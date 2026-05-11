@@ -190,17 +190,17 @@ Desktop or laptop:
 | Component | Requirement |
 |---|---|
 | GPU | NVIDIA, 4GB+ VRAM, auto-adapts across 7 tiers |
-| CPU | 4+ cores, 8+ recommended |
-| RAM | 8GB+ minimum, 16GB+ recommended, 32GB+ enables full local code generation |
-| OS | Linux, Ubuntu 22.04+ tested |
-| Storage | 50GB+ free |
+| CPU | 8+ cores recommended |
+| RAM | 32GB+ enables full local code generation |
+| OS | Linux, PoPOS Latest tested |
+| Storage | 500GB+ free |
 
 ### Senses
 
 Optional but recommended:
 
 - Raspberry Pi 5, 8GB or 16GB
-- Hailo-10H AI HAT+ (40 TOPS)
+- Hailo-10H AI HAT+ 2 (40 TOPS)
 - Raspberry Pi Camera
 - USB microphone + speaker
 - 7" touchscreen for particle UI
