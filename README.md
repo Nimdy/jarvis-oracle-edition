@@ -200,7 +200,7 @@ Desktop or laptop:
 Optional but recommended:
 
 - Raspberry Pi 5, 8GB or 16GB
-- Hailo-10H AI HAT+
+- Hailo-10H AI HAT+ (40 TOPS)
 - Raspberry Pi Camera
 - USB microphone + speaker
 - 7" touchscreen for particle UI
