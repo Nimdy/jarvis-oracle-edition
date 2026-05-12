@@ -1,5 +1,7 @@
 # JARVIS Oracle Edition
 
+<img width="1350" height="900" alt="jarvis-oracle-edition" src="https://github.com/user-attachments/assets/cf36e537-b0d2-4cb2-a8b2-ec8e85ab51a0" />
+
 **A fully local, self-evolving personal cognitive architecture.**
 
 **Project website:** [jarvisoracle.com](https://jarvisoracle.com/)  
