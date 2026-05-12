@@ -417,7 +417,7 @@ Every number in this paper is reproducible from the release repository.
 ### 9.1 Clone and check
 
 ```
-git clone https://github.com/duafoo/jarvis-oracle-edition
+git clone https://github.com/Nimdy/jarvis-oracle-edition
 cd jarvis-oracle-edition/brain
 python -m venv .venv && source .venv/bin/activate
 pip install -r ../requirements.txt
