@@ -212,7 +212,7 @@ Optional but recommended:
 ### 1. Clone & Setup
 
 ```bash
-git clone https://github.com/zerobandwidth/jarvis-oracle-edition.git
+git clone https://github.com/Nimdy/jarvis-oracle-edition.git
 cd jarvis-oracle-edition
 ```
 
