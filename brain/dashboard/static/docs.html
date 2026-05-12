@@ -1,0 +1,1896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS Oracle Edition — System Reference</title>
+  <link rel="stylesheet" href="/static/docs.css">
+</head>
+<body>
+
+  <div class="j-freshness-banner" id="j-freshness-banner" style="display:none;"></div>
+  <script src="/static/freshness-banner.js"></script>
+  <script src="/static/status-markers.js"></script>
+
+  <!-- Sidebar Navigation -->
+  <nav class="d-sidebar" id="sidebar">
+    <div class="d-sidebar-brand">
+      <span class="d-brand-text">JARVIS</span>
+      <span class="d-brand-sub" style="color:var(--cyan);font-size:0.58rem;letter-spacing:0.08em;">ORACLE EDITION</span>
+      <span class="d-brand-sub">System Reference</span>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Architecture</div>
+      <a class="d-nav-link" href="#architecture-diagram">Interactive Diagram</a>
+      <a class="d-nav-link" href="#two-device-split">Two-Device Split</a>
+      <a class="d-nav-link" href="#hardware-tiers">Hardware Tiers</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Data Flows</div>
+      <a class="d-nav-link" href="#flow-voice">Voice Pipeline</a>
+      <a class="d-nav-link" href="#flow-perception">Perception Fusion</a>
+      <a class="d-nav-link" href="#flow-conversation">Conversation &amp; Routing</a>
+      <a class="d-nav-link" href="#flow-personal-intel">Personal Intel Capture</a>
+      <a class="d-nav-link" href="#flow-memory">Memory System</a>
+      <a class="d-nav-link" href="#flow-phase5">Phase 5 Loop</a>
+      <a class="d-nav-link" href="#flow-self-improve">Capability &amp; Self-Improve</a>
+      <a class="d-nav-link" href="#flow-distillation">Distillation Pipeline</a>
+      <a class="d-nav-link" href="#flow-world-model">World Model</a>
+      <a class="d-nav-link" href="#flow-policy">Policy Layer</a>
+      <a class="d-nav-link" href="#flow-consciousness">Kernel Tick Cycle</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Design Principles</div>
+      <a class="d-nav-link" href="#trilayer-cognition">Tri-Layer Cognition</a>
+      <a class="d-nav-link" href="#identity-boundary">Identity Boundary</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Integrity</div>
+      <a class="d-nav-link" href="#epistemic-stack">Epistemic Stack (L0–L12)</a>
+      <a class="d-nav-link" href="#safety-guards">Safety Guards</a>
+      <a class="d-nav-link" href="#l3-escalation-governance">L3 Escalation Governance (Phase 6.5)</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Subsystems</div>
+      <a class="d-nav-link" href="#goal-continuity">Goal Continuity</a>
+      <a class="d-nav-link" href="#eval-sidecar">Eval Sidecar / PVL</a>
+      <a class="d-nav-link" href="#restart-resilience">Restart Resilience</a>
+      <a class="d-nav-link" href="#synthetic-training">Synthetic Training</a>
+      <a class="d-nav-link" href="/hrr">HRR Shadow Substrate (P4)</a>
+      <a class="d-nav-link" href="/hrr-scene">Mental World / Spatial HRR (P5)</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Reference</div>
+      <a class="d-nav-link" href="#maturity-gates">Maturity Gates</a>
+      <a class="d-nav-link" href="#operational-modes">Operational Modes</a>
+      <a class="d-nav-link" href="#persistence-map">Persistence Map</a>
+      <a class="d-nav-link" href="#event-catalog">Event Catalog</a>
+    </div>
+    <div class="d-nav-group d-nav-footer">
+      <a class="d-nav-link d-back-link" href="/">← Live Dashboard</a>
+      <a class="d-nav-link d-back-link" href="/showcase">Strategic Showcase</a>
+      <a class="d-nav-link d-back-link" href="/capability-pipeline">Capability Pipeline</a>
+      <a class="d-nav-link d-back-link" href="/history">Build History</a>
+      <a class="d-nav-link d-back-link" href="/api-reference">API Reference</a>
+      <a class="d-nav-link d-back-link" href="/science">Scientific Reference</a>
+      <a class="d-nav-link d-back-link" href="/learning">Companion Training & Learning</a>
+      <a class="d-nav-link d-back-link" href="/maturity">Maturity Gates</a>
+      <a class="d-nav-link d-back-link" href="/hrr">HRR Shadow (P4)</a>
+      <a class="d-nav-link d-back-link" href="/hrr-scene">Mental World (P5)</a>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="d-main" id="main">
+
+    <!-- Hero -->
+    <div class="d-hero">
+      <h1>JARVIS Oracle Edition — System Reference</h1>
+      <p>JARVIS Oracle Edition is a digital soul architecture — a persistent, local-first cognitive structure with memory continuity, evolutionary consolidation, neural maturation, dreaming, governed self-improvement, and epistemic integrity. Complete architectural reference. Static documentation — no live data, no auto-refresh.</p>
+    </div>
+
+    <!-- ═══════════ POSITIONING ═══════════ -->
+    <section id="positioning" class="d-section">
+      <div class="d-card" style="border-left: 3px solid var(--cyan); padding: 20px 24px;">
+        <p style="font-size: 0.92rem; line-height: 1.7; color: var(--text); margin: 0;">
+          JARVIS Oracle Edition is a <strong>working prototype workshop for personal ASI foundations</strong>: a sovereign digital soul system that doesn't just respond to prompts but <em>evolves its own cognition</em> over time. It writes its own neural network architectures, trains them from its own experience, detects and resolves its own contradictions, measures its own calibration drift, and proposes patches to its own source code — all under a layered safety stack that gates every self-modification through sandbox testing, shadow evaluation, and human approval thresholds.
+        </p>
+        <p style="font-size: 0.82rem; line-height: 1.6; color: var(--text-muted); margin: 12px 0 0;">
+          This is not a claim of achieved AGI, achieved ASI, or superhuman performance. The architecture is designed for <strong>lifelong symbiotic growth</strong> with a single user — accumulating personal context, earning trust through measured behavior, and graduating capabilities only after evidence-gated promotion. Every claim it makes about itself is verified. Every memory carries provenance. Every decision is attributable.
+        </p>
+      </div>
+    </section>
+
+    <!-- ═══════════ ARCHITECTURE DIAGRAM ═══════════ -->
+    <section id="architecture-diagram" class="d-section">
+      <h2>Interactive Architecture Diagram</h2>
+      <p class="d-muted">Hover nodes for descriptions. Click to expand details below.</p>
+      <div id="arch-diagram-container"></div>
+    </section>
+
+    <!-- ═══════════ TWO-DEVICE SPLIT ═══════════ -->
+    <section id="two-device-split" class="d-section">
+      <h2>Two-Device Split</h2>
+      <div class="d-cols">
+        <div class="d-card d-card-cyan">
+          <h3>Pi 5 — The Senses</h3>
+          <p>Raspberry Pi 5 with Hailo-10H AI HAT+. Thin sensor node — captures and streams, does not decide.</p>
+          <ul>
+            <li><strong>Vision:</strong> Picamera2 → YOLOv8s person detection (Hailo NPU 15fps), YOLOv8s-Pose, facial expression, CPU YOLOv8n scene objects</li>
+            <li><strong>Audio:</strong> USB microphone at 44.1kHz → resample to 16kHz int16 → binary WebSocket</li>
+            <li><strong>Display:</strong> 7" touchscreen with cyberpunk particle system in Chromium kiosk</li>
+            <li><strong>Playback:</strong> Receives WAV audio from brain TTS → plays via aplay</li>
+          </ul>
+        </div>
+        <div class="d-card d-card-green">
+          <h3>Desktop/Laptop — The Brain</h3>
+          <p>NVIDIA GPU workstation. Source of truth for all cognitive state. Hardware-adaptive via VRAM tier detection.</p>
+          <ul>
+            <li><strong>Audio Intelligence:</strong> openWakeWord, Silero VAD, faster-whisper GPU STT</li>
+            <li><strong>Identity:</strong> ECAPA-TDNN speaker ID (CUDA), MobileFaceNet face ID (CUDA)</li>
+            <li><strong>Cognition:</strong> Cognitive engine, kernel loop, meta-cognition, mutations</li>
+            <li><strong>LLM:</strong> Ollama (qwen3:8b default), context builder, streaming response</li>
+            <li><strong>TTS:</strong> Kokoro ONNX GPU synthesis → audio_b64 to Pi</li>
+            <li><strong>Neural:</strong> Policy NN, hemisphere NNs, distillation specialists</li>
+          </ul>
+        </div>
+      </div>
+      <div class="d-note">Communication is bidirectional WebSocket on the local network (:9100). Pi sends binary frames (raw PCM ~32KB/s) + text frames (PerceptionEvent JSON). Brain sends text frames (BrainMessage JSON with audio_b64). Auto-reconnect every 3s.</div>
+    </section>
+
+    <!-- ═══════════ HARDWARE TIERS ═══════════ -->
+    <section id="hardware-tiers" class="d-section">
+      <h2>Hardware Tiers</h2>
+      <p>The brain auto-detects GPU VRAM at startup and selects model sizes, compute types, and memory strategy from 7 tiers. <strong>Local-first guarantee:</strong> all core capabilities (voice, cognition, memory, learning) run entirely on local hardware. Cloud APIs (Claude, OpenAI) are optional enhancers — never required for core function.</p>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr><th>Tier</th><th>VRAM</th><th>LLM</th><th>Fast</th><th>Vision</th><th>STT</th><th>TTS</th><th>Keep-alive</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>minimal</td><td>&lt;4 GB</td><td>qwen3:1.7b</td><td>qwen3:1.7b</td><td class="d-dim">disabled</td><td>tiny/int8</td><td class="d-dim">none</td><td>5m</td></tr>
+            <tr><td>low</td><td>4-6 GB</td><td>qwen3:4b</td><td>qwen3:1.7b</td><td class="d-dim">disabled</td><td>small/int8</td><td class="d-dim">none</td><td>5m</td></tr>
+            <tr><td>medium</td><td>6-8 GB</td><td>qwen3:8b</td><td>qwen3:4b</td><td class="d-dim">disabled</td><td>medium/int8_fp16</td><td>kokoro_cpu</td><td>5m</td></tr>
+            <tr><td>high</td><td>8-12 GB</td><td>qwen3:8b</td><td>qwen3:4b</td><td>qwen2.5vl:7b</td><td>large-v3-turbo</td><td>kokoro_cpu</td><td>10m</td></tr>
+            <tr><td>premium</td><td>12-16 GB</td><td>qwen3:8b</td><td>qwen3:8b</td><td>qwen2.5vl:7b</td><td>large-v3/int8_fp16</td><td>kokoro_gpu</td><td>30m</td></tr>
+            <tr class="d-row-highlight"><td>ultra</td><td>16-24 GB</td><td>qwen3:14b</td><td>qwen3:8b</td><td>qwen2.5vl:7b</td><td>large-v3/float16</td><td>kokoro_gpu</td><td>always</td></tr>
+            <tr class="d-row-highlight"><td>extreme</td><td>24+ GB</td><td>qwen3:32b</td><td>qwen3:14b</td><td>qwen2.5vl:7b</td><td>large-v3/float16</td><td>kokoro_gpu</td><td>always</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="d-note">Ultra+ tiers use <code>keep_alive=-1</code> to pin models in VRAM permanently, eliminating cold-start latency. Premium uses 30m keep-alive. CPU-resident coding LLM (qwen2.5-coder) runs on a separate Ollama instance on port 11435, never touching GPU VRAM.</div>
+
+      <h3 style="margin-top:20px;">Self-Improvement Coder — RAM Tiers</h3>
+      <p>The Qwen3-Coder-Next model is selected by <strong>system RAM</strong> (independent of GPU tier). It runs purely on CPU via <code>llama-server</code> and never contends with VRAM.</p>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr><th>System RAM</th><th>GGUF Quant</th><th>Model Size</th><th>Quality</th><th>Headroom</th></tr>
+          </thead>
+          <tbody>
+            <tr class="d-row-highlight"><td>56GB+</td><td>UD-Q4_K_XL</td><td>~46GB</td><td>Best</td><td>~10GB+ for OS/Jarvis</td></tr>
+            <tr><td>48–55GB</td><td>UD-IQ4_XS</td><td>~38GB</td><td>Good</td><td>~10GB+ for OS/Jarvis</td></tr>
+            <tr><td>32–47GB</td><td>UD-IQ2_M</td><td>~25GB</td><td>Acceptable</td><td>~7GB+ for OS/Jarvis</td></tr>
+            <tr><td class="d-c-red">&lt;32GB</td><td colspan="4">Disabled — would OOM. Do not force-enable.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="d-note"><code>setup.sh</code> reads <code>/proc/meminfo</code> and selects the correct quant before download. <code>config.py</code> uses <code>hardware_profile.resolve_coder_profile(ram_gb)</code> for runtime gating. The model starts on-demand (not at boot) and shuts down after each generation to reclaim RAM.</div>
+    </section>
+
+    <!-- ═══════════ VOICE PIPELINE ═══════════ -->
+    <section id="flow-voice" class="d-section">
+      <h2>Data Flow: Voice Pipeline</h2>
+      <div class="d-flow">
+        <div class="d-flow-step d-c-cyan">User speaks</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-cyan">Pi mic 44.1kHz</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-cyan">Resample 16kHz</div>
+        <div class="d-flow-arrow">binary WS</div>
+        <div class="d-flow-step d-c-purple">Brain AudioStream</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-purple">openWakeWord</div>
+        <div class="d-flow-arrow">wake!</div>
+        <div class="d-flow-step d-c-purple">Silero VAD</div>
+        <div class="d-flow-arrow">speech end</div>
+        <div class="d-flow-step d-c-purple">faster-whisper STT</div>
+        <div class="d-flow-arrow">text</div>
+        <div class="d-flow-step d-c-green">Addressee Gate</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">Tool Router</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">Ollama LLM</div>
+        <div class="d-flow-arrow">stream</div>
+        <div class="d-flow-step d-c-amber">Kokoro TTS</div>
+        <div class="d-flow-arrow">audio_b64</div>
+        <div class="d-flow-step d-c-cyan">Pi speaker</div>
+      </div>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Timing Targets</h4>
+          <table class="d-table d-table-sm">
+            <tr><td>Audio capture → brain</td><td>~30ms</td></tr>
+            <tr><td>Wake word latency</td><td>50-100ms</td></tr>
+            <tr><td>Speech end → STT</td><td>2-4s</td></tr>
+            <tr><td>STT → first audio</td><td>&lt;2s</td></tr>
+            <tr><td>Barge-in → cancel</td><td>&lt;300ms</td></tr>
+            <tr><td>Follow-up window</td><td>4s (no wake needed)</td></tr>
+          </table>
+        </div>
+        <div class="d-detail">
+          <h4>Key Mechanisms</h4>
+          <ul>
+            <li><strong>Echo detection:</strong> SequenceMatcher ≥70% similarity → discard (50% for partial fragments)</li>
+            <li><strong>Barge-in:</strong> OWW at 2× threshold (1.0) + 3 consecutive hits in 800ms</li>
+            <li><strong>Cancel-token:</strong> LLM polls <code>cancel_check</code> every 30 tokens</li>
+            <li><strong>Follow-up mode:</strong> 4s post-response window, no wake word needed</li>
+            <li><strong>Speaker echo guard:</strong> ≥60% for unknown speakers</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ PERCEPTION FUSION ═══════════ -->
+    <section id="flow-perception" class="d-section">
+      <h2>Data Flow: Perception Fusion</h2>
+      <div class="d-flow">
+        <div class="d-flow-step d-c-cyan">Vision events</div>
+        <div class="d-flow-arrow">+</div>
+        <div class="d-flow-step d-c-cyan">Audio events</div>
+        <div class="d-flow-arrow">+</div>
+        <div class="d-flow-step d-c-purple">SpeakerID (CUDA)</div>
+        <div class="d-flow-arrow">+</div>
+        <div class="d-flow-step d-c-purple">FaceID (CUDA)</div>
+        <div class="d-flow-arrow">fuse</div>
+        <div class="d-flow-step d-c-green">IdentityFusion</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">AttentionCore</div>
+        <div class="d-flow-arrow">engagement</div>
+        <div class="d-flow-step d-c-amber">ModeManager</div>
+        <div class="d-flow-arrow">cadence</div>
+        <div class="d-flow-step d-c-amber">KernelLoop</div>
+      </div>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Identity Fusion (Layer 3A)</h4>
+          <ul>
+            <li>Voice + face agreement → <strong>verified</strong></li>
+            <li>Disagreement → hold, pick higher confidence</li>
+            <li>Persistence window: 180s max, half-life 90s</li>
+            <li>Multi-speaker suppression when &gt;1 person visible</li>
+            <li>Trust states: trusted / tentative / degraded / conflicted / unknown</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>8 Operational Modes</h4>
+          <ul>
+            <li><strong>gestation</strong> — birth protocol (cadence 1.0×)</li>
+            <li><strong>passive</strong> — idle (cadence 0.5×)</li>
+            <li><strong>conversational</strong> — user talking (cadence 1.5×)</li>
+            <li><strong>reflective</strong> — post-conversation (cadence 1.0×)</li>
+            <li><strong>focused</strong> — deep task (cadence 2.0×)</li>
+            <li><strong>sleep / dreaming / deep_learning</strong> — maintenance</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ CONVERSATION & ROUTING ═══════════ -->
+    <section id="flow-conversation" class="d-section">
+      <h2>Data Flow: Conversation &amp; Routing</h2>
+      <p>The tool router uses keyword + regex intent dispatch across 13 classes. Strict self-report routes bypass the LLM for deterministic, metric-backed answers.</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Route Classes</h4>
+          <div class="d-tag-cloud">
+            <span class="d-tag">TIME</span><span class="d-tag">SYSTEM</span><span class="d-tag">STATUS</span>
+            <span class="d-tag">MEMORY</span><span class="d-tag">VISION</span><span class="d-tag">INTROSPECTION</span>
+            <span class="d-tag">IDENTITY</span><span class="d-tag">SKILL</span><span class="d-tag">PERFORM</span>
+            <span class="d-tag">WEB_SEARCH</span><span class="d-tag">CODEBASE</span><span class="d-tag">ACADEMIC</span>
+            <span class="d-tag">LIBRARY_INGEST</span><span class="d-tag">NONE (LLM)</span>
+          </div>
+        </div>
+        <div class="d-detail">
+          <h4>Introspection Tiers</h4>
+          <ol>
+            <li><strong>Tier 1:</strong> Strict native — grounded learning job / recent learning answers</li>
+            <li><strong>Tier 2:</strong> Strict native — grounded recent research answers</li>
+            <li><strong>Tier R:</strong> Reflective — philosophical self-questions, full soul prompt + personality (still filtered through L0 CapabilityGate)</li>
+            <li><strong>Tier 3:</strong> Pre-LLM bounded — MeaningFrame (≥15 facts, conf≥0.6)</li>
+            <li><strong>Tier 4:</strong> LLM with grounding → deterministic fail-closed fallback</li>
+          </ol>
+        </div>
+      </div>
+      <div class="d-note"><strong>Follow-up overrides:</strong> Affirmative replies ("yes", "sure") to prior offers (camera, enrollment, guided-collect) are caught before the LLM. <strong>Narrowly-gated context injection:</strong> Recent turns injected into NONE route only on follow-up, affirmative, or anaphora detection ("that", "it", "do it").</div>
+    </section>
+
+    <!-- ═══════════ PERSONAL INTEL ═══════════ -->
+    <section id="flow-personal-intel" class="d-section">
+      <h2>Data Flow: Personal Intel Capture</h2>
+      <div class="d-flow">
+        <div class="d-flow-step d-c-cyan">User speech</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-amber">Pattern match</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-red">Filter unstable</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">Memory write</div>
+        <div class="d-flow-arrow">+</div>
+        <div class="d-flow-step d-c-green">Relationship update</div>
+      </div>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Pattern Lists</h4>
+          <ul>
+            <li><code>_INTEREST_PATTERNS</code> — "I love X", "I'm into X"</li>
+            <li><code>_DISLIKE_PATTERNS</code> — "I hate X", "I can't stand X"</li>
+            <li><code>_FACT_PATTERNS</code> — "I'm a X", "I work at X"</li>
+            <li><code>_PREFERENCE_PATTERNS</code> — "I prefer X", "I like X better"</li>
+            <li><code>_THIRDPARTY_PATTERNS</code> — "my wife is X", "my friend does X"</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Safety Mechanisms</h4>
+          <ul>
+            <li><strong>Content filter:</strong> <code>_is_unstable_personal_fact()</code> blocks transient states, gerunds, system terms, self-references (jarvis/ai/bot) using <code>name_validator._BLOCKED_WORDS</code></li>
+            <li><strong>Correction:</strong> <code>_CORRECTION_PATTERNS</code> ("that's wrong", "no I'm not X") trigger <code>_correct_recent_facts()</code> — downweights <code>user_preference</code> memories from last 5 min (weight × 0.1, tagged <code>corrected</code>)</li>
+            <li><strong>Retirement:</strong> <code>_RETIREMENT_PATTERNS</code> ("I stopped X", "I don't X anymore") downweight matching prefs, create historical "User used to X" record</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ MEMORY SYSTEM ═══════════ -->
+    <section id="flow-memory" class="d-section">
+      <h2>Data Flow: Memory System</h2>
+      <div class="d-flow">
+        <div class="d-flow-step d-c-green">engine.remember()</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-amber">Quarantine soft-gate</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-amber">Salience advisory</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">storage.add()</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">index + search</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-purple">MEMORY_WRITE event</div>
+      </div>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Vector Embedding</h4>
+          <p><code>search.index_memory()</code> calls <code>_extract_embedding_text(payload)</code> to produce the text that gets embedded. For structured dict payloads (research pointers, summaries), extracts human-readable fields (<code>claim</code>, <code>question</code>, <code>summary</code>, <code>text</code>, <code>content</code>, <code>description</code>) instead of Python <code>repr()</code>.</p>
+        </div>
+        <div class="d-detail">
+          <h4>CueGate — Memory Safety</h4>
+          <p>Single authority for all memory access policy. Three access classes plus a synthetic-session kill switch:</p>
+          <ol>
+            <li><strong>READ</strong> — always open via <code>session()</code> RAII</li>
+            <li><strong>OBSERVATION_WRITE</strong> — blocked during dream/sleep/reflective/deep_learning</li>
+            <li><strong>CONSOLIDATION_WRITE</strong> — only within <code>begin/end_consolidation()</code> window</li>
+            <li><strong>Synthetic session gate</strong> — <code>begin/end_synthetic_session(source)</code> tracks active synthetic sensor IDs in a <code>set[str]</code>. While any source is active, <code>synthetic_session_active()</code> is True and BOTH observation and consolidation writes short-circuit. Short-circuits also installed in <code>engine.remember()</code>, <code>memory/core._direct_memory_write()</code>, and <code>memory/transactions._execute_op</code> — defense in depth</li>
+          </ol>
+          <p class="d-muted">All background write paths gate through CueGate: observer, association repair, dream cycle. Conversation handler writes are safe (only fire during active conversation = waking/conversational mode). Synthetic exercises wire through <code>perception_orchestrator._on_synthetic_exercise_state</code> → <code>memory_gate.begin/end_synthetic_session</code> + <code>identity_fusion.set_synthetic_active</code> — so no synthetic-origin event can create a memory, resolve an identity, or emit <code>PERCEPTION_FACE_IDENTIFIED</code>.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Memory Cortex NNs</h4>
+          <ul>
+            <li><strong>MemoryRanker:</strong> MLP 12→32→16→1, ~700 params, CPU, BCELoss</li>
+            <li><strong>SalienceModel:</strong> MLP 11→24→12→3, ~500 params, CPU, MSELoss</li>
+            <li>Trained during dream/sleep from JSONL telemetry</li>
+            <li>Auto-disable if &lt;80% of heuristic baseline. Flap guard: 3 disables = permanent</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Provenance Tags</h4>
+          <div class="d-tag-cloud">
+            <span class="d-tag">observed</span><span class="d-tag">user_claim</span>
+            <span class="d-tag">conversation</span><span class="d-tag">model_inference</span>
+            <span class="d-tag">external_source</span><span class="d-tag">experiment_result</span>
+            <span class="d-tag">derived_pattern</span><span class="d-tag">seed</span>
+            <span class="d-tag">unknown</span>
+          </div>
+          <p class="d-muted">Retrieval boost: peer-reviewed +0.12, codebase-verified +0.10, autonomous factual +0.08</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ PHASE 5 ═══════════ -->
+    <section id="flow-phase5" class="d-section">
+      <h2>Data Flow: Phase 5 — Continuous Improvement Loop</h2>
+      <div class="d-flow d-flow-loop">
+        <div class="d-flow-step d-c-red">Friction Miner</div>
+        <div class="d-flow-arrow">rate</div>
+        <div class="d-flow-step d-c-green">Metric Triggers</div>
+        <div class="d-flow-arrow">intent</div>
+        <div class="d-flow-step d-c-green">Research</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">Knowledge Integration</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">Interventions</div>
+        <div class="d-flow-arrow">24h shadow</div>
+        <div class="d-flow-step d-c-amber">Measure Delta</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">Promote / Discard</div>
+        <div class="d-flow-arrow">feedback</div>
+        <div class="d-flow-step d-c-green">Opp. Scorer</div>
+      </div>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Friction Pipeline</h4>
+          <p><code>FrictionMiner</code> detects corrections, rephrases, and annoyance in conversation turns. Events persist to <code>friction_events.jsonl</code>. <code>get_friction_rate(window)</code> feeds metric triggers against threshold (0.150).</p>
+        </div>
+        <div class="d-detail">
+          <h4>Intervention Lifecycle</h4>
+          <p><code>propose()</code> → <code>auto_activate_proposed(metrics)</code> captures <code>baseline_value</code> → 24h shadow window → <code>check_shadow_results(metrics)</code> computes <code>measured_delta</code> = current − baseline (direction-aware) → promote if delta &gt; 0.01, discard otherwise.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Source Ledger Feedback</h4>
+          <p><code>retrieval_log.log_outcome()</code> is the <strong>single authority</strong> for <code>source_ledger.record_retrieval()</code>. Verdicts: useful / interesting_but_non_actionable / not_useful. Feeds ±0.15 adjustment into <code>OpportunityScorer</code>.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Scoring Formula</h4>
+          <p>Score = (Impact×0.4 + Evidence×0.3 + Confidence×0.2) − (Risk×0.25) − (Cost×0.15) + policy_adj − diminishing_penalty − action_rate_penalty</p>
+          <ol>
+            <li><strong>Policy memory:</strong> ±0.3 based on historical win rate for similar topics</li>
+            <li><strong>Diminishing returns:</strong> repeated intents in same category penalized</li>
+            <li><strong>Action rate:</strong> spamming cheap actions penalized over time window</li>
+          </ol>
+          <p class="d-muted">Total score clamped [0.0, 1.0]. Source ledger feeds ±0.15 into policy adjustment.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ CAPABILITY ACQUISITION + SELF-IMPROVEMENT PIPELINE ═══════════ -->
+    <section id="flow-self-improve" class="d-section">
+      <h2>Data Flow: Capability Acquisition &amp; Self-Improvement Pipeline</h2>
+      <p><strong>Pipeline proven end-to-end (2026-04-15, 2 plugins).</strong> Self-improvement is now one child lane of the broader <strong>Capability Acquisition Pipeline</strong> — a governed parent lifecycle that unifies all capability growth (research, planning, code generation, skill/plugin creation, verification, deployment). The shared <strong>CodeGen Service</strong> provides code generation for both acquisition and self-improvement paths. Includes DIAGNOSTIC and CODE_QUALITY shadow-only specialists with live dashboard visibility. <strong>Two plugins completed full lifecycle:</strong> unit converter (2026-04-14) + dice roller (2026-04-15). They proved the pre-environment-setup plugin path; the current plugin path is the hardened 11-lane flow with <code>environment_setup</code>, sandbox validation, shadow observation, and activation to routable state. <strong>Stage 2 first approved patch</strong> applied to live system (2026-04-15): scanner detection → codegen → sandbox ALL PASSED → operator approval → disk apply → health check passed → no rollback. Pending approvals now persist across restarts.</p>
+      <p><strong>Skill approval bridge (2026-05-04):</strong> skill learning now has an explicit operational proof bridge with an operator approval checkpoint. Contract skills that lack a callable/plugin write an <code>operational_handoff_required</code> artifact and wait for approval before a governed acquisition/plugin job may begin. The SkillRegistry remains unverified until the plugin/callable is sandbox-proven, promoted to <code>supervised</code> or <code>active</code>, and passes expected-vs-actual contract smoke tests. See <code>docs/SKILL_LEARNING_GUIDE.md</code> for operator expectations and <code>docs/MATRIX_PROTOCOL_GUIDE.md</code> for the separate neural-specialist lane.</p>
+      <p><strong>Skill-acquisition hardening (2026-05-05):</strong> incomplete acquisition plans are refused before approval, planning diagnostics expose missing design/test fields, terminal acquisition failure/cancellation promptly blocks the linked learning job, and shared CodeGen is labeled <code>authority=infrastructure_only</code>. The new <code>SKILL_ACQUISITION</code> specialist and synthetic weight room are telemetry-only; they cannot verify skills, promote plugins, or unlock capability claims.</p>
+
+      <!-- Capability Acquisition Pipeline -->
+      <h3>Capability Acquisition Pipeline</h3>
+      <p>When Jarvis needs to learn or build something new (from user "learn X" requests, Matrix specialist birth, or internal capability gaps), the acquisition pipeline coordinates the full lifecycle. Lifecycle evidence is not automatically operational proof: a user-facing skill requires a callable executor/tool/plugin plus contract smoke evidence or a domain baseline.</p>
+      <div class="d-flow d-flow-loop">
+        <div class="d-flow-step d-c-cyan">Intent Classifier</div>
+        <div class="d-flow-arrow">classify</div>
+        <div class="d-flow-step d-c-green">Evidence Grounding</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">Doc Resolution</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-purple">AcquisitionPlanner</div>
+        <div class="d-flow-arrow">plan</div>
+        <div class="d-flow-step d-c-red">Human Plan Review</div>
+        <div class="d-flow-arrow">approved / reject &amp; revise</div>
+        <div class="d-flow-step d-c-purple">CodeGenService</div>
+        <div class="d-flow-arrow">code</div>
+        <div class="d-flow-step d-c-amber">Plugin Quarantine</div>
+        <div class="d-flow-arrow">verify</div>
+        <div class="d-flow-step d-c-amber">VerificationBundle</div>
+        <div class="d-flow-arrow">register</div>
+        <div class="d-flow-step d-c-green">SkillRegistry</div>
+        <div class="d-flow-arrow">activate</div>
+        <div class="d-flow-step d-c-green">Plugin Active</div>
+      </div>
+
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>10 Acquisition Lanes</h4>
+          <table class="d-table d-table-sm">
+            <tr><td>Evidence Grounding</td><td>Internal knowledge check before external research</td></tr>
+            <tr><td>Documentation Resolution</td><td>MCP/docs freshness bridge (DocumentationArtifact)</td></tr>
+            <tr><td>Planning</td><td>AcquisitionPlanner with narrow mandate</td></tr>
+            <tr><td>Plan Review</td><td>Human approval gate (PlanReviewArtifact). Reject &amp; Revise: resets planning + plan_review lanes with operator feedback injected into coder prompt. Plan version increments.</td></tr>
+            <tr><td>Implementation</td><td>CodeGenService generates and validates code</td></tr>
+            <tr><td>Plugin Quarantine</td><td>PluginRegistry registers in quarantined state</td></tr>
+            <tr><td>Verification</td><td>VerificationBundle cross-references lane proof and expected-vs-actual outputs</td></tr>
+            <tr><td>Skill Registration</td><td>Registers operationally verified capability into SkillRegistry</td></tr>
+            <tr><td>Plugin Activation</td><td>Promotes: quarantined → shadow → supervised → active</td></tr>
+            <tr><td>Truth Recording</td><td>AttributionLedger + bounded memory write</td></tr>
+          </table>
+        </div>
+        <div class="d-detail">
+          <h4>Outcome Classes</h4>
+          <table class="d-table d-table-sm">
+            <tr><td>knowledge_only</td><td>Research produces knowledge, no code needed</td></tr>
+            <tr><td>skill_creation</td><td>New skill registered via SkillRegistry</td></tr>
+            <tr><td>plugin_service</td><td>New plugin/tool deployed</td></tr>
+            <tr><td>core_upgrade</td><td>Core system modification (via self-improve)</td></tr>
+            <tr><td>specialist_nn</td><td>Matrix specialist birth (Phase 7)</td></tr>
+            <tr><td>hardware_integration</td><td>Hardware capability (Phase 7)</td></tr>
+            <tr><td>mixed</td><td>Multiple outcome lanes</td></tr>
+          </table>
+        </div>
+        <div class="d-detail">
+          <h4>Evidence Classes</h4>
+          <table class="d-table d-table-sm">
+            <tr><td>Skill learning</td><td>Operational only after a callable executor/tool/plugin passes contract smoke or domain baseline proof</td></tr>
+            <tr><td>Matrix Protocol</td><td>Neural-specialist learning; advisory/training evidence unless consumed by an operational verifier</td></tr>
+            <tr><td>Acquisition/plugin</td><td>Operational after quarantine/shadow/activation plus lane-native smoke refs</td></tr>
+            <tr><td>Self-improvement</td><td>Patch proof: sandbox, approval, atomic apply, health check; not automatic skill proof</td></tr>
+            <tr><td>Synthetic skill-acquisition</td><td>Telemetry-only training for <code>SKILL_ACQUISITION</code>; never operational proof</td></tr>
+          </table>
+        </div>
+        <div class="d-detail">
+          <h4>Skill Learning Expectations</h4>
+          <ul>
+            <li><strong>Created learning job</strong> means Jarvis accepted the request and started evidence collection.</li>
+            <li><strong>Need examples/data</strong> means the skill cannot be verified from abstract description alone.</li>
+            <li><strong>Need governed plugin/tool</strong> means verification must route through acquisition and plugin proof.</li>
+            <li><strong>Advisory</strong> means knowledge or coaching exists, but operational proof is not yet earned.</li>
+            <li><strong>Verified</strong> means SkillRegistry has current contract/domain evidence, not just lifecycle completion.</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Sacred Guardrails</h4>
+          <ul>
+            <li>No lane-local execution logic in acquisition layer</li>
+            <li>No lane-local truth storage in acquisition layer</li>
+            <li>No bypass of child safety gates</li>
+            <li>No child lifecycle compression into summaries</li>
+            <li>No skill verification from lifecycle artifacts alone</li>
+            <li>No plugin activation without lane-native proof refs</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Dynamic Plugin Lifecycle</h4>
+          <ul>
+            <li><strong>quarantined</strong> — generated code deployed to disk, not yet executable. Codegen produces a two-file contract (<code>handler.py</code> + <code>__init__.py</code>). If the LLM only generates <code>handler.py</code>, a fallback bridge synthesizes <code>__init__.py</code> with <code>from .handler import run; handle = run</code>.</li>
+            <li><strong>shadow</strong> — runs alongside but output not used. Shadow observation window: 300s (tier 0), 1800s (tier 1), 3600s (tier 2+).</li>
+            <li><strong>supervised</strong> — results shown but flagged for review</li>
+            <li><strong>active</strong> — fully operational, routed via ToolType.PLUGIN</li>
+            <li><strong>disabled</strong> — circuit breaker or manual disable</li>
+          </ul>
+          <p class="d-muted">Circuit breaker: 3 failures within 10 minutes → auto-disable. Per-plugin JSONL audit trail. Import allowlist: <code>json</code>, <code>re</code>, <code>datetime</code>, <code>math</code>, <code>random</code>, <code>string</code>, <code>textwrap</code>, <code>copy</code>, <code>operator</code>, <code>decimal</code>, <code>fractions</code>, <code>statistics</code>, <code>uuid</code>, <code>collections</code>, <code>itertools</code>, <code>functools</code>, <code>typing</code>, <code>enum</code>, <code>dataclasses</code>, <code>pathlib</code>, <code>hashlib</code>, <code>time</code>, <code>calendar</code>. High-risk lanes (<code>plugin_activation</code>, <code>deployment</code>) are mode-gated — blocked during <code>dreaming</code>/<code>sleep</code>/<code>gestation</code>.</p>
+        </div>
+      </div>
+
+      <!-- Plan Evaluator Shadow NN -->
+      <h3 style="margin-top:28px;">Plan Evaluator Shadow NN</h3>
+      <p>First acquisition-native hemisphere specialist. Operates in <strong>shadow-only</strong> mode — observes plan reviews, predicts human verdicts, accumulates accuracy, never gates decisions. The real asset is supervised training data from human review verdicts captured from day one.</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Signal Pipeline</h4>
+          <ul>
+            <li><strong>Features</strong> recorded when plan technical design enrichment completes (<code>_enrich_plan_with_technical_design()</code>)</li>
+            <li><strong>Verdict labels</strong> recorded when human reviews plan (<code>approve_plan()</code>)</li>
+            <li><strong>Shadow prediction</strong> runs when plan enters <code>awaiting_plan_review</code> — stored as <code>ShadowPredictionArtifact</code></li>
+            <li><strong>Resolution</strong> compares prediction to actual verdict, fills accuracy + reason category</li>
+          </ul>
+          <p class="d-muted">Pairing key: <code>(acquisition_id, plan_id, plan_version)</code> — not timestamps. Plans are discrete, mutable artifacts.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Feature Vector (32-dim)</h4>
+          <table class="d-table d-table-sm">
+            <tr><td>Dims 0–8</td><td>Classification: outcome one-hot, risk tier, confidence</td></tr>
+            <tr><td>Dims 9–15</td><td>Plan structure: steps, rollback, capabilities, version</td></tr>
+            <tr><td>Dims 16–23</td><td>Relational quality: design coverage, dep alignment, evidence coverage</td></tr>
+            <tr><td>Dims 24–27</td><td>Text richness: design completeness, measurable criteria</td></tr>
+            <tr><td>Dims 28–31</td><td>Evidence: doc artifacts, freshness, research sources</td></tr>
+          </table>
+        </div>
+        <div class="d-detail">
+          <h4>Dashboard Maturity Bands</h4>
+          <table class="d-table d-table-sm">
+            <tr><td class="d-muted">&lt;15 resolved</td><td>bootstrap</td></tr>
+            <tr><td class="d-muted">&lt;50 resolved</td><td>early_noisy</td></tr>
+            <tr><td class="d-muted">&lt;100 resolved</td><td>preliminary</td></tr>
+            <tr><td class="d-muted">&lt;250 resolved</td><td>meaningful</td></tr>
+            <tr><td class="d-muted">250+ resolved</td><td>stable</td></tr>
+          </table>
+          <p class="d-muted">Stratified accuracy by risk tier, outcome class, and reason category.</p>
+        </div>
+      </div>
+
+      <!-- Self-Improvement Scanner -->
+      <h3 style="margin-top:28px;">Self-Improvement Scanner</h3>
+      <p>Automated code patching loop (one child lane of acquisition): metric-driven scanner detects genuine degradation → fingerprint dedup prevents re-scanning → CoderServer generates patches on-demand → sandbox validates → human approves. Stage-gated and RAM-aware.</p>
+
+      <div class="d-flow d-flow-loop">
+        <div class="d-flow-step d-c-purple">Kernel Tick (900s)</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">6 Metric Detectors</div>
+        <div class="d-flow-arrow">fingerprint</div>
+        <div class="d-flow-step d-c-amber">Dedup Gate</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">ImprovementRequest</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-purple">CoderServer</div>
+        <div class="d-flow-arrow">patch</div>
+        <div class="d-flow-step d-c-amber">Sandbox (AST + lint + test)</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-red">Human Approval</div>
+        <div class="d-flow-arrow">apply</div>
+        <div class="d-flow-step d-c-green">Health Monitor</div>
+      </div>
+
+      <!-- Stage System -->
+      <h3 style="margin-top:28px;">Stage System</h3>
+      <p>Three stages control how far patches progress. The stage is resolved from <code>SELF_IMPROVE_STAGE</code> env var (or derived from <code>FREEZE_AUTO_IMPROVE</code> + <code>SELF_IMPROVE_DRY_RUN</code> flags).</p>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr><th>Stage</th><th>Name</th><th>Behavior</th><th>Code Applied?</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="d-c-red">0</td><td>Frozen</td><td>Auto-triggers blocked. Only manual <code>/api/self-improve/trigger</code> allowed.</td><td>No</td></tr>
+            <tr><td class="d-c-amber">1</td><td>Dry Run</td><td>Full pipeline runs — scanner, codegen, sandbox — but nothing written to disk.</td><td>No</td></tr>
+            <tr><td class="d-c-green">2</td><td>Human Approval</td><td>Patches generated and sandbox-tested. Applied only after dashboard approval.</td><td>After approval</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="d-note">Stage 1 unconditionally forces <code>dry_run=True</code> regardless of caller arguments — this cannot be bypassed. The recommended progression: start at Stage 0 (frozen) → promote to Stage 1 (dry-run) for observation → promote to Stage 2 (human-approval) only after reviewing scanner output. <strong>Stage 2 proven (2026-04-15):</strong> first real approved patch applied and survived health check. Pending approvals persist to <code>~/.jarvis/pending_approvals.json</code> (atomic write, full <code>ImprovementRecord</code> serialization) and survive restarts. Stage itself persists to <code>self_improve_stage.json</code>. Runtime stage changes via <code>POST /api/self-improve/stage</code>.</div>
+
+      <!-- Metric-Driven Scanner -->
+      <h3>Metric-Driven Scanner</h3>
+      <p>6 detectors in <code>consciousness_system._si_detect_opportunities()</code>. Each reads only from architecturally-owned subsystems (analytics, health_monitor, observer, event_bus). No cross-boundary reads. Enriched diagnostic context flows into the <strong>DIAGNOSTIC</strong> hemisphere specialist (codebase structure from <code>CodebaseIndex</code>, live friction/correction signals from <code>FrictionMiner</code>).</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Detectors</h4>
+          <table class="d-table d-table-sm">
+            <tr><td>Health Degradation</td><td>Overall health &lt;0.6 sustained</td><td>analytics + health_monitor</td></tr>
+            <tr><td>Reasoning Quality</td><td>Quality score drops below threshold</td><td>analytics</td></tr>
+            <tr><td>Confidence Volatility</td><td>Rapid swings in confidence metrics</td><td>analytics</td></tr>
+            <tr><td>Response Latency</td><td>Spikes in response generation time</td><td>analytics</td></tr>
+            <tr><td>Event Bus Errors</td><td>Error rate exceeds baseline</td><td>event_bus</td></tr>
+            <tr><td>Tick Performance</td><td>Tick p95 regression above budget</td><td>observer</td></tr>
+          </table>
+        </div>
+        <div class="d-detail">
+          <h4>Deduplication Pipeline</h4>
+          <ol>
+            <li><strong>Fingerprint hash:</strong> deterministic hash of (detector + metric + threshold) per opportunity</li>
+            <li><strong>In-memory cooldown:</strong> 4-hour window — same fingerprint cannot fire twice</li>
+            <li><strong>Past proposals check:</strong> 24-hour scan against persisted <code>improvement_proposals.jsonl</code></li>
+            <li><strong>Daily cap:</strong> max 6 LLM generation attempts per calendar day</li>
+          </ol>
+        </div>
+        <div class="d-detail">
+          <h4>Maturity Guards</h4>
+          <ul>
+            <li><strong>Minimum uptime:</strong> 30 minutes before any scan fires</li>
+            <li><strong>Per-detector sample floor:</strong> each detector has its own minimum observation count before triggering</li>
+            <li><strong>Sustained evidence:</strong> metrics must hold below threshold for multiple consecutive checks, not just one spike</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>What It Does NOT Scan</h4>
+          <ul>
+            <li class="d-muted">No PVL contracts (ProcessVerifier is architecturally off-limits)</li>
+            <li class="d-muted">No dashboard data (presentation layer)</li>
+            <li class="d-muted">No eval sidecar (read-only observer)</li>
+            <li class="d-muted">No identity/memory subsystems (different ownership)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- DIAGNOSTIC + CODE_QUALITY + CLAIM_CLASSIFIER + DREAM_SYNTHESIS + SKILL_ACQUISITION Specialists -->
+      <h3>Self-Improvement Intelligence Specialists</h3>
+      <p>Five shadow-only Tier-1 hemisphere specialists that learn from self-improvement, capability gate, dream validation, and skill/acquisition lifecycle activity. None gate any pipeline decision — all are advisory and accumulate training signal for future promotion.</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>DIAGNOSTIC (43-dim → 6-class)</h4>
+          <p>Detector-pattern approximator: learns to predict which of 6 detector categories fires from the system health state. Teacher signal: "which detector fired."</p>
+          <table class="d-table d-table-sm">
+            <tr><td>dims 0-5</td><td>Health snapshot (overall, worst, reasoning, coherence, volatility, confidence)</td></tr>
+            <tr><td>dims 6-11</td><td>Performance (trend, slow ratio, avg slow, error rate, tick p95, uptime)</td></tr>
+            <tr><td>dims 12-19</td><td>Context (quarantine, soul integrity, mode, evolution, consciousness, trend, mutations, learning jobs)</td></tr>
+            <tr><td>dims 20-27</td><td>History (opportunity count, max sustained, improvements today, last age, sandbox rate, friction rate, correction count, autonomy level)</td></tr>
+            <tr><td>dims 28-31</td><td>Detector firing pattern (count, max priority, has_health, has_perf)</td></tr>
+            <tr><td>dims 32-37</td><td><strong>Codebase structure</strong> (module lines, import fanout, importers, symbol count, recently modified, has_codebase_context)</td></tr>
+            <tr><td>dims 38-42</td><td><strong>Friction/correction</strong> (severity ratio, correction ratio, identity count, auto-accepted, has_friction_context)</td></tr>
+          </table>
+          <p><strong>Primary-target aggregation:</strong> when multiple detectors fire, the highest-priority/longest-sustained opportunity's module is encoded. <strong>Friction window:</strong> 3600s, matching the self-improvement scan cadence. <strong>Negative examples:</strong> every 5th healthy scan (no detectors fired) records a uniform distribution label <code>[1/6, ..., 1/6]</code> at fidelity 0.6, preventing the specialist from training exclusively on positive examples.</p>
+        </div>
+        <div class="d-detail">
+          <h4>CODE_QUALITY (35-dim → 4-class)</h4>
+          <p>Patch outcome predictor: learns to predict whether a self-improvement attempt will result in improvement, stability, regression, or rollback.</p>
+          <table class="d-table d-table-sm">
+            <tr><td>dims 0-7</td><td>Request classification (type one-hot, priority, risk, approval)</td></tr>
+            <tr><td>dims 8-15</td><td>Patch features (files, lines, new files, confidence, escalations, iterations, provider, category)</td></tr>
+            <tr><td>dims 16-22</td><td>Sandbox results (lint, tests, sim, p95 delta)</td></tr>
+            <tr><td>dims 23-25</td><td>Diagnostics (count, silent stubs, recommendation)</td></tr>
+            <tr><td>dims 26-27</td><td>System context (quarantine pressure, soul integrity)</td></tr>
+            <tr><td>dims 28-34</td><td><strong>Module patch history</strong> (total patches, success rate, regression rate, recency, recidivism, avg iterations, has_patch_history)</td></tr>
+          </table>
+          <p><strong>Patch history scan:</strong> reads <code>improvement_proposals.jsonl</code> newest-first, capped at 500 lines. <strong>Recidivism:</strong> exact same fingerprint on the same target module.</p>
+        </div>
+        <div class="d-detail">
+          <h4>CLAIM_CLASSIFIER (28-dim → 8-class)</h4>
+          <p>Gate action class predictor: learns to predict what action the CapabilityGate will take on a claim (pass, block, rewrite). Teacher signal: gate decision tag. Friction correction provides corrective supervision when the gate was too aggressive.</p>
+          <table class="d-table d-table-sm">
+            <tr><td>dims 0-3</td><td>Text shape (token count, char length, first-person pronoun, we-pronoun)</td></tr>
+            <tr><td>dims 4-7</td><td>Pattern match (pattern index, readiness frame, ability category, intention category)</td></tr>
+            <tr><td>dims 8-13</td><td>Signal flags (blocked verb, technical signal, internal ops, purely conversational, preference alignment, grounded observation)</td></tr>
+            <tr><td>dims 14-16</td><td>Context flags (subordinate context, reflective exclusion, verified skill context)</td></tr>
+            <tr><td>dims 17-19</td><td>Route context (NONE route, strict route, status mode)</td></tr>
+            <tr><td>dims 20-22</td><td>Registry state (verified, learning, unknown)</td></tr>
+            <tr><td>dims 23-24</td><td>Evidence state (perception evidence fresh, identity confirmed)</td></tr>
+            <tr><td>dims 25-27</td><td>History (family block count, session block count, time since last block)</td></tr>
+          </table>
+          <p><strong>8 label classes:</strong> conversational, grounded, verified, preference, reflective, learning_acknowledged, blocked, rewritten. <strong>Friction correction:</strong> when <code>FrictionMiner</code> detects <code>too_cautious</code> or <code>correction</code> events, the gate correlates with recent blocked/rewritten claims (ring buffer, max 10, 60s window) and records a corrective "conversational" label at fidelity 0.7 (original gate labels are fidelity 1.0; higher fidelity wins during tensor preparation). <strong>Dashboard:</strong> label distribution histogram visible on the Specialists tab.</p>
+        </div>
+        <div class="d-detail">
+          <h4>DREAM_SYNTHESIS (16-dim → 4-class)</h4>
+          <p>Dream artifact validation predictor: learns to shadow the ReflectiveValidator's artifact disposition decisions. Teacher signal: validator outcome (promote/hold/discard/quarantine) with structured reason metadata.</p>
+          <table class="d-table d-table-sm">
+            <tr><td>dims 0-1</td><td>Artifact content (content length normalized, coherence)</td></tr>
+            <tr><td>dims 2-4</td><td>Artifact type (pattern, connection, insight — one-hot)</td></tr>
+            <tr><td>dim 5</td><td>Artifact confidence</td></tr>
+            <tr><td>dim 6</td><td>Cluster coherence</td></tr>
+            <tr><td>dim 7</td><td>Pending age (time since creation, normalized)</td></tr>
+            <tr><td>dims 8-10</td><td>System state (memory density, dream cycle count, awareness level)</td></tr>
+            <tr><td>dims 11-12</td><td>Epistemic state (belief count, contradiction debt)</td></tr>
+            <tr><td>dims 13-14</td><td>Governance (soul integrity index, quarantine pressure)</td></tr>
+            <tr><td>dim 15</td><td>Promotion rate (historical promotion success rate)</td></tr>
+          </table>
+          <p><strong>4 label classes:</strong> promoted, held, discarded, quarantined. <strong>8 reason categories:</strong> no_sources, contradicts_beliefs, informational_hold, low_coherence, low_confidence, meets_thresholds, borderline_hold, promotion_cap. Self-referential discards (dream-about-dream feedback loop guard) are classified as <code>borderline_hold</code>. <strong>Anti-authority contract:</strong> The NN learns to predict what the validator does — it never bypasses the validator, writes to memory, or promotes artifacts. Structural AST tests enforce import isolation. Data pairing by <code>artifact_id</code>.</p>
+        </div>
+        <div class="d-detail">
+          <h4>SKILL_ACQUISITION (40-dim → 5-class)</h4>
+          <p>Skill/acquisition lifecycle outcome predictor. Teacher signal comes from handoff, planning, implementation, verification, and terminal acquisition outcomes. Synthetic weight-room data is allowed only as telemetry.</p>
+          <ul>
+            <li><strong>Authority:</strong> shadow-only, no broadcast slots, no policy influence, no plugin activation, no SkillRegistry verification.</li>
+            <li><strong>Sources:</strong> live acquisition lifecycle records plus synthetic weight-room profiles.</li>
+            <li><strong>Boundary:</strong> synthetic signals cannot satisfy lived maturity gates or operational proof.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="d-note" style="margin-top:16px;">
+        <strong>Dashboard:</strong> The <a href="/capability-pipeline">Capability Pipeline</a> page includes a <strong>Specialists</strong> tab showing live maturity bands, signal counts, accuracy, training attempts, and failure state for shadow specialists. The Learning tab shows the live <strong>Hemisphere NNs</strong> panel. The <strong>Training</strong> tab shows the <strong>Skill Acquisition Weight Room</strong>, <strong>Companion Training</strong>, <strong>Language Evidence Gates</strong>, <strong>Synthetic Perception Exercise</strong>, and <strong>Text-Only Exercises</strong> (commitment, claim, retrieval, world model, contradiction, diagnostic, plan evaluator) panels. Data is sourced from snapshot caches and specialist APIs; synthetic panels remain telemetry-only.
+      </div>
+
+      <!-- CodeGen Service + CoderServer -->
+      <h3>CodeGen Service &amp; CoderServer</h3>
+      <p>The <strong>CodeGen Service</strong> (<code>codegen/service.py</code>) is the shared code generation layer used by both the Capability Acquisition Pipeline and the self-improvement scanner. It wraps the <strong>CoderServer</strong> (Qwen3-Coder-Next 80B MoE via <code>llama-server</code> on CPU) and provides structured generation, validation, and sandbox evaluation. Starts on-demand, shuts down after to reclaim RAM. It defaults to <code>CODER_GPU_LAYERS=0</code> and never touches GPU VRAM unless an operator explicitly changes that for a larger machine. Minutes-long code design/generation is expected; preserving live brain GPU capacity is the priority. Dashboard/API status labels it <code>authority=infrastructure_only</code> with active/last consumer telemetry so ownership stays with the caller lane.</p>
+      <div class="d-flow">
+        <div class="d-flow-step d-c-green">Generation request</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-purple">CodeGenService</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-purple">CoderServer.ensure_running()</div>
+        <div class="d-flow-arrow">boot ~2min</div>
+        <div class="d-flow-step d-c-purple">llama-server /health poll</div>
+        <div class="d-flow-arrow">ready</div>
+        <div class="d-flow-step d-c-green">/v1/chat/completions</div>
+        <div class="d-flow-arrow">code</div>
+        <div class="d-flow-step d-c-amber">Sandbox validation</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-red">CoderServer.shutdown()</div>
+      </div>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>RAM-Gated Quant Selection</h4>
+          <p>The system auto-selects the best GGUF quantization for available system RAM. This prevents OOM on machines that can't fit the full model.</p>
+          <table class="d-table d-table-sm">
+            <thead><tr><th>System RAM</th><th>GGUF Quant</th><th>Model Size</th><th>Quality</th></tr></thead>
+            <tbody>
+              <tr class="d-row-highlight"><td>56GB+</td><td>UD-Q4_K_XL</td><td>~46GB</td><td>Best</td></tr>
+              <tr><td>48–55GB</td><td>UD-IQ4_XS</td><td>~38GB</td><td>Good</td></tr>
+              <tr><td>32–47GB</td><td>UD-IQ2_M</td><td>~25GB</td><td>Acceptable</td></tr>
+              <tr><td class="d-c-red">&lt;32GB</td><td colspan="3">Disabled — would OOM the system</td></tr>
+            </tbody>
+          </table>
+          <p class="d-muted"><code>setup.sh</code> auto-detects RAM and downloads the correct quant. <code>config.py</code> uses <code>hardware_profile.resolve_coder_profile()</code> to gate auto-detection. Force-enabling on insufficient RAM logs a warning but does not block (user override).</p>
+        </div>
+        <div class="d-detail">
+          <h4>Provider Hierarchy</h4>
+          <ol>
+            <li><strong>CoderServer</strong> (primary) — local Qwen3-Coder-Next, zero API cost, highest accuracy</li>
+            <li><strong>Ollama</strong> (fallback) — local qwen3:8b or tier-appropriate model, lower accuracy but always available</li>
+          </ol>
+          <p class="d-muted">Claude and OpenAI API calls are <strong>not used</strong> in the code generation hot path — zero external API cost. The coder server communicates via OpenAI-compatible API on <code>localhost:8081</code>.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Lifecycle Safety</h4>
+          <ul>
+            <li><strong>On-demand:</strong> Server starts only when generation needed, shuts down immediately after</li>
+            <li><strong>atexit handler:</strong> Sends SIGKILL to any orphan llama-server on interpreter shutdown</li>
+            <li><strong>setup.sh cleanup:</strong> Kills lingering llama-server processes on startup, frees port 8081</li>
+            <li><strong>Pure CPU by default:</strong> <code>CODER_GPU_LAYERS=0</code> — never contends with Ollama, STT, TTS, emotion, speaker ID, or embeddings for VRAM</li>
+            <li><strong>Health poll:</strong> <code>/health</code> endpoint checked every 2s during startup (180s timeout)</li>
+            <li><strong>Request timeout:</strong> 600s per generation (complex code patches can be slow on CPU; this is normal operator-visible behavior)</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>JSON Repair Loop</h4>
+          <p>LLM output must be valid JSON matching the patch schema. If the first attempt fails to parse:</p>
+          <ol>
+            <li>Extract JSON from markdown fences if present — includes a <strong>code block fallback</strong> that reconstructs JSON from labelled markdown blocks (e.g., <code>```json ... ```</code>) when the CoderServer wraps output in triple-backtick fences instead of returning raw JSON (~50% of attempts)</li>
+            <li>Re-prompt with <code>JSON_REPAIR_PROMPT</code> (max 2 retries)</li>
+            <li>On final failure: log and discard (no partial patches)</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- Sandbox & Safety -->
+      <h3>Sandbox Validation &amp; Safety Gates</h3>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Sandbox Pipeline</h4>
+          <div class="d-flow" style="flex-wrap:wrap;">
+            <div class="d-flow-step d-c-amber">AST parse check</div>
+            <div class="d-flow-arrow">→</div>
+            <div class="d-flow-step d-c-amber">ruff lint</div>
+            <div class="d-flow-arrow">→</div>
+            <div class="d-flow-step d-c-amber">pytest (affected modules)</div>
+            <div class="d-flow-arrow">→</div>
+            <div class="d-flow-step d-c-amber">Kernel tick sim</div>
+            <div class="d-flow-arrow">pass</div>
+            <div class="d-flow-step d-c-green">Proposal persisted</div>
+          </div>
+        </div>
+        <div class="d-detail">
+          <h4>Write Boundaries</h4>
+          <p><code>patch_plan.ALLOWED_PATHS</code> (12 directories):</p>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">consciousness/</span><span class="d-tag">personality/</span>
+            <span class="d-tag">policy/</span><span class="d-tag">self_improve/</span>
+            <span class="d-tag">reasoning/</span><span class="d-tag">hemisphere/</span>
+            <span class="d-tag">tools/</span><span class="d-tag">tools/plugins/</span>
+            <span class="d-tag">memory/</span><span class="d-tag">perception/</span>
+            <span class="d-tag">cognition/</span><span class="d-tag">codegen/</span>
+          </div>
+          <p class="d-muted">Everything outside these directories is untouchable — dashboard, config, setup scripts, tests, identity, epistemic layers are all protected from self-modification.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Denied Patterns (13 regexes)</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag d-tag-red">subprocess</span><span class="d-tag d-tag-red">os.system</span>
+            <span class="d-tag d-tag-red">os.popen</span><span class="d-tag d-tag-red">__import__</span>
+            <span class="d-tag d-tag-red">exec</span><span class="d-tag d-tag-red">eval</span>
+            <span class="d-tag d-tag-red">credentials</span><span class="d-tag d-tag-red">api_key</span>
+            <span class="d-tag d-tag-red">password</span><span class="d-tag d-tag-red">secret</span>
+            <span class="d-tag d-tag-red">open('w')</span><span class="d-tag d-tag-red">socket</span>
+            <span class="d-tag d-tag-red">http.client</span>
+          </div>
+          <p class="d-muted">Any patch containing these patterns is rejected immediately — no sandbox test needed.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Post-Apply Health Gate</h4>
+          <ul>
+            <li>Health monitored every kernel tick after patch apply</li>
+            <li>Regression detected → auto-rollback from <code>improvement_snapshots/</code></li>
+            <li>Supervisor crash recovery: 5 rapid crashes → rollback pending patches</li>
+            <li>All proposals persisted to <code>improvement_proposals.jsonl</code> with full audit trail</li>
+            <li><strong>Proven (2026-04-15):</strong> first real Stage 2 patch applied → health check passed → no rollback</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Architectural Boundaries -->
+      <h3>Architectural Boundaries</h3>
+      <div class="d-note d-note-warn">
+        Both the acquisition pipeline and self-improvement scanner are <strong>strictly bounded</strong>. The scanner reads metrics from architecturally-owned subsystems only (analytics, health_monitor, observer, event_bus). Code patches are written only to allowed directories. Plugins go through a quarantine→shadow→supervised→active lifecycle. Neither path reads or writes to: identity subsystem, epistemic layers (L5-L10), eval sidecar, dashboard data, or user memory. The scanner does <strong>not</strong> import PVL contracts — eval is a separate read-only sidecar.
+      </div>
+
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Data Isolation</h4>
+          <table class="d-table d-table-sm">
+            <tr><td><strong>Scanner reads</strong></td><td>ConsciousnessAnalytics, HealthMonitor, Observer, EventBus</td></tr>
+            <tr><td><strong>Scanner writes</strong></td><td>ImprovementRequest (in-memory) → improvement_proposals.jsonl</td></tr>
+            <tr><td><strong>Acquisition reads</strong></td><td>SkillRegistry, MemorySearch, Library, codebase context (AST index)</td></tr>
+            <tr><td><strong>Acquisition writes</strong></td><td>CapabilityAcquisitionJob → acquisition_jobs.jsonl, PluginRecord → plugin_registry/, ShadowPredictionArtifact → acquisition_shadows/</td></tr>
+            <tr><td><strong>CodeGen reads</strong></td><td>AcquisitionPlan or ImprovementRequest + codebase context (read-only)</td></tr>
+            <tr><td><strong>CodeGen writes</strong></td><td>Generated code (in-memory) → sandbox input or plugin quarantine</td></tr>
+            <tr><td><strong>Apply writes</strong></td><td>File patches to allowed directories only (after approval)</td></tr>
+          </table>
+        </div>
+        <div class="d-detail">
+          <h4>What the Pipeline Cannot Do</h4>
+          <ul>
+            <li class="d-muted">Cannot modify its own scanner or safety gates</li>
+            <li class="d-muted">Cannot modify identity, epistemic, or eval subsystems</li>
+            <li class="d-muted">Cannot call external APIs (no Claude/OpenAI in codegen path)</li>
+            <li class="d-muted">Cannot bypass stage system (Stage 1 dry_run is unconditional)</li>
+            <li class="d-muted">Cannot exceed 6 LLM generations per day (scanner path)</li>
+            <li class="d-muted">Cannot use subprocess, exec, eval, or network calls in patches</li>
+            <li class="d-muted">Cannot activate a plugin without lane-native proof references</li>
+            <li class="d-muted">Cannot compress child lifecycles — SkillRegistry, PluginRegistry, AttributionLedger retain their own state</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Artifact Taxonomy -->
+      <h3>Artifact Taxonomy</h3>
+      <p>The acquisition pipeline classifies all produced objects into three categories to enforce correct ownership and versioning:</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <table class="d-table d-table-sm">
+            <thead><tr><th>Category</th><th>Examples</th><th>Properties</th></tr></thead>
+            <tbody>
+              <tr><td>Mutable</td><td>AcquisitionPlan, PluginRecord, LearningJob</td><td>Updated in-place, have lifecycle states</td></tr>
+              <tr><td>Immutable</td><td>EvaluationReport, VerificationBundle, DocumentationArtifact</td><td>Write-once, append-only</td></tr>
+              <tr><td>Versioned</td><td>CodePatch, generated plugin modules, skill evidence</td><td>Version-tracked, rollback-able</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ DISTILLATION ═══════════ -->
+    <section id="flow-distillation" class="d-section">
+      <h2>Data Flow: Distillation Pipeline</h2>
+      <div class="d-flow">
+        <div class="d-flow-step d-c-purple">Teacher models</div>
+        <div class="d-flow-arrow">signals</div>
+        <div class="d-flow-step d-c-purple">DistillationCollector</div>
+        <div class="d-flow-arrow">JSONL</div>
+        <div class="d-flow-step d-c-amber">Z-Score Normalize</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-purple">Tier-1 Specialists</div>
+        <div class="d-flow-arrow">accuracy gate</div>
+        <div class="d-flow-step d-c-purple">Tier-2 Hemispheres</div>
+        <div class="d-flow-arrow">broadcast</div>
+        <div class="d-flow-step d-c-purple">Policy NN (20-dim)</div>
+      </div>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Tier-1 Specialists (12 active configs)</h4>
+          <table class="d-table d-table-sm">
+            <tr><td>speaker_repr</td><td>ECAPA-TDNN → compressor 192→192</td><td>cosine_mse</td></tr>
+            <tr><td>face_repr</td><td>MobileFaceNet → compressor 512→512</td><td>cosine_mse</td></tr>
+            <tr><td>emotion_depth</td><td>wav2vec2 → approximator 32→8</td><td>kl_div</td></tr>
+            <tr><td>voice_intent</td><td>tool_router → approximator 384→8</td><td>kl_div</td></tr>
+            <tr><td>speaker_diarize</td><td>ECAPA-TDNN → approximator 192→3</td><td>kl_div</td></tr>
+            <tr><td>perception_fusion</td><td>multi-modal → cross_modal 48→8</td><td>mse</td></tr>
+            <tr><td>plan_evaluator</td><td>acquisition_planner → approximator 32→3</td><td>kl_div</td></tr>
+            <tr><td>diagnostic</td><td>diagnostic_detector → approximator 43→6</td><td>kl_div</td></tr>
+            <tr><td>code_quality</td><td>upgrade_verdict → approximator 35→4</td><td>kl_div</td></tr>
+            <tr><td>claim_classifier</td><td>claim_verdict → approximator 28→8</td><td>kl_div</td></tr>
+            <tr><td>dream_synthesis</td><td>ReflectiveValidator → approximator 16→4</td><td>kl_div</td></tr>
+            <tr><td>skill_acquisition</td><td>skill/acquisition lifecycle → approximator 40→5</td><td>kl_div</td></tr>
+            <tr style="color:#6a6a80;font-style:italic;"><td>language_style</td><td>Phase C language substrate → approximator 384→7</td><td>kl_div (enum only, no DistillationConfig)</td></tr>
+            <tr style="color:#6a6a80;font-style:italic;"><td>hrr_encoder</td><td>HRR/VSA research lane → approximator 384→4</td><td>PRE-MATURE shadow stub (enum only)</td></tr>
+          </table>
+        </div>
+        <div class="d-detail">
+          <h4>EMA Running Normalization</h4>
+          <p>Features from <code>audio_features*</code> sources (including <code>audio_features_enriched</code> 32-dim) are normalized via EMA-based running statistics in <code>data_feed.py</code> (<code>_RunningNormStats</code>). Condition uses <code>source.startswith("audio_features")</code> to match both 7-dim and 32-dim mixed-scale features (spectral ~2000, RMS ~0.05, ECAPA ~±1). Without normalization, large-scale features dominate gradients and training fails. Running stats (α=0.2) converge after ~3 batches and provide a stable normalization frame across training cycles, preventing false regression signals from per-batch distribution shift. Dependent specialists (e.g. <code>emotion_depth</code>) also skip retraining for 60s after any dependency (e.g. <code>speaker_repr</code>) is retrained, preventing training on inconsistent enriched features.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Accuracy Gating</h4>
+          <ul>
+            <li>Min accuracy floor: <code>TIER1_MIN_ACCURACY</code> = 5%</li>
+            <li>3 consecutive sub-floor results → specialist disabled for session</li>
+            <li>Successful retrain resets failure counter</li>
+            <li>Persisted accuracy below floor pre-seeds counter to 1</li>
+            <li><strong>Cold-start overfit guard:</strong> <code>DISTILLATION_REGRESSION_MIN_SAMPLES = 50</code> — regression check skipped when specialist has &lt;50 paired training samples. Prevents initial-build memorization (100% on 15 samples) from creating an unreachable regression baseline.</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Broadcast → Policy NN</h4>
+          <p>Global Broadcast Slots (4, expandable to 6 via M6) feed Tier-2 hemisphere outputs into Policy NN StateEncoder (dims 16-19). M6 expansion requires 2+ promoted specialists with &gt;0.05 mean impact and 7-day stability. Uses shadow dual-encoder A/B migration (20→22 dim).</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ WORLD MODEL ═══════════ -->
+    <section id="flow-world-model" class="d-section">
+      <h2>Data Flow: World Model</h2>
+      <div class="d-flow">
+        <div class="d-flow-step d-c-cyan">9 subsystem snapshots</div>
+        <div class="d-flow-arrow">fuse</div>
+        <div class="d-flow-step d-c-purple">WorldModel</div>
+        <div class="d-flow-arrow">delta</div>
+        <div class="d-flow-step d-c-purple">CausalEngine (18 rules)</div>
+        <div class="d-flow-arrow">predict</div>
+        <div class="d-flow-step d-c-purple">MentalSimulator</div>
+        <div class="d-flow-arrow">validate</div>
+        <div class="d-flow-step d-c-green">WORLD_MODEL_PREDICTION_VALIDATED</div>
+      </div>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Promotion Levels</h4>
+          <ol>
+            <li><strong>Shadow:</strong> Running but not influencing decisions (4h min runtime)</li>
+            <li><strong>Advisory:</strong> Injecting "if X then Y" into context (50 validated predictions, ≥65% accuracy)</li>
+            <li><strong>Active:</strong> Full authority (same 50/65% gate re-evaluated after advisory period)</li>
+            <li class="d-muted" style="font-size:0.82rem;">Auto-demotion: accuracy &lt;50% over 20 consecutive outcomes → demote one level</li>
+          </ol>
+        </div>
+        <div class="d-detail">
+          <h4>Simulator (Phase 3)</h4>
+          <p>Hypothetical projections using CausalEngine rules. Read-only — never mutates real state, never emits events. Max 3 projection steps. Shadow → advisory promotion requires 100 validated simulations at 70% accuracy over 48h.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ POLICY LAYER ═══════════ -->
+    <section id="flow-policy" class="d-section">
+      <h2>Data Flow: Policy Layer</h2>
+      <div class="d-flow">
+        <div class="d-flow-step d-c-green">Consciousness state</div>
+        <div class="d-flow-arrow">encode</div>
+        <div class="d-flow-step d-c-purple">StateEncoder (20-dim)</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-purple">Policy NN</div>
+        <div class="d-flow-arrow">8 knobs</div>
+        <div class="d-flow-step d-c-amber">Governor safety check</div>
+        <div class="d-flow-arrow">→</div>
+        <div class="d-flow-step d-c-green">PolicyDecision</div>
+      </div>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>8 Behavioral Knobs</h4>
+          <div class="d-tag-cloud">
+            <span class="d-tag">budget_allocation</span><span class="d-tag">task_scheduling</span>
+            <span class="d-tag">thought_weight_delta</span><span class="d-tag">mutation_ranking</span>
+            <span class="d-tag">response_length</span><span class="d-tag">proactivity_control</span>
+            <span class="d-tag">interruption_control</span><span class="d-tag">mode_suggestion</span>
+          </div>
+        </div>
+        <div class="d-detail">
+          <h4>Shadow A/B Evaluation</h4>
+          <p>Both kernel (heuristic) and NN produce decisions. Reward is computed for both. NN must achieve &gt;55% decisive win rate over 100+ decisions with positive margin and 30+ decisive comparisons before promotion. Governor blocks below 0.08 confidence. 5 regressions → auto-disable.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ CONSCIOUSNESS TICK ═══════════ -->
+    <section id="flow-consciousness" class="d-section">
+      <h2>Data Flow: Kernel Tick Cycle</h2>
+      <p>The cognitive kernel ticks at 100ms base / cadence_multiplier (0.5×–2.0×). Three priority queues ensure phase transitions never wait for background operations.</p>
+      <p><b>Internal thoughts are scheduled cognitive events, not hidden chat prompts.</b> They can originate from meta-thought templates, existential reasoning, philosophical dialogue, dreams, autonomy, fractal recall, curiosity, mutation/evolution loops, and other kernel cycles. The dashboard's emergence surfaces are operational evidence about these substrate mechanisms; they are not proof of sentience or digital life.</p>
+      <p><b>Emergence Evidence Panel.</b> Diagnostics renders a Level 0-7 evidence ladder from existing subsystem state. Levels 0-6 describe measurable substrate evidence such as internally generated activity, self-monitoring, persistence, self-directed inquiry, adaptation, counterfactual evaluation, and continuity under perturbation. Level 7 is intentionally empty unless an event survives known-mechanism elimination: templates, LLM prompt context, hardcoded detector rules, metric thresholds, and direct user prompting.</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Background Cycle Intervals</h4>
+          <table class="d-table d-table-sm">
+            <tr><td>World model</td><td>5s</td></tr>
+            <tr><td>Meta-thoughts</td><td>8s</td></tr>
+            <tr><td>Health monitor</td><td>30s</td></tr>
+            <tr><td>Analysis</td><td>30s</td></tr>
+            <tr><td>Fractal recall</td><td>30s</td></tr>
+            <tr><td>Quarantine</td><td>60s</td></tr>
+            <tr><td>Contradiction engine</td><td>60s</td></tr>
+            <tr><td>Belief graph</td><td>60s</td></tr>
+            <tr><td>Scene continuity</td><td>60s</td></tr>
+            <tr><td>Curiosity questions</td><td>60s</td></tr>
+            <tr><td>Onboarding</td><td>60s</td></tr>
+            <tr><td>Evolution</td><td>90s</td></tr>
+            <tr><td>Truth calibration</td><td>120s</td></tr>
+            <tr><td>Soul integrity</td><td>120s</td></tr>
+            <tr><td>Hemispheres</td><td>120s</td></tr>
+            <tr><td>Existential reasoning</td><td>120s</td></tr>
+            <tr><td>Goals</td><td>120s</td></tr>
+            <tr><td>Mutations</td><td>180s</td></tr>
+            <tr><td>Dialogue</td><td>240s</td></tr>
+            <tr><td>Capability discovery</td><td>300s</td></tr>
+            <tr><td>Reflective audit</td><td>300s</td></tr>
+            <tr><td>Learning jobs</td><td>300s</td></tr>
+            <tr><td>Self-improvement</td><td>900s</td></tr>
+          </table>
+        </div>
+        <div class="d-detail">
+          <h4>Thought Hygiene</h4>
+          <ul>
+            <li><strong>Tier-1 (actionable):</strong> pattern_recognition, synthesis, uncertainty, emotional_awareness</li>
+            <li><strong>Tier-2 (decorative):</strong> self_observation, consciousness_questioning, existential_wonder, etc.</li>
+            <li>Max 2 Tier-2 between Tier-1 firings</li>
+            <li>30-entry fingerprint dedup ring buffer</li>
+            <li>Observer awareness diminishing returns above 0.8</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ TRI-LAYER COGNITION ═══════════ -->
+    <section id="trilayer-cognition" class="d-section">
+      <h2>Design Principle: Tri-Layer Cognition</h2>
+      <p>The architecture enforces strict separation between three cognitive layers. The LLM is <strong>never</strong> the source of truth for system state — it only articulates data provided by subsystems.</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Layer 1 — Symbolic Truth</h4>
+          <p>Deterministic, inspectable, auditable. Includes:</p>
+          <ul>
+            <li>Memory storage with provenance (<code>memory/*</code>)</li>
+            <li>Belief records and contradiction engine (<code>epistemic/*</code>)</li>
+            <li>Attribution ledger — append-only event truth (<code>consciousness/attribution_ledger.py</code>)</li>
+            <li>Identity resolution and scope (<code>identity/*</code>)</li>
+            <li>Skill registry with evidence-gated verification (<code>skills/*</code>)</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Layer 2 — Neural Intuition</h4>
+          <p>Pattern learning from real data, shadow-evaluated before promotion:</p>
+          <ul>
+            <li>Policy NN — behavioral knobs via shadow A/B (<code>policy/*</code>)</li>
+            <li>Hemisphere NNs — Tier-1 distillation + Tier-2 dynamic architecture (<code>hemisphere/*</code>)</li>
+            <li>Memory Cortex — ranker and salience models (<code>memory/ranker.py</code>, <code>memory/salience.py</code>)</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Layer 3 — LLM Articulation</h4>
+          <p>Turns structured data into natural speech. <strong>Constraints:</strong></p>
+          <ul>
+            <li>Never stores or generates facts about system state</li>
+            <li>All output filtered through CapabilityGate (7 enforcement layers + action confabulation detection)</li>
+            <li>STATUS route bypasses LLM entirely — uses bounded articulation</li>
+            <li>Introspection has strict tier pipeline (grounded → bounded → LLM → fail-closed)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="d-note">This separation ensures internal truth remains inspectable and prevents prompt-only authority drift. The LLM can be swapped (Ollama model changes per tier) without affecting cognitive state.</div>
+    </section>
+
+    <!-- ═══════════ IDENTITY BOUNDARY ═══════════ -->
+    <section id="identity-boundary" class="d-section">
+      <h2>Design Principle: Identity Boundary Enforcement</h2>
+      <p>Layer 3 of the epistemic stack enforces that memory retrieval respects identity scope. The <code>IdentityBoundaryEngine</code> applies a retrieval policy matrix:</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Retrieval Policy Matrix</h4>
+          <table class="d-table d-table-sm">
+            <tr><td><strong>allow</strong></td><td>Memory belongs to current identity scope or is universal</td></tr>
+            <tr><td><strong>block</strong></td><td>Memory belongs to a different identity — never surfaced</td></tr>
+            <tr><td><strong>allow_if_referenced</strong></td><td>Cross-identity memory allowed only when the subject is explicitly referenced in conversation</td></tr>
+          </table>
+        </div>
+        <div class="d-detail">
+          <h4>Enforcement Chain</h4>
+          <ul>
+            <li><code>IdentityResolver</code> fuses voice/face/persistence → <code>IdentityContext</code> + <code>IdentityScope</code></li>
+            <li><code>IdentityBoundaryEngine</code> applies retrieval policy based on scope</li>
+            <li>Preference injection guard prevents cross-user preferences from leaking</li>
+            <li><code>IdentityAudit</code> logs all scope assignments, blocks, and quarantine events</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ EPISTEMIC STACK ═══════════ -->
+    <section id="epistemic-stack" class="d-section">
+      <h2>Epistemic Integrity Stack (L0–L12 + L3A/L3B)</h2>
+      <p>15 integrity entries (Layers 0–12 plus L3A and L3B) protecting cognitive integrity. Every outgoing response passes through L0. Every memory write passes through CueGate.</p>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr><th>Layer</th><th>Name</th><th>Status</th><th>Protects Against</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="d-c-green">L0</td><td>Capability Gate</td><td>Shipped</td><td>Unverified capability claims — 7 enforcement layers, 15 claim patterns + action confabulation guard</td></tr>
+            <tr><td class="d-c-green">L1</td><td>Attribution Ledger</td><td>Shipped</td><td>Untracked causal chains — append-only JSONL event truth</td></tr>
+            <tr><td class="d-c-green">L2</td><td>Provenance-Aware Memory</td><td>Shipped</td><td>Source-blind retrieval — every memory carries provenance</td></tr>
+            <tr><td class="d-c-green">L3</td><td>Identity Boundary</td><td>Shipped</td><td>Cross-identity memory leaks — retrieval policy matrix</td></tr>
+            <tr><td class="d-c-green">L3A</td><td>Identity Persistence</td><td>Shipped</td><td>Stale biometric signals — 180s persistence window</td></tr>
+            <tr><td class="d-c-amber">L3B</td><td>Persistent Scene Model</td><td>Shadow</td><td>Physical world amnesia — entity tracking, region mapping</td></tr>
+            <tr><td class="d-c-green">L4</td><td>Delayed Outcomes</td><td>Shipped</td><td>False credit assignment — counterfactual baselines</td></tr>
+            <tr><td class="d-c-green">L5</td><td>Typed Contradictions</td><td>Shipped</td><td>Belief inconsistency — 6 conflict classes</td></tr>
+            <tr><td class="d-c-green">L6</td><td>Truth Calibration</td><td>Shipped</td><td>Systematic overconfidence — 8-domain scoring, Brier/ECE</td></tr>
+            <tr><td class="d-c-green">L7</td><td>Belief Graph</td><td>Shipped</td><td>Unsupported belief propagation — weighted evidence edges</td></tr>
+            <tr><td class="d-c-amber">L8</td><td>Cognitive Quarantine</td><td>Active-Lite</td><td>Anomalous cognition patterns — 5 anomaly categories</td></tr>
+            <tr><td class="d-c-green">L9</td><td>Reflective Audit</td><td>Shipped</td><td>Undetected learning errors — 6-dimension scan</td></tr>
+            <tr><td class="d-c-green">L10</td><td>Soul Integrity</td><td>Shipped</td><td>Aggregate cognitive degradation — 10-dim composite</td></tr>
+            <tr><td class="d-c-green">L11</td><td>Epistemic Compaction</td><td>Shipped</td><td>Belief/edge overgrowth — weight caps, edge budgets</td></tr>
+            <tr><td class="d-c-green">L12</td><td>Intention Truth Layer (Stage 0 + Stage 1 shadow)</td><td>Shipped</td><td>Silently-dropped commitments, unbacked "give me a moment" promises — commitment extractor + intention registry + backed-commitment gate + IntentionResolver shadow delivery scoring</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top: 24px;">Intention Truth Layer (Layer 12, Stage 0 + Stage 1)</h3>
+      <p>Stage 0: Minimal truth-layer infrastructure for Jarvis to honestly track its own outgoing commitments. Stage 0 is truth-only — no delivery mechanism. Stage 1: <strong>IntentionResolver</strong> adds shadow-only heuristic delivery scoring — evaluates whether JARVIS should proactively report resolved intentions. Starts <code>shadow_only</code>; delivery locked until operator promotes past <code>advisory_canary</code>.</p>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr><th>Component</th><th>Where</th><th>Role</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>CommitmentExtractor</td><td>cognition/commitment_extractor.py</td><td>Regex bootstrap (~15 patterns) across 4 classes: <code>follow_up</code>, <code>deferred_action</code>, <code>future_work</code>, <code>task_started</code>. <code>CONVERSATIONAL_SAFE_PATTERNS</code> filter benign reflections ("I'll think about it", "keep that in mind") upstream.</td></tr>
+            <tr><td>IntentionRegistry</td><td>cognition/intention_registry.py</td><td>Durable CRUD for <code>IntentionRecord</code> (register / resolve / abandon / stale_sweep). Atomic JSON persistence to <code>~/.jarvis/intention_registry.json</code> + append-only ledger at <code>~/.jarvis/intention_outcomes.jsonl</code>. Singleton with thread-safe operations. Outcomes: <code>open | resolved | failed | stale | abandoned</code>.</td></tr>
+            <tr><td>Backed-commitment gate</td><td>skills/capability_gate.py::evaluate_commitment()</td><td>Route-class policy, not a verb whitelist. Unbacked commitment sentence(s) → "I don't have a background task to follow up on that right now." Backed commitments pass through unchanged.</td></tr>
+            <tr><td>Conversation handler hook</td><td>conversation_handler.py</td><td>Turn-scoped <code>_backing_job_ids</code> + <code>_intention_registered_turn</code>. Outgoing pipeline: route dispatch → <code>_gate_text</code> → <code>evaluate_commitment</code> → <code>_send_sentence</code>. LIBRARY_INGEST returns job id synchronously; thread resolves intention on completion.</td></tr>
+            <tr><td>Autonomy resolution</td><td>autonomy/orchestrator.py</td><td>AUTONOMY_RESEARCH_COMPLETED / _FAILED events call <code>intention_registry.resolve()</code>. Truth-only, no user-facing delivery.</td></tr>
+            <tr><td>Stale sweep cycle</td><td>consciousness_system.py</td><td>300s cadence, mode-gated via <code>allowed_cycles</code>. Marks open intentions older than 7d as <code>stale</code>.</td></tr>
+            <tr><td>Self-status surfacing</td><td>reasoning/bounded_response.py</td><td>When <code>open_count &gt; 0</code>, <code>MeaningFrame(self_status)</code> adds deterministic facts: "Open intentions: N" + "Most recent open intention age: ...". No LLM narration.</td></tr>
+            <tr><td>Observability</td><td><code>/api/intentions</code> + dashboard panel + PVL group <code>intention_truth</code></td><td>Open/stale counts, 7-day outcome histogram, recent open + resolved lists. 3 PVL contracts assert the truth boundary.</td></tr>
+            <tr style="border-top: 2px solid #333;"><td colspan="3" style="color: #0cf; font-weight: 700; padding-top: 8px;">Stage 1 — IntentionResolver (shadow-only)</td></tr>
+            <tr><td>IntentionResolver</td><td>cognition/intention_resolver.py</td><td>Heuristic relevance predictor: <code>evaluate(signal) → ResolverVerdict</code> with 4 decisions (<code>deliver_now</code>, <code>deliver_on_next_turn</code>, <code>suppress</code>, <code>defer</code>), 10 controlled reason codes, 5-rung promotion ladder (<code>shadow_only → active</code>). Append-only JSONL at <code>~/.jarvis/intention_resolver_verdicts.jsonl</code>.</td></tr>
+            <tr><td>IntentionDeliveryEncoder</td><td>hemisphere/intention_delivery_encoder.py</td><td>24-dim feature vector shape (3 blocks: intention intrinsic, conversation context, system governance) reserved for the future Stage 2 specialist. The encoder exists; runtime Stage 1 currently logs resolver verdicts, not specialist training tensors.</td></tr>
+            <tr><td>Resolver tick</td><td>consciousness_system.py</td><td>30s cadence, mode-gated. Evaluates up to 5 recent resolutions per tick, attaches shadow verdicts to records.</td></tr>
+            <tr><td>ProactiveGovernor hook</td><td>personality/proactive.py</td><td>Consumes <code>deliver_now</code> verdicts when resolver stage permits delivery (≥ <code>advisory_canary</code>). Subject to existing cooldown/addressee/capability gates.</td></tr>
+            <tr><td>Resolver observability</td><td><code>/api/intention-resolver</code> + dashboard panel + status marker</td><td>Stage, shadow metrics, verdict distribution, reason-code histogram, recent verdicts. <code>POST /api/intention-resolver/rollback</code> for manual demotion. <code>POST /api/intention-resolver/stage</code> for manual stage set.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top: 12px;"><strong>Stage 0 hard contracts:</strong> commitments without a backing job id MUST be rewritten; commitments WITH a backing job id MUST pass unchanged; conversational reflections MUST NOT be rewritten; autonomy outcomes MUST land in the registry. <strong>Stage 1 invariants:</strong> resolver starts <code>shadow_only</code> (zero delivery); Stage 0 outcomes are never mutated by the resolver; <code>intention_delivery</code> hemisphere specialist stays commented out (Stage 2 only); ProactiveGovernor remains single authority for unsolicited speech.</p>
+    </section>
+
+    <!-- ═══════════ SAFETY GUARDS ═══════════ -->
+    <section id="safety-guards" class="d-section">
+      <h2>Safety Guards</h2>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr><th>Guard</th><th>Where</th><th>What It Prevents</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Capability Gate</td><td>conversation_handler.py</td><td>7 sequential enforcement layers scan all outgoing text for unverified claims. <strong>Route-aware:</strong> on <code>NONE</code> route, claims passing 3 negative checks (not internal ops, not capability assertion, not self-report) pass as conversational. Strict routes (STATUS, INTROSPECTION) enforce full DEFAULT BLOCK. <code>_INTERNAL_OPS_RE</code> pattern matches system domain × operation noun combinations.</td></tr>
+            <tr><td>CueGate mode check</td><td>memory/gate.py</td><td>Blocks observation writes during dream/sleep/reflective/deep_learning modes</td></tr>
+            <tr><td>Mutation Governor</td><td>mutation_governor.py</td><td>Risk scoring, cooldown, stability gate (no mutations if tick p95 &gt; 50ms), rollback</td></tr>
+            <tr><td>Self-Improve sandbox</td><td>self_improve/sandbox.py</td><td>AST parse + ruff lint + pytest + kernel tick simulation before any code patch</td></tr>
+            <tr><td>Self-Improve write boundary</td><td>self_improve/patch_plan.py</td><td>10 allowed directories, 13 denied regex patterns (subprocess, exec, credentials, etc.)</td></tr>
+            <tr><td>Self-Improve stage gate</td><td>self_improve/orchestrator.py</td><td>3-tier stage system: frozen (no triggers), dry-run (unconditional), human-approval</td></tr>
+            <tr><td>Self-Improve daily cap</td><td>consciousness_system.py</td><td>Max 6 LLM generation attempts per day — prevents runaway API/compute costs</td></tr>
+            <tr><td>Self-Improve fingerprint dedup</td><td>consciousness_system.py</td><td>4h in-memory + 24h persistence cooldown — same issue never re-scanned</td></tr>
+            <tr><td>Self-Improve RAM gate</td><td>hardware_profile.py</td><td>CoderServer disabled on &lt;32GB RAM — prevents OOM on underpowered machines</td></tr>
+            <tr><td>CoderServer orphan cleanup</td><td>self_improve/coder_server.py</td><td>atexit handler + setup.sh kills orphan llama-server processes</td></tr>
+            <tr><td>Policy Governor</td><td>policy/governor.py</td><td>Confidence check, bounds check, load check, regression check on NN decisions</td></tr>
+            <tr><td>Quarantine pressure</td><td>quarantine/pressure.py</td><td>Elevated: raised thresholds. High: policy blocked, mutation cap halved, WM capped</td></tr>
+            <tr><td>Source ledger retrieval counting</td><td>retrieval_log.py</td><td><code>log_outcome()</code> is single authority — prevents double-counting</td></tr>
+            <tr><td>Dream artifact containment</td><td>dream_artifacts.py, consciousness_system.py, consolidation.py</td><td>Provisional ring buffer (200), never in MemoryStorage, never MEMORY_WRITE. Anti-feedback-loop: promoted dream artifacts excluded from dream cycle input via <code>_CONSOL_EXCLUDE_TAGS</code>; content dedup prevents duplicate artifacts; two-layer self-referential discard in validator (content check + source-memory tag dominance ≥50%); per-cycle artifact cap (20); consolidation engine rejects dream-dominated clusters via <code>_ALREADY_CONSOLIDATED_TAGS</code>. Validator records distillation signals for DREAM_SYNTHESIS specialist (record-only, no NN consumption)</td></tr>
+            <tr><td>Echo detection</td><td>perception_orchestrator.py</td><td>SequenceMatcher ≥70% blocks mic-captured TTS playback (50% for partial fragments)</td></tr>
+            <tr><td>Addressee Gate</td><td>perception/addressee.py</td><td>30 negation phrases + 17 dismissive patterns suppress non-Jarvis speech</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ═══════════ GOAL CONTINUITY ═══════════ -->
+    <section id="goal-continuity" class="d-section">
+      <h2>Goal Continuity Layer</h2>
+      <p>User-facing goals persist across sessions and drive autonomy alignment. Goals are the bridge between what the user wants and what the autonomy pipeline researches.</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Goal Lifecycle</h4>
+          <div class="d-flow" style="flex-wrap:wrap;">
+            <div class="d-flow-step d-c-green">Created</div>
+            <div class="d-flow-arrow">→</div>
+            <div class="d-flow-step d-c-amber">Promoted</div>
+            <div class="d-flow-arrow">→</div>
+            <div class="d-flow-step d-c-green">Completed</div>
+          </div>
+          <p class="d-muted" style="margin-top:8px;">Also: paused, resumed, abandoned. TaskStatus includes "interrupted".</p>
+          <ul>
+            <li><code>GoalManager.tick()</code> — review, promote, revalidate, refresh, dispatch</li>
+            <li><code>GoalPlanner</code> — generates tasks + creates intents with scope/hint routing</li>
+            <li><code>GoalReview</code> — structured review with goal_effect-weighted progress scoring</li>
+            <li>Persists to <code>~/.jarvis/goals.json</code></li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Autonomy Alignment</h4>
+          <ul>
+            <li><strong>Hard gate:</strong> when a user goal is stalled, non-goal-linked research is blocked</li>
+            <li><strong>Scoring alignment:</strong> goal-linked impact weighted 0.85, unlinked existential 0.15</li>
+            <li><strong>Drive dampening:</strong> curiosity drive dampened 0.5× when active user goals exist</li>
+            <li><strong>Signal producers:</strong> conversation→goal, metric-deficit→goal, autonomy-theme→goal</li>
+          </ul>
+        </div>
+      </div>
+      <div class="d-note">Events: <code>GOAL_CREATED</code>, <code>GOAL_PROMOTED</code>, <code>GOAL_COMPLETED</code>, <code>GOAL_ABANDONED</code>, <code>GOAL_PAUSED</code>, <code>GOAL_RESUMED</code>, <code>GOAL_PROGRESS_UPDATE</code>.</div>
+    </section>
+
+    <!-- ═══════════ EVAL SIDECAR ═══════════ -->
+    <section id="eval-sidecar" class="d-section">
+      <h2>Eval Sidecar / Process Verification Layer</h2>
+      <p>Read-only shadow observer that scores system behavior without affecting it. Never emits events, never writes to memory/beliefs/policy.</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Process Verification Layer (PVL)</h4>
+          <ul>
+            <li><strong>114 contracts</strong> across 23 groups</li>
+            <li>Mode prerequisites — contracts only applicable in relevant modes</li>
+            <li>Playbook day assignments — staged maturity expectations</li>
+            <li>Coverage = passing / applicable contracts</li>
+            <li>Hydration from event/snapshot history for deferred evaluation</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Oracle Benchmark v1.1</h4>
+          <p>Pure read-only 7-domain scorer (100 points total):</p>
+          <table class="d-table d-table-sm">
+            <tr><td>Restart Integrity</td><td>20 pts</td></tr>
+            <tr><td>Epistemic Integrity</td><td>20 pts</td></tr>
+            <tr><td>Memory Continuity</td><td>15 pts</td></tr>
+            <tr><td>Operational Maturity</td><td>15 pts</td></tr>
+            <tr><td>Autonomy Attribution</td><td>10 pts</td></tr>
+            <tr><td>World Model Coherence</td><td>10 pts</td></tr>
+            <tr><td>Learning Adaptation</td><td>10 pts</td></tr>
+          </table>
+          <p class="d-muted">Seal levels: Gold (≥90), Silver (≥80), Bronze (≥70). Hard-fail gates cap score regardless of total.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Data Collection</h4>
+          <ul>
+            <li><code>EventTap</code> — subscribes to 57 EventBus events, O(1) deque append</li>
+            <li><code>Collector</code> — reads 21+ subsystem stats every 60s → EvalSnapshot</li>
+            <li>All persisted to <code>~/.jarvis/eval/</code> (events, snapshots, scores, runs, meta)</li>
+            <li>50MB file rotation per JSONL file</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Scorecards</h4>
+          <ul>
+            <li>Rolling window comparisons: 15m / 1h / 6h / 24h</li>
+            <li>Proof points attached to each scoring claim</li>
+            <li>Evidence provenance: live-proven, test-proven, unexercised</li>
+            <li>API: <code>GET /api/eval/benchmark</code></li>
+          </ul>
+        </div>
+      </div>
+      <div class="d-note">The eval sidecar is a <strong>non-invasive observer</strong>. It reads system APIs and taps events but never writes back. PVL and Oracle Benchmark can be run on any brain instance without changing behavior.</div>
+    </section>
+
+    <!-- ═══════════ RESTART RESILIENCE ═══════════ -->
+    <section id="restart-resilience" class="d-section">
+      <h2>Restart Resilience</h2>
+      <p>State survives reboot without trust inflation. The principle: reboots preserve continuity while clearly distinguishing current readiness from ever-proven readiness.</p>
+
+      <div class="d-note d-note-info"><strong>Open-source release policy: continuity-preserving.</strong> The 2026-05-10 release ships against a live, continuously-running brain. The <code>reset-brain.sh</code> wipe-ceremony is <strong>DEFERRED / OPTIONAL</strong> — preserved for cold-start reproducibility experiments, but <em>not</em> a prerequisite for release or for forking the repo. A verified continuity backup (46 GiB, sha256 <code>b9e92bf6…</code>, 198 files) is archived in <code>docs/validation_reports/continuity_baseline_2026-04-23.md</code>. New consumers start from an empty <code>~/.jarvis/</code> (onboarding / gestation); existing operators keep their accumulated state.</div>
+
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Supervisor Crash Recovery</h4>
+          <ul>
+            <li><code>jarvis-supervisor.py</code> spawns and monitors <code>main.py</code></li>
+            <li>Exponential backoff on crash: 5s → 10s → 20s → 40s → 60s</li>
+            <li>5 crashes in 300s → give up</li>
+            <li>Rapid crash + pending verification → triggers patch rollback</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>No Trust Inflation</h4>
+          <ul>
+            <li>All accumulation counters restart at zero on boot</li>
+            <li>Maturity gates re-lock — must earn trust again through evidence</li>
+            <li>World model level, promotion snapshots, persisted counters restored but re-evaluated</li>
+            <li>Consciousness state schema v2: provenance metadata, 6-subsystem restore, <code>_restore_complete</code> latch</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4>Autonomy Level Gated Restore</h4>
+          <p>Persisted autonomy level is loaded but NOT auto-applied. 5 safety gates must pass:</p>
+          <ol>
+            <li>Valid persisted state with <code>promoted_at</code> timestamp</li>
+            <li>Policy memory still qualifies via <code>check_promotion_eligibility()</code></li>
+            <li>No significant recent regressions (2+ in last 5 non-warmup outcomes)</li>
+            <li>Quarantine pressure not <code>high</code></li>
+            <li>Contradiction debt &lt; 0.20</li>
+          </ol>
+          <p class="d-muted">L2 + all gates pass → auto-restore. L3 + all gates pass → warn only (manual). Any gate fails → stay at config default.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Atomic Persistence</h4>
+          <ul>
+            <li>All JSON writes use <code>atomic_write_json()</code> (temp file → <code>os.replace</code>)</li>
+            <li>No partial writes — crash during save leaves previous version intact</li>
+            <li>JSONL files use append mode — crash loses at most the last entry</li>
+            <li><strong>Stage 2 pending approvals</strong> persist to <code>pending_approvals.json</code> — full patch contents serialized so <code>approve()</code> works after restart</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SYNTHETIC TRAINING ═══════════ -->
+    <section id="synthetic-training" class="d-section">
+      <h2>Synthetic Training Exercises</h2>
+      <p>Quarantined training lanes that generate NN training data while enforcing strict epistemic truth boundaries. Every exercise uses standalone instances, capped fidelity (0.7), no EventBus emission, no real persistence writes, and <code>origin="synthetic"</code> provenance.</p>
+
+      <div class="d-note d-note-info">Synthetic exercises never touch the live brain's state. They can run offline (most exercises) or during idle periods without contaminating identity, memory, beliefs, or promotion counters.</div>
+
+      <h3>Exercise Inventory (7 Total)</h3>
+      <table class="d-table">
+        <thead><tr><th>Exercise</th><th>File</th><th>Trains</th><th>Truth Boundary</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Perception</strong></td>
+            <td><code>synthetic/exercise.py</code></td>
+            <td>Speaker repr, face repr, emotion depth, voice intent, speaker diarize, perception fusion (Tier-1 specialists via live audio pipeline)</td>
+            <td>Session-sticky flag, hard stop in <code>_transcribe_speech()</code>, 15s cooldown, distillation fidelity capped at 0.7</td>
+          </tr>
+          <tr>
+            <td><strong>Claim</strong></td>
+            <td><code>synthetic/claim_exercise.py</code></td>
+            <td>Claim classifier Tier-1 specialist (28-dim &rarr; 8-class)</td>
+            <td>Standalone <code>CapabilityGate</code> instance, no audio/STT/wake word, text-only</td>
+          </tr>
+          <tr>
+            <td><strong>Memory Retrieval</strong></td>
+            <td><code>synthetic/retrieval_exercise.py</code></td>
+            <td>MemoryRanker (12-dim &rarr; 1) and SalienceModel (11-dim &rarr; 3)</td>
+            <td>Read-only memory/vector access, writes to separate JSONL (not <code>memory_retrieval_log.jsonl</code>), pairs merged into cortex training at 0.7 weight</td>
+          </tr>
+          <tr>
+            <td><strong>World Model</strong></td>
+            <td><code>synthetic/world_model_exercise.py</code></td>
+            <td>CausalEngine rule coverage (all 18 rules), prediction accuracy</td>
+            <td>Standalone <code>CausalEngine()</code> instance, no <code>WorldModel.update()</code>, no promotion counter writes, stats only</td>
+          </tr>
+          <tr>
+            <td><strong>Contradiction</strong></td>
+            <td><code>synthetic/contradiction_exercise.py</code></td>
+            <td>Conflict classification accuracy across 6 classes + near-miss detection</td>
+            <td>Pure <code>extract_claims()</code> + standalone <code>ConflictClassifier</code> + temp-dir <code>BeliefStore</code>, no <code>ContradictionEngine</code> singleton</td>
+          </tr>
+          <tr>
+            <td><strong>Diagnostic Encoder</strong></td>
+            <td><code>synthetic/diagnostic_exercise.py</code></td>
+            <td>Diagnostic Tier-1 specialist (43-dim &rarr; 6-class, shadow-only)</td>
+            <td><code>DiagnosticEncoder.encode()</code> is <code>@staticmethod</code> &mdash; pure. Records to <code>DistillationCollector</code> at fidelity 0.7</td>
+          </tr>
+          <tr>
+            <td><strong>Plan Evaluator</strong></td>
+            <td><code>synthetic/plan_evaluator_exercise.py</code></td>
+            <td>Plan evaluator Tier-1 specialist (32-dim &rarr; 3-class, shadow-only)</td>
+            <td><code>PlanEvaluatorEncoder.encode()</code> is <code>@staticmethod</code> &mdash; pure. Mock <code>SimpleNamespace</code> objects, no acquisition singleton</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Epistemic Isolation Contract</h3>
+      <p>Every synthetic exercise enforces these invariants:</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <div class="d-detail-title">Standalone Instances</div>
+          <p>No singleton access. CausalEngine, BeliefStore, ConflictClassifier, CapabilityGate &mdash; all instantiated fresh.</p>
+        </div>
+        <div class="d-detail">
+          <div class="d-detail-title">Fidelity Cap 0.7</div>
+          <p>Synthetic distillation signals are weighted 30% below real ones during hemisphere training. The DistillationCollector routes low-fidelity signals to quarantine.</p>
+        </div>
+        <div class="d-detail">
+          <div class="d-detail-title">No EventBus Emission</div>
+          <p>Synthetic exercises never emit <code>MEMORY_WRITE</code>, <code>CONTRADICTION_DETECTED</code>, <code>WORLD_MODEL_PREDICTION_VALIDATED</code>, or any other event that could mutate live state. The perception exercise additionally gates <code>IDENTITY_RESOLVED</code> (via <code>identity_fusion._emit_resolved</code>) and <code>PERCEPTION_FACE_IDENTIFIED</code> (via the <code>face_crop</code> handler in <code>perception/server.py</code>) whenever <code>memory_gate.synthetic_session_active()</code> is True — enforced by <code>TestFaceCropSuppressedDuringSyntheticSession</code> and <code>TestSyntheticGate</code> regressions.</p>
+        </div>
+        <div class="d-detail">
+          <div class="d-detail-title">No Real Persistence</div>
+          <p>Temp directories for belief stores. Separate JSONL for retrieval pairs. No writes to <code>beliefs.jsonl</code>, <code>world_model_promotion.json</code>, <code>acquisition_shadows/</code>, or <code>memory_retrieval_log.jsonl</code>.</p>
+        </div>
+        <div class="d-detail">
+          <div class="d-detail-title">origin="synthetic"</div>
+          <p>Every recorded signal carries provenance tracking. Dashboard and training pipelines can distinguish synthetic from real data.</p>
+        </div>
+      </div>
+
+      <h3>Lane Separation</h3>
+      <p>Five testing lanes that must never contaminate each other:</p>
+      <ol>
+        <li><strong>Real user runtime</strong> &mdash; identity, rapport, autobiographical memory, grounded recall</li>
+        <li><strong>Synthetic perception</strong> &mdash; perception pipeline, routing accuracy, distillation throughput</li>
+        <li><strong>Synthetic claim</strong> &mdash; CapabilityGate accuracy, claim classifier training</li>
+        <li><strong>Synthetic cognitive</strong> &mdash; retrieval, world model, contradiction, diagnostic, plan evaluator</li>
+        <li><strong>Autonomous soak</strong> &mdash; background cognition, maintenance, self-study</li>
+      </ol>
+
+      <h3>Running Exercises</h3>
+      <p>Perception exercise: <code>python -m scripts.run_synthetic_exercise --profile route_coverage</code></p>
+      <p>Cognitive exercises: <code>python -m scripts.run_synthetic_exercises --exercise all --profile coverage</code></p>
+      <p>Individual: <code>python -m scripts.run_synthetic_exercises --exercise diagnostic,plan_evaluator --profile stress --record</code></p>
+      <p>Profiles: <strong>smoke</strong> (quick check), <strong>coverage</strong> (all categories/rules), <strong>stress</strong> (high-volume).</p>
+      <p>Reports written to <code>~/.jarvis/synthetic_exercise/reports/</code>.</p>
+    </section>
+
+    <!-- ═══════════ MATURITY GATES ═══════════ -->
+    <section id="maturity-gates" class="d-section">
+      <h2>Maturity Gates Reference</h2>
+      <div class="d-note d-note-warn">A fresh brain is NOT broken — it is pre-mature. Every zero counter and locked gate exists by design. The system earns trust through accumulated evidence, not configuration.</div>
+      <p>Full reference: <code>docs/archive/MATURITY_GATES_REFERENCE.md</code> (24 sections, 180+ individual thresholds). Gate classification: <span style="color:#4fc3f7">●</span> = accumulation gate (delays data production), <span style="color:#ff7043">●</span> = safety/authority boundary (protects correctness).</p>
+
+      <h3>Timing &amp; Promotion Gates</h3>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr><th>Subsystem</th><th>Min Time</th><th>Min Data</th><th>Promotion Criteria</th><th>Class</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Gestation</td><td>2 hours (env override)</td><td>15 research jobs, 10 deltas</td><td>Composite ≥0.8 across 8 components</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Boot stabilization</td><td>10 min</td><td>—</td><td>Blocks mutations + hemisphere training</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Policy promotion</td><td>30 min boot cooldown</td><td>100 shadow decisions</td><td>&gt;55% win rate, 30+ decisive, positive margin</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>Policy features</td><td>300s between unlocks</td><td>200–1000 experience</td><td>40–60% win rate, 100–300 shadow A/B per feature</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>World Model L1</td><td>4 hours shadow</td><td>50 validated predictions</td><td>65% accuracy</td><td style="color:#4fc3f7">● / <span style="color:#ff7043">●</span></td></tr>
+            <tr><td>Simulator advisory</td><td>48 hours shadow</td><td>100 validated simulations</td><td>70% accuracy</td><td style="color:#4fc3f7">● / <span style="color:#ff7043">●</span></td></tr>
+            <tr><td>Autonomy L2</td><td>30 min warmup</td><td>10 positive deltas</td><td>40% win rate</td><td style="color:#4fc3f7">● / <span style="color:#ff7043">●</span></td></tr>
+            <tr><td>Autonomy L3</td><td>—</td><td>25 positive deltas</td><td>50% win rate, 0 regressions in last 10. <strong>Manual-only</strong> — no auto-promotion (Phase 6.5 invariant). Requires evidence-gated <code>POST /api/autonomy/level</code> with reason ≥20 char, caller_id, and either <code>current_ok</code> or <code>prior_attested_ok</code>.</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>M6 expansion</td><td>7 days stability</td><td>2+ promoted specialists</td><td>&gt;0.05 mean impact</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Salience blend</td><td>—</td><td>500 validated predictions</td><td>+0.1 blend per 500</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Ranker re-enable</td><td>10 min cooldown</td><td>Last 20 outcomes</td><td>≥40% success rate</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>Memory cortex</td><td>Dream/sleep cycles</td><td>50 pairs (ranker), 100 (salience)</td><td>Train during dream mode</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Fractal Recall</td><td>User present</td><td>Cue strength ≥0.15</td><td>Not in sleep mode</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>Self-Improve scanner</td><td>30 min uptime</td><td>Per-detector sample floors</td><td>Sustained evidence over multiple checks</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>CoderServer</td><td>—</td><td>Model file + binary + RAM ≥32GB</td><td>Auto-detected at boot</td><td style="color:#ff7043">●</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Dream Pipeline Gates</h3>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr><th>Gate</th><th>Value</th><th>What It Blocks</th><th>Class</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Artifact creation (clusters_found)</td><td>≥ 2</td><td>ALL dream artifact generation + dream specialist training</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Dream cycle recent memories</td><td>&lt; 5 = skip</td><td>Dream cycle early return</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Dream input exclusion filter</td><td><code>_CONSOL_EXCLUDE_TAGS</code></td><td>Excludes dream_insight, consolidated, dream_consolidation, dream_artifact, dream_consolidation_proposal from cycle input — prevents recursive dream-about-dream feedback loops</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>Non-dreaming min memories</td><td>≥ 20</td><td>Dream cycles outside dreaming mode</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Non-dreaming interval</td><td>600s</td><td>Dream cycle cadence (non-dreaming)</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Dreaming interval</td><td>30s</td><td>Dream cycle cadence (dreaming mode)</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Per-cycle artifact budget</td><td>20</td><td>Max artifacts created per dream cycle (<code>MAX_ARTIFACTS_PER_DREAM_CYCLE</code>)</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>Content dedup</td><td>Set-based</td><td>Identical artifact content only created once per cycle (<code>_existing_content</code> set)</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>Self-referential discard (content)</td><td>String match</td><td>Validator discards consolidation_proposals mentioning "dream_artifact" or "dream_consolidation_proposal"</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>Self-referential discard (source tags)</td><td>≥ 50%</td><td>Validator discards artifacts whose source memories are ≥50% dream-tagged (<code>_DREAM_SELF_REF_TAGS</code>)</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>Consolidation recursion guard</td><td><code>_ALREADY_CONSOLIDATED_TAGS</code></td><td>Clusters dominated by consolidated/dream-tagged memories score −1.0 in consolidation engine</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>Artifact validation cooldown</td><td>120s</td><td>Validator runs</td><td style="color:#4fc3f7">●</td></tr>
+            <tr><td>Promotion coherence/confidence</td><td>0.45 / 0.35</td><td>Quality floor for promotion</td><td style="color:#ff7043">●</td></tr>
+            <tr><td>CueGate (observation writes)</td><td>Mode-gated</td><td>Memory writes during dreaming/sleep/reflective</td><td style="color:#ff7043">●</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Dream Cycle Data Flow</h3>
+      <p>The dream cycle (<code>consciousness_system._run_dream_cycle()</code>) runs in 5 phases during dreaming mode (30s cadence) or opportunistically (600s cadence, ≥20 memories). It operates <strong>only on lived experience</strong> — promoted dream artifacts are excluded from the input set and cannot create recursive feedback loops.</p>
+      <div class="d-detail" style="margin-bottom:16px;">
+        <ol style="line-height:1.8;">
+          <li><strong>Phase 1–2: Cluster + Associate</strong> — Recent non-dream memories are clustered by semantic similarity. Cross-cluster associations are reinforced. Memory associations capped at 20 per memory.</li>
+          <li><strong>Phase 3: Reinforce + Decay</strong> — High-value memories in large coherent clusters get weight reinforcement. Weak, isolated memories get exponential decay.</li>
+          <li><strong>Phase 4: Artifact Generation</strong> — Cluster insights (patterns, connections, anomalies, gaps, consolidation proposals) are converted to provisional <code>DreamArtifact</code> objects in the ring buffer. Guarded by: content dedup (<code>_existing_content</code> set), per-cycle budget (<code>MAX_ARTIFACTS_PER_DREAM_CYCLE = 20</code>), and the <code>_add_artifact_if_novel()</code> helper.</li>
+          <li><strong>Phase 4.5: Memory Consolidation</strong> — The <code>MemoryConsolidationEngine</code> merges high-coherence clusters into summary memories. Source memories are tagged <code>consolidated</code> and downweighted. The consolidation engine's <code>_ALREADY_CONSOLIDATED_TAGS</code> rejects clusters dominated by already-consolidated or dream-artifact memories.</li>
+          <li><strong>Phase 5: Validation</strong> — The <code>ReflectiveValidator</code> evaluates pending artifacts (only when NOT dreaming). Two-layer self-referential guard discards dream-about-dream artifacts. Surviving artifacts that meet promotion thresholds (coherence ≥ 0.65, confidence ≥ 0.5) are promoted to canonical memory via <code>engine.remember()</code> with tags <code>dream_artifact</code> + <code>dream_{type}</code>.</li>
+        </ol>
+      </div>
+      <p class="d-muted"><strong>Ontological boundary invariant:</strong> Dream cycles may read lived memories. Dream cycles may create provisional artifacts. Validators may promote selected artifacts. Dream cycles must <em>not</em> recursively consolidate promoted dream artifacts. This invariant is enforced by <code>_CONSOL_EXCLUDE_TAGS</code> (primary), <code>_ALREADY_CONSOLIDATED_TAGS</code> (consolidation engine), content dedup (artifact generation), and the two-layer self-referential discard (validator). See <code>SyntheticSoul.md</code> §6.4.</p>
+
+      <h3>Safety &amp; Authority Boundaries (Never Tune)</h3>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr><th>Category</th><th>Key Gates</th><th>What They Protect</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Capability Gate</td><td>15 claim patterns, action confab detection, route-aware eval</td><td>Anti-confabulation, honesty</td></tr>
+            <tr><td>Quarantine pressure</td><td>0.3 elevated / 0.6 high + cascading friction</td><td>System-wide safety throttle</td></tr>
+            <tr><td>Identity thresholds</td><td>Speaker 0.50, Face 0.55, multi-person 0.55</td><td>Identity correctness</td></tr>
+            <tr><td>Mutation governor</td><td>Risk 0.7, p95 50ms, 12/hr, 400/session</td><td>Kernel stability</td></tr>
+            <tr><td>Soul integrity</td><td>Repair 0.50, Critical 0.30</td><td>Existential safety</td></tr>
+            <tr><td>Self-improve stage</td><td>0=frozen, 1=dry-run, 2=human-approval</td><td>Patch safety</td></tr>
+            <tr><td>Distillation quality</td><td>Fidelity 0.3 quarantine, 5% accuracy floor, 3-strike disable</td><td>Training data quality</td></tr>
+            <tr><td>Contradiction debt veto</td><td>0.20 threshold</td><td>Autonomy blocked when beliefs inconsistent</td></tr>
+            <tr><td>CueGate mode policy</td><td>Observation writes blocked in dreaming/sleep/reflective</td><td>Dream contamination prevention</td></tr>
+            <tr><td>Onboarding graduation</td><td>0.92 composite</td><td>Genuine readiness verification</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Specialist Minimum Samples (Tier-1 Distillation)</h3>
+      <div class="d-table-wrap">
+        <table class="d-table d-table-sm">
+          <thead>
+            <tr><th>Specialist</th><th>min_samples</th><th>Teacher</th><th>Source File</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>speaker_repr</td><td>20</td><td>ECAPA-TDNN</td><td>hemisphere/types.py</td></tr>
+            <tr><td>face_repr</td><td>20</td><td>MobileFaceNet</td><td>hemisphere/types.py</td></tr>
+            <tr><td>emotion_depth</td><td>30</td><td>wav2vec2</td><td>hemisphere/types.py</td></tr>
+            <tr><td>voice_intent</td><td>15</td><td>tool_router</td><td>hemisphere/types.py</td></tr>
+            <tr><td>speaker_diarize</td><td>30</td><td>ECAPA-TDNN</td><td>hemisphere/types.py</td></tr>
+            <tr><td>perception_fusion</td><td>50</td><td>multi-modal</td><td>hemisphere/types.py</td></tr>
+            <tr><td>plan_evaluator</td><td>15</td><td>acquisition_planner</td><td>hemisphere/types.py</td></tr>
+            <tr><td>diagnostic</td><td>15</td><td>SI scanner</td><td>hemisphere/types.py</td></tr>
+            <tr><td>code_quality</td><td>15</td><td>upgrade_verdict</td><td>hemisphere/types.py</td></tr>
+            <tr><td>claim_classifier</td><td>15</td><td>CapabilityGate</td><td>hemisphere/types.py</td></tr>
+            <tr><td>dream_synthesis</td><td>15</td><td>ReflectiveValidator</td><td>hemisphere/types.py</td></tr>
+            <tr><td>skill_acquisition</td><td>15</td><td>acquisition lifecycle</td><td>hemisphere/types.py</td></tr>
+            <tr style="color:#6a6a80;font-style:italic;"><td>language_style</td><td>30</td><td>language quality telemetry</td><td>enum only, no DistillationConfig</td></tr>
+            <tr style="color:#6a6a80;font-style:italic;"><td>hrr_encoder</td><td>future-only</td><td>HRR/VSA research lane</td><td>enum only, no DistillationConfig</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Background Cycle Intervals (seconds)</h3>
+      <div class="d-table-wrap">
+        <table class="d-table d-table-sm">
+          <thead>
+            <tr><th>Cycle</th><th>Normal</th><th>Deep Learning</th><th>Dreaming</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>meta_thought</td><td>8</td><td>4</td><td>6</td></tr>
+            <tr><td>analysis</td><td>30</td><td>15</td><td>20</td></tr>
+            <tr><td>evolution</td><td>90</td><td>30</td><td>60</td></tr>
+            <tr><td>mutation</td><td>180</td><td>60</td><td>120</td></tr>
+            <tr><td>hemisphere</td><td>120</td><td>45</td><td>60</td></tr>
+            <tr><td>self_improve</td><td>900</td><td>300</td><td>600</td></tr>
+            <tr><td>distillation</td><td>300</td><td>120</td><td>120</td></tr>
+            <tr><td>world_model</td><td>5</td><td>5</td><td>—</td></tr>
+            <tr><td>dream_cycle</td><td>—</td><td>—</td><td>30</td></tr>
+            <tr><td>study</td><td>120</td><td>30</td><td>45</td></tr>
+            <tr><td>contradiction</td><td>60</td><td>30</td><td>30</td></tr>
+            <tr><td>truth_calibration</td><td>120</td><td>60</td><td>60</td></tr>
+            <tr><td>belief_graph</td><td>60</td><td>30</td><td>30</td></tr>
+            <tr><td>soul_integrity</td><td>120</td><td>60</td><td>60</td></tr>
+            <tr><td>reflective_audit</td><td>300</td><td>120</td><td>150</td></tr>
+            <tr><td>goals</td><td>120</td><td>60</td><td>90</td></tr>
+            <tr><td>fractal_recall</td><td>30</td><td>—</td><td>—</td></tr>
+            <tr><td>acquisition</td><td>60</td><td>30</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ═══════════ OPERATIONAL MODES ═══════════ -->
+    <section id="operational-modes" class="d-section">
+      <h2>Operational Modes</h2>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead>
+            <tr><th>Mode</th><th>Cadence</th><th>Response Depth</th><th>Proactivity</th><th>Key Behavior</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>gestation</td><td>1.0×</td><td>moderate</td><td>none</td><td>Birth protocol — self-study, research, bootcamp, identity</td></tr>
+            <tr><td>passive</td><td>0.5×</td><td>minimal</td><td>low</td><td>Idle, minimal processing</td></tr>
+            <tr><td>conversational</td><td>1.5×</td><td>full</td><td>moderate</td><td>Active user conversation</td></tr>
+            <tr><td>reflective</td><td>1.0×</td><td>moderate</td><td>low</td><td>Post-conversation analysis</td></tr>
+            <tr><td>focused</td><td>2.0×</td><td>deep</td><td>none</td><td>Deep task processing</td></tr>
+            <tr><td>sleep</td><td>0.5×</td><td>minimal</td><td>none</td><td>Maintenance, 14 of 27 cycles allowed</td></tr>
+            <tr><td>dreaming</td><td>1.0×</td><td>none</td><td>none</td><td>Memory consolidation, cortex training</td></tr>
+            <tr><td>deep_learning</td><td>2.0×</td><td>none</td><td>none</td><td>Accelerated hemisphere training</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="d-note">BOOT_GRACE_S=60 blocks sleep downgrades during startup. Hysteresis: separate enter/exit engagement thresholds prevent mode flapping.</div>
+    </section>
+
+    <!-- ═══════════ PERSISTENCE MAP ═══════════ -->
+    <section id="persistence-map" class="d-section">
+      <h2>Persistence Map</h2>
+      <p>All files under <code>~/.jarvis/</code> unless noted. All JSON writes use <code>atomic_write_json()</code> (temp file → os.replace).</p>
+      <div class="d-table-wrap">
+        <table class="d-table d-table-sm">
+          <thead>
+            <tr><th>File</th><th>Contents</th><th>Write Interval</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>memories.json</code></td><td>All memories</td><td>Every 60s</td></tr>
+            <tr><td><code>consciousness_state.json</code></td><td>Cognitive state (schema v2, 6 subsystems)</td><td>Every 120s</td></tr>
+            <tr><td><code>identity.json</code></td><td>Soul identity (values, traits, mood, relationships)</td><td>On change</td></tr>
+            <tr><td><code>speakers.json</code></td><td>Speaker ID embeddings + profiles</td><td>On change</td></tr>
+            <tr><td><code>face_profiles.json</code></td><td>Face ID embeddings + profiles</td><td>On change</td></tr>
+            <tr><td><code>policy_experience.jsonl</code></td><td>NN training buffer</td><td>Append</td></tr>
+            <tr><td><code>policy_models/</code></td><td>Versioned NN weights (.pt)</td><td>On promotion</td></tr>
+            <tr><td><code>hemispheres/</code></td><td>Versioned hemisphere models (.pt)</td><td>On training</td></tr>
+            <tr><td><code>beliefs.jsonl</code></td><td>L5 extracted beliefs</td><td>Append</td></tr>
+            <tr><td><code>tensions.jsonl</code></td><td>L5 identity tensions</td><td>Append</td></tr>
+            <tr><td><code>belief_edges.jsonl</code></td><td>L7 evidence edges</td><td>Append + compact</td></tr>
+            <tr><td><code>attribution_ledger.jsonl</code></td><td>L1 event truth</td><td>Append-only</td></tr>
+            <tr><td><code>friction_events.jsonl</code></td><td>Phase 5.1a friction detections</td><td>Append (500 max)</td></tr>
+            <tr><td><code>interventions.jsonl</code></td><td>Phase 5.2 candidate interventions</td><td>Append (10MB rotation)</td></tr>
+            <tr><td><code>source_ledger.jsonl</code></td><td>Phase 5.1b source usefulness</td><td>Append (500 max)</td></tr>
+            <tr><td><code>goals.json</code></td><td>Goal continuity layer</td><td>On change</td></tr>
+            <tr><td><code>improvement_proposals.jsonl</code></td><td>Self-improvement proposals (fingerprint, evidence, outcome)</td><td>Append</td></tr>
+            <tr><td><code>improvement_snapshots/</code></td><td>Pre-patch file backups for rollback</td><td>Before apply</td></tr>
+            <tr><td><code>improvements.json</code></td><td>Self-improvement counters + recent records</td><td>On change</td></tr>
+            <tr><td><code>pending_approvals.json</code></td><td>Stage 2 pending approval queue — full ImprovementRecord serialization (request, patch with file contents, report, plan). Survives restarts.</td><td>On mutation</td></tr>
+            <tr><td><code>self_improve_stage.json</code></td><td>Self-improvement stage (0/1/2) with source tracking</td><td>On stage change</td></tr>
+            <tr><td><code>plugin_registry.json</code></td><td>Plugin records with lifecycle state (quarantined→shadow→supervised→active→disabled)</td><td>On state change</td></tr>
+            <tr><td><code>library/library.db</code></td><td>Document library (SQLite + sqlite-vec)</td><td>On ingest</td></tr>
+            <tr><td><code>vector_memory.db</code></td><td>Memory semantic search index</td><td>On memory write</td></tr>
+            <tr><td><code>acquisition_shadows/</code></td><td>Shadow prediction artifacts (plan evaluator specialist)</td><td>On plan review</td></tr>
+            <tr><td><code>intention_registry.json</code></td><td>L12 Intention Truth Layer — open + recently resolved IntentionRecords, counters</td><td>Atomic, auto-save</td></tr>
+            <tr><td><code>intention_outcomes.jsonl</code></td><td>L12 Intention Truth Layer — append-only resolution ledger (register/resolve/abandon/stale events)</td><td>Append</td></tr>
+            <tr><td><code>intention_resolver_verdicts.jsonl</code></td><td>L12 IntentionResolver (Stage 1) — shadow verdict log (signal + verdict + stage, 10MB rotation)</td><td>Append</td></tr>
+            <tr><td><code>ever_proven_attestation.json</code></td><td>Phase 6.5 — hash-attested operator-seeded records of ever-proven capabilities (e.g., <code>autonomy.l3</code>). Unlocks <code>prior_attested_ok</code>; never backfills <code>current_ok</code>.</td><td>Atomic, seed CLI</td></tr>
+            <tr><td><code>pending_escalations.json</code></td><td>Phase 6.5 — pending/approved/rejected/parked L3 escalation requests with <code>declared_scope</code> path sets and lifecycle state</td><td>On mutation</td></tr>
+            <tr><td><code>escalation_activity.jsonl</code></td><td>Phase 6.5 — append-only audit of escalation submit/approve/reject/park/expire events</td><td>Append</td></tr>
+            <tr><td><code>autonomy_audit.jsonl</code></td><td>Phase 6.5 — durable subscriber ledger for all <code>AUTONOMY_L3_*</code> and <code>AUTONOMY_ESCALATION_*</code> events. 10 MB rotation, sanitized payloads, newest-last.</td><td>Append + rotate</td></tr>
+            <tr class="d-row-highlight"><td><code>~/.jarvis_blue_diamonds/</code></td><td>Permanent curated knowledge vault — survives brain resets</td><td>On graduation</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ═══════════ L3 ESCALATION GOVERNANCE (Phase 6.5) ═══════════ -->
+    <section id="l3-escalation-governance" class="d-section">
+      <h2>L3 Escalation Governance (Phase 6.5)</h2>
+      <p>Phase 6.5 is the governance layer that sits in front of L3 autonomy. Its job is to keep four lines permanently separated: <strong>eligibility ≠ activation</strong>, <strong>proof ≠ present state</strong>, <strong>authority ≠ permission</strong>, <strong>permission ≠ safe execution</strong>. Every rule, every event, and every persisted file below exists to make one of those boundaries harder to blur.</p>
+
+      <div class="d-note d-note-info"><strong>Phase 6.5 SHIPPED 2026-04-23.</strong> Governance layer + live-brain full-lifecycle ceremony + operator-triggered restart continuity all exercised end-to-end on the desktop brain. All five shipping criteria captured in <code>docs/validation_reports/phase_6_5_live_evidence-2026-04-23.md</code>.</div>
+
+      <div class="d-note d-note-info"><strong>Continuity re-verified 2026-04-24 (P2.4).</strong> After the open-source release truth-pass (Phase 1 + P2.1–P2.3), every Phase 6.5 invariant was re-verified on the live un-wiped brain across 5 post-ship process restarts. Audit ledger still append-only, attestation file byte-unchanged since seed, zero <code>l3_promoted.outcome != "clean"</code> violations, zero unmatched 2→3 transitions. Three-axis separation mechanically intact: <code>current_ok=false</code> (live-sourced, 34 wins / 47.2% win_rate), <code>prior_attested_ok=true</code>, <code>activation_ok=false</code>, <code>request_ok=true</code>. Evidence: <code>docs/validation_reports/phase_6_5_continuity_reverify-2026-04-23.md</code>.</div>
+
+      <h3>Five-Field State Model</h3>
+      <p>The autonomy API and dashboard always expose these five fields. They are never collapsed into a single "ready" flag.</p>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead><tr><th>Field</th><th>Source</th><th>Semantics</th></tr></thead>
+          <tbody>
+            <tr><td><code>current_ok</code></td><td>Live policy memory — recomputed from <code>check_promotion_eligibility()</code></td><td>Does the orchestrator qualify for L3 <em>right now</em>? Never backfilled from persisted files.</td></tr>
+            <tr><td><code>prior_attested_ok</code></td><td>Attestation ledger — <code>ever_proven_attestation.json</code>, hash-checked</td><td>Have we demonstrated L3 capability at least once, across prior resets? Uses hash-attested operator-seeded records only.</td></tr>
+            <tr><td><code>request_ok</code></td><td>Derived: <code>current_ok ∨ prior_attested_ok</code></td><td>May an operator <em>request</em> L3 promotion? Requestability is not activation.</td></tr>
+            <tr><td><code>approval_required</code></td><td>Policy constant (always <code>true</code>)</td><td>L3 activation always requires explicit operator approval through the evidence-gated API.</td></tr>
+            <tr><td><code>activation_ok</code></td><td>Derived: <code>current_ok ∧ current_level ≥ 3</code></td><td>Is the system actually running at L3 right now with live-verified eligibility?</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Hard Invariants (Enforced in Code)</h3>
+      <ol>
+        <li><strong>No auto-promotion 2→3.</strong> The orchestrator cannot self-promote to L3 on any telemetry path. Only a successful evidence-gated <code>POST /api/autonomy/level</code> can reach L3. Regression test: <code>test_l2_orchestrator_never_self_promotes_under_load</code>.</li>
+        <li><strong><code>current_ok</code> is strictly live.</strong> The snapshot cache builder and API serializer must <em>not</em> backfill <code>current_ok</code> from persisted state on cold boot. Either live policy evaluator recomputes it for this session, or the field is <code>false</code>.</li>
+        <li><strong>Attestation does not contaminate <code>ever_ok</code></strong> for non-L3 checks. Validation pack L3 checks emit only when the snapshot <code>autonomy</code> panel contains an <code>l3</code> sub-dict.</li>
+        <li><strong>No global path widening.</strong> Approved escalations carry a narrow <code>declared_scope</code> path set and route through <code>attempt_improvement(manual=True)</code>. <code>ALLOWED_PATHS</code> is never mutated at the orchestrator level.</li>
+        <li><strong><code>AUTONOMY_L3_PROMOTED</code> means L3 became active — period.</strong> Denials land on <code>AUTONOMY_L3_ACTIVATION_DENIED</code>. No mixed-outcome semantics.</li>
+        <li><strong>Every audited event persists.</strong> <code>AutonomyAuditLedger</code> subscribes at boot (before <code>reconcile_on_boot</code>) and writes JSONL to <code>~/.jarvis/autonomy_audit.jsonl</code> with 10 MB rotation. Disk failures are swallowed; the bus is never blocked.</li>
+      </ol>
+
+      <h3>Attestation Semantics</h3>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4><code>artifact_status</code></h4>
+          <ul>
+            <li><code>hash_verified</code> — report file present on disk and SHA-256 matches the ledger record.</li>
+            <li><code>hash_mismatch</code> — file present but digest does not match. <strong>Does NOT</strong> satisfy <code>prior_attested_ok</code>.</li>
+            <li><code>missing</code> — file has been deleted/moved. Still satisfies <code>prior_attested_ok</code> but surfaces as weaker evidence.</li>
+            <li><code>hash_unverifiable</code> — ledger record has no recorded hash. <strong>Does NOT</strong> satisfy <code>prior_attested_ok</code>.</li>
+          </ul>
+        </div>
+        <div class="d-detail">
+          <h4><code>attestation_strength</code></h4>
+          <ul>
+            <li><code>verified</code> — at least one record has <code>artifact_status=hash_verified</code>. Strongest evidence class.</li>
+            <li><code>archived_missing</code> — the only matching records are <code>missing</code>. Trust continuity preserved across resets, but the report artifact is gone.</li>
+            <li><code>none</code> — no records match. <code>prior_attested_ok=false</code>.</li>
+          </ul>
+          <p class="d-muted">The dashboard and API always surface this distinction so an operator can never treat <code>archived_missing</code> as equal to <code>verified</code>.</p>
+        </div>
+      </div>
+
+      <h3>Manual Promotion vs. Auto-Generated Escalation — One Invariant</h3>
+      <p>Two escalation generation modes exist and they route differently. This separation is load-bearing and is spelled out here so no future coder can collapse them.</p>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead><tr><th>Path</th><th>Precondition</th><th>Trigger</th></tr></thead>
+          <tbody>
+            <tr><td>Manual L3 promotion</td><td><code>request_ok</code> — either <code>current_ok</code> or <code>prior_attested_ok</code></td><td>Operator calls <code>POST /api/autonomy/level</code> with <code>level=3</code>, a ≥20-char reason, and a caller_id. Approval is always required.</td></tr>
+            <tr><td>Auto-generated escalation request</td><td>Live <code>autonomy_level ≥ 3</code></td><td>Runtime condition generates an <code>EscalationRequest</code> with <code>declared_scope</code>. Approval routes through <code>attempt_improvement(manual=True)</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Attestation alone never generates escalation requests. It only unlocks the <em>requestability</em> of manual L3 promotion.</p>
+
+      <h3><code>POST /api/autonomy/level</code> Policy</h3>
+      <ul>
+        <li><code>reason</code> must be a human-supplied string ≥ 20 characters.</li>
+        <li><code>caller_id</code> must be non-empty.</li>
+        <li>For <code>level ≥ 3</code> the call is rejected unless at least one of: <code>current_ok</code>, <code>prior_attested_ok</code>, OR (<code>emergency: true</code> AND <code>operator_override: true</code> AND env var <code>ALLOW_EMERGENCY_OVERRIDE=1</code>).</li>
+        <li>Every outcome — accept, 400, 403, PermissionError — is audit-logged and every 403 emits <code>AUTONOMY_L3_ACTIVATION_DENIED</code>.</li>
+      </ul>
+
+      <h3>Escalation Lifecycle States</h3>
+      <ul>
+        <li><code>pending</code> — submitted, awaiting operator decision.</li>
+        <li><code>approved</code> — operator approved; self-improvement attempt scheduled with the request's <code>declared_scope</code>.</li>
+        <li><code>rejected</code> — operator rejected with rejection_reason.</li>
+        <li><code>parked</code> — approval applied but the underlying self-improvement attempt did not complete cleanly; left on disk for audit.</li>
+        <li><code>expired</code> — pruned by the time-based sweep before operator decision.</li>
+      </ul>
+
+      <h3>Durable Audit Ledger</h3>
+      <p><code>AutonomyAuditLedger</code> (<code>brain/autonomy/audit_ledger.py</code>) subscribes to 9 autonomy/L3/escalation events at boot — <em>before</em> <code>reconcile_on_boot</code> runs, so no boot-time event is lost. Records append as JSONL to <code>~/.jarvis/autonomy_audit.jsonl</code> with a 10 MB size-capped rotation, sanitized payloads, thread-safe writes, and graceful disk-failure handling. Read path: <code>GET /api/autonomy/audit?limit=N</code>. Corrupt lines are skipped, not fatal.</p>
+
+      <h3>Five Shipping Criteria — all captured on live brain (2026-04-23)</h3>
+      <p>All five shipping criteria exercised end-to-end on the desktop brain on 2026-04-23. Full evidence artifact: <code>docs/validation_reports/phase_6_5_live_evidence-2026-04-23.md</code>.</p>
+      <ol>
+        <li>✅ <strong>Attestation seed exercised on live brain.</strong> <code>autonomy.l3</code> record seeded from <code>docs/pre_reset_report_phase9_complete.md</code> (<code>sha256:020ed8b9…</code>); <code>/api/autonomy/level</code> returned <code>prior_attested_ok=true</code>, <code>attestation_strength="verified"</code>, <code>artifact_status="hash_verified"</code>, <code>request_ok=true</code>, with <code>current_ok=false</code> (live-sourced, independent).</li>
+        <li>✅ <strong>Manual L3 promotion.</strong> <code>POST /api/autonomy/level</code> with <code>level=3</code> + <code>evidence_path</code> emitted exactly <code>autonomy:level_changed(2→3)</code> → <code>autonomy:l3_promoted(outcome="clean", approval_source="prior_attested")</code> in the audit ledger.</li>
+        <li>✅ <strong>Escalation lifecycle.</strong> A <code>shadow_default_win_rate</code> escalation was submitted with <code>declared_scope=["brain/policy/"]</code> and rejected via <code>POST /api/autonomy/escalations/{id}/reject</code>; <code>autonomy:escalation_rejected</code> event persisted, pending list reflects terminal rejected state.</li>
+        <li>✅ <strong>Restart continuity.</strong> Operator-triggered restart: audit ledger preserved all pre-restart events, attestation artifact hash-matched on disk, escalation store preserved the rejected record, <code>prior_attested_ok</code> still true post-restart, <code>reconcile_on_boot()</code> correctly refused to auto-restore L3 from persisted state.</li>
+        <li>✅ <strong>No taxonomy regressions.</strong> On-disk sweep of <code>~/.jarvis/autonomy_audit.jsonl</code> confirmed every <code>AUTONOMY_L3_PROMOTED</code> entry has <code>outcome="clean"</code>; no spurious denial / parked / expired events.</li>
+      </ol>
+
+      <p><strong>Non-goals (explicitly deferred):</strong> cryptographic signing of attestations; L3 auto-promotion in any form; global <code>ALLOWED_PATHS</code> widening; cross-contaminating <code>ever_ok</code> for non-L3 capabilities.</p>
+    </section>
+
+    <!-- ═══════════ EVENT CATALOG ═══════════ -->
+    <section id="event-catalog" class="d-section">
+      <h2>Event Catalog (157 events)</h2>
+      <p>All events are emitted via the singleton <code>EventBus</code>. Circuit breaker, event validation, recursive emit guard. Events are string constants in <code>consciousness/events.py</code>.</p>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <h4>Kernel &amp; State</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">KERNEL_BOOT</span><span class="d-tag">KERNEL_TICK</span>
+            <span class="d-tag">KERNEL_PHASE_CHANGE</span><span class="d-tag">KERNEL_THOUGHT</span>
+            <span class="d-tag">PHASE_SHIFT</span><span class="d-tag">TONE_SHIFT</span>
+          </div>
+        </div>
+        <div class="d-detail">
+          <h4>Perception</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">PERCEPTION_WAKE_WORD</span><span class="d-tag">PERCEPTION_TRANSCRIPTION</span>
+            <span class="d-tag">PERCEPTION_SPEAKER_IDENTIFIED</span><span class="d-tag">PERCEPTION_USER_EMOTION</span>
+            <span class="d-tag">PERCEPTION_FACE_IDENTIFIED</span><span class="d-tag">PERCEPTION_BARGE_IN</span>
+            <span class="d-tag">PERCEPTION_SCENE_SUMMARY</span><span class="d-tag">PERCEPTION_USER_PRESENT_STABLE</span>
+          </div>
+        </div>
+        <div class="d-detail">
+          <h4>Memory &amp; Identity</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">MEMORY_WRITE</span><span class="d-tag">MEMORY_DECAY_CYCLE</span>
+            <span class="d-tag">MEMORY_ASSOCIATED</span><span class="d-tag">IDENTITY_SCOPE_ASSIGNED</span>
+            <span class="d-tag">IDENTITY_BOUNDARY_BLOCKED</span><span class="d-tag">IDENTITY_RESOLVED</span>
+          </div>
+        </div>
+        <div class="d-detail">
+          <h4>Autonomy &amp; Research</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">AUTONOMY_INTENT_QUEUED</span><span class="d-tag">AUTONOMY_INTENT_BLOCKED</span>
+            <span class="d-tag">AUTONOMY_RESEARCH_STARTED</span><span class="d-tag">AUTONOMY_RESEARCH_COMPLETED</span>
+            <span class="d-tag">AUTONOMY_RESEARCH_FAILED</span><span class="d-tag">AUTONOMY_RESEARCH_SKIPPED</span>
+            <span class="d-tag">AUTONOMY_DELTA_MEASURED</span><span class="d-tag">AUTONOMY_LEVEL_CHANGED</span>
+            <span class="d-tag">GOAL_CREATED</span><span class="d-tag">GOAL_PROGRESS_UPDATE</span>
+          </div>
+        </div>
+        <div class="d-detail">
+          <h4>L3 Escalation Governance (Phase 6.5)</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">AUTONOMY_L3_ELIGIBLE</span><span class="d-tag">AUTONOMY_L3_PROMOTED</span>
+            <span class="d-tag">AUTONOMY_L3_ACTIVATION_DENIED</span>
+            <span class="d-tag">AUTONOMY_ESCALATION_REQUESTED</span><span class="d-tag">AUTONOMY_ESCALATION_APPROVED</span>
+            <span class="d-tag">AUTONOMY_ESCALATION_REJECTED</span><span class="d-tag">AUTONOMY_ESCALATION_ROLLED_BACK</span>
+            <span class="d-tag">AUTONOMY_ESCALATION_PARKED</span><span class="d-tag">AUTONOMY_ESCALATION_EXPIRED</span>
+          </div>
+          <p style="font-size:0.78rem;color:var(--text-muted);margin-top:6px"><code>AUTONOMY_L3_PROMOTED</code> fires <strong>only</strong> on a successful 2→3 transition with <code>outcome="clean"</code>. Denied promotions emit <code>AUTONOMY_L3_ACTIVATION_DENIED</code>. All nine events are persisted to <code>~/.jarvis/autonomy_audit.jsonl</code>.</p>
+        </div>
+        <div class="d-detail">
+          <h4>Epistemic</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">CONTRADICTION_DETECTED</span><span class="d-tag">CALIBRATION_UPDATED</span>
+            <span class="d-tag">BELIEF_GRAPH_EDGE_CREATED</span><span class="d-tag">QUARANTINE_SIGNAL_EMITTED</span>
+            <span class="d-tag">SOUL_INTEGRITY_UPDATED</span><span class="d-tag">REFLECTIVE_AUDIT_COMPLETED</span>
+          </div>
+        </div>
+        <div class="d-detail">
+          <h4>Neural Networks</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">HEMISPHERE_TRAINING_PROGRESS</span><span class="d-tag">HEMISPHERE_NETWORK_READY</span>
+            <span class="d-tag">HEMISPHERE_EVOLUTION_COMPLETE</span><span class="d-tag">HEMISPHERE_DISTILLATION_STATS</span>
+            <span class="d-tag">SKILL_LEARNING_STARTED</span><span class="d-tag">SKILL_STATUS_CHANGED</span>
+          </div>
+        </div>
+        <div class="d-detail">
+          <h4>Self-Improvement</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">IMPROVEMENT_STARTED</span><span class="d-tag">IMPROVEMENT_VALIDATED</span>
+            <span class="d-tag">IMPROVEMENT_PROMOTED</span><span class="d-tag">IMPROVEMENT_ROLLED_BACK</span>
+            <span class="d-tag">IMPROVEMENT_NEEDS_APPROVAL</span><span class="d-tag">IMPROVEMENT_DRY_RUN</span>
+          </div>
+        </div>
+        <div class="d-detail">
+          <h4>Capability Acquisition</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">ACQUISITION_CREATED</span><span class="d-tag">ACQUISITION_CLASSIFIED</span>
+            <span class="d-tag">ACQUISITION_LANE_STARTED</span><span class="d-tag">ACQUISITION_LANE_COMPLETED</span>
+            <span class="d-tag">ACQUISITION_PLAN_READY</span><span class="d-tag">ACQUISITION_PLAN_REVIEWED</span>
+            <span class="d-tag">ACQUISITION_CODE_GENERATED</span><span class="d-tag">ACQUISITION_PLUGIN_DEPLOYED</span>
+            <span class="d-tag">ACQUISITION_VERIFIED</span><span class="d-tag">ACQUISITION_COMPLETED</span>
+            <span class="d-tag">ACQUISITION_FAILED</span><span class="d-tag">ACQUISITION_APPROVAL_NEEDED</span>
+            <span class="d-tag">ACQUISITION_DEPLOYMENT_REVIEWED</span>
+          </div>
+        </div>
+      </div>
+        <div class="d-detail">
+          <h4>Spatial &amp; World Model</h4>
+          <div class="d-tag-cloud d-tag-sm">
+            <span class="d-tag">SPATIAL_TRACK_UPDATED</span><span class="d-tag">SPATIAL_ANCHOR_REGISTERED</span>
+            <span class="d-tag">SPATIAL_DELTA_PROMOTED</span><span class="d-tag">SPATIAL_CALIBRATION_CHANGED</span>
+            <span class="d-tag">WORLD_MODEL_UPDATE</span><span class="d-tag">WORLD_MODEL_DELTA</span>
+            <span class="d-tag">WORLD_MODEL_PREDICTION_VALIDATED</span><span class="d-tag">WORLD_MODEL_PROMOTED</span>
+          </div>
+        </div>
+      </div>
+      <div class="d-note">Module-local events (not in events.py): <code>MODE_CHANGE</code> (modes.py), <code>ATTENTION_UPDATE</code> (attention.py), <code>IDENTITY_RESOLVED</code> (identity_fusion.py), <code>PRESENCE_USER_ARRIVED</code> (presence.py).</div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="d-footer">
+      <span>JARVIS Oracle Edition — Self-Evolving Personal Intelligence</span>
+      <a href="/">← Back to Live Dashboard</a>
+    </footer>
+  </main>
+
+  <script src="/static/docs.js"></script>
+</body>
+</html>

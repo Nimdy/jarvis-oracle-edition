@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS Oracle Edition — API Reference</title>
+  <link rel="stylesheet" href="/static/docs.css">
+  <link rel="stylesheet" href="/static/api.css">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <div class="j-freshness-banner" id="j-freshness-banner" style="display:none;"></div>
+  <script src="/static/freshness-banner.js"></script>
+  <script src="/static/status-markers.js"></script>
+
+  <!-- Sidebar -->
+  <nav class="d-sidebar" id="sidebar">
+    <div class="d-sidebar-brand">
+      <span class="d-brand-text">JARVIS</span>
+      <span class="d-brand-sub" style="color:var(--cyan);font-size:0.58rem;letter-spacing:0.08em;">ORACLE EDITION</span>
+      <span class="d-brand-sub">API Reference</span>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Brain (:9200)</div>
+      <a class="d-nav-link" href="#cat-auth">Authentication</a>
+      <a class="d-nav-link" href="#cat-system">System &amp; Health</a>
+      <a class="d-nav-link" href="#cat-consciousness">Consciousness</a>
+      <a class="d-nav-link" href="#cat-memory">Memory</a>
+      <a class="d-nav-link" href="#cat-identity">Identity</a>
+      <a class="d-nav-link" href="#cat-skills">Skills &amp; Learning</a>
+      <a class="d-nav-link" href="#cat-policy">Policy &amp; NNs</a>
+      <a class="d-nav-link" href="#cat-autonomy">Autonomy &amp; Goals</a>
+      <a class="d-nav-link" href="#cat-library">Knowledge Library</a>
+      <a class="d-nav-link" href="#cat-acquisition">Capability Acquisition</a>
+      <a class="d-nav-link" href="#cat-plugins">Plugin Registry</a>
+      <a class="d-nav-link" href="#cat-codegen">CodeGen Service</a>
+      <a class="d-nav-link" href="#cat-selfimprove">Self-Improvement</a>
+      <a class="d-nav-link" href="#cat-eval">Evaluation</a>
+      <a class="d-nav-link" href="#cat-trace">Traceability</a>
+      <a class="d-nav-link" href="#cat-live-addendum">Live Route Addendum</a>
+      <a class="d-nav-link" href="#cat-control">System Control</a>
+      <a class="d-nav-link" href="#cat-ws">WebSocket (Live)</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Perception (:9100)</div>
+      <a class="d-nav-link" href="#cat-perception">Perception Bus</a>
+      <a class="d-nav-link" href="#cat-events-schema">Event Schema</a>
+      <a class="d-nav-link" href="#cat-brain-messages">Brain → Pi Messages</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Pi 5 (:8080)</div>
+      <a class="d-nav-link" href="#cat-pi">Pi UI Server</a>
+    </div>
+    <div class="d-nav-group d-nav-footer">
+      <a class="d-nav-link d-back-link" href="/">← Live Dashboard</a>
+      <a class="d-nav-link d-back-link" href="/showcase">Strategic Showcase</a>
+      <a class="d-nav-link d-back-link" href="/docs">System Reference</a>
+      <a class="d-nav-link d-back-link" href="/history">Build History</a>
+      <a class="d-nav-link d-back-link" href="/science">Scientific Reference</a>
+      <a class="d-nav-link d-back-link" href="/learning">Companion Training & Learning</a>
+      <a class="d-nav-link d-back-link" href="/maturity">Maturity Gates</a>
+      <a class="d-nav-link d-back-link" href="/hrr">HRR Shadow (P4)</a>
+      <a class="d-nav-link d-back-link" href="/hrr-scene">Mental World (P5)</a>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="d-main" id="main">
+
+    <div class="d-hero">
+      <h1>JARVIS Oracle Edition — API Reference</h1>
+      <p>Complete endpoint reference for integrating with the JARVIS brain, perception bus, and sensor node. All APIs are local-network only — no cloud dependency.</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="a-stats">
+      <div class="a-stat"><span class="a-stat-num">140</span><span class="a-stat-label">Brain API Routes</span></div>
+      <div class="a-stat"><span class="a-stat-num">3</span><span class="a-stat-label">Services</span></div>
+      <div class="a-stat"><span class="a-stat-num">Lock-marked</span><span class="a-stat-label">Auth Protected</span></div>
+      <div class="a-stat"><span class="a-stat-num">3</span><span class="a-stat-label">WebSockets</span></div>
+    </div>
+
+    <!-- Search & Filter -->
+    <div class="a-search-bar">
+      <input type="text" id="api-search" class="a-search-input" placeholder="Search endpoints... (path, method, description)">
+      <button class="a-filter-btn active" data-filter="all">All</button>
+      <button class="a-filter-btn" data-filter="GET">GET</button>
+      <button class="a-filter-btn" data-filter="POST">POST</button>
+      <button class="a-filter-btn" data-filter="DELETE">DELETE</button>
+      <button class="a-filter-btn" data-filter="WS">WS</button>
+      <button class="a-filter-btn" onclick="toggleAllEndpoints(true)" style="margin-left:8px">Expand All</button>
+      <button class="a-filter-btn" onclick="toggleAllEndpoints(false)">Collapse All</button>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- AUTHENTICATION -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-auth" data-cat-id="auth"><h3>Authentication</h3></div>
+    <div class="a-protocol">
+      <h4>API Key Authentication</h4>
+      <p>Destructive endpoints (POST, DELETE) require an API key. Read-only GET endpoints are open.</p>
+      <div class="a-block">
+        <div class="a-block-label">Two ways to authenticate</div>
+        <div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button><span class="a-comment"># Option 1: Bearer token header</span>
+Authorization: Bearer &lt;DASHBOARD_API_KEY&gt;
+
+<span class="a-comment"># Option 2: Query parameter</span>
+GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
+      </div>
+      <p style="margin-top:12px;font-size:0.82rem;color:var(--text-muted)">The API key is auto-generated at boot and printed to the console log. Set <code>DASHBOARD_API_KEY</code> env var to use a fixed key. The key is also exposed at <code>GET /api/config</code> for the dashboard frontend.</p>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- SYSTEM & HEALTH -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-system" data-cat-id="system"><h3>System &amp; Health <span class="a-category-count">8 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-status" data-method="GET" data-path="/api/status" data-desc="Core system status" data-cat="system">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)">
+        <span class="a-ep-chevron">▶</span>
+        <span class="a-method a-get">GET</span>
+        <span class="a-path">/api/status</span>
+        <span class="a-ep-desc">Core system status — running, memory, consciousness, sensors</span>
+      </div>
+      <div class="a-ep-body">
+        <div class="a-block"><div class="a-block-label">Response</div>
+          <div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"running"</span>: <span class="a-bool">true</span>,
+  <span class="a-key">"memory"</span>: { <span class="a-key">"total"</span>: <span class="a-num">142</span>, <span class="a-key">"by_type"</span>: {...} },
+  <span class="a-key">"consciousness"</span>: { <span class="a-key">"stage"</span>: <span class="a-str">"integrative"</span>, <span class="a-key">"confidence"</span>: <span class="a-num">0.72</span> },
+  <span class="a-key">"sensors"</span>: { <span class="a-key">"connected"</span>: [<span class="a-str">"pi5-senses"</span>] },
+  <span class="a-key">"truth_calibration"</span>: { <span class="a-key">"composite"</span>: <span class="a-num">0.68</span> }
+}</div></div>
+        <div class="a-curl"><div class="a-curl-label">Example</div>
+          <div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>curl http://localhost:9200/api/status</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-health" data-method="GET" data-path="/api/health" data-desc="Health subsystem snapshot" data-cat="system">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)">
+        <span class="a-ep-chevron">▶</span>
+        <span class="a-method a-get">GET</span>
+        <span class="a-path">/api/health</span>
+        <span class="a-ep-desc">Health subsystem snapshot (from cache)</span>
+      </div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns the pre-built health snapshot from the dashboard cache. Updated every 2s.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-health-detailed" data-method="GET" data-path="/api/health/detailed" data-desc="Live detailed health check" data-cat="system">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)">
+        <span class="a-ep-chevron">▶</span>
+        <span class="a-method a-get">GET</span>
+        <span class="a-path">/api/health/detailed</span>
+        <span class="a-ep-desc">Live health check — bypasses cache, reads engine directly</span>
+      </div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Calls <code>consciousness.check_health()</code> live. Use for debugging; prefer <code>/api/health</code> for monitoring.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-sensor-health" data-method="GET" data-path="/api/sensor-health" data-desc="Pi sensor health telemetry" data-cat="system">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)">
+        <span class="a-ep-chevron">▶</span>
+        <span class="a-method a-get">GET</span>
+        <span class="a-path">/api/sensor-health</span>
+        <span class="a-ep-desc">Pi sensor telemetry — CPU temp, throttle, camera FPS</span>
+      </div>
+      <div class="a-ep-body">
+        <div class="a-block"><div class="a-block-label">Response</div>
+          <div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"pi5-senses"</span>: {
+    <span class="a-key">"cpu_temp_c"</span>: <span class="a-num">52.3</span>,
+    <span class="a-key">"cpu_percent"</span>: <span class="a-num">34.2</span>,
+    <span class="a-key">"mem_used_mb"</span>: <span class="a-num">1200</span>,
+    <span class="a-key">"camera_fps"</span>: <span class="a-num">14.8</span>,
+    <span class="a-key">"throttled"</span>: <span class="a-str">"0x0"</span>,
+    <span class="a-key">"uptime_s"</span>: <span class="a-num">3600</span>,
+    <span class="a-key">"audio_playing"</span>: <span class="a-bool">false</span>
+  }
+}</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-config" data-method="GET" data-path="/api/config" data-desc="Pi video URL + API key" data-cat="system">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/config</span><span class="a-ep-desc">Returns Pi video URL and dashboard API key</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{ <span class="a-key">"pi_video_url"</span>: <span class="a-str">"http://192.168.1.248:8080/video"</span>, <span class="a-key">"api_key"</span>: <span class="a-str">"..."</span> }</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-settings-get" data-method="GET" data-path="/api/settings" data-desc="Runtime-tunable settings" data-cat="system">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/settings</span><span class="a-ep-desc">Current runtime settings (tone, budget, mode, cadence)</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"kernel"</span>: { <span class="a-key">"budget_ms"</span>: <span class="a-num">50</span>, <span class="a-key">"cadence_multiplier"</span>: <span class="a-num">1.5</span>, <span class="a-key">"ticks"</span>: <span class="a-num">42000</span> },
+  <span class="a-key">"thought_weights"</span>: { ... },
+  <span class="a-key">"mode"</span>: { <span class="a-key">"current"</span>: <span class="a-str">"conversational"</span> },
+  <span class="a-key">"tone"</span>: <span class="a-str">"casual"</span>,
+  <span class="a-key">"consciousness_stage"</span>: <span class="a-str">"integrative"</span>
+}</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-settings-post" data-method="POST" data-path="/api/settings" data-desc="Update runtime settings" data-cat="system">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/settings</span><span class="a-ep-desc">Update tone, budget_ms</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body">
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">tone</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>professional | casual | urgent | empathetic | playful</td></tr>
+          <tr><td class="a-param-name">budget_ms</td><td class="a-param-type">number</td><td class="a-param-opt">optional</td><td>Kernel tick budget (25-100ms)</td></tr>
+        </tbody></table>
+        <div class="a-curl"><div class="a-curl-label">Example</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST http://localhost:9200/api/settings \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"tone": "casual", "budget_ms": 50}'</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-logs" data-method="GET" data-path="/api/logs" data-desc="Tail brain log file" data-cat="system">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/logs?lines=50</span><span class="a-ep-desc">Last N lines of /tmp/jarvis-brain.log</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">lines</td><td class="a-param-type">int</td><td>50</td><td>Number of log lines to return</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- CONSCIOUSNESS -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-consciousness" data-cat-id="consciousness"><h3>Consciousness &amp; Cognition <span class="a-category-count">9 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-consciousness" data-method="GET" data-path="/api/consciousness" data-desc="Full consciousness state" data-cat="consciousness">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/consciousness</span><span class="a-ep-desc">Consciousness subsystem state snapshot</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Full consciousness engine state including stage, confidence, mode, phase, and subsystem metrics. Updated every 2s via cache.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-evolution" data-method="GET" data-path="/api/consciousness/evolution" data-desc="Evolution stage + transcendence" data-cat="consciousness">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/consciousness/evolution</span><span class="a-ep-desc">Operational evolution stage + emergence detector telemetry</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Evolution stage and detector counters for internally generated patterns. Emergent behavior records are operational evidence signals produced by known rules over thoughts/inquiries; they are not proof of sentience, consciousness, or digital life.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-mutations" data-method="GET" data-path="/api/consciousness/mutations" data-desc="Mutation history" data-cat="consciousness">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/consciousness/mutations</span><span class="a-ep-desc">Mutation proposals, applied, rejected, rolled back</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Includes governor stats (cooldown, per-hour/session caps) and rollback history.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-thoughts" data-method="GET" data-path="/api/consciousness/thoughts" data-desc="Meta-cognitive thoughts" data-cat="consciousness">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/consciousness/thoughts</span><span class="a-ep-desc">Grounded internal-thought event log</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Template-based meta-thought event records with cooldowns, fingerprint dedup, and tier budgets. This is one source of internal activity, not the whole cognitive substrate and not a free-form sentience claim.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-observer" data-method="GET" data-path="/api/consciousness/observer" data-desc="Observer stance" data-cat="consciousness">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/consciousness/observer</span><span class="a-ep-desc">Observer stance (waking/dreaming/reflective), observations</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Structured observations with DeltaEffects and awareness tracking. Stance affects memory write policy via CueGate.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-existential" data-method="GET" data-path="/api/consciousness/existential" data-desc="Existential reasoning" data-cat="consciousness">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/consciousness/existential</span><span class="a-ep-desc">Structured inquiry chains, LLM-gated, token-budgeted</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Ticked every 120s. Produces structured chains of existential reasoning with depth limits.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-philosophical" data-method="GET" data-path="/api/consciousness/philosophical" data-desc="Philosophical dialogue" data-cat="consciousness">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/consciousness/philosophical</span><span class="a-ep-desc">Framework debates, position evolution</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">LLM-gated philosophical framework debates with position tracking.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-analytics" data-method="GET" data-path="/api/consciousness/analytics" data-desc="Rolling analytics" data-cat="consciousness">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/consciousness/analytics</span><span class="a-ep-desc">O(1) rolling-window: confidence, reasoning, health</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Real-time analytics with O(1) memory footprint. Tracks confidence trends, reasoning patterns, and system health over configurable windows.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-kernel" data-method="GET" data-path="/api/kernel/performance" data-desc="Kernel tick metrics" data-cat="consciousness">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/kernel/performance</span><span class="a-ep-desc">Tick budget, cadence, p50/p95/p99 latencies</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns kernel loop performance metrics: budget utilization, cadence multiplier, tick count, and latency percentiles.</p></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- MEMORY -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-memory" data-cat-id="memory"><h3>Memory <span class="a-category-count">3 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-memories" data-method="GET" data-path="/api/memories" data-desc="List recent memories" data-cat="memory">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/memories?count=20</span><span class="a-ep-desc">List recent memories with type, tags, weight</span></div>
+      <div class="a-ep-body">
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">count</td><td class="a-param-type">int</td><td>20</td><td>Number of recent memories to return</td></tr>
+        </tbody></table>
+        <div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>[{
+  <span class="a-key">"id"</span>: <span class="a-str">"mem_abc123"</span>,
+  <span class="a-key">"type"</span>: <span class="a-str">"observation"</span>,
+  <span class="a-key">"payload"</span>: <span class="a-str">"User prefers dark mode interfaces"</span>,
+  <span class="a-key">"weight"</span>: <span class="a-num">0.85</span>,
+  <span class="a-key">"tags"</span>: [<span class="a-str">"user_preference"</span>, <span class="a-str">"ui"</span>],
+  <span class="a-key">"timestamp"</span>: <span class="a-num">1712700000.0</span>
+}]</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-memory-detail" data-method="GET" data-path="/api/memories/{memory_id}" data-desc="Memory detail" data-cat="memory">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/memories/<span class="a-path-param">{memory_id}</span></span><span class="a-ep-desc">Full detail including provenance, associations, access count</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response (additional fields)</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  ...base fields...,
+  <span class="a-key">"provenance"</span>: <span class="a-str">"observed"</span>,
+  <span class="a-key">"speaker"</span>: <span class="a-str">"David"</span>,
+  <span class="a-key">"access_count"</span>: <span class="a-num">7</span>,
+  <span class="a-key">"associations"</span>: [<span class="a-str">"mem_def456"</span>, <span class="a-str">"mem_ghi789"</span>]  <span class="a-comment">// up to 20</span>
+}</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-memory-search" data-method="GET" data-path="/api/memories/search" data-desc="Search memories" data-cat="memory">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/memories/search?q=&amp;tag=&amp;type=</span><span class="a-ep-desc">Search by keyword, tag, or type</span></div>
+      <div class="a-ep-body">
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">q</td><td class="a-param-type">string</td><td>""</td><td>Keyword search (semantic + keyword)</td></tr>
+          <tr><td class="a-param-name">tag</td><td class="a-param-type">string</td><td>""</td><td>Filter by tag (e.g. "user_preference")</td></tr>
+          <tr><td class="a-param-name">type</td><td class="a-param-type">string</td><td>""</td><td>Filter by memory type</td></tr>
+          <tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td>20</td><td>Max results</td></tr>
+        </tbody></table>
+        <div class="a-curl"><div class="a-curl-label">Example</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>curl "http://localhost:9200/api/memories/search?q=dark+mode&tag=user_preference&limit=5"</div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- IDENTITY -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-identity" data-cat-id="identity"><h3>Identity Management <span class="a-category-count">12 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-speakers" data-method="GET" data-path="/api/speakers" data-desc="List speaker profiles" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/speakers</span><span class="a-ep-desc">Speaker profiles, current speaker, availability</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{ <span class="a-key">"speakers"</span>: [...], <span class="a-key">"current"</span>: <span class="a-str">"David"</span>, <span class="a-key">"available"</span>: <span class="a-bool">true</span> }</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-speakers-enroll" data-method="POST" data-path="/api/speakers/enroll" data-desc="Enroll speaker from audio" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/speakers/enroll</span><span class="a-ep-desc">Enroll a speaker from PCM audio clips</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body">
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">name</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>Name for the speaker profile</td></tr>
+          <tr><td class="a-param-name">clips</td><td class="a-param-type">string[]</td><td class="a-param-req">required</td><td>Base64-encoded 16kHz int16 PCM audio clips</td></tr>
+        </tbody></table>
+        <div class="a-curl"><div class="a-curl-label">Example</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST http://localhost:9200/api/speakers/enroll \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Alice", "clips": ["base64_pcm_data..."]}'</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-speakers-delete" data-method="DELETE" data-path="/api/speakers/{name}" data-desc="Remove speaker" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-delete">DELETE</span><span class="a-path">/api/speakers/<span class="a-path-param">{name}</span></span><span class="a-ep-desc">Remove a speaker profile</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Permanently removes the speaker's embedding and profile data.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-faces" data-method="GET" data-path="/api/faces" data-desc="List face profiles" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/faces</span><span class="a-ep-desc">Face profiles and availability</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{ <span class="a-key">"faces"</span>: [...], <span class="a-key">"available"</span>: <span class="a-bool">true</span> }</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-faces-enroll" data-method="POST" data-path="/api/faces/enroll" data-desc="Enroll face from crops" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/faces/enroll</span><span class="a-ep-desc">Enroll face from JPEG crops</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">name</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>Name for the face profile</td></tr>
+        <tr><td class="a-param-name">crops</td><td class="a-param-type">string[]</td><td class="a-param-req">required</td><td>Base64-encoded JPEG face crop images</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-faces-delete" data-method="DELETE" data-path="/api/faces/{name}" data-desc="Remove face" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-delete">DELETE</span><span class="a-path">/api/faces/<span class="a-path-param">{name}</span></span><span class="a-ep-desc">Remove face profile</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Permanently removes the face embedding and profile.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-identity" data-method="GET" data-path="/api/identity" data-desc="Current fused identity" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/identity</span><span class="a-ep-desc">Current identity — fusion status, trust state, resolution basis</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"identity"</span>: <span class="a-str">"David"</span>,
+  <span class="a-key">"fusion"</span>: {
+    <span class="a-key">"voice_trust_state"</span>: <span class="a-str">"trusted"</span>,
+    <span class="a-key">"resolution_basis"</span>: <span class="a-str">"voice+face_agreement"</span>,
+    <span class="a-key">"multi_person_visible"</span>: <span class="a-bool">false</span>,
+    <span class="a-key">"flip_count"</span>: <span class="a-num">0</span>
+  }
+}</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-identity-forget" data-method="POST" data-path="/api/identity/forget-all" data-desc="Forget person biometrics" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/identity/forget-all</span><span class="a-ep-desc">Remove voice + face for a person</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">name</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>Person to forget</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-identity-toggle-face" data-method="POST" data-path="/api/identity/toggle-face" data-desc="Enable/disable face recognition" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/identity/toggle-face</span><span class="a-ep-desc">Toggle face recognition on/off</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">enabled</td><td class="a-param-type">boolean</td><td class="a-param-req">required</td><td>true to enable, false to disable</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-candidates" data-method="GET" data-path="/api/identity/candidates" data-desc="Identity candidates" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/identity/candidates</span><span class="a-ep-desc">Accumulated identity candidates with evidence</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns evidence accumulator state for all candidate identities, including sample counts and confidence scores.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-candidates-promote" data-method="POST" data-path="/api/identity/candidates/promote" data-desc="Promote candidate" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/identity/candidates/promote</span><span class="a-ep-desc">Manually promote a candidate to persistent identity</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th></tr></thead><tbody>
+        <tr><td class="a-param-name">name</td><td class="a-param-type">string</td><td class="a-param-req">required</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-candidates-reject" data-method="POST" data-path="/api/identity/candidates/reject" data-desc="Reject candidate" data-cat="identity">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/identity/candidates/reject</span><span class="a-ep-desc">Reject and discard a candidate</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th></tr></thead><tbody>
+        <tr><td class="a-param-name">name</td><td class="a-param-type">string</td><td class="a-param-req">required</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- SKILLS & LEARNING -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-skills" data-cat-id="skills"><h3>Skills &amp; Learning <span class="a-category-count">8 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-skills" data-method="GET" data-path="/api/skills" data-desc="Registry + jobs + gate" data-cat="skills">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/skills</span><span class="a-ep-desc">Skill registry, learning jobs, capability gate state</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"registry"</span>: { <span class="a-comment">// all registered skills</span> },
+  <span class="a-key">"learning_jobs"</span>: { <span class="a-comment">// active/completed jobs</span> },
+  <span class="a-key">"capability_gate"</span>: { <span class="a-comment">// enforcement stats</span> }
+}</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-skill-detail" data-method="GET" data-path="/api/skills/{skill_id}" data-desc="Skill detail" data-cat="skills">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/skills/<span class="a-path-param">{skill_id}</span></span><span class="a-ep-desc">Full skill record + associated learning job</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns the SkillRecord dict plus its associated learning job (if any). Returns 404 if skill not found.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-skill-delete" data-method="DELETE" data-path="/api/skills/{skill_id}" data-desc="Remove skill" data-cat="skills">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-delete">DELETE</span><span class="a-path">/api/skills/<span class="a-path-param">{skill_id}</span></span><span class="a-ep-desc">Remove a skill record</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">confirm_default</td><td class="a-param-type">bool</td><td>false</td><td>Must be true to delete default skills (returns 409 otherwise)</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-job-delete" data-method="DELETE" data-path="/api/learning-jobs/{job_id}" data-desc="Delete learning job" data-cat="skills">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-delete">DELETE</span><span class="a-path">/api/learning-jobs/<span class="a-path-param">{job_id}</span></span><span class="a-ep-desc">Delete a learning job</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">remove_skill</td><td class="a-param-type">bool</td><td>false</td><td>Also remove the associated skill record</td></tr>
+        <tr><td class="a-param-name">force</td><td class="a-param-type">bool</td><td>false</td><td>Force delete even if job is running</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-jobs-cleanup" data-method="POST" data-path="/api/learning-jobs/cleanup" data-desc="Purge stale jobs" data-cat="skills">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/learning-jobs/cleanup?max_age_hours=1.0</span><span class="a-ep-desc">Purge blocked/stale learning jobs</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Deletes blocked and stale jobs older than <code>max_age_hours</code>. Also purges non-actionable junk skills.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-skill-handoff-approve" data-method="POST" data-path="/api/skills/{skill_id}/handoff/approve" data-desc="Approve skill operational handoff" data-cat="skills">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/skills/<span class="a-path-param">{skill_id}</span>/handoff/approve</span><span class="a-ep-desc">Approve pending operational build into acquisition</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Requires a skill with a pending learning-job operational handoff. Creates the linked acquisition through the normal acquisition pipeline; no skill is treated as operational proof without lane-native evidence.</p><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th></tr></thead><tbody><tr><td class="a-param-name">approved_by</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td></tr><tr><td class="a-param-name">notes</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td></tr></tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-skill-handoff-reject" data-method="POST" data-path="/api/skills/{skill_id}/handoff/reject" data-desc="Reject skill operational handoff" data-cat="skills">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/skills/<span class="a-path-param">{skill_id}</span>/handoff/reject</span><span class="a-ep-desc">Reject pending operational build request</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Rejects the operational handoff while preserving the learning-job truth record.</p><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th></tr></thead><tbody><tr><td class="a-param-name">rejected_by</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td></tr><tr><td class="a-param-name">reason</td><td class="a-param-type">string</td><td class="a-param-req">required</td></tr></tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-skill-handoff-retry" data-method="POST" data-path="/api/skills/{skill_id}/handoff/retry" data-desc="Retry skill operational handoff" data-cat="skills">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/skills/<span class="a-path-param">{skill_id}</span>/handoff/retry</span><span class="a-ep-desc">Retry a failed or cancelled operational build</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Starts a fresh acquisition handoff for a failed or cancelled operational build, preserving prior handoff evidence rather than overwriting it.</p><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th></tr></thead><tbody><tr><td class="a-param-name">approved_by</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td></tr><tr><td class="a-param-name">notes</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td></tr></tbody></table></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- POLICY & NNs -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-policy" data-cat-id="policy"><h3>Policy &amp; Neural Networks <span class="a-category-count">5 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-policy" data-method="GET" data-path="/api/policy" data-desc="Full policy status" data-cat="policy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/policy</span><span class="a-ep-desc">Shadow A/B stats, win rates, promotion status</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Full policy subsystem snapshot including shadow evaluation metrics, experience buffer size, and governor state.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-policy-events" data-method="GET" data-path="/api/policy/events" data-desc="Recent policy telemetry" data-cat="policy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/policy/events?limit=50</span><span class="a-ep-desc">Recent policy decisions and rewards</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td>50</td><td>Max events (capped at 50)</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-policy-models" data-method="GET" data-path="/api/policy/models" data-desc="Model registry" data-cat="policy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/policy/models</span><span class="a-ep-desc">Total versions, active version, architecture</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{ <span class="a-key">"total_versions"</span>: <span class="a-num">3</span>, <span class="a-key">"active_version"</span>: <span class="a-num">2</span>, <span class="a-key">"active_arch"</span>: <span class="a-str">"MLP2Layer"</span> }</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-personality" data-method="GET" data-path="/api/personality" data-desc="Personality traits" data-cat="policy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/personality</span><span class="a-ep-desc">Current personality trait values from cache</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns evolved trait scores, mood state, and trait modulation effects.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-discipline" data-method="GET" data-path="/api/discipline-metrics" data-desc="Discipline metrics" data-cat="policy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/discipline-metrics</span><span class="a-ep-desc">Before/after metrics for Semantic Discipline Roadmap</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns per-phase discipline metrics: relevance actions, thought generation, job health, emotion model status.</p></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- AUTONOMY & GOALS -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-autonomy" data-cat-id="autonomy"><h3>Autonomy &amp; Goals <span class="a-category-count">15 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-intentions" data-method="GET" data-path="/api/intentions" data-desc="Intention registry (truth layer)" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/intentions</span><span class="a-ep-desc">Open intentions, recent resolutions, 7-day outcome histogram</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Stage 0 truth layer for outgoing commitments. Read-only; no delivery mechanism. Returns <code>status</code> (counts + histogram), <code>open</code> (up to 500), and <code>recent_resolved</code> (up to 50).</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-intention-resolver" data-method="GET" data-path="/api/intention-resolver" data-desc="Intention resolver status (Stage 1)" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/intention-resolver</span><span class="a-ep-desc">Resolver stage, shadow metrics, verdict distribution, recent verdicts</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Stage 1 heuristic delivery scoring. Returns <code>stage</code>, <code>total_evaluated</code>, <code>verdict_counts</code>, <code>reason_counts</code>, <code>shadow_metrics</code>, <code>recent_verdicts</code>. Starts <code>shadow_only</code> — no delivery until promoted.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-intention-resolver-rollback" data-method="POST" data-path="/api/intention-resolver/rollback" data-desc="Demote resolver one rung" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/intention-resolver/rollback</span><span class="a-ep-desc">Demote resolver one rung in the promotion ladder</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Requires <code>Authorization: Bearer &lt;key&gt;</code>. Returns <code>{ "status": "ok", "new_stage": "..." }</code>.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-intention-resolver-stage" data-method="POST" data-path="/api/intention-resolver/stage" data-desc="Set resolver stage" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/intention-resolver/stage</span><span class="a-ep-desc">Set resolver stage manually</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Requires <code>Authorization: Bearer &lt;key&gt;</code>. Body: <code>{ "stage": "shadow_advisory" }</code>. Valid stages: <code>shadow_only</code>, <code>shadow_advisory</code>, <code>advisory_canary</code>, <code>advisory</code>, <code>active</code>.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-goals" data-method="GET" data-path="/api/goals" data-desc="Goal continuity layer" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/goals</span><span class="a-ep-desc">All goals with lifecycle state, scores, evidence</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns GoalManager status including active/paused/completed goals and focus selection.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-goals-observe" data-method="POST" data-path="/api/goals/observe" data-desc="Inject goal signal" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/goals/observe</span><span class="a-ep-desc">Inject a GoalSignal manually</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">content</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>Goal description</td></tr>
+        <tr><td class="a-param-name">signal_type</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Signal classification</td></tr>
+        <tr><td class="a-param-name">source</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Signal source</td></tr>
+        <tr><td class="a-param-name">priority_hint</td><td class="a-param-type">float</td><td class="a-param-opt">optional</td><td>Priority hint for ranking</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-goal-complete" data-method="POST" data-path="/api/goals/{goal_id}/complete" data-desc="Complete goal" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/goals/<span class="a-path-param">{goal_id}</span>/complete</span><span class="a-ep-desc">Mark goal as completed</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th></tr></thead><tbody><tr><td class="a-param-name">reason</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td></tr></tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-goal-abandon" data-method="POST" data-path="/api/goals/{goal_id}/abandon" data-desc="Abandon goal" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/goals/<span class="a-path-param">{goal_id}</span>/abandon</span><span class="a-ep-desc">Abandon a goal</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Marks the goal as abandoned with optional reason.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-goal-pause" data-method="POST" data-path="/api/goals/{goal_id}/pause" data-desc="Pause goal" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/goals/<span class="a-path-param">{goal_id}</span>/pause</span><span class="a-ep-desc">Pause a goal</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Temporarily pauses goal tracking and autonomy alignment.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-goal-resume" data-method="POST" data-path="/api/goals/{goal_id}/resume" data-desc="Resume goal" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/goals/<span class="a-path-param">{goal_id}</span>/resume</span><span class="a-ep-desc">Resume a paused goal</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Resumes goal tracking and re-engages autonomy alignment.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-onboarding" data-method="GET" data-path="/api/onboarding/status" data-desc="Onboarding progress" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/onboarding/status</span><span class="a-ep-desc">7-stage companion training progress</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns current onboarding stage, day, checkpoints met, and readiness history.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-onboarding-start" data-method="POST" data-path="/api/onboarding/start" data-desc="Start onboarding" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/onboarding/start</span><span class="a-ep-desc">Start companion training playbook</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Begins the 7-stage companion training automation.</p></div>
+    </div>
+
+    <!-- ─────────── Phase 6.5 — L3 Escalation Governance ─────────── -->
+
+    <div class="a-endpoint" id="ep-autonomy-level-get" data-method="GET" data-path="/api/autonomy/level" data-desc="Autonomy level + five-field state (Phase 6.5)" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/autonomy/level</span><span class="a-ep-desc">Current autonomy level + Phase 6.5 five-field state model</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Returns the five evidence fields that gate L3 activation. <code>current_ok</code> is live-sourced from <code>check_promotion_eligibility()</code> — never backfilled from persisted files. <code>prior_attested_ok</code> comes from the attestation ledger. <code>request_ok = current_ok ∨ prior_attested_ok</code>.</p>
+        <div class="a-block"><div class="a-block-label">Response</div>
+          <div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"current_level"</span>: <span class="a-num">2</span>,
+  <span class="a-key">"current_ok"</span>: <span class="a-bool">false</span>,
+  <span class="a-key">"prior_attested_ok"</span>: <span class="a-bool">true</span>,
+  <span class="a-key">"attestation_strength"</span>: <span class="a-str">"verified"</span>,
+  <span class="a-key">"attestation_records"</span>: [{
+    <span class="a-key">"evidence_source"</span>: <span class="a-str">"docs/pre_reset_report_phase9_complete.md"</span>,
+    <span class="a-key">"report_hash"</span>: <span class="a-str">"sha256:..."</span>,
+    <span class="a-key">"artifact_status"</span>: <span class="a-str">"hash_verified"</span>,
+    <span class="a-key">"attestation_strength"</span>: <span class="a-str">"verified"</span>,
+    <span class="a-key">"accepted_by"</span>: <span class="a-str">"operator"</span>,
+    <span class="a-key">"accepted_at"</span>: <span class="a-num">1745280000.0</span>,
+    <span class="a-key">"measured_source"</span>: <span class="a-str">"markdown_extract"</span>
+  }],
+  <span class="a-key">"request_ok"</span>: <span class="a-bool">true</span>,
+  <span class="a-key">"approval_required"</span>: <span class="a-bool">true</span>,
+  <span class="a-key">"activation_ok"</span>: <span class="a-bool">false</span>,
+  <span class="a-key">"eligibility_detail"</span>: { <span class="a-key">"wins"</span>: <span class="a-num">12</span>, <span class="a-key">"win_rate"</span>: <span class="a-num">0.42</span>, <span class="a-key">"recent_regressions"</span>: <span class="a-num">0</span>, <span class="a-key">"reason"</span>: <span class="a-str">"deltas_below_threshold"</span> }
+}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-autonomy-level-set" data-method="POST" data-path="/api/autonomy/level" data-desc="Set autonomy level (evidence-gated)" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/autonomy/level</span><span class="a-ep-desc">Set autonomy level manually — L3 requires evidence (Phase 6.5)</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Evidence-gated. For <code>level &gt;= 3</code>, at least one of <code>current_ok</code>, <code>prior_attested_ok</code>, or the emergency triplet (<code>emergency: true</code> ∧ <code>operator_override: true</code> ∧ env var <code>ALLOW_EMERGENCY_OVERRIDE=1</code>) must hold. Every call is audit-logged; every 403 emits <code>AUTONOMY_L3_ACTIVATION_DENIED</code>.</p>
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">level</td><td class="a-param-type">int</td><td class="a-param-req">required</td><td>Target autonomy level (0–3)</td></tr>
+          <tr><td class="a-param-name">reason</td><td class="a-param-type">string</td><td class="a-param-req">required, ≥20 chars</td><td>Human-supplied rationale. Short strings rejected with 400.</td></tr>
+          <tr><td class="a-param-name">caller_id</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>Non-empty caller identity for the audit trail</td></tr>
+          <tr><td class="a-param-name">evidence_path</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Path to supporting evidence document</td></tr>
+          <tr><td class="a-param-name">operator_override</td><td class="a-param-type">bool</td><td class="a-param-opt">optional</td><td>Required (with <code>emergency</code>) for escape-hatch path</td></tr>
+          <tr><td class="a-param-name">emergency</td><td class="a-param-type">bool</td><td class="a-param-opt">optional</td><td>Only honored when <code>ALLOW_EMERGENCY_OVERRIDE=1</code> env is set</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-autonomy-attestation" data-method="GET" data-path="/api/autonomy/attestation" data-desc="Attestation ledger (ever-proven memory)" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/autonomy/attestation</span><span class="a-ep-desc">Hash-attested operator-seeded records of ever-proven capabilities</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Returns the full accepted attestation ledger. Each record carries <code>artifact_status</code> (<code>hash_verified</code> | <code>missing</code> | <code>hash_mismatch</code> | <code>hash_unverifiable</code>) and <code>attestation_strength</code> (<code>verified</code> | <code>archived_missing</code>) so the UI can surface weaker evidence explicitly. Only <code>hash_verified</code> and <code>missing</code> satisfy <code>prior_attested_ok</code>.</p>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-autonomy-escalations" data-method="GET" data-path="/api/autonomy/escalations" data-desc="Pending L3 escalation queue" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/autonomy/escalations</span><span class="a-ep-desc">List pending L3 escalation requests with declared_scope</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Returns <code>{ pending: [...] }</code>. Each request carries <code>id</code>, <code>metric</code>, <code>severity</code>, <code>target_module</code>, <code>declared_scope</code> (narrow per-request path set — <strong>never</strong> global), <code>evidence_refs</code>, <code>metric_context_summary</code>, <code>submitted_autonomy_level</code>, <code>created_at</code>, <code>expires_at</code>, <code>status</code>, and <code>suggested_fix</code>. Auto-generated requests only fire when live <code>autonomy_level &gt;= 3</code>.</p>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-autonomy-escalation-approve" data-method="POST" data-path="/api/autonomy/escalations/{escalation_id}/approve" data-desc="Approve an L3 escalation" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/autonomy/escalations/<span class="a-path-param">{escalation_id}</span>/approve</span><span class="a-ep-desc">Approve and route through self-improvement with narrow declared_scope</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Requires live <code>autonomy_level &gt;= 3</code> (emits <code>AUTONOMY_L3_ACTIVATION_DENIED</code> with reason <code>escalation_approve_below_l3</code> and returns 403 otherwise). Runs <code>attempt_improvement(manual=True)</code> with <code>declared_scope</code> set to the request's narrow path list. No global widening of <code>ALLOWED_PATHS</code> ever occurs. Emits <code>AUTONOMY_ESCALATION_APPROVED</code> and, if the applied improvement cannot complete cleanly, <code>AUTONOMY_ESCALATION_PARKED</code>.</p>
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">approved_by</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>Non-empty operator identity</td></tr>
+          <tr><td class="a-param-name">approval_reason</td><td class="a-param-type">string</td><td class="a-param-req">required, ≥20 chars</td><td>Human rationale for approval</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-autonomy-escalation-reject" data-method="POST" data-path="/api/autonomy/escalations/{escalation_id}/reject" data-desc="Reject an L3 escalation" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/autonomy/escalations/<span class="a-path-param">{escalation_id}</span>/reject</span><span class="a-ep-desc">Reject a pending L3 escalation</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Marks the escalation as rejected and emits <code>AUTONOMY_ESCALATION_REJECTED</code>.</p>
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">rejected_by</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>Non-empty operator identity</td></tr>
+          <tr><td class="a-param-name">rejection_reason</td><td class="a-param-type">string</td><td class="a-param-req">required, ≥20 chars</td><td>Human rationale for rejection</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-autonomy-audit" data-method="GET" data-path="/api/autonomy/audit" data-desc="Durable autonomy/L3 audit ledger" data-cat="autonomy">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/autonomy/audit</span><span class="a-ep-desc">Recent autonomy/L3/escalation audit events from the durable ledger</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Reads <code>~/.jarvis/autonomy_audit.jsonl</code> (Phase 6.5). Safe when the event bus is unwired — the endpoint reads disk state. Records are newest-last and match file order. Subscriber wires at boot <em>before</em> <code>reconcile_on_boot()</code> so no boot-time event is lost. 10 MB size-capped rotation, sanitized payloads, thread-safe writes.</p>
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td class="a-param-opt">optional (default 100, max 1000)</td><td>Max number of recent entries to return</td></tr>
+        </tbody></table>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-top:8px">Audited event classes: <code>AUTONOMY_L3_ELIGIBLE</code>, <code>AUTONOMY_L3_PROMOTED</code> (clean activations only), <code>AUTONOMY_L3_ACTIVATION_DENIED</code>, <code>AUTONOMY_ESCALATION_REQUESTED</code> / <code>APPROVED</code> / <code>REJECTED</code> / <code>ROLLED_BACK</code> / <code>PARKED</code> / <code>EXPIRED</code>.</p>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- LIBRARY -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-library" data-cat-id="library"><h3>Knowledge Library <span class="a-category-count">4 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-library-ingest" data-method="POST" data-path="/api/library/ingest" data-desc="Ingest a source" data-cat="library">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/library/ingest</span><span class="a-ep-desc">Ingest content/URL into the knowledge library</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">content</td><td class="a-param-type">string</td><td class="a-param-opt">one of content/url</td><td>Raw text content to ingest</td></tr>
+        <tr><td class="a-param-name">url</td><td class="a-param-type">string</td><td class="a-param-opt">one of content/url</td><td>URL to fetch and ingest (SSRF-safe)</td></tr>
+        <tr><td class="a-param-name">title</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Source title</td></tr>
+        <tr><td class="a-param-name">domain_tags</td><td class="a-param-type">string[]</td><td class="a-param-opt">optional</td><td>Domain classification tags</td></tr>
+        <tr><td class="a-param-name">study_now</td><td class="a-param-type">bool</td><td class="a-param-opt">optional</td><td>Trigger LLM study immediately after ingest</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-library-batch" data-method="POST" data-path="/api/library/ingest-batch" data-desc="Batch ingest textbook" data-cat="library">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/library/ingest-batch</span><span class="a-ep-desc">Batch-ingest from TOC URL (textbooks)</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">toc_url</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>Table of contents URL to crawl</td></tr>
+        <tr><td class="a-param-name">dry_run</td><td class="a-param-type">bool</td><td class="a-param-opt">optional</td><td>Preview without ingesting</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-library-sources" data-method="GET" data-path="/api/library/sources" data-desc="List library sources" data-cat="library">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/library/sources?limit=20&amp;offset=0</span><span class="a-ep-desc">Paginated list of ingested sources with metadata</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td>20 (max 50)</td><td>Results per page</td></tr>
+        <tr><td class="a-param-name">offset</td><td class="a-param-type">int</td><td>0</td><td>Pagination offset</td></tr>
+        <tr><td class="a-param-name">ingested_by</td><td class="a-param-type">string</td><td>""</td><td>Filter by ingestion source</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-library-source-detail" data-method="GET" data-path="/api/library/sources/{source_id}" data-desc="Source detail" data-cat="library">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/library/sources/<span class="a-path-param">{source_id}</span></span><span class="a-ep-desc">Full source with content_text, authors, citations</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns complete source metadata plus full extracted content text.</p></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- SELF-IMPROVEMENT -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- CAPABILITY ACQUISITION -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-acquisition" data-cat-id="acquisition"><h3>Capability Acquisition <span class="a-category-count">7 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-acq-status" data-method="GET" data-path="/api/acquisition" data-desc="Pipeline status" data-cat="acquisition">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/acquisition</span><span class="a-ep-desc">Capability Acquisition Pipeline status — jobs, lanes, outcomes</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Returns the full AcquisitionOrchestrator state: enabled flag, recent jobs with lane progress, and summary statistics.</p>
+        <div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"enabled"</span>: <span class="a-bool">true</span>,
+  <span class="a-key">"total_jobs"</span>: <span class="a-num">3</span>,
+  <span class="a-key">"active_jobs"</span>: <span class="a-num">1</span>,
+  <span class="a-key">"completed_jobs"</span>: <span class="a-num">2</span>,
+  <span class="a-key">"recent"</span>: [{
+    <span class="a-key">"id"</span>: <span class="a-str">"acq_abc123"</span>,
+    <span class="a-key">"intent"</span>: <span class="a-str">"learn web scraping"</span>,
+    <span class="a-key">"outcome_class"</span>: <span class="a-str">"skill_creation"</span>,
+    <span class="a-key">"status"</span>: <span class="a-str">"running"</span>,
+    <span class="a-key">"lanes"</span>: { <span class="a-key">"evidence_grounding"</span>: <span class="a-str">"completed"</span>, <span class="a-key">"planning"</span>: <span class="a-str">"running"</span>, ... }
+  }]
+}</div></div>
+        <div class="a-curl"><div class="a-curl-label">Example</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>curl http://localhost:9200/api/acquisition</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-acq-detail" data-method="GET" data-path="/api/acquisition/{acquisition_id}" data-desc="Job detail" data-cat="acquisition">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/acquisition/<span class="a-path-param">{acquisition_id}</span></span><span class="a-ep-desc">Full acquisition job detail — lanes, artifacts, timestamps</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns a single acquisition job with full lane status breakdown, artifact references, and timeline. Returns 404 if job not found.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-acq-create" data-method="POST" data-path="/api/acquisition/create" data-desc="Create acquisition job" data-cat="acquisition">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/acquisition/create</span><span class="a-ep-desc">Create a new acquisition job from user intent</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body">
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">intent</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>User intent text (e.g. "learn web scraping")</td></tr>
+        </tbody></table>
+        <div class="a-curl"><div class="a-curl-label">Example</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST http://localhost:9200/api/acquisition/create \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"intent": "learn web scraping with Python"}'</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-acq-approve-plan" data-method="POST" data-path="/api/acquisition/{acquisition_id}/approve-plan" data-desc="Approve or reject plan" data-cat="acquisition">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/acquisition/<span class="a-path-param">{acquisition_id}</span>/approve-plan</span><span class="a-ep-desc">Approve or reject &amp; revise an acquisition plan</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">verdict</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td><code>approved</code>, <code>approved_as_is</code>, <code>approved_with_edits</code>, <code>rejected</code>, or <code>cancelled</code></td></tr>
+        <tr><td class="a-param-name">notes</td><td class="a-param-type">string</td><td class="a-param-opt">required for rejection</td><td>Operator feedback explaining what to keep, change, or add. Injected into the coder LLM prompt when re-planning.</td></tr>
+        <tr><td class="a-param-name">reason_category</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Structured verdict reason: <code>incomplete_design</code>, <code>wrong_approach</code>, <code>missing_tests</code>, <code>security_concern</code>, <code>scope_too_large</code>, <code>needs_more_detail</code>, <code>other</code>. Used for plan evaluator NN training labels.</td></tr>
+        <tr><td class="a-param-name">suggested_changes</td><td class="a-param-type">array</td><td class="a-param-opt">optional</td><td>Array of <code>{description: string}</code> objects with specific change requests.</td></tr>
+      </tbody></table>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:8px;">On <strong>rejection</strong>: resets <code>planning</code> and <code>plan_review</code> lanes to pending. The coder re-plans with operator feedback injected alongside the previous plan (for revision, not regeneration). Plan version increments. Dashboard shows prior rejection feedback on the revised plan.</p>
+        <p style="font-size:0.78rem;color:var(--text-muted);">On <strong>approval</strong>: incomplete plans are refused if <code>technical_approach</code>, <code>implementation_sketch</code>, or <code>test_cases</code> are missing. The response carries planning diagnostics instead of allowing an empty plan to proceed.</p>
+        <p style="font-size:0.78rem;color:var(--text-muted);">Emits <code>ACQUISITION_PLAN_REVIEWED</code> event. Records plan features + verdict label to DistillationCollector for the plan_evaluator shadow specialist. Resolves any pending shadow prediction artifact.</p>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-acq-cancel" data-method="POST" data-path="/api/acquisition/{acquisition_id}/cancel" data-desc="Cancel job" data-cat="acquisition">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/acquisition/<span class="a-path-param">{acquisition_id}</span>/cancel</span><span class="a-ep-desc">Cancel and remove an acquisition job (any state)</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">reason</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Cancellation reason (default: <code>operator_cancelled</code>)</td></tr>
+      </tbody></table>
+      <p style="font-size:0.78rem;color:var(--text-muted);margin-top:8px;">Marks the job as <code>cancelled</code> on disk and removes it from the active in-memory set. Works from any job state (failed, blocked, executing, awaiting review, etc.). Dashboard shows a "Remove Job" button on failed/cancelled/blocked jobs.</p>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-acq-plan-evaluator" data-method="GET" data-path="/api/acquisition/plan-evaluator" data-desc="Plan evaluator shadow stats" data-cat="acquisition">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/acquisition/plan-evaluator</span><span class="a-ep-desc">Plan evaluator shadow NN specialist — maturity, accuracy, stratified breakdowns</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Returns the shadow plan evaluator specialist's stats: sample count, maturity band, overall and stratified accuracy, verdict distribution, and recent shadow prediction artifacts.</p>
+        <div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"enabled"</span>: <span class="a-bool">true</span>,
+  <span class="a-key">"maturity"</span>: <span class="a-str">"bootstrap"</span>,
+  <span class="a-key">"sample_count"</span>: <span class="a-num">12</span>,
+  <span class="a-key">"shadow_predictions_total"</span>: <span class="a-num">5</span>,
+  <span class="a-key">"shadow_predictions_resolved"</span>: <span class="a-num">3</span>,
+  <span class="a-key">"shadow_accuracy"</span>: <span class="a-num">0.6667</span>,
+  <span class="a-key">"correct_count"</span>: <span class="a-num">2</span>,
+  <span class="a-key">"verdict_distribution"</span>: { <span class="a-str">"approved"</span>: <span class="a-num">2</span>, <span class="a-str">"rejected"</span>: <span class="a-num">1</span> },
+  <span class="a-key">"accuracy_by_risk_tier"</span>: { <span class="a-str">"2"</span>: { <span class="a-str">"total"</span>: <span class="a-num">2</span>, <span class="a-str">"correct"</span>: <span class="a-num">1</span>, <span class="a-str">"accuracy"</span>: <span class="a-num">0.5</span> } },
+  <span class="a-key">"accuracy_by_outcome_class"</span>: { <span class="a-str">"plugin_service"</span>: { ... } },
+  <span class="a-key">"accuracy_by_reason_category"</span>: { <span class="a-str">"technical_weakness"</span>: { ... } },
+  <span class="a-key">"recent_shadows"</span>: [ ... ]
+}</div></div>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:8px;"><strong>Maturity bands</strong>: <code>bootstrap</code> (&lt;15), <code>early_noisy</code> (&lt;50), <code>preliminary</code> (&lt;100), <code>meaningful</code> (&lt;250), <code>stable</code> (250+). Based on resolved (not total) shadow predictions.</p>
+        <div class="a-curl"><div class="a-curl-label">Example</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>curl http://localhost:9200/api/acquisition/plan-evaluator</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-acq-approve-deploy" data-method="POST" data-path="/api/acquisition/{acquisition_id}/approve-deploy" data-desc="Approve/deny deploy" data-cat="acquisition">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/acquisition/<span class="a-path-param">{acquisition_id}</span>/approve-deploy</span><span class="a-ep-desc">Approve or deny deployment of completed acquisition</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">approved</td><td class="a-param-type">bool</td><td class="a-param-req">required</td><td>true to deploy, false to reject</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- PLUGIN REGISTRY -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-plugins" data-cat-id="plugins"><h3>Plugin Registry <span class="a-category-count">6 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-plugins-list" data-method="GET" data-path="/api/plugins" data-desc="List all plugins" data-cat="plugins">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/plugins</span><span class="a-ep-desc">Plugin registry — all plugins with state, invocations, failures</span></div>
+      <div class="a-ep-body">
+        <div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"plugins"</span>: [{
+    <span class="a-key">"name"</span>: <span class="a-str">"web_scraper"</span>,
+    <span class="a-key">"state"</span>: <span class="a-str">"supervised"</span>,
+    <span class="a-key">"version"</span>: <span class="a-num">1</span>,
+    <span class="a-key">"risk_tier"</span>: <span class="a-str">"standard"</span>,
+    <span class="a-key">"invocation_count"</span>: <span class="a-num">42</span>,
+    <span class="a-key">"failure_count"</span>: <span class="a-num">0</span>
+  }],
+  <span class="a-key">"total"</span>: <span class="a-num">3</span>,
+  <span class="a-key">"active"</span>: <span class="a-num">1</span>
+}</div></div>
+        <div class="a-curl"><div class="a-curl-label">Example</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>curl http://localhost:9200/api/plugins</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-plugin-detail" data-method="GET" data-path="/api/plugins/{name}" data-desc="Plugin detail" data-cat="plugins">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/plugins/<span class="a-path-param">{name}</span></span><span class="a-ep-desc">Full plugin record — state, version, risk tier, supervision mode</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns full PluginRecord with invocation/failure counts, created_at/updated_at timestamps, supervision mode, and description. Returns 404 if plugin not found.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-plugin-promote" data-method="POST" data-path="/api/plugins/{name}/promote" data-desc="Promote plugin" data-cat="plugins">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/plugins/<span class="a-path-param">{name}</span>/promote</span><span class="a-ep-desc">Promote plugin to next supervision tier</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Promotion path: quarantined → shadow → supervised → active. Returns 400 if promotion not possible (e.g. already at highest tier).</p>
+        <div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{ <span class="a-key">"status"</span>: <span class="a-str">"promoted"</span>, <span class="a-key">"name"</span>: <span class="a-str">"web_scraper"</span>, <span class="a-key">"new_state"</span>: <span class="a-str">"active"</span> }</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-plugin-disable" data-method="POST" data-path="/api/plugins/{name}/disable" data-desc="Disable plugin" data-cat="plugins">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/plugins/<span class="a-path-param">{name}</span>/disable</span><span class="a-ep-desc">Disable a plugin (circuit breaker / manual)</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Moves the plugin to disabled state. Can be re-activated later via the activate endpoint.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-plugin-activate" data-method="POST" data-path="/api/plugins/{name}/activate" data-desc="Activate plugin" data-cat="plugins">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/plugins/<span class="a-path-param">{name}</span>/activate</span><span class="a-ep-desc">Activate a quarantined/disabled plugin into shadow mode</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Moves the plugin from quarantined or disabled into shadow mode for evaluation.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-plugin-rollback" data-method="POST" data-path="/api/plugins/{name}/rollback" data-desc="Rollback plugin" data-cat="plugins">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/plugins/<span class="a-path-param">{name}</span>/rollback</span><span class="a-ep-desc">Rollback plugin to previous version</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Reverts the plugin to its previous version and moves it back to quarantined state for re-verification.</p></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- CODEGEN SERVICE -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-codegen" data-cat-id="codegen"><h3>CodeGen Service <span class="a-category-count">1 endpoint</span></h3></div>
+
+    <div class="a-endpoint" id="ep-codegen" data-method="GET" data-path="/api/codegen" data-desc="CodeGen status" data-cat="codegen">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/codegen</span><span class="a-ep-desc">Shared CodeGen infrastructure status, consumers, and CoderServer availability</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Returns the shared CodeGen Service status used by both acquisition and self-improvement pipelines. This is infrastructure telemetry, not self-improvement ownership. CoderServer defaults to CPU-only execution (<code>gpu_layers: 0</code>); minutes-long generations are expected and preserve GPU VRAM for live brain models.</p>
+        <div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"coder"</span>: {
+    <span class="a-key">"available"</span>: <span class="a-bool">true</span>,
+    <span class="a-key">"model"</span>: <span class="a-str">"Qwen3-Coder-Next-UD-Q4_K_XL"</span>,
+    <span class="a-key">"ram_gb"</span>: <span class="a-num">64</span>,
+    <span class="a-key">"gpu_layers"</span>: <span class="a-num">0</span>,
+    <span class="a-key">"active_consumer"</span>: <span class="a-str">""</span>,
+    <span class="a-key">"last_consumer"</span>: <span class="a-str">"acquisition"</span>
+  },
+  <span class="a-key">"authority"</span>: <span class="a-str">"infrastructure_only"</span>,
+  <span class="a-key">"consumers"</span>: [<span class="a-str">"acquisition"</span>, <span class="a-str">"self_improve"</span>],
+  <span class="a-key">"codegen_available"</span>: <span class="a-bool">true</span>,
+  <span class="a-key">"acquisition_enabled"</span>: <span class="a-bool">true</span>
+}</div></div>
+        <div class="a-curl"><div class="a-curl-label">Example</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>curl http://localhost:9200/api/codegen</div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- SELF-IMPROVEMENT -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-selfimprove" data-cat-id="selfimprove"><h3>Self-Improvement <span class="a-category-count">9 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-si-status" data-method="GET" data-path="/api/self-improve" data-desc="Self-improve status" data-cat="selfimprove">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-improve</span><span class="a-ep-desc">Self-improvement pipeline state — stage, scanner, coder, history</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns full pipeline status including stage system, scanner state, coder availability, recent patches, pending approvals, and sandbox results.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-si-proposals" data-method="GET" data-path="/api/self-improve/proposals" data-desc="Recent proposals" data-cat="selfimprove">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-improve/proposals</span><span class="a-ep-desc">Recent proposals with 5Ws, diffs, and sandbox results</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns recent improvement proposals including what/where/why/when/who analysis, file diffs, and sandbox validation details.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-si-scanner" data-method="GET" data-path="/api/self-improve/scanner" data-desc="Scanner state" data-cat="selfimprove">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-improve/scanner</span><span class="a-ep-desc">Scanner state — detectors, sustained counts, fingerprint dedup, daily cap</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns the 6 metric detectors' status, sustained count per detector, fingerprint cooldown ring, and daily generation cap usage.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-si-coder" data-method="GET" data-path="/api/self-improve/coder" data-desc="Coder status" data-cat="selfimprove">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-improve/coder</span><span class="a-ep-desc">CoderServer status — model, availability, generation stats</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Backward-compatible view of the shared CoderServer. Ownership and authority live under <code>/api/codegen</code>; self-improvement is one consumer, not the owner.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-si-specialists" data-method="GET" data-path="/api/self-improve/specialists" data-desc="SI specialists" data-cat="selfimprove">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-improve/specialists</span><span class="a-ep-desc">SI specialist hemisphere data — DIAGNOSTIC, CODE_QUALITY, CLAIM_CLASSIFIER, DREAM_SYNTHESIS, plan_evaluator</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns maturity band, signal counts (total/buffered/quarantined), best accuracy, training attempts, network count, failure count, disabled state, and last signal timestamp for each self-improvement specialist. CLAIM_CLASSIFIER includes <code>claim_label_distribution</code> histogram. DREAM_SYNTHESIS includes <code>reason_distribution</code> histogram of validator reason categories. Sourced from hemisphere state + distillation collector.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-si-pending" data-method="GET" data-path="/api/self-improve/pending" data-desc="Pending patches" data-cat="selfimprove">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-improve/pending</span><span class="a-ep-desc">Pending approval patches + recent history</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Lists patches awaiting human approval and the 10 most recent history entries. Pending approvals persist to <code>~/.jarvis/pending_approvals.json</code> and survive restarts. Each entry includes full diff, sandbox summary, and <code>why_requires_approval</code> reason.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-si-approve" data-method="POST" data-path="/api/self-improve/approve" data-desc="Approve/reject patch" data-cat="selfimprove">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/self-improve/approve</span><span class="a-ep-desc">Approve or reject a pending code patch</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">patch_id</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>Patch identifier</td></tr>
+        <tr><td class="a-param-name">approved</td><td class="a-param-type">bool</td><td class="a-param-req">required</td><td>true to apply, false to reject</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-si-stage" data-method="POST" data-path="/api/self-improve/stage" data-desc="Set SI stage" data-cat="selfimprove">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/self-improve/stage</span><span class="a-ep-desc">Change the self-improvement stage at runtime</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">stage</td><td class="a-param-type">int</td><td class="a-param-req">required</td><td>0 (frozen), 1 (dry-run), or 2 (human-approval). Persists to <code>self_improve_stage.json</code>.</td></tr>
+      </tbody></table><p style="font-size:0.82rem;color:var(--text-muted)">Runtime stage change without restart. Promoting to stage 2 warns if no reliable code generation provider is available.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-si-trigger" data-method="POST" data-path="/api/self-improve/trigger" data-desc="Trigger improvement" data-cat="selfimprove">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/self-improve/trigger</span><span class="a-ep-desc">Manually trigger an improvement attempt</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">type</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Improvement type hint</td></tr>
+        <tr><td class="a-param-name">target_module</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Module to target</td></tr>
+        <tr><td class="a-param-name">description</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Description of desired improvement</td></tr>
+      </tbody></table><p style="font-size:0.82rem;color:var(--text-muted)">Non-manual trigger — enters the normal approval queue at Stage 2. Unlike dry-run, the resulting patch can be approved and applied. Subject to the 600s inter-trigger cooldown.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-si-dryrun" data-method="POST" data-path="/api/self-improve/dry-run" data-desc="Trigger dry-run" data-cat="selfimprove">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/self-improve/dry-run</span><span class="a-ep-desc">Generate a patch without applying</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+        <tr><td class="a-param-name">type</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Improvement type hint</td></tr>
+        <tr><td class="a-param-name">target_module</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Module to target</td></tr>
+        <tr><td class="a-param-name">description</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Description of desired improvement</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- EVALUATION -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-eval" data-cat-id="eval"><h3>Evaluation &amp; Benchmarks <span class="a-category-count">3 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-eval-snapshot" data-method="GET" data-path="/api/eval/snapshot" data-desc="Full eval sidecar" data-cat="eval">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/eval/snapshot</span><span class="a-ep-desc">Full eval sidecar snapshot — PVL, contracts, maturity</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Complete evaluation sidecar state including 114 PVL contracts across 23 groups, coverage score, and playbook alignment.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-eval-benchmark" data-method="GET" data-path="/api/eval/benchmark" data-desc="Oracle Benchmark v1.1" data-cat="eval">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/eval/benchmark</span><span class="a-ep-desc">Oracle Benchmark v1.1 — 7-domain scoring (100 pts total)</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns the Oracle Benchmark score with domain breakdowns, seal level (Gold/Silver/Bronze), hard-fail gates, and evidence provenance.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-eval-ab" data-method="GET" data-path="/api/eval/autonomy-ab" data-desc="Autonomy A/B comparison" data-cat="eval">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/eval/autonomy-ab</span><span class="a-ep-desc">Autonomy A/B comparisons + intervention/friction/source stats</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns recent comparison history plus Phase 5 subsystem stats: interventions, friction miner, and source usefulness.</p></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- TRACEABILITY -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-trace" data-cat-id="trace"><h3>Traceability &amp; Explainability <span class="a-category-count">6 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-ledger-recent" data-method="GET" data-path="/api/ledger/recent" data-desc="Recent ledger entries" data-cat="trace">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/ledger/recent?limit=50</span><span class="a-ep-desc">Recent attribution ledger entries (append-only truth)</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Max</th></tr></thead><tbody>
+        <tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td>50</td><td>200</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-ledger-stats" data-method="GET" data-path="/api/ledger/stats" data-desc="Ledger statistics" data-cat="trace">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/ledger/stats</span><span class="a-ep-desc">Ledger statistics and outcome scheduler state</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Aggregate counts, causal chain statistics, and outcome resolution state.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-ledger-chain" data-method="GET" data-path="/api/ledger/chain/{root_id}" data-desc="Causal chain" data-cat="trace">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/ledger/chain/<span class="a-path-param">{root_id}</span></span><span class="a-ep-desc">All entries in a causal chain</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Follows the parent chain from root to leaf, returning all ledger entries.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-trace-explorer" data-method="GET" data-path="/api/trace/explorer" data-desc="Trace lineage explorer" data-cat="trace">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/trace/explorer</span><span class="a-ep-desc">Operator-oriented lineage: root chains, agent runs, tool lineage</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th></tr></thead><tbody>
+        <tr><td class="a-param-name">root_limit</td><td class="a-param-type">int</td><td>20</td></tr>
+        <tr><td class="a-param-name">run_limit</td><td class="a-param-type">int</td><td>20</td></tr>
+        <tr><td class="a-param-name">tool_limit</td><td class="a-param-type">int</td><td>40</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-explain-trace" data-method="GET" data-path="/api/explainability/trace/{conversation_id}" data-desc="Explainability trace" data-cat="trace">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/explainability/trace/<span class="a-path-param">{conversation_id}</span></span><span class="a-ep-desc">Provenance trace + evidence chain for a conversation</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns the full evidence chain linking a conversation to its tool routes, memory retrievals, and response generation.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-explain-recent" data-method="GET" data-path="/api/explainability/recent" data-desc="Recent traces" data-cat="trace">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/explainability/recent?limit=10</span><span class="a-ep-desc">Provenance traces for recent conversations</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Max</th></tr></thead><tbody>
+        <tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td>10</td><td>50</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- LIVE ROUTE ADDENDUM -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-live-addendum" data-cat-id="live-addendum"><h3>Live Route Addendum <span class="a-category-count">34 endpoints</span></h3></div>
+
+    <div class="a-protocol">
+      <h4>Static reference catch-up</h4>
+      <p>This section lists currently wired FastAPI routes that were added after the original static API page. It keeps the operator reference route-complete while fuller response examples are backfilled over time.</p>
+    </div>
+
+    <div class="a-endpoint" id="ep-full-snapshot" data-method="GET" data-path="/api/full-snapshot" data-desc="Complete dashboard snapshot" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/full-snapshot</span><span class="a-ep-desc">Complete dashboard snapshot used by validation and UI panels</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Aggregates runtime cache surfaces including core, maturity, learning jobs, HRR/P5, language, policy, autonomy, and truth markers.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-build-history-api" data-method="GET" data-path="/api/build-history" data-desc="Structured build history" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/build-history</span><span class="a-ep-desc">Structured parse of build history for dashboard history views</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Read-only documentation surface derived from repository build-history files.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-reconstructability" data-method="GET" data-path="/api/reconstructability" data-desc="Reconstructability metadata" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/reconstructability</span><span class="a-ep-desc">Per-surface reconstructability metadata for operator UI</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Shows whether displayed truth surfaces can be reconstructed from persisted evidence.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-maturity-gates-api" data-method="GET" data-path="/api/maturity-gates" data-desc="Maturity gate report" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/maturity-gates</span><span class="a-ep-desc">Current maturity gates, ever-active gates, and recovery state</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">The source of truth for maturity-gated dashboard readings. Red can mean evidence is still accumulating.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-self-test-api" data-method="GET" data-path="/api/self-test" data-desc="Self-test rollup" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-test</span><span class="a-ep-desc">Runtime self-test / validation pack rollup</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Reports honest pass/blocked status from current evidence. A blocked status is not automatically a dashboard failure.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-meta-build-status" data-method="GET" data-path="/api/meta/build-status" data-desc="Build status metadata" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/meta/build-status</span><span class="a-ep-desc">Repository/build freshness metadata for static pages</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Used by truth strips and documentation pages to avoid stale build claims.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-meta-status-markers" data-method="GET" data-path="/api/meta/status-markers" data-desc="Status marker rollup" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/meta/status-markers</span><span class="a-ep-desc">Architecture-contract status markers for static prose pages</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Feeds inline badges on static pages so prose stays tied to live evidence.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-hrr-status" data-method="GET" data-path="/api/hrr/status" data-desc="HRR shadow status" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/hrr/status</span><span class="a-ep-desc">HRR primitive library and zero-authority shadow status</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Reports HRR/P5 as PRE-MATURE / shadow-only unless governance evidence changes.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-hrr-samples" data-method="GET" data-path="/api/hrr/samples" data-desc="HRR sample traces" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/hrr/samples</span><span class="a-ep-desc">Recent HRR shadow samples</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th></tr></thead><tbody><tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td>20</td></tr></tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-hrr-scene" data-method="GET" data-path="/api/hrr/scene" data-desc="P5 mental-world scene" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/hrr/scene</span><span class="a-ep-desc">Mental-world scene snapshot without raw vectors</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Derived-only P5 scene view. It must not expose raw HRR vectors or grant policy authority.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-hrr-scene-history" data-method="GET" data-path="/api/hrr/scene/history" data-desc="P5 scene history" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/hrr/scene/history</span><span class="a-ep-desc">Recent derived P5 mental-world snapshots</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th></tr></thead><tbody><tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td>20</td></tr></tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-language" data-method="GET" data-path="/api/language" data-desc="Language runtime status" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/language</span><span class="a-ep-desc">Language substrate, promotion gates, and evidence floors</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Shows why the language runtime bridge is enabled, shadow-only, or held off.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-language-phasec" data-method="GET" data-path="/api/language-phasec" data-desc="Phase C shadow student" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/language-phasec</span><span class="a-ep-desc">Phase C shadow-student status</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Read-only detail for the trained-but-not-live language student.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-language-kernel" data-method="GET" data-path="/api/language-kernel" data-desc="Language kernel status" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/language-kernel</span><span class="a-ep-desc">Language runtime kernel and bridge guardrails</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Confirms runtime bridge mode, live/shadow counts, and blocked guardrail states.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-language-corpus-stats" data-method="GET" data-path="/api/language-corpus/stats" data-desc="Language corpus stats" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/language-corpus/stats</span><span class="a-ep-desc">Language training corpus and class balance stats</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Useful for diagnosing evidence-floor gaps without changing thresholds.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-world-model-diagnostics" data-method="GET" data-path="/api/world-model/diagnostics" data-desc="World model diagnostics" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/world-model/diagnostics</span><span class="a-ep-desc">World-model promotion and prediction diagnostics</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Maturity-gated diagnostics for world-model readiness and recovery.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-spatial-diagnostics" data-method="GET" data-path="/api/spatial/diagnostics" data-desc="Spatial calibration diagnostics" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/spatial/diagnostics</span><span class="a-ep-desc">Spatial estimator and calibration diagnostics</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Read-only diagnostics for spatial scene estimation.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-spatial-calibration" data-method="POST" data-path="/api/spatial/calibration" data-desc="Update spatial calibration" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/spatial/calibration</span><span class="a-ep-desc">Update spatial calibration parameters</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Protected operator endpoint. Body fields are optional calibration parameters.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-scene-api" data-method="GET" data-path="/api/scene" data-desc="Current scene snapshot" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/scene</span><span class="a-ep-desc">Current scene summary from perception cache</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Read-only scene facts from the live perception stack.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-synthetic-exercise" data-method="GET" data-path="/api/synthetic-exercise" data-desc="Synthetic exercise status" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/synthetic-exercise</span><span class="a-ep-desc">Synthetic exercise status without contaminating lived evidence</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Synthetic lanes are truth-boundary-preserving and do not satisfy lived maturity gates.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-synthetic-skill-acq-status" data-method="GET" data-path="/api/synthetic/skill-acquisition/status" data-desc="Skill-acquisition weight room status" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/synthetic/skill-acquisition/status</span><span class="a-ep-desc">Synthetic skill-acquisition weight room status and authority boundary</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Returns recent reports, run progress, profile gates, synthetic feature/label counts, and the hard authority boundary. This endpoint is telemetry-only.</p>
+        <div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"authority"</span>: <span class="a-str">"telemetry_only"</span>,
+  <span class="a-key">"synthetic_only"</span>: <span class="a-bool">true</span>,
+  <span class="a-key">"live_influence"</span>: <span class="a-bool">false</span>,
+  <span class="a-key">"promotion_eligible"</span>: <span class="a-bool">false</span>,
+  <span class="a-key">"running"</span>: { <span class="a-key">"active"</span>: <span class="a-bool">false</span> },
+  <span class="a-key">"profiles"</span>: { <span class="a-key">"smoke"</span>: { <span class="a-key">"allowed"</span>: <span class="a-bool">true</span> }, <span class="a-key">"coverage"</span>: { <span class="a-key">"allowed"</span>: <span class="a-bool">true</span> } }
+}</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-synthetic-skill-acq-run" data-method="POST" data-path="/api/synthetic/skill-acquisition/run" data-desc="Run skill-acquisition weight room" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/synthetic/skill-acquisition/run</span><span class="a-ep-desc">Start a gated synthetic skill-acquisition workout</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body">
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">profile</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td><code>smoke</code>, <code>coverage</code>, <code>strict</code>, or <code>stress</code>. Default <code>smoke</code>.</td></tr>
+          <tr><td class="a-param-name">count</td><td class="a-param-type">int</td><td class="a-param-opt">optional</td><td>Override episode count within profile limits.</td></tr>
+          <tr><td class="a-param-name">seed</td><td class="a-param-type">int</td><td class="a-param-opt">optional</td><td>Deterministic run seed.</td></tr>
+        </tbody></table>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:8px;">Runs in a background thread and refuses concurrent runs. <code>smoke</code> is invariant-only; <code>coverage</code> records synthetic telemetry; <code>strict</code> and <code>stress</code> are operator-flag gated.</p>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-synthetic-exercises-status" data-method="GET" data-path="/api/synthetic/exercises/status" data-desc="Synthetic exercise suite status" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/synthetic/exercises/status</span><span class="a-ep-desc">All synthetic exercise lanes and truth-boundary status</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Read-only rollup for claim, commitment, and skill-acquisition synthetic exercise reports. Synthetic exercise data is telemetry/training evidence only and must not satisfy lived maturity gates.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-synthetic-exercises-running" data-method="GET" data-path="/api/synthetic/exercises/running" data-desc="Synthetic exercise running state" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/synthetic/exercises/running</span><span class="a-ep-desc">Currently running synthetic exercise jobs</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Shows active background synthetic exercise runs so operators can avoid overlapping workouts.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-synthetic-exercises-run" data-method="POST" data-path="/api/synthetic/exercises/run" data-desc="Run a synthetic exercise" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/synthetic/exercises/run</span><span class="a-ep-desc">Start a protected synthetic exercise run</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body">
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">exercise</td><td class="a-param-type">string</td><td class="a-param-req">required</td><td>Exercise lane such as <code>claim</code>, <code>commitment</code>, or <code>skill_acquisition</code>.</td></tr>
+          <tr><td class="a-param-name">profile</td><td class="a-param-type">string</td><td class="a-param-opt">optional</td><td>Profile such as <code>smoke</code>, <code>coverage</code>, <code>strict</code>, or <code>stress</code>, depending on lane.</td></tr>
+          <tr><td class="a-param-name">count</td><td class="a-param-type">int</td><td class="a-param-opt">optional</td><td>Optional bounded run size override.</td></tr>
+        </tbody></table>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:8px;">Protected operator endpoint. Heavy profiles remain gated by their lane-specific safety flags.</p>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-intent-shadow" data-method="GET" data-path="/api/intent-shadow" data-desc="Intention shadow status" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/intent-shadow</span><span class="a-ep-desc">Intention resolver shadow telemetry</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Read-only stage telemetry for backed-commitment learning.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-debug-engine-attrs" data-method="GET" data-path="/api/debug/engine-attrs" data-desc="Debug engine attrs" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/debug/engine-attrs</span><span class="a-ep-desc">Developer diagnostic: available engine attributes</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Diagnostic-only endpoint for local operator debugging.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-chat-api" data-method="POST" data-path="/api/chat" data-desc="Dashboard chat" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/chat</span><span class="a-ep-desc">Dashboard chat entrypoint when explicitly enabled</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Protected and gated by <code>ENABLE_DASHBOARD_CHAT</code>. Normal interaction should use Pi voice input.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-feedback-api" data-method="POST" data-path="/api/feedback" data-desc="Conversation feedback" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/feedback</span><span class="a-ep-desc">Record positive/negative feedback for recent conversation</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Writes explicit user satisfaction signal for evaluation and learning surfaces.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-soul-export-api" data-method="POST" data-path="/api/soul/export" data-desc="Export soul snapshot" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/soul/export</span><span class="a-ep-desc">Export governed soul/personality snapshot</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Protected operator snapshot export for continuity/audit work.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-tone-api" data-method="POST" data-path="/api/tone" data-desc="Set conversational tone" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/tone</span><span class="a-ep-desc">Set runtime conversational tone</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Protected runtime preference update.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-self-improve-dry-run-last" data-method="GET" data-path="/api/self-improve/dry-run/last" data-desc="Last dry-run result" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-improve/dry-run/last</span><span class="a-ep-desc">Most recent self-improvement dry-run result</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Read-only status for the latest non-applying self-improvement run.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-acq-approve-plan-live" data-method="POST" data-path="/api/acquisition/{acquisition_id}/approve-plan" data-desc="Approve acquisition plan" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/acquisition/<span class="a-path-param">{acquisition_id}</span>/approve-plan</span><span class="a-ep-desc">Protected approval for acquisition planning gate</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Canonical path parameter is <code>{acquisition_id}</code>.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-acq-approve-deploy-live" data-method="POST" data-path="/api/acquisition/{acquisition_id}/approve-deploy" data-desc="Approve acquisition deploy" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/acquisition/<span class="a-path-param">{acquisition_id}</span>/approve-deploy</span><span class="a-ep-desc">Protected approval for acquisition deploy gate</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Canonical path parameter is <code>{acquisition_id}</code>.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-acq-cancel-live" data-method="POST" data-path="/api/acquisition/{acquisition_id}/cancel" data-desc="Cancel acquisition" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/acquisition/<span class="a-path-param">{acquisition_id}</span>/cancel</span><span class="a-ep-desc">Protected cancellation of acquisition job</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Canonical path parameter is <code>{acquisition_id}</code>.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-autonomy-escalation-approve-live" data-method="POST" data-path="/api/autonomy/escalations/{escalation_id}/approve" data-desc="Approve autonomy escalation" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/autonomy/escalations/<span class="a-path-param">{escalation_id}</span>/approve</span><span class="a-ep-desc">Protected L3 escalation approval path</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Approval routes through governed self-improvement with declared scope.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-autonomy-escalation-reject-live" data-method="POST" data-path="/api/autonomy/escalations/{escalation_id}/reject" data-desc="Reject autonomy escalation" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/autonomy/escalations/<span class="a-path-param">{escalation_id}</span>/reject</span><span class="a-ep-desc">Protected L3 escalation rejection path</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Rejects or parks a pending escalation without applying code.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-trace-explorer-chain" data-method="GET" data-path="/api/trace/explorer/chain/{root_id}" data-desc="Trace explorer causal chain" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/trace/explorer/chain/<span class="a-path-param">{root_id}</span></span><span class="a-ep-desc">Causal chain tree with normalized trace fields</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th></tr></thead><tbody><tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td>250</td></tr></tbody></table></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-system-code-freshness" data-method="GET" data-path="/api/system/code-freshness" data-desc="Code freshness" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/system/code-freshness</span><span class="a-ep-desc">Runtime code freshness and sync status</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Helps detect whether static docs and running brain code are from the same sync.</p></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- SYSTEM CONTROL -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-control" data-cat-id="control"><h3>System Control <span class="a-category-count">5 endpoints</span></h3></div>
+
+    <div class="a-endpoint" id="ep-sys-status" data-method="GET" data-path="/api/system/status" data-desc="Alive check" data-cat="control">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/system/status</span><span class="a-ep-desc">Alive check — running, shutting_down</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{ <span class="a-key">"alive"</span>: <span class="a-bool">true</span>, <span class="a-key">"shutting_down"</span>: <span class="a-bool">false</span>, <span class="a-key">"running"</span>: <span class="a-bool">true</span> }</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-sys-save" data-method="POST" data-path="/api/system/save" data-desc="Save all state" data-cat="control">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/system/save</span><span class="a-ep-desc">Save all state without stopping</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{ <span class="a-key">"status"</span>: <span class="a-str">"ok"</span>, <span class="a-key">"saved"</span>: [<span class="a-str">"memories"</span>, <span class="a-str">"consciousness"</span>], <span class="a-key">"errors"</span>: [] }</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-sys-shutdown" data-method="POST" data-path="/api/system/shutdown" data-desc="Graceful shutdown" data-cat="control">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/system/shutdown</span><span class="a-ep-desc">Graceful save + shutdown (exit 0)</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><div class="a-curl"><div class="a-curl-label">Example</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>curl -X POST http://localhost:9200/api/system/shutdown \
+  -H "Authorization: Bearer $API_KEY"</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-sys-restart" data-method="POST" data-path="/api/system/restart" data-desc="Graceful restart" data-cat="control">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/system/restart</span><span class="a-ep-desc">Save + restart (exit 10 → supervisor restarts)</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Saves all state, then exits with code 10 which the supervisor recognizes as a restart request.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-voice-test" data-method="POST" data-path="/api/voice-test" data-desc="TTS playback test" data-cat="control">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/voice-test</span><span class="a-ep-desc">Send text to Pi for TTS playback</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th></tr></thead><tbody>
+        <tr><td class="a-param-name">text</td><td class="a-param-type">string</td><td class="a-param-req">required</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- WEBSOCKET -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-ws" data-cat-id="ws"><h3>WebSocket — Live Dashboard <span class="a-category-count">1 endpoint</span></h3></div>
+
+    <div class="a-endpoint" id="ep-ws" data-method="WS" data-path="/ws" data-desc="Live snapshot push" data-cat="ws">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-ws">WS</span><span class="a-path">ws://localhost:9200/ws</span><span class="a-ep-desc">Live dashboard snapshot push (hash-diffed, 1s interval)</span></div>
+      <div class="a-ep-body">
+        <div class="a-protocol">
+          <h4>Protocol</h4>
+          <div class="a-protocol-flow">
+            <div class="a-protocol-node">Client connects</div>
+            <div class="a-protocol-arrow">→</div>
+            <div class="a-protocol-node">Server sends full snapshot</div>
+            <div class="a-protocol-arrow">→</div>
+            <div class="a-protocol-node">Every 1s: if hash changed, push update</div>
+          </div>
+          <div class="a-block"><div class="a-block-label">Message format (Server → Client)</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"type"</span>: <span class="a-str">"snapshot"</span>,
+  <span class="a-key">"status"</span>: { ... },
+  <span class="a-key">"consciousness"</span>: { ... },
+  <span class="a-key">"memory"</span>: { ... },
+  <span class="a-key">"policy"</span>: { ... },
+  <span class="a-key">"health"</span>: { ... },
+  <span class="a-comment">// ... all cached subsystem snapshots</span>
+}</div></div>
+          <p style="font-size:0.82rem;color:var(--text-muted)">Client → Server: any text message acts as keepalive (content ignored). Cache is rebuilt every <code>CACHE_INTERVAL_S=2.0</code> seconds.</p>
+        </div>
+        <div class="a-curl"><div class="a-curl-label">Example (websocat)</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>websocat ws://localhost:9200/ws</div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- PERCEPTION BUS -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-perception" data-cat-id="perception"><h3>Perception Bus (:9100) <span class="a-category-count">WebSocket</span></h3></div>
+
+    <div class="a-protocol">
+      <h4>Pi → Brain (Sensor Node to Cognitive Engine)</h4>
+      <p>Binary WebSocket on port 9100. The Pi connects as a client; the brain hosts the server.</p>
+      <div class="a-protocol-flow">
+        <div class="a-protocol-node">Pi connects</div>
+        <div class="a-protocol-arrow">→</div>
+        <div class="a-protocol-node">Binary frames: raw PCM 16kHz int16 (~32KB/s)</div>
+        <div class="a-protocol-arrow">+</div>
+        <div class="a-protocol-node">Text frames: PerceptionEvent JSON</div>
+      </div>
+      <p style="margin-top:8px;font-size:0.82rem;color:var(--text-muted)">Header <code>x-sensor-id</code> identifies the sensor. Auto-reconnect every 3s on disconnect. Max frame size 10MB. Ping interval 60s.</p>
+      <div class="a-curl"><div class="a-curl-label">Connection example</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button><span class="a-comment"># Python client (simplified)</span>
+<span class="a-key">import</span> websockets
+ws = <span class="a-key">await</span> websockets.connect(
+    <span class="a-str">"ws://brain-ip:9100"</span>,
+    extra_headers={<span class="a-str">"x-sensor-id"</span>: <span class="a-str">"my-sensor"</span>}
+)
+<span class="a-comment"># Send binary audio</span>
+<span class="a-key">await</span> ws.send(pcm_bytes)
+<span class="a-comment"># Send JSON event</span>
+<span class="a-key">await</span> ws.send(json.dumps({<span class="a-str">"source"</span>: <span class="a-str">"vision"</span>, <span class="a-str">"type"</span>: <span class="a-str">"person_detected"</span>, ...}))</div></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- EVENT SCHEMA -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-events-schema" data-cat-id="events-schema"><h3>Perception Event Schema</h3></div>
+
+    <div class="a-protocol">
+      <h4>PerceptionEvent (Pi → Brain)</h4>
+      <div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"source"</span>: <span class="a-str">"vision"</span> | <span class="a-str">"audio"</span> | <span class="a-str">"screen"</span> | <span class="a-str">"system"</span>,
+  <span class="a-key">"type"</span>: <span class="a-str">"person_detected"</span>,     <span class="a-comment">// event type string</span>
+  <span class="a-key">"timestamp"</span>: <span class="a-num">1712700000.0</span>,    <span class="a-comment">// epoch seconds</span>
+  <span class="a-key">"data"</span>: { ... },               <span class="a-comment">// type-specific payload</span>
+  <span class="a-key">"confidence"</span>: <span class="a-num">0.92</span>,          <span class="a-comment">// detection confidence</span>
+  <span class="a-key">"conversation_id"</span>: <span class="a-str">""</span>         <span class="a-comment">// optional conversation context</span>
+}</div>
+      <div class="a-block" style="margin-top:16px"><div class="a-block-label">Supported event types</div>
+        <table class="a-params">
+          <thead><tr><th>Type</th><th>Source</th><th>Data Fields</th></tr></thead>
+          <tbody>
+            <tr><td class="a-param-name">person_detected</td><td>vision</td><td><code>bbox: [x1,y1,x2,y2]</code></td></tr>
+            <tr><td class="a-param-name">person_lost</td><td>vision</td><td><em>none</em></td></tr>
+            <tr><td class="a-param-name">face_expression</td><td>vision</td><td><code>expression: "happy"|"sad"|"angry"|"surprise"|"neutral"</code></td></tr>
+            <tr><td class="a-param-name">pose_detected</td><td>vision</td><td><code>keypoints: [[x,y,conf]×17], gesture: str</code></td></tr>
+            <tr><td class="a-param-name">face_crop</td><td>vision</td><td><code>crop_b64: str, track_id: int</code></td></tr>
+            <tr><td class="a-param-name">scene_summary</td><td>vision</td><td><code>detections: [{label,conf,bbox}], frame_size: [w,h], scene_change_score: float</code></td></tr>
+            <tr><td class="a-param-name">playback_complete</td><td>audio</td><td><em>uses conversation_id</em></td></tr>
+            <tr><td class="a-param-name">sensor_health</td><td>system</td><td><code>cpu_temp_c, cpu_percent, mem_used_mb, mem_total_mb, camera_fps, throttled, uptime_s</code></td></tr>
+            <tr><td class="a-param-name">sensor_status</td><td>system</td><td><code>mic_device, mic_rms, mic_muted, vision_fps</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- BRAIN MESSAGES -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-brain-messages" data-cat-id="brain-messages"><h3>Brain → Pi Messages</h3></div>
+
+    <div class="a-protocol">
+      <h4>BrainMessage (Brain → Pi)</h4>
+      <div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"type"</span>: <span class="a-str">"response"</span> | <span class="a-str">"response_chunk"</span> | <span class="a-str">"response_end"</span> | <span class="a-str">"state_update"</span> | <span class="a-str">"command"</span> | <span class="a-str">"consciousness_feed"</span>,
+  <span class="a-key">"text"</span>: <span class="a-str">"Hello David"</span>,      <span class="a-comment">// response text</span>
+  <span class="a-key">"tone"</span>: <span class="a-str">"casual"</span>,            <span class="a-comment">// current tone</span>
+  <span class="a-key">"phase"</span>: <span class="a-str">"SPEAKING"</span>,          <span class="a-comment">// current phase for UI</span>
+  <span class="a-key">"data"</span>: {
+    <span class="a-key">"audio_b64"</span>: <span class="a-str">"..."</span>,       <span class="a-comment">// base64 WAV (Kokoro TTS output)</span>
+    <span class="a-key">"action"</span>: <span class="a-str">"camera_control"</span> <span class="a-comment">// for command type</span>
+  },
+  <span class="a-key">"conversation_id"</span>: <span class="a-str">"4cf029a9"</span>
+}</div>
+      <div class="a-block" style="margin-top:16px"><div class="a-block-label">Message types</div>
+        <table class="a-params">
+          <thead><tr><th>Type</th><th>Purpose</th><th>Key Data</th></tr></thead>
+          <tbody>
+            <tr><td class="a-param-name">response</td><td>Full response with TTS audio</td><td><code>audio_b64</code> (WAV), <code>text</code></td></tr>
+            <tr><td class="a-param-name">response_chunk</td><td>Streaming LLM chunk</td><td><code>text</code> (partial)</td></tr>
+            <tr><td class="a-param-name">response_end</td><td>End of response stream</td><td><code>conversation_id</code></td></tr>
+            <tr><td class="a-param-name">state_update</td><td>Phase transition</td><td><code>phase</code> (LISTENING, PROCESSING, etc.)</td></tr>
+            <tr><td class="a-param-name">command</td><td>Control commands</td><td><code>action</code> (camera_control, etc.)</td></tr>
+            <tr><td class="a-param-name">consciousness_feed</td><td>Consciousness state for particle display</td><td>Stage, confidence, mode metrics</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- PI UI SERVER -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="a-category" id="cat-pi" data-cat-id="pi"><h3>Pi 5 UI Server (:8080) <span class="a-category-count">7 endpoints</span></h3></div>
+
+    <div class="a-protocol">
+      <p>The Pi runs an aiohttp server on port 8080 for the particle display UI, live camera feed, and debug logs.</p>
+    </div>
+
+    <div class="a-endpoint" id="ep-pi-index" data-method="GET" data-path="/" data-desc="Particle display UI" data-cat="pi">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">http://pi-ip:8080/</span><span class="a-ep-desc">Particle display HTML page (Chromium kiosk)</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Serves the cyberpunk particle system UI. Normally displayed in fullscreen kiosk mode on the Pi's 7" touchscreen.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-pi-ws" data-method="WS" data-path="/ws" data-desc="Pi UI WebSocket" data-cat="pi">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-ws">WS</span><span class="a-path">ws://pi-ip:8080/ws</span><span class="a-ep-desc">Phase state + consciousness feed for particle display</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Messages (Server → Client)</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button><span class="a-comment">// Phase change</span>
+{ <span class="a-key">"type"</span>: <span class="a-str">"state"</span>, <span class="a-key">"phase"</span>: <span class="a-str">"LISTENING"</span> }
+
+<span class="a-comment">// Consciousness feed for particle behavior</span>
+{ <span class="a-key">"type"</span>: <span class="a-str">"consciousness"</span>, <span class="a-key">"stage"</span>: <span class="a-str">"integrative"</span>, ... }</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-pi-video" data-method="GET" data-path="/video" data-desc="MJPEG live feed" data-cat="pi">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">http://pi-ip:8080/video</span><span class="a-ep-desc">MJPEG live camera stream (~10 FPS, JPEG quality 70)</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Multipart MJPEG stream. Embed in <code>&lt;img src="..."&gt;</code> for live video. Content-Type: <code>multipart/x-mixed-replace; boundary=frame</code>.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-pi-snapshot" data-method="GET" data-path="/snapshot" data-desc="Single camera frame" data-cat="pi">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">http://pi-ip:8080/snapshot</span><span class="a-ep-desc">Single JPEG snapshot (quality 85)</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Returns a single JPEG image. Returns 503 if no camera frame is available.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-pi-debug" data-method="GET" data-path="/debug" data-desc="Live debug log page" data-cat="pi">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">http://pi-ip:8080/debug</span><span class="a-ep-desc">Live log viewer with SSE streaming</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Self-contained HTML page with color-coded log levels. Uses Server-Sent Events for real-time log streaming.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-pi-debug-history" data-method="GET" data-path="/debug/history" data-desc="Log buffer" data-cat="pi">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">http://pi-ip:8080/debug/history</span><span class="a-ep-desc">Last 500 log lines as JSON array</span></div>
+      <div class="a-ep-body"><div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>[<span class="a-str">"2026-04-09 20:38:01 [jarvis.senses] INFO: Camera initialized"</span>, ...]</div></div></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-pi-debug-stream" data-method="GET" data-path="/debug/stream" data-desc="SSE log stream" data-cat="pi">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">http://pi-ip:8080/debug/stream</span><span class="a-ep-desc">Server-Sent Events — real-time log lines</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Content-Type: <code>text/event-stream</code>. Each <code>data:</code> line contains one log entry.</p></div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="d-footer">
+      <span>JARVIS Oracle Edition — API Reference</span>
+      <a href="/">← Back to Live Dashboard</a>
+    </footer>
+  </main>
+
+  <script src="/static/api.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   JARVIS Oracle Edition — Scientific Reference Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Math blocks */
+.s-math{background:#0d1117;border:1px solid var(--border);border-radius:6px;padding:14px 18px;margin:10px 0;font-family:'KaTeX_Math','Times New Roman',serif;font-size:1.05rem;line-height:1.8;overflow-x:auto;color:#e6edf3;text-align:center}
+.s-math-inline{font-family:'KaTeX_Math','Times New Roman',serif;font-style:italic;color:var(--cyan)}
+
+/* Architecture diagrams */
+.s-arch{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;margin:12px 0}
+.s-arch-title{font-size:0.82rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px}
+.s-arch-layers{display:flex;flex-direction:column;gap:4px}
+.s-arch-layer{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:4px;font-size:0.82rem;font-family:'JetBrains Mono',monospace}
+.s-arch-layer .s-dim{color:var(--cyan);min-width:80px}
+.s-arch-layer .s-act{color:#a78bfa;min-width:50px}
+.s-arch-layer .s-type{color:var(--text-muted)}
+.s-arch-layer:nth-child(odd){background:rgba(255,255,255,0.02)}
+.s-arch-arrow{text-align:center;color:var(--text-muted);font-size:0.7rem;padding:2px 0}
+
+/* Param tables */
+.s-params{width:100%;border-collapse:collapse;font-size:0.82rem;margin:12px 0}
+.s-params th{text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);padding:6px 10px;border-bottom:1px solid var(--border)}
+.s-params td{padding:6px 10px;border-bottom:1px solid rgba(255,255,255,0.03);vertical-align:top}
+.s-params .s-const{font-family:'JetBrains Mono',monospace;color:var(--cyan);font-size:0.8rem}
+.s-params .s-val{font-family:'JetBrains Mono',monospace;color:#f5a623;font-size:0.8rem}
+.s-params .s-file{font-family:'JetBrains Mono',monospace;color:var(--text-muted);font-size:0.72rem}
+
+/* Section cards */
+.s-section{margin:12px 0}
+.s-card-header{display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:8px;user-select:none}
+.s-card-header:hover{border-color:var(--cyan)}
+.s-card-chevron{color:var(--text-muted);font-size:0.7rem;transition:transform 0.2s;flex-shrink:0}
+.s-card-chevron.open{transform:rotate(90deg)}
+.s-card-title{font-size:0.92rem;font-weight:600;color:var(--text)}
+.s-card-sub{font-size:0.72rem;color:var(--text-muted);margin-left:auto}
+.s-card-body{display:none;padding:12px 14px;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;background:var(--card)}
+.s-card-body.open{display:block}
+
+/* Feature vector table */
+.s-vec{counter-reset:dim-counter -1}
+.s-vec tr{counter-increment:dim-counter}
+.s-vec td:first-child::before{content:counter(dim-counter);font-family:'JetBrains Mono',monospace;color:var(--text-muted);font-size:0.72rem}
+
+/* Verified badge */
+.s-verified{display:inline-flex;align-items:center;gap:3px;font-size:0.68rem;color:#10b981;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:3px;padding:1px 5px}
+.s-stale{display:inline-flex;align-items:center;gap:3px;font-size:0.68rem;color:#f59e0b;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:3px;padding:1px 5px}
+
+/* Weight diagram */
+.s-weight-bar{display:flex;height:20px;border-radius:4px;overflow:hidden;margin:8px 0}
+.s-weight-seg{display:flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#000;white-space:nowrap;overflow:hidden}

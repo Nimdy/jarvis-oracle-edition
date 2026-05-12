@@ -1,0 +1,21 @@
+# Jarvis Pi 5 Senses — Thin Sensor Node Dependencies
+# Note: picamera2, hailo_platform, and opencv are system-installed
+# The .venv uses --system-site-packages to access them
+
+# Vision + audio decimation
+numpy>=1.26
+
+# CPU scene object detection (YOLOv8n ONNX)
+onnxruntime>=1.18
+
+# Audio capture (PortAudio)
+sounddevice>=0.5
+
+# Transport (WebSocket to brain)
+websockets>=14.0
+
+# Config & validation
+pydantic>=2.7
+
+# UI server
+aiohttp>=3.9

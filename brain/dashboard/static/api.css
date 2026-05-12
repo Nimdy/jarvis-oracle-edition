@@ -1,0 +1,91 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   JARVIS Oracle Edition — API Reference Styles
+   Cutting-edge API docs with method badges, copy buttons, response shapes
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Method badges */
+.a-method{display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.72rem;font-weight:700;letter-spacing:0.04em;font-family:'JetBrains Mono',monospace;vertical-align:middle;min-width:52px;text-align:center}
+.a-get{background:#10b981;color:#022c22}
+.a-post{background:#3b82f6;color:#0c1929}
+.a-delete{background:#ef4444;color:#1a0000}
+.a-ws{background:#a855f7;color:#1a0033}
+
+/* Endpoint path */
+.a-path{font-family:'JetBrains Mono',monospace;font-size:0.88rem;color:var(--cyan);margin-left:8px;word-break:break-all}
+.a-path-param{color:#f59e0b}
+
+/* Endpoint card */
+.a-endpoint{background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;overflow:hidden;transition:border-color 0.2s}
+.a-endpoint:hover{border-color:var(--cyan)}
+.a-endpoint:target{border-color:var(--cyan);box-shadow:0 0 20px rgba(0,255,255,0.08)}
+.a-ep-header{display:flex;align-items:center;padding:12px 16px;cursor:pointer;gap:8px;user-select:none}
+.a-ep-header:hover{background:rgba(255,255,255,0.02)}
+.a-ep-desc{color:var(--text-muted);font-size:0.8rem;margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40%}
+.a-ep-lock{color:#f59e0b;font-size:0.75rem;margin-left:4px}
+.a-ep-chevron{color:var(--text-muted);font-size:0.7rem;transition:transform 0.2s;flex-shrink:0}
+.a-ep-chevron.open{transform:rotate(90deg)}
+.a-ep-body{display:none;padding:0 16px 16px;border-top:1px solid var(--border)}
+.a-ep-body.open{display:block}
+
+/* Response/request blocks */
+.a-block{margin:10px 0}
+.a-block-label{font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:4px}
+.a-code{background:#0d1117;border:1px solid var(--border);border-radius:6px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:0.78rem;line-height:1.6;color:#e6edf3;overflow-x:auto;position:relative;white-space:pre;tab-size:2}
+.a-code .a-key{color:#7ee787}
+.a-code .a-str{color:#a5d6ff}
+.a-code .a-num{color:#f5a623}
+.a-code .a-bool{color:#ff7b72}
+.a-code .a-comment{color:#6e7681;font-style:italic}
+.a-copy-btn{position:absolute;top:6px;right:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);font-size:0.68rem;padding:3px 8px;border-radius:4px;cursor:pointer;transition:all 0.15s}
+.a-copy-btn:hover{background:rgba(0,255,255,0.1);color:var(--cyan);border-color:var(--cyan)}
+.a-copy-btn.copied{color:#10b981;border-color:#10b981}
+
+/* Param table */
+.a-params{width:100%;border-collapse:collapse;font-size:0.8rem;margin:8px 0}
+.a-params th{text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--border)}
+.a-params td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.03);vertical-align:top}
+.a-params .a-param-name{font-family:'JetBrains Mono',monospace;color:var(--cyan);font-size:0.78rem}
+.a-params .a-param-type{font-family:'JetBrains Mono',monospace;color:#a78bfa;font-size:0.72rem}
+.a-params .a-param-req{color:#ef4444;font-size:0.68rem;font-weight:700}
+.a-params .a-param-opt{color:var(--text-muted);font-size:0.68rem}
+
+/* Category header */
+.a-category{margin:32px 0 12px;padding:12px 0 6px;border-bottom:2px solid var(--border)}
+.a-category h3{margin:0;font-size:1.05rem;color:var(--text)}
+.a-category-count{color:var(--text-muted);font-size:0.78rem;margin-left:8px}
+
+/* Protocol section */
+.a-protocol{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:20px;margin:16px 0}
+.a-protocol h4{margin:0 0 12px;color:var(--text)}
+.a-protocol-flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}
+.a-protocol-node{background:rgba(0,255,255,0.06);border:1px solid rgba(0,255,255,0.2);border-radius:6px;padding:6px 12px;font-size:0.8rem;color:var(--cyan)}
+.a-protocol-arrow{color:var(--text-muted);font-size:0.85rem}
+.a-protocol-label{font-size:0.72rem;color:var(--text-muted);text-align:center;margin-top:2px}
+
+/* Search/filter */
+.a-search-bar{display:flex;gap:8px;margin-bottom:20px;position:sticky;top:0;z-index:10;background:var(--bg);padding:12px 0}
+.a-search-input{flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:var(--text);font-size:0.88rem;font-family:inherit;outline:none;transition:border-color 0.2s}
+.a-search-input:focus{border-color:var(--cyan)}
+.a-search-input::placeholder{color:var(--text-muted)}
+.a-filter-btn{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--text-muted);font-size:0.78rem;cursor:pointer;transition:all 0.15s}
+.a-filter-btn:hover,.a-filter-btn.active{background:rgba(0,255,255,0.08);color:var(--cyan);border-color:var(--cyan)}
+
+/* Stats header */
+.a-stats{display:flex;gap:16px;margin:16px 0 24px;flex-wrap:wrap}
+.a-stat{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 18px;text-align:center;min-width:100px}
+.a-stat-num{font-size:1.5rem;font-weight:700;color:var(--cyan);display:block}
+.a-stat-label{font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em}
+
+/* Curl example */
+.a-curl{margin:10px 0}
+.a-curl-label{font-size:0.72rem;font-weight:700;color:var(--text-muted);margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.a-curl-label::before{content:"$";color:#10b981;font-family:'JetBrains Mono',monospace}
+
+/* Auth badge inline */
+.a-auth-badge{display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;color:#f59e0b;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:4px;padding:1px 6px}
+
+/* Responsive */
+@media(max-width:900px){
+  .a-ep-desc{display:none}
+  .a-ep-header{flex-wrap:wrap}
+}

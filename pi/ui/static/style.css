@@ -1,0 +1,126 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #000;
+  cursor: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#particles {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+}
+
+#stage-indicator {
+  position: fixed;
+  top: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: rgba(107, 79, 207, 0.5);
+  pointer-events: none;
+  z-index: 15;
+  transition: color 1.2s ease;
+  text-shadow: 0 0 8px currentColor;
+}
+
+#thought-whisper {
+  position: fixed;
+  top: 28px;
+  left: 10%;
+  right: 10%;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: rgba(200, 180, 255, 0.0);
+  pointer-events: none;
+  z-index: 15;
+  transition: opacity 1.5s ease;
+  opacity: 0;
+  text-shadow: 0 0 6px rgba(200, 180, 255, 0.3);
+  max-height: 30px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#status {
+  position: fixed;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+  z-index: 10;
+  transition: color 0.8s ease;
+}
+
+#focus-text {
+  position: fixed;
+  bottom: 26px;
+  left: 15%;
+  right: 15%;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: rgba(150, 150, 200, 0.25);
+  pointer-events: none;
+  z-index: 10;
+  max-height: 20px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: color 1s ease;
+}
+
+#live-text {
+  position: fixed;
+  bottom: 44px;
+  left: 8%;
+  right: 8%;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgba(100, 200, 255, 0.0);
+  pointer-events: none;
+  z-index: 20;
+  transition: color 0.3s ease, opacity 0.5s ease;
+  max-height: 80px;
+  overflow: hidden;
+  text-shadow: 0 0 10px rgba(100, 200, 255, 0.3);
+}
+
+#live-text.active {
+  color: rgba(100, 200, 255, 0.9);
+}
+
+#live-text.final {
+  color: rgba(180, 220, 255, 1.0);
+}
+
+#live-text.fade-out {
+  opacity: 0;
+}

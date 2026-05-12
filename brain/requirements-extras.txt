@@ -1,0 +1,23 @@
+# Jarvis Brain — Heavy ML Dependencies
+# Install separately: pip install -r requirements-extras.txt
+# Each module gracefully degrades if these are missing.
+
+# Anthropic Claude API (optional, controlled via ENABLE_CLAUDE=true in .env)
+anthropic>=0.40
+
+# Semantic memory (vector search)
+sqlite-vec>=0.1.6
+sentence-transformers>=3.0
+
+# Neural policy layer (NN training)
+torch>=2.0
+
+# CUDA 12 cuBLAS — ctranslate2 (faster-whisper) needs libcublas.so.12;
+# newer PyTorch may only pull nvidia-cublas 13+.
+nvidia-cublas-cu12
+
+# Multimodal reasoning (Phi-4-Multimodal, optional)
+transformers>=4.40
+
+# Self-improvement (external AI patch generation, optional)
+openai>=1.0

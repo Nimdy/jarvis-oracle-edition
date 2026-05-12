@@ -1,0 +1,93 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   JARVIS Oracle Edition — Strategic Showcase Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Stat grid — large numbers */
+.sc-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin:16px 0}
+.sc-stat{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px 14px;text-align:center}
+.sc-stat-val{font-size:1.6rem;font-weight:700;font-family:var(--font-mono);color:var(--cyan);line-height:1.2}
+.sc-stat-label{font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-top:4px}
+.sc-stat--green .sc-stat-val{color:var(--green)}
+.sc-stat--amber .sc-stat-val{color:var(--amber)}
+.sc-stat--purple .sc-stat-val{color:var(--purple-lt)}
+
+/* Evidence callout */
+.sc-evidence{border-left:3px solid var(--green);background:rgba(0,255,153,0.03);border-radius:0 6px 6px 0;padding:14px 18px;margin:14px 0;position:relative}
+.sc-evidence-badge{display:inline-block;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--green);background:rgba(0,255,153,0.10);border:1px solid rgba(0,255,153,0.25);border-radius:3px;padding:1px 6px;margin-bottom:8px}
+.sc-evidence p{font-size:0.82rem;line-height:1.7;color:var(--text);margin:4px 0}
+.sc-evidence .sc-ev-metric{font-family:var(--font-mono);color:var(--cyan);font-weight:600}
+
+/* Metric row */
+.sc-metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:12px 0}
+.sc-metric{display:flex;justify-content:space-between;align-items:baseline;padding:6px 10px;border-radius:4px;font-size:0.82rem}
+.sc-metric:nth-child(odd){background:rgba(255,255,255,0.015)}
+.sc-metric-k{color:var(--text-muted)}
+.sc-metric-v{font-family:var(--font-mono);color:var(--cyan);font-weight:600}
+
+/* Layer table */
+.sc-layer-table{width:100%;border-collapse:collapse;font-size:0.8rem;margin:12px 0}
+.sc-layer-table th{text-align:left;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border)}
+.sc-layer-table td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,0.03);vertical-align:top}
+.sc-layer-table .sc-l-id{font-family:var(--font-mono);color:var(--purple-lt);font-size:0.78rem;white-space:nowrap}
+.sc-layer-table .sc-l-name{color:var(--text);font-weight:600}
+.sc-layer-table .sc-l-desc{color:var(--text-muted);font-size:0.78rem}
+.sc-layer-table .sc-l-status{font-size:0.68rem;font-weight:600}
+.sc-l-shipped{color:var(--green)}
+.sc-l-shadow{color:var(--amber)}
+
+/* Comparison table (Oracle Benchmark) */
+.sc-bench-table{width:100%;border-collapse:collapse;font-size:0.82rem;margin:12px 0}
+.sc-bench-table th{text-align:left;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border)}
+.sc-bench-table td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,0.03)}
+.sc-bench-table .sc-b-domain{color:var(--text);font-weight:600}
+.sc-bench-table .sc-b-score{font-family:var(--font-mono);color:var(--cyan)}
+.sc-bench-table .sc-b-delta{font-family:var(--font-mono);color:var(--green);font-size:0.78rem}
+.sc-bench-table .sc-b-max{font-family:var(--font-mono);color:var(--text-muted);font-size:0.78rem}
+
+/* Strategic fit cards */
+.sc-fit-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin:14px 0}
+.sc-fit-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px 18px}
+.sc-fit-card h4{font-size:0.88rem;color:var(--text);margin:0 0 6px;font-weight:600}
+.sc-fit-card p{font-size:0.78rem;color:var(--text-muted);line-height:1.6;margin:0}
+.sc-fit-card .sc-fit-tag{display:inline-block;font-size:0.62rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;padding:2px 6px;border-radius:3px;margin-top:8px}
+.sc-fit-tag--safety{color:var(--green);background:rgba(0,255,153,0.08);border:1px solid rgba(0,255,153,0.2)}
+.sc-fit-tag--personal{color:var(--cyan);background:rgba(0,204,255,0.08);border:1px solid rgba(0,204,255,0.2)}
+.sc-fit-tag--truth{color:var(--amber);background:rgba(255,153,0,0.08);border:1px solid rgba(255,153,0,0.2)}
+.sc-fit-tag--distill{color:var(--purple-lt);background:rgba(204,136,255,0.08);border:1px solid rgba(204,136,255,0.2)}
+
+/* Collapsible sections (reuse science pattern) */
+.sc-section{margin:12px 0}
+.sc-card-header{display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;user-select:none}
+.sc-card-header:hover{border-color:var(--cyan)}
+.sc-card-chevron{color:var(--text-muted);font-size:0.7rem;transition:transform 0.2s;flex-shrink:0}
+.sc-card-chevron.open{transform:rotate(90deg)}
+.sc-card-title{font-size:0.92rem;font-weight:600;color:var(--text)}
+.sc-card-sub{font-size:0.72rem;color:var(--text-muted);margin-left:auto}
+.sc-card-body{display:none;padding:14px;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;background:var(--bg-card)}
+.sc-card-body.open{display:block}
+
+/* Code file reference */
+.sc-file{font-family:var(--font-mono);font-size:0.75rem;color:var(--text-muted);background:rgba(255,255,255,0.03);padding:1px 5px;border-radius:3px}
+
+/* Module LOC table */
+.sc-mod-table{width:100%;border-collapse:collapse;font-size:0.78rem;margin:12px 0}
+.sc-mod-table th{text-align:left;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);padding:6px 10px;border-bottom:1px solid var(--border)}
+.sc-mod-table td{padding:5px 10px;border-bottom:1px solid rgba(255,255,255,0.03)}
+.sc-mod-table .sc-mod-name{font-family:var(--font-mono);color:var(--cyan)}
+.sc-mod-table .sc-mod-loc{font-family:var(--font-mono);color:var(--text);text-align:right}
+.sc-mod-table .sc-mod-desc{color:var(--text-muted)}
+
+/* Weight / VRAM bar */
+.sc-bar{display:flex;height:22px;border-radius:4px;overflow:hidden;margin:10px 0;background:var(--bg-card);border:1px solid var(--border)}
+.sc-bar-seg{display:flex;align-items:center;justify-content:center;font-size:0.58rem;font-weight:700;color:var(--bg);white-space:nowrap;overflow:hidden;padding:0 4px}
+
+/* Inline badge */
+.sc-badge{display:inline-block;font-size:0.62rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;padding:1px 5px;border-radius:3px;vertical-align:middle}
+.sc-badge--gold{color:#fbbf24;background:rgba(251,191,36,0.10);border:1px solid rgba(251,191,36,0.25)}
+.sc-badge--live{color:var(--green);background:rgba(0,255,153,0.08);border:1px solid rgba(0,255,153,0.2)}
+.sc-badge--perfect{color:var(--cyan);background:rgba(0,204,255,0.08);border:1px solid rgba(0,204,255,0.2)}
+
+/* Dimension list */
+.sc-dims{display:grid;grid-template-columns:1fr 80px;gap:2px;font-size:0.8rem;margin:10px 0}
+.sc-dims dt{color:var(--text-muted);padding:4px 0}
+.sc-dims dd{font-family:var(--font-mono);color:var(--cyan);text-align:right;padding:4px 0;margin:0}

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="j-header">
+    <div class="j-header-brand">
+      <div class="j-brand-stack">
+        <span class="j-brand-text">JARVIS</span>
+        <span class="j-brand-edition">Oracle Edition</span>
+      </div>
+      <span class="j-ws-dot" id="ws-dot" title="WebSocket status"></span>
+    </div>
+    <nav class="j-tab-bar">
+      <button class="j-tab active" data-tab="cockpit">Cockpit</button>
+      <button class="j-tab" data-tab="trust">Trust</button>
+      <button class="j-tab" data-tab="memory">Memory</button>
+      <button class="j-tab" data-tab="activity">Activity</button>
+      <button class="j-tab" data-tab="learning">Learning</button>
+      <button class="j-tab" data-tab="training">Training</button>
+      <button class="j-tab" data-tab="diagnostics">Diagnostics</button>
+    </nav>
+    <div class="j-header-actions">
+      <span class="j-refresh-indicator" id="refresh-indicator" title="Click to force refresh">--</span>
+      <button class="j-pause-btn" id="pause-btn" title="Pause auto-refresh (P)">&#9646;&#9646;</button>
+      <a class="j-docs-btn" href="/docs" title="System Reference Docs">&#x1F4D6;</a>
+      <a class="j-docs-btn" href="/history" title="Build History">&#x1F4C5;</a>
+      <a class="j-docs-btn" href="/api-reference" title="API Reference">&#x2699;</a>
+      <a class="j-docs-btn" href="/science" title="Scientific Reference">&#x1F52C;</a>
+      <a class="j-docs-btn" href="/learning" title="Companion Training & Learning">Train</a>
+      <a class="j-docs-btn" href="/capability-pipeline" title="Capability Pipeline">&#x1F527;</a>
+      <a class="j-docs-btn" href="/maturity" title="Maturity Gates Reference">&#x1F4D0;</a>
+      <a class="j-docs-btn" href="/hrr" title="HRR / VSA Live Shadow (P4)">&#x1F300;</a>
+      <a class="j-docs-btn" href="/hrr-scene" title="HRR Spatial Mental World (P5)">&#x1F5FA;</a>
+      <button class="j-help-btn" id="help-btn" title="Keyboard shortcuts">?</button>
+    </div>
+  </header>
+
+  <!-- Boot banner (conditional, hidden by default) -->
+  <div class="j-boot-banner" id="boot-banner" style="display:none;">
+    <span class="j-boot-icon">⏳</span>
+    <span id="boot-message">System is starting up — metrics may be incomplete.</span>
+  </div>
+
+  <!-- Action-needed strip (conditional, hidden by default) -->
+  <div class="j-action-strip" id="action-strip" style="display:none;"></div>
+
+  <!-- Stale-code banner (conditional, hidden by default) — appears when the
+       on-disk brain source is newer than the running process, nudging the
+       operator to click Restart after `sync-desktop.sh`. -->
+  <div class="j-stale-code-banner" id="stale-code-banner" style="display:none;"></div>
+
+  <!-- Legacy static-page freshness hook. Static pages are served from disk
+       on reload, so this remains hidden; runtime code freshness is handled
+       by the live stale-code banner above. -->
+  <div class="j-freshness-banner" id="j-freshness-banner" style="display:none;"></div>
+  <script src="/static/freshness-banner.js"></script>
+  <script src="/static/status-markers.js"></script>
+
+  <!-- System Truth Score strip (P1.7). Distinct from the per-panel Truth
+       Score cards: this is a top-of-page header summary that aggregates
+       self-test verdict + dashboard-truth-probe clean state + autonomy
+       three-axis snapshot. Hidden until first poll succeeds. -->
+  <div class="j-truth-strip" id="j-truth-strip" style="display:none;"></div>
+  <script src="/static/truth-strip.js"></script>
+
+  <!-- Tab content areas -->
+  <main class="j-content">
+    <!-- COCKPIT TAB -->
+    <section class="j-tab-content active" data-tab="cockpit">
+      <div id="cockpit-root"></div>
+    </section>
+
+    <!-- TRUST TAB -->
+    <section class="j-tab-content" data-tab="trust">
+      <div id="trust-root"></div>
+    </section>
+
+    <!-- MEMORY TAB -->
+    <section class="j-tab-content" data-tab="memory">
+      <div id="memory-root"></div>
+    </section>
+
+    <!-- ACTIVITY TAB -->
+    <section class="j-tab-content" data-tab="activity">
+      <div id="activity-root"></div>
+    </section>
+
+    <!-- LEARNING TAB -->
+    <section class="j-tab-content" data-tab="learning">
+      <div id="learning-root"></div>
+    </section>
+
+    <!-- TRAINING TAB -->
+    <section class="j-tab-content" data-tab="training">
+      <div id="training-root"></div>
+    </section>
+
+    <!-- DIAGNOSTICS TAB -->
+    <section class="j-tab-content" data-tab="diagnostics">
+      <div id="diagnostics-root"></div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="j-footer">
+    <span id="footer-mode">--</span>
+    <span id="footer-phase">--</span>
+    <span id="footer-uptime">--</span>
+    <span id="footer-identity">--</span>
+    <span id="footer-cache-age">--</span>
+  </footer>
+
+  <!-- Modal roots for overlays -->
+  <div class="j-modal-backdrop" id="modal-backdrop" style="display:none;">
+    <div class="j-modal" id="modal-content"></div>
+  </div>
+
+  <!-- Keyboard shortcut help (hidden by default) -->
+  <div class="j-help-overlay" id="help-overlay" style="display:none;">
+    <div class="j-help-card">
+      <h3>Keyboard Shortcuts</h3>
+      <div class="j-help-row"><kbd>1</kbd> Cockpit</div>
+      <div class="j-help-row"><kbd>2</kbd> Trust</div>
+      <div class="j-help-row"><kbd>3</kbd> Memory</div>
+      <div class="j-help-row"><kbd>4</kbd> Activity</div>
+      <div class="j-help-row"><kbd>5</kbd> Learning</div>
+      <div class="j-help-row"><kbd>6</kbd> Training</div>
+      <div class="j-help-row"><kbd>7</kbd> Diagnostics</div>
+      <div class="j-help-row"><kbd>P</kbd> Pause / Resume refresh</div>
+      <div class="j-help-row"><kbd>Esc</kbd> Close this</div>
+      <button onclick="document.getElementById('help-overlay').style.display='none'">Close</button>
+    </div>
+  </div>
+
+  <!-- Scripts: deps first, main last -->
+  <script src="/static/charts.js"></script>
+  <script src="/static/renderers.js"></script>
+  <script src="/static/dashboard.js"></script>
+  <script src="/static/interactives.js"></script>
+</body>
+</html>

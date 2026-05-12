@@ -1,0 +1,36 @@
+# Jarvis Brain — Core Python Dependencies
+#
+# NOTE: ML packages (torch, faster-whisper, kokoro-onnx, onnxruntime-gpu,
+# openwakeword, speechbrain, transformers, sentence-transformers) are
+# installed individually by setup.sh to control install order and avoid
+# dependency conflicts (e.g. onnxruntime CPU vs GPU).
+
+# LLM
+ollama>=0.4
+
+# Config & validation
+pydantic>=2.7
+
+# Perception (WebSocket server for Pi)
+websockets>=14.0
+
+# Dashboard
+fastapi>=0.115
+uvicorn>=0.32
+
+# Claude API (optional — vision + self-improvement)
+anthropic>=0.80
+
+# HTTP client (vision snapshot fetch from Pi)
+aiohttp>=3.9
+
+# Utilities
+nanoid>=2.0.0
+numpy>=1.26
+ddgs>=9.0
+opencv-python-headless>=4.8
+huggingface-hub>=0.20
+
+# Dev / test
+pytest>=7.0
+ruff>=0.4

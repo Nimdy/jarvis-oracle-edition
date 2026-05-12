@@ -1,0 +1,316 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   JARVIS Build History — Page-Specific Styles
+   Extends docs.css base theme with collapsible entry cards, tag colors,
+   stat hero bar, and sidebar month grouping.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════ TOP NAV BAR ═══════════════ */
+
+.h-topnav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 0 10px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+
+.h-topnav a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--transition);
+  padding: 4px 0;
+}
+
+.h-topnav a:hover { color: var(--text); }
+
+.h-topnav a.active {
+  color: var(--cyan);
+  border-bottom: 2px solid var(--cyan);
+}
+
+/* ═══════════════ HERO STATS ═══════════════ */
+
+.h-stats {
+  display: flex;
+  gap: 32px;
+  margin-top: 20px;
+}
+
+.h-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.h-stat-num {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.h-stat-label {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ═══════════════ BUILD ENTRIES ═══════════════ */
+
+.h-entry {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.h-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition);
+  border-radius: 4px;
+}
+
+.h-entry-header:hover {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.h-date {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  min-width: 85px;
+}
+
+.h-entry-header h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  padding: 0;
+  border: none;
+  flex: 1;
+  line-height: 1.3;
+}
+
+.h-chevron {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  transition: transform 0.2s ease;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.h-entry.open .h-chevron {
+  transform: rotate(180deg);
+}
+
+/* ═══════════════ ENTRY BODY ═══════════════ */
+
+.h-summary {
+  padding: 0 0 12px;
+}
+
+.h-summary p {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  max-width: 720px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.h-details {
+  padding: 0 0 24px;
+}
+
+.h-details h3 {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--cyan);
+  margin: 16px 0 8px;
+}
+
+.h-details h4 {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 12px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.h-details p {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  max-width: 720px;
+}
+
+.h-details ul, .h-details ol {
+  padding-left: 20px;
+  margin-bottom: 10px;
+}
+
+.h-details li {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  line-height: 1.55;
+}
+
+.h-details li strong {
+  color: var(--text);
+}
+
+.h-details code {
+  background: rgba(0, 204, 255, 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+/* ═══════════════ TAGS ═══════════════ */
+
+.h-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.h-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  border-radius: 3px;
+  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.h-tag-fix {
+  background: rgba(255, 68, 68, 0.08);
+  border: 1px solid rgba(255, 68, 68, 0.2);
+  color: var(--red);
+}
+
+.h-tag-shipped {
+  background: rgba(0, 255, 153, 0.06);
+  border: 1px solid rgba(0, 255, 153, 0.2);
+  color: var(--green);
+}
+
+.h-tag-audit {
+  background: rgba(255, 153, 0, 0.06);
+  border: 1px solid rgba(255, 153, 0, 0.2);
+  color: var(--amber);
+}
+
+.h-tag-milestone {
+  background: rgba(204, 0, 255, 0.06);
+  border: 1px solid rgba(204, 0, 255, 0.2);
+  color: var(--purple-lt);
+}
+
+.h-tag-feature {
+  background: rgba(0, 204, 255, 0.06);
+  border: 1px solid rgba(0, 204, 255, 0.15);
+  color: var(--cyan);
+}
+
+.h-tag-docs {
+  background: rgba(106, 106, 128, 0.08);
+  border: 1px solid rgba(106, 106, 128, 0.2);
+  color: var(--text-muted);
+}
+
+.h-tag-critical {
+  background: rgba(255, 68, 68, 0.12);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  color: #ff6666;
+}
+
+/* ═══════════════ METRIC HIGHLIGHTS ═══════════════ */
+
+.h-metric {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--green);
+  font-weight: 600;
+}
+
+.h-metric-warn {
+  color: var(--amber);
+}
+
+.h-metric-bad {
+  color: var(--red);
+}
+
+/* ═══════════════ FILE LIST ═══════════════ */
+
+.h-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.h-file {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  background: rgba(0, 204, 255, 0.04);
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+}
+
+/* ═══════════════ SIDEBAR MONTH LABELS ═══════════════ */
+
+.d-nav-link.h-nav-entry {
+  font-size: 0.72rem;
+  padding: 3px 20px 3px 28px;
+  color: var(--text-dim);
+}
+
+.d-nav-link.h-nav-entry:hover {
+  color: var(--text-muted);
+}
+
+/* ═══════════════ RESPONSIVE ═══════════════ */
+
+@media (max-width: 900px) {
+  .h-stats {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .h-entry-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .h-entry-header h2 {
+    font-size: 0.88rem;
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .h-tags {
+    order: 4;
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+}

@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS Oracle Edition — Scientific Reference</title>
+  <link rel="stylesheet" href="/static/docs.css">
+  <link rel="stylesheet" href="/static/science.css">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});"></script>
+</head>
+<body>
+
+  <div class="j-freshness-banner" id="j-freshness-banner" style="display:none;"></div>
+  <script src="/static/freshness-banner.js"></script>
+  <script src="/static/status-markers.js"></script>
+
+  <!-- Sidebar -->
+  <nav class="d-sidebar" id="sidebar">
+    <div class="d-sidebar-brand">
+      <span class="d-brand-text">JARVIS</span>
+      <span class="d-brand-sub" style="color:var(--cyan);font-size:0.58rem;letter-spacing:0.08em;">ORACLE EDITION</span>
+      <span class="d-brand-sub">Scientific Reference</span>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Neural Networks</div>
+      <a class="d-nav-link" href="#nn-policy">Policy NN (RL)</a>
+      <a class="d-nav-link" href="#nn-cortex">Memory Cortex</a>
+      <a class="d-nav-link" href="#nn-hemisphere">Hemisphere NNs</a>
+      <a class="d-nav-link" href="#nn-distillation">Distillation Pipeline</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">RL &amp; Optimization</div>
+      <a class="d-nav-link" href="#rl-state">State Encoding (20-D)</a>
+      <a class="d-nav-link" href="#rl-reward">Reward Computation</a>
+      <a class="d-nav-link" href="#rl-training">Training Loop</a>
+      <a class="d-nav-link" href="#rl-shadow">Shadow A/B Evaluation</a>
+      <a class="d-nav-link" href="#rl-promotion">Promotion Criteria</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Scoring Functions</div>
+      <a class="d-nav-link" href="#score-resonance">Fractal Recall Resonance</a>
+      <a class="d-nav-link" href="#score-soul">Soul Integrity Index</a>
+      <a class="d-nav-link" href="#score-truth">Truth Calibration</a>
+      <a class="d-nav-link" href="#score-opportunity">Opportunity Scorer</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Causal &amp; World Model</div>
+      <a class="d-nav-link" href="#causal-engine">Causal Engine Rules</a>
+      <a class="d-nav-link" href="#world-model">World Model Promotion</a>
+      <a class="d-nav-link" href="#simulator">Mental Simulator</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Identity &amp; Biometrics</div>
+      <a class="d-nav-link" href="#identity-math">Identity Fusion Math</a>
+      <a class="d-nav-link" href="#biometric-ema">Biometric EMA Smoothing</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Epistemic</div>
+      <a class="d-nav-link" href="#brier-ece">Brier Score &amp; ECE</a>
+      <a class="d-nav-link" href="#belief-propagation">Belief Propagation</a>
+      <a class="d-nav-link" href="#intention-truth-layer">Intention Truth Layer (L12)</a>
+      <a class="d-nav-link" href="#l3-escalation-governance">L3 Escalation Governance (Phase 6.5)</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Research</div>
+      <a class="d-nav-link" href="#holographic-cognition-hrr">Holographic Cognition / HRR-VSA (PRE-MATURE)</a>
+      <a class="d-nav-link" href="#mental-world-spatial-hrr">Internal Mental World / Spatial HRR (PRE-MATURE)</a>
+    </div>
+    <div class="d-nav-group d-nav-footer">
+      <a class="d-nav-link d-back-link" href="/">← Live Dashboard</a>
+      <a class="d-nav-link d-back-link" href="/showcase">Strategic Showcase</a>
+      <a class="d-nav-link d-back-link" href="/docs">System Reference</a>
+      <a class="d-nav-link d-back-link" href="/api-reference">API Reference</a>
+      <a class="d-nav-link d-back-link" href="/learning">Companion Training & Learning</a>
+      <a class="d-nav-link d-back-link" href="/maturity">Maturity Gates</a>
+      <a class="d-nav-link d-back-link" href="/hrr">HRR Shadow (P4)</a>
+      <a class="d-nav-link d-back-link" href="/hrr-scene">Mental World (P5)</a>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="d-main" id="main">
+
+    <div class="d-hero">
+      <h1>JARVIS Oracle Edition — Scientific Reference</h1>
+      <p>Complete mathematical specification of every neural network, reinforcement learning loop, scoring function, and causal model. All values traced from live source code — verified against <code>brain/</code> at commit HEAD.</p>
+      <div style="margin-top:12px">
+        <button class="a-filter-btn" onclick="expandAllSections(true)">Expand All</button>
+        <button class="a-filter-btn" onclick="expandAllSections(false)">Collapse All</button>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- POLICY NN -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="nn-policy" class="d-section">
+      <h2>Policy Neural Network (Reinforcement Learning)</h2>
+      <p>Three architecture variants compete via shadow A/B evaluation. The active model controls kernel parameters (thought weights, tick budget, mode suggestion) through a feature-gated interface. All output activations are $\tanh$ producing values in $[-1, 1]$.</p>
+
+      <div class="s-section" id="arch-mlp2">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">MLP-2Layer (Default)</span>
+          <span class="s-card-sub">~6K params · policy/policy_nn.py</span>
+        </div>
+        <div class="s-card-body">
+          <div class="s-arch">
+            <div class="s-arch-title">Architecture</div>
+            <div class="s-arch-layers">
+              <div class="s-arch-layer"><span class="s-dim">Input: 20</span><span class="s-type">State vector $\mathbf{s} \in [0,1]^{20}$</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(20→64)</span><span class="s-act">ReLU</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(64→64)</span><span class="s-act">ReLU</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(64→8)</span><span class="s-act">Tanh</span><span class="s-type">$\mathbf{a} \in [-1,1]^8$</span></div>
+            </div>
+          </div>
+          <p>The 8-dimensional action vector maps to:</p>
+          <table class="s-params">
+            <thead><tr><th>Dim</th><th>Maps To</th><th>Transform</th></tr></thead>
+            <tbody>
+              <tr><td class="s-const">a[0..3]</td><td>thought_weights_delta (philosophical, contextual, reactive, introspective)</td><td>$\delta_i = a_i \times 0.1$</td></tr>
+              <tr><td class="s-const">a[4]</td><td>budget_ms</td><td>$b = 16 + a_4 \times 5$ (if $|a_4| > 0.1$, else None)</td></tr>
+              <tr><td class="s-const">a[5]</td><td>suggested_mode</td><td>$&lt;{-0.25}$: idle, $&gt;0.65$: focused, $&gt;0.25$: conversational</td></tr>
+              <tr><td class="s-const">a[6]</td><td>response_length_hint</td><td>$&lt;{-0.25}$: brief, $&gt;0.25$: detailed</td></tr>
+              <tr><td class="s-const">a[7]</td><td>reserved</td><td>unused (future expansion)</td></tr>
+            </tbody>
+          </table>
+          <div class="s-math">$$\mathbf{a} = \tanh(W_3 \cdot \text{ReLU}(W_2 \cdot \text{ReLU}(W_1 \cdot \mathbf{s} + b_1) + b_2) + b_3)$$</div>
+        </div>
+      </div>
+
+      <div class="s-section" id="arch-mlp3">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">MLP-3Layer</span>
+          <span class="s-card-sub">~13K params · policy/policy_nn.py</span>
+        </div>
+        <div class="s-card-body">
+          <div class="s-arch">
+            <div class="s-arch-title">Architecture</div>
+            <div class="s-arch-layers">
+              <div class="s-arch-layer"><span class="s-dim">Input: 20</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(20→128)</span><span class="s-act">ReLU</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(128→64)</span><span class="s-act">ReLU</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(64→32)</span><span class="s-act">ReLU</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(32→8)</span><span class="s-act">Tanh</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="s-section" id="arch-gru">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">GRU-Policy (Recurrent)</span>
+          <span class="s-card-sub">~19K params · policy/policy_nn.py</span>
+        </div>
+        <div class="s-card-body">
+          <div class="s-arch">
+            <div class="s-arch-title">Architecture</div>
+            <div class="s-arch-layers">
+              <div class="s-arch-layer"><span class="s-dim">Input: 20</span><span class="s-type">$\mathbf{s}_t$ (reshaped to [B, 1, 20])</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">GRU(20→64)</span><span class="s-type">Hidden state $\mathbf{h}_t \in \mathbb{R}^{64}$ carried across ticks</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(64→32)</span><span class="s-act">ReLU</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(32→8)</span><span class="s-act">Tanh</span></div>
+            </div>
+          </div>
+          <p>GRU equations (standard Cho et al. 2014):</p>
+          <div class="s-math">$$\mathbf{z}_t = \sigma(W_z \mathbf{s}_t + U_z \mathbf{h}_{t-1})$$$$\mathbf{r}_t = \sigma(W_r \mathbf{s}_t + U_r \mathbf{h}_{t-1})$$$$\tilde{\mathbf{h}}_t = \tanh(W_h \mathbf{s}_t + U_h (\mathbf{r}_t \odot \mathbf{h}_{t-1}))$$$$\mathbf{h}_t = (1 - \mathbf{z}_t) \odot \mathbf{h}_{t-1} + \mathbf{z}_t \odot \tilde{\mathbf{h}}_t$$</div>
+          <p>Hidden state $\mathbf{h}_t$ is detached between ticks to prevent unbounded backpropagation. <code>reset_hidden()</code> clears state on mode transitions.</p>
+        </div>
+      </div>
+
+      <table class="s-params" style="margin-top:16px">
+        <thead><tr><th>Constant</th><th>Value</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">STATE_DIM</td><td class="s-val">20</td><td class="s-file">policy/state_encoder.py</td></tr>
+          <tr><td class="s-const">SHADOW_STATE_DIM</td><td class="s-val">22</td><td class="s-file">policy/state_encoder.py (M6 expansion)</td></tr>
+          <tr><td class="s-const">ACTION_DIM</td><td class="s-val">8</td><td class="s-file">policy/policy_nn.py</td></tr>
+          <tr><td class="s-const">EXPLORATION_SIGMA</td><td class="s-val">0.03</td><td class="s-file">policy/policy_interface.py</td></tr>
+          <tr><td class="s-const">ENCODER_VERSION</td><td class="s-val">2</td><td class="s-file">policy/state_encoder.py</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- STATE ENCODING -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="rl-state" class="d-section">
+      <h2>State Encoding — 20-Dimensional Feature Vector</h2>
+      <p>The <code>StateEncoder</code> converts the full consciousness state into a normalized $\mathbf{s} \in [0,1]^{20}$ vector. Each dimension is clamped to $[0,1]$ after computation. Dimensions 16–19 are dynamic Global Broadcast Slots assigned by the hemisphere orchestrator.</p>
+
+      <table class="s-params s-vec">
+        <thead><tr><th style="width:40px">Dim</th><th>Feature</th><th>Formula / Source</th><th>Range</th></tr></thead>
+        <tbody>
+          <tr><td></td><td>Evolution stage</td><td>Ordinal map: basic→0.0, self_reflective→0.2, philosophical→0.4, recursive→0.7, integrative→1.0</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Transcendence level</td><td>$\min(\text{transcendence} / 10, 1)$</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Awareness level</td><td>Direct from consciousness (default 0.3)</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Reasoning quality</td><td>Direct from analytics (default 0.5)</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Blended confidence</td><td>$0.7 \cdot \text{analytics\_conf} + 0.3 \cdot \text{truth\_score}$</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Mutation rate</td><td>$\min(\text{rate} / 12, 1)$ — per hour, 3600s window</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Observation rate</td><td>$\min(\text{rate} / 500, 1)$</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Emergent behavior count</td><td>$\min(\text{count} / 20, 1)$</td><td>[0,1]</td></tr>
+          <tr><td></td><td>System healthy</td><td>Binary: 1.0 if healthy, 0.0 otherwise</td><td>{0,1}</td></tr>
+          <tr><td></td><td>Active capabilities</td><td>$\min(\text{len} / 6, 1)$</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Thought weight: philosophical</td><td>$w / 3.0$</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Thought weight: contextual</td><td>$w / 3.0$</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Thought weight: reactive</td><td>$w / 3.0$</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Thought weight: introspective</td><td>$w / 3.0$</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Memory density</td><td>4-axis composite (see Scoring Functions)</td><td>[0,1]</td></tr>
+          <tr><td></td><td>User presence composite</td><td>If user absent: 0.0. If present: $\max(1.0, \; 1.0 + 0.3 \cdot \text{tension} \cdot 0.5^{t/300} + 0.2 \cdot \text{curiosity\_sat})$</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Broadcast Slot 0</td><td>Dynamic — top hemisphere signal (hysteresis-selected)</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Broadcast Slot 1</td><td>Dynamic — second hemisphere signal</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Broadcast Slot 2</td><td>Dynamic — third hemisphere signal</td><td>[0,1]</td></tr>
+          <tr><td></td><td>Broadcast Slot 3</td><td>Dynamic — fourth hemisphere signal</td><td>[0,1]</td></tr>
+        </tbody>
+      </table>
+
+      <div class="d-note">M6 expansion adds dims 20–21 (slots 4–5) via <code>ShadowStateEncoder</code> producing $\mathbf{s} \in [0,1]^{22}$. The shadow encoder runs A/B against the live 20-dim encoder. Zero-padded weight migration via <code>migrate_weights()</code> enables warm-start from 20→22 dims.</div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- REWARD -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="rl-reward" class="d-section">
+      <h2>Reward Computation</h2>
+      <p>The reward signal is computed in <code>engine._compute_health_reward()</code> from kernel performance metrics and consciousness analytics. It is a composite of 7 terms:</p>
+
+      <div class="s-math">$$R = R_{\text{latency}} + R_{\text{backlog}} + R_{\text{overrun}} + R_{\text{slow}} + R_{\text{reasoning}} + R_{\text{confidence}} - R_{\text{overconf}}$$</div>
+
+      <table class="s-params">
+        <thead><tr><th>Component</th><th>Formula</th><th>Range</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">$R_{\text{latency}}$</td><td>$+0.3$ if p95 &lt; 30ms, $+0.1$ if p95 &lt; 50ms, $-0.2$ otherwise</td><td>[-0.2, 0.3]</td></tr>
+          <tr><td class="s-const">$R_{\text{backlog}}$</td><td>$+0.2$ if deferred_backlog = 0, else $-\min(0.3, \text{backlog} \times 0.05)$</td><td>[-0.3, 0.2]</td></tr>
+          <tr><td class="s-const">$R_{\text{overrun}}$</td><td>$0.2 \cdot \max(0, 1 - \text{overrun\_rate} \times 20)$</td><td>[0, 0.2]</td></tr>
+          <tr><td class="s-const">$R_{\text{slow}}$</td><td>$0.3 \cdot (1 - \min(1, \text{slow\_ratio} \times 10))$</td><td>[0, 0.3]</td></tr>
+          <tr><td class="s-const">$R_{\text{reasoning}}$</td><td>$0.1 \cdot (\text{reasoning\_quality} - 0.5)$</td><td>[-0.05, 0.05]</td></tr>
+          <tr><td class="s-const">$R_{\text{confidence}}$</td><td>$0.05 \cdot (\text{confidence\_avg} - 0.5)$</td><td>[-0.025, 0.025]</td></tr>
+          <tr><td class="s-const">$R_{\text{overconf}}$</td><td>$0.15 \cdot \min(\text{overconf\_error}, 0.25)$ if overconf &gt; 0.05</td><td>[0, 0.0375]</td></tr>
+        </tbody>
+      </table>
+      <p>The reward is NOT normalized to $[0,1]$ — it lives in approximately $[-0.6, 1.0]$. This is fed directly into the experience buffer and shadow evaluator.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- TRAINING -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="rl-training" class="d-section">
+      <h2>Training Loop — Advantage-Weighted Imitation Learning</h2>
+      <p>The policy NN is trained via advantage-weighted imitation learning, not standard policy gradient. Key innovation: when the NN's own past proposal coincided with positive advantage, it trains toward <em>its own action</em> rather than the kernel's, breaking the "perfect copy → ties forever" equilibrium.</p>
+
+      <div class="s-math">$$\mathcal{L} = \frac{1}{B}\sum_{i=1}^{B} w_i \cdot \| \hat{\mathbf{a}}_i - \mathbf{a}^*_i \|^2$$</div>
+
+      <p>Where the target action $\mathbf{a}^*_i$ and weight $w_i$ are:</p>
+
+      <div class="s-math">$$\mathbf{a}^*_i = \begin{cases} \mathbf{a}^{\text{nn}}_i & \text{if } A_i > \tau_{\text{adv}} \text{ and nn\_action exists} \\ \mathbf{a}^{\text{kernel}}_i & \text{otherwise} \end{cases}$$</div>
+      <div class="s-math">$$A_i = r_i - \bar{r}_{\text{EMA}}, \quad \hat{A}_i = A_i / \max(\sigma_r, 0.01)$$</div>
+      <div class="s-math">$$w_i = \text{clamp}(1 + \hat{A}_i, \; 0.1, \; 3.0)$$</div>
+
+      <table class="s-params">
+        <thead><tr><th>Constant</th><th>Value</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">BATCH_SIZE</td><td class="s-val">32</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">LEARNING_RATE</td><td class="s-val">1e-3</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">MAX_EPOCHS</td><td class="s-val">50</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">EARLY_STOP_PATIENCE</td><td class="s-val">5</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">TRAINING_INTERVAL_S</td><td class="s-val">600</td><td class="s-file">policy/trainer.py (10 min)</td></tr>
+          <tr><td class="s-const">ADVANTAGE_THRESHOLD</td><td class="s-val">0.05</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">MIN_REWARD_WEIGHT</td><td class="s-val">0.1</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">MAX_REPLAY_SAMPLES</td><td class="s-val">768</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">MIN_TRAINING_SAMPLES</td><td class="s-val">20</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">Reward EMA α</td><td class="s-val">0.05</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">Optimizer</td><td class="s-val">Adam</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">Train/Val split</td><td class="s-val">80/20</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">Priority sampling fraction</td><td class="s-val">0.5</td><td class="s-file">policy/trainer.py</td></tr>
+          <tr><td class="s-const">Recent bias</td><td class="s-val">0.7</td><td class="s-file">policy/trainer.py</td></tr>
+        </tbody>
+      </table>
+
+      <p><strong>Action-to-vector encoding</strong>: Thought weights are absolute values (0.5–2.0) centered at 1.0, scaled so $1.0 \mapsto 0.0$, $2.0 \mapsto 1.0$. Budget is centered at 16ms, scaled by 10. Mode/response hints encoded as discrete floats.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- SHADOW A/B -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="rl-shadow" class="d-section">
+      <h2>Shadow A/B Evaluation</h2>
+      <p>The NN runs in shadow mode alongside the kernel. It proposes actions without applying them, then scores retrospectively when the conversation outcome arrives. The scoring is outcome-based with noop detection and diversity bonuses.</p>
+
+      <div class="s-section">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">Retrospective Scoring Algorithm</span>
+          <span class="s-card-sub">policy/evaluator.py</span>
+        </div>
+        <div class="s-card-body">
+          <p>For each pending shadow proposal (max age 120s):</p>
+          <ol style="font-size:0.85rem;line-height:1.7">
+            <li>Compute <strong>noop detection</strong>: if $\max(|\Delta_{tw}|) < 2.5\sigma$ AND $L_2(\Delta_{tw}) < 5\sigma$ AND budget diff ≤ 3 AND mode/response unchanged → noop</li>
+            <li>For noops: $R_{\text{nn}} = R_{\text{actual}} + \text{NOOP\_PENALTY}$, kernel gets $R_{\text{actual}}$</li>
+            <li>For non-noops, compute deviation magnitude: $d = \sqrt{\sum \delta_i^2}$ and scaled bonus $\beta = 0.08 \cdot \min(d / 0.15, 1)$</li>
+            <li><strong>Reward improved</strong> ($\Delta r > 0.02$): NN gets $+\beta$</li>
+            <li><strong>Reward degraded</strong> ($\Delta r < -0.02$): kernel gets $+0.5\beta$</li>
+            <li><strong>Stable + healthy</strong> ($r > 0.7$): NN gets $+0.5\beta$ (diversity bonus)</li>
+            <li><strong>Stable + struggling</strong> ($r > 0.1$): NN gets $+0.3\beta$ (reduced diversity)</li>
+          </ol>
+
+          <p>Classification into win/loss/tie:</p>
+          <div class="s-math">$$\text{margin} = R_{\text{nn}} - R_{\text{kernel}}$$</div>
+          <div class="s-math">$$\text{class} = \begin{cases} \text{nn\_win} & \text{if } \text{margin} > 0.03 \\ \text{kernel\_win} & \text{if } \text{margin} < -0.03 \\ \text{tie} & \text{if } |\text{margin}| < 0.01 \text{ OR } |\text{margin}| \leq 0.03 \end{cases}$$</div>
+
+          <table class="s-params">
+            <thead><tr><th>Constant</th><th>Value</th><th>Role</th></tr></thead>
+            <tbody>
+              <tr><td class="s-const">TIE_MARGIN</td><td class="s-val">0.03</td><td>Margin above which NN/kernel wins</td></tr>
+              <tr><td class="s-const">MIN_OUTCOME_MARGIN</td><td class="s-val">0.01</td><td>Below this → always tie</td></tr>
+              <tr><td class="s-const">NOOP_PENALTY</td><td class="s-val">−0.01</td><td>Penalty for unchanged proposals</td></tr>
+              <tr><td class="s-const">DEVIATION_BONUS</td><td class="s-val">0.08</td><td>Max bonus for divergent proposals</td></tr>
+              <tr><td class="s-const">NOISE_NOOP_SIGMA_MULT</td><td class="s-val">2.5</td><td>Noise floor = 2.5 × σ</td></tr>
+              <tr><td class="s-const">SHADOW_WINDOW_SIZE</td><td class="s-val">500</td><td>Rolling evaluation window</td></tr>
+              <tr><td class="s-const">EMA_ALPHA</td><td class="s-val">0.1</td><td>Win margin EMA smoothing</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- PROMOTION -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="rl-promotion" class="d-section">
+      <h2>Promotion Criteria &amp; Feature Enabling</h2>
+      <p>NN promotion and feature enabling are gated by demonstrated competence, not time.</p>
+
+      <div class="s-section">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">Shadow → Control Promotion</span>
+        </div>
+        <div class="s-card-body">
+          <div class="s-math">$$\text{eligible} = (N \geq 100) \;\land\; (\text{DWR} > 0.55) \;\land\; (D \geq \max(30, 0.15N)) \;\land\; (\bar{m} > 0.03) \;\land\; (W_{\text{nn}} > W_{\text{kernel}})$$</div>
+          <p>Where $N$ = total decisions, DWR = decisive win rate (nn_wins / decisive), $D$ = decisive count, $\bar{m}$ = average win margin.</p>
+        </div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">Progressive Feature Enabling</span>
+        </div>
+        <div class="s-card-body">
+          <p>Features are earned one at a time with a 300s cooldown between enables:</p>
+          <table class="s-params">
+            <thead><tr><th>Feature</th><th>Min Experience</th><th>Min Win Rate</th><th>Min Shadow A/B</th></tr></thead>
+            <tbody>
+              <tr><td class="s-const">budget_allocation</td><td class="s-val">200</td><td class="s-val">0.40</td><td class="s-val">100</td></tr>
+              <tr><td class="s-const">thought_weight_delta</td><td class="s-val">500</td><td class="s-val">0.50</td><td class="s-val">200</td></tr>
+              <tr><td class="s-const">mode_suggestion</td><td class="s-val">500</td><td class="s-val">0.55</td><td class="s-val">200</td></tr>
+              <tr><td class="s-const">response_length</td><td class="s-val">1000</td><td class="s-val">0.55</td><td class="s-val">300</td></tr>
+              <tr><td class="s-const">proactivity_control</td><td class="s-val">1000</td><td class="s-val">0.60</td><td class="s-val">300</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- MEMORY CORTEX -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="nn-cortex" class="d-section">
+      <h2>Memory Cortex Neural Networks</h2>
+      <p>Two small MLPs learn memory management from telemetry data. Both run on CPU, trained during dream/sleep cycles.</p>
+
+      <div class="s-section">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron open">▶</span>
+          <span class="s-card-title">MemoryRanker — Learned Retrieval Reranking</span>
+          <span class="s-card-sub">~961 params · memory/ranker.py</span>
+        </div>
+        <div class="s-card-body open">
+          <div class="s-arch">
+            <div class="s-arch-title">Architecture</div>
+            <div class="s-arch-layers">
+              <div class="s-arch-layer"><span class="s-dim">Input: 12</span><span class="s-type">Retrieval features (semantic sim, recency, weight, heuristic score, ...)</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(12→32)</span><span class="s-act">ReLU</span><span class="s-type">Dropout(0.1)</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(32→16)</span><span class="s-act">ReLU</span><span class="s-type">Dropout(0.05)</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(16→1)</span><span class="s-act">Sigmoid</span><span class="s-type">$p \in [0,1]$ — relevance score</span></div>
+            </div>
+          </div>
+          <p><strong>Training</strong>: Binary classification — was this memory injected into the prompt AND did the conversation succeed? Loss: BCELoss (implied by sigmoid output). Heuristic formula preserved as feature dim 3 and as fallback scorer.</p>
+          <p><strong>Auto-disable</strong>: If rolling success rate drops below $0.8 \times$ heuristic baseline → auto-disable. Re-enable requires success rate ≥ <code>FALLBACK_THRESHOLD</code> (0.4) after cooldown. Flap guard: 3 auto-disables = permanent disable for session.</p>
+          <table class="s-params">
+            <thead><tr><th>Constant</th><th>Value</th></tr></thead>
+            <tbody>
+              <tr><td class="s-const">INPUT_DIM</td><td class="s-val">12</td></tr>
+              <tr><td class="s-const">MIN_TRAINING_PAIRS</td><td class="s-val">50</td></tr>
+              <tr><td class="s-const">MAX_TRAINING_PAIRS</td><td class="s-val">2000</td></tr>
+              <tr><td class="s-const">DEFAULT_EPOCHS</td><td class="s-val">15</td></tr>
+              <tr><td class="s-const">DEFAULT_BATCH_SIZE</td><td class="s-val">16</td></tr>
+              <tr><td class="s-const">DEFAULT_LR</td><td class="s-val">0.001</td></tr>
+              <tr><td class="s-const">FALLBACK_THRESHOLD</td><td class="s-val">0.4</td></tr>
+              <tr><td class="s-const">REENABLE_COOLDOWN_S</td><td class="s-val">600</td></tr>
+              <tr><td class="s-const">FLAP_WINDOW</td><td class="s-val">3</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron open">▶</span>
+          <span class="s-card-title">SalienceModel — Storage Gate Predictor</span>
+          <span class="s-card-sub">~627 params · memory/salience.py</span>
+        </div>
+        <div class="s-card-body open">
+          <div class="s-arch">
+            <div class="s-arch-title">Architecture</div>
+            <div class="s-arch-layers">
+              <div class="s-arch-layer"><span class="s-dim">Input: 11</span><span class="s-type">Memory candidate features</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(11→24)</span><span class="s-act">ReLU</span><span class="s-type">Dropout(0.1)</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(24→12)</span><span class="s-act">ReLU</span></div>
+              <div class="s-arch-arrow">↓</div>
+              <div class="s-arch-layer"><span class="s-dim">Linear(12→3)</span><span class="s-act">Sigmoid</span><span class="s-type">$[p_{\text{store}}, w_{\text{pred}}, d_{\text{pred}}] \in [0,1]^3$</span></div>
+            </div>
+          </div>
+          <p><strong>3-head output</strong>: (1) store confidence, (2) predicted initial weight, (3) predicted decay rate. Blended with rule-based defaults at a configurable ratio that increases with validated predictions.</p>
+          <div class="s-math">$$\text{output} = \alpha \cdot \text{model\_pred} + (1 - \alpha) \cdot \text{heuristic}$$</div>
+          <div class="s-math">$$\alpha = \min\!\left(\alpha_{\max}, \; \alpha_0 + \left\lfloor \frac{V}{500} \right\rfloor \cdot 0.1\right) \quad \text{where } \alpha_0 = 0.2, \; \alpha_{\max} = 0.6$$</div>
+          <table class="s-params">
+            <thead><tr><th>Constant</th><th>Value</th></tr></thead>
+            <tbody>
+              <tr><td class="s-const">INPUT_DIM</td><td class="s-val">11</td></tr>
+              <tr><td class="s-const">OUTPUT_DIM</td><td class="s-val">3</td></tr>
+              <tr><td class="s-const">MIN_TRAINING_PAIRS</td><td class="s-val">100</td></tr>
+              <tr><td class="s-const">INITIAL_MODEL_BLEND</td><td class="s-val">0.2</td></tr>
+              <tr><td class="s-const">MAX_MODEL_BLEND</td><td class="s-val">0.6</td></tr>
+              <tr><td class="s-const">BLEND_INCREASE_THRESHOLD</td><td class="s-val">500 validated predictions</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- HEMISPHERE -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="nn-hemisphere" class="d-section">
+      <h2>Hemisphere Neural Networks</h2>
+      <p>Dynamic architecture neural networks designed by <code>NeuralArchitect</code> and evolved by <code>EvolutionEngine</code>. Two tiers: Tier-1 distillation specialists (fixed configs) and Tier-2 dynamic-architecture hemispheres (AI-designed topologies).</p>
+
+      <div class="s-section">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">Tier-2 Architecture Design</span>
+          <span class="s-card-sub">hemisphere/architect.py</span>
+        </div>
+        <div class="s-card-body">
+          <p>Three design strategies controlling topology depth:</p>
+          <table class="s-params">
+            <thead><tr><th>Strategy</th><th>Layers</th><th>When Used</th></tr></thead>
+            <tbody>
+              <tr><td class="s-const">CONSERVATIVE</td><td class="s-val">1 hidden</td><td>First design for a focus</td></tr>
+              <tr><td class="s-const">ADAPTIVE</td><td class="s-val">2 hidden</td><td>After initial success</td></tr>
+              <tr><td class="s-const">EXPERIMENTAL</td><td class="s-val">3 hidden</td><td>After proven baseline</td></tr>
+            </tbody>
+          </table>
+          <p>Focus types: MEMORY, MOOD, TRAITS, GENERAL, CUSTOM, plus Matrix specialists (POSITIVE_MEMORY, NEGATIVE_MEMORY, SPEAKER_PROFILE, TEMPORAL_PATTERN, SKILL_TRANSFER), plus shadow Tier-1 specialists (DIAGNOSTIC, CODE_QUALITY, CLAIM_CLASSIFIER, DREAM_SYNTHESIS, SKILL_ACQUISITION).</p>
+          <p><strong>Loss functions</strong>: KLDivLoss for classification (MOOD, TRAITS), MSELoss for regression (MEMORY, GENERAL).</p>
+          <p><strong>Global Broadcast Slots</strong>: Top 4 (expandable to 6 via M6) hemisphere signals are injected into the policy state encoder dims 16–19. Slot assignment uses hysteresis: 15% beat threshold and 3-cycle dwell time to prevent churn.</p>
+        </div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">Evolution Engine</span>
+          <span class="s-card-sub">hemisphere/evolution.py</span>
+        </div>
+        <div class="s-card-body">
+          <p>Genetic algorithm over neural architectures: crossover (random layer swaps) + mutation (width ±, activation swap, depth ±1). Selected by validation loss on held-out data.</p>
+          <p>Lifecycle ladder: candidate → probationary → verified → eligible → promoted. Each stage requires sustained accuracy above the prior stage's threshold.</p>
+        </div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">Tier-2 Matrix Specialist Template Set (P3.6 → P3.10, shipped 2026-04-25)</span>
+          <span class="s-card-sub">brain/hemisphere/{positive,negative}_memory_encoder.py, speaker_profile_encoder.py, temporal_pattern_encoder.py, skill_transfer_encoder.py</span>
+        </div>
+        <div class="s-card-body">
+          <p>Five Tier-2 Matrix Protocol specialists shipped sequentially on 2026-04-25 as the canonical template set. <strong>All five enter <code>CANDIDATE_BIRTH</code> only — no live promotion.</strong> Each follows the same template: pure-function encoder, bounded 16-dim <code>[0, 1]</code> feature vector, deterministic <code>compute_signal_value()</code> ∈ <code>[0, 1]</code> (never accuracy-as-proxy), orchestrator dispatch through <code>_matrix_focus_signal()</code> ahead of the legacy accuracy fallback, architect topology override.</p>
+          <table class="s-params">
+            <thead><tr><th>Focus</th><th>Encoder</th><th>Lane-specific guardrail</th></tr></thead>
+            <tbody>
+              <tr><td class="s-const">positive_memory</td><td>positive_memory_encoder.py</td><td>Standard authority fence — never write memory / beliefs / identity / autonomy / policy / HRR / Soul Integrity</td></tr>
+              <tr><td class="s-const">negative_memory</td><td>negative_memory_encoder.py</td><td><strong>Does NOT consume <code>emotion_depth</code></strong> — verified by behavioral regression test (encoder output invariant to <code>emotion_negative_bias</code> perturbations); Block C weighted higher (0.30) so signal does not starve under low-conversation periods</td></tr>
+              <tr><td class="s-const">speaker_profile</td><td>speaker_profile_encoder.py</td><td><strong>Raw 192-dim ECAPA-TDNN <code>speaker_repr</code> + <code>face_repr</code> embeddings MUST NOT cross encoder boundary</strong>, MUST NOT appear in any API surface, MUST NOT enter any dashboard payload — fenced at three layers</td></tr>
+              <tr><td class="s-const">temporal_pattern</td><td>temporal_pattern_encoder.py</td><td><strong>NO schedule / weekday / hour-of-day / calendar inference</strong> — privacy fence enforced at three layers (encoder input shape, orchestrator context builder, three regression tests including a static source-scan); rhythm/cadence only</td></tr>
+              <tr><td class="s-const">skill_transfer</td><td>skill_transfer_encoder.py</td><td><strong>Similarity is not capability.</strong> May say "this skill resembles prior verified skill families"; MUST NOT say "therefore this skill is verified / safe / promotable" — capability gate intact, fenced at five layers</td></tr>
+            </tbody>
+          </table>
+          <p><strong>M6 expansion gate (currently dormant by design).</strong> <code>hemisphere/orchestrator.py::_check_expansion_trigger()</code> arms broadcast slots 4 + 5 only when all three conditions hold simultaneously: (1) <strong>≥ 2 PROMOTED</strong> Tier-2 specialists, (2) mean Tier-2 impact <strong>≥ 0.05</strong>, (3) oldest <code>specialist_verification_ts</code> age <strong>≥ <code>EXPANSION_STABILITY_DAYS</code> (7 days)</strong>. None of the five new specialists are promoted yet — all are at <code>CANDIDATE_BIRTH</code>. Dormant is the correct state.</p>
+          <p>Schema-audit Tier-2 emitted-focus count progressed cleanly across the sprint: 17 → 18 (P3.6) → 19 (P3.7) → 20 → 21 (P3.8) → 22 (P3.9) → 23 (P3.10). Cumulative test count at P3.10 close: <strong>452/452 focused</strong> (107 net-new across the five lanes), <strong>4532/4532 full sweep</strong> (excl. 6 pre-existing unrelated flakes).</p>
+          <p style="font-size:0.85em;color:var(--text-muted);margin-top:0.6em;">Closing reports: <code>p3_6_positive_memory-2026-04-25.md</code>, <code>p3_7_negative_memory-2026-04-25.md</code>, <code>p3_8_speaker_profile-2026-04-25.md</code>, <code>p3_9_temporal_pattern-2026-04-25.md</code>, <code>p3_10_skill_transfer-2026-04-25.md</code>. Template-set readiness closeout: <code>p3_tier2_matrix_template_closeout-2026-04-25.md</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- DISTILLATION -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="nn-distillation" class="d-section">
+      <h2>Tier-1 Distillation Pipeline</h2>
+      <p>Knowledge distillation from teacher models and lifecycle teachers (ECAPA-TDNN, MobileFaceNet, wav2vec2, tool_router, acquisition_planner, diagnostic_detector, upgrade_verdict, claim_verdict, ReflectiveValidator, skill/acquisition outcomes) into lightweight student specialists. 12 active specialist configurations in <code>DISTILLATION_CONFIGS</code> use fidelity-weighted loss. One future specialist (<code>intention_delivery</code>) is reserved but inert.</p>
+
+      <table class="s-params">
+        <thead><tr><th>Specialist</th><th>Teacher</th><th>Type</th><th>Dims (in→out)</th><th>Bottleneck</th><th>Loss</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">speaker_repr</td><td>ECAPA-TDNN</td><td>compressor</td><td class="s-val">192→192</td><td class="s-val">16</td><td>cosine_mse</td></tr>
+          <tr><td class="s-const">face_repr</td><td>MobileFaceNet</td><td>compressor</td><td class="s-val">512→512</td><td class="s-val">16</td><td>cosine_mse</td></tr>
+          <tr><td class="s-const">emotion_depth</td><td>wav2vec2</td><td>approximator</td><td class="s-val">32→8</td><td class="s-val">—</td><td>kl_div</td></tr>
+          <tr><td class="s-const">voice_intent</td><td>tool_router</td><td>approximator</td><td class="s-val">384→8</td><td class="s-val">—</td><td>kl_div</td></tr>
+          <tr><td class="s-const">speaker_diarize</td><td>ECAPA-TDNN</td><td>approximator</td><td class="s-val">192→3</td><td class="s-val">—</td><td>kl_div</td></tr>
+          <tr><td class="s-const">perception_fusion</td><td>multi-modal</td><td>cross_modal</td><td class="s-val">48→8</td><td class="s-val">—</td><td>mse</td></tr>
+          <tr><td class="s-const">plan_evaluator</td><td>acquisition_planner</td><td>approximator</td><td class="s-val">32→3</td><td class="s-val">—</td><td>kl_div</td></tr>
+          <tr><td class="s-const">diagnostic</td><td>diagnostic_detector</td><td>approximator</td><td class="s-val">43→6</td><td class="s-val">—</td><td>kl_div</td></tr>
+          <tr><td class="s-const">code_quality</td><td>upgrade_verdict</td><td>approximator</td><td class="s-val">35→4</td><td class="s-val">—</td><td>kl_div</td></tr>
+          <tr><td class="s-const">claim_classifier</td><td>claim_verdict</td><td>approximator</td><td class="s-val">28→8</td><td class="s-val">—</td><td>kl_div</td></tr>
+          <tr><td class="s-const">dream_synthesis</td><td>ReflectiveValidator</td><td>approximator</td><td class="s-val">16→4</td><td class="s-val">—</td><td>kl_div</td></tr>
+          <tr><td class="s-const">skill_acquisition</td><td>skill_acquisition_outcome</td><td>approximator</td><td class="s-val">40→5</td><td class="s-val">—</td><td>kl_div</td></tr>
+          <tr style="color:#6a6a80;font-style:italic;"><td class="s-const">intention_delivery</td><td>IntentionResolver verdict</td><td>approximator</td><td class="s-val">24→4</td><td class="s-val">—</td><td>kl_div <span style="color:#f90;">(Stage 2, inert)</span></td></tr>
+        </tbody>
+      </table>
+
+      <p><strong>Fidelity-weighted loss</strong>: Each teacher signal carries a fidelity score $f \in [0, 1]$. Signals below 0.3 are quarantined. The loss is weighted by fidelity:</p>
+      <div class="s-math">$$\mathcal{L}_{\text{distill}} = f \cdot \mathcal{L}_{\text{base}}(\hat{y}, y_{\text{teacher}})$$</div>
+
+      <p><strong>Approximator features</strong> from any <code>audio_features*</code> source (including <code>audio_features_enriched</code>, a 32-dim mixed-scale vector combining 7 spectral features with 25-dim ECAPA-TDNN speaker embeddings) are z-score normalized before training: $x' = (x - \mu) / \max(\sigma, \epsilon)$. Without normalization, large-scale spectral features would dominate gradients and suppress learning on the ECAPA range.</p>
+
+      <p><strong>Accuracy gating</strong>: Post-train accuracy below <code>TIER1_MIN_ACCURACY</code> (5%) increments a failure counter. After 3 consecutive sub-floor results, the specialist is disabled for the session. <strong>Cold-start overfit guard</strong>: <code>DISTILLATION_REGRESSION_MIN_SAMPLES = 50</code> — the regression check is skipped when the specialist has fewer than 50 paired training samples. This prevents initial-build memorization (100% accuracy on 15 samples) from creating an unreachable regression baseline that triggers perpetual rollbacks.</p>
+
+      <p><strong>Dependency-retrain ordering</strong>: Some specialists declare <code>depends_on</code> another specialist (e.g. <code>emotion_depth</code> depends on <code>speaker_repr</code> because its <code>audio_features_enriched</code> input contains ECAPA embeddings). To avoid training on stale encoder output, a dependent is skipped if its dependency retrained within <code>DISTILLATION_DEP_RETRAIN_WINDOW_S = 60s</code>. <strong>Critical scheduling detail</strong>: the check uses a snapshot of <code>_tier1_last_retrain_time</code> taken once at the start of <code>_run_distillation_cycle</code>, <em>not</em> the live dict. Without the snapshot, a dependency retraining earlier in the same cycle would stamp its timestamp and cause its dependents to self-block inside the same tick, producing the "healthy inputs, zero epochs" pathology observed on <code>emotion_depth</code> pre-fix. Cross-cycle protection (dependency retrained in a <em>previous</em> cycle within the window) still holds via the same snapshot read.</p>
+
+      <h3 style="margin-top:28px;">Plan Evaluator — Feature Vector &amp; Verdict Encoding</h3>
+      <p>First acquisition-native specialist. Shadow-only — predicts human review verdicts on acquisition plans. Teacher signal: human approval/rejection via <code>approve_plan()</code>. Data pairing by <code>(acquisition_id, plan_id, plan_version)</code> — discrete artifacts, not timestamp windows.</p>
+
+      <h4>32-Dimensional Feature Vector</h4>
+      <p>Encoded by <code>PlanEvaluatorEncoder</code> from <code>AcquisitionPlan</code> + <code>CapabilityAcquisitionJob</code> metadata. All dimensions clamped to $[0, 1]$.</p>
+      <table class="s-params">
+        <thead><tr><th>Block</th><th>Dims</th><th>Features</th></tr></thead>
+        <tbody>
+          <tr><td>Classification</td><td class="s-val">0–8</td><td>Outcome class one-hot (7 classes), $\text{risk\_tier}/5$, confidence</td></tr>
+          <tr><td>Plan Structure</td><td class="s-val">9–15</td><td>$\min(\text{steps}, 20)/20$, rollback ∈ {0,1}, $\min(\text{caps}, 10)/10$, $\min(\text{artifacts}, 10)/10$, $\min(\text{promo\_criteria}, 10)/10$, $\min(\text{version}, 5)/5$, reserved</td></tr>
+          <tr><td>Relational Quality</td><td class="s-val">16–23</td><td>has_all_design_sections, dep→capability alignment, evidence→implementation coverage, verification→implementation refs, rollback_exists_for_deployment, $\min(\text{tests}/\max(\text{impl},1), 1)$, $\min(\text{deps}, 10)/10$, $\min(\text{tests}, 10)/10$</td></tr>
+          <tr><td>Text Richness</td><td class="s-val">24–27</td><td>design_completeness (5-section avg), $\min(\text{total\_chars}, 5000)/5000$, measurable_criteria_ratio, risk_specificity ($\min(\text{nums+keywords}, 5)/5$)</td></tr>
+          <tr><td>Evidence</td><td class="s-val">28–31</td><td>$\min(\text{docs}, 10)/10$, avg_freshness (30-day window), $\min(\text{research}, 10)/10$, evidence_coverage</td></tr>
+        </tbody>
+      </table>
+
+      <h4>3-Class Verdict Target</h4>
+      <p>Human verdicts mapped to a softmax distribution over 3 classes:</p>
+      <table class="s-params">
+        <thead><tr><th>Raw Verdict</th><th>Class</th><th>Label $\mathbf{y}$</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">approved_as_is, approved_with_edits</td><td>approved</td><td class="s-val">[1, 0, 0]</td></tr>
+          <tr><td class="s-const">rejected, cancelled</td><td>rejected</td><td class="s-val">[0, 1, 0]</td></tr>
+          <tr><td class="s-const">needs_revision, route_to_self_improve, convert_to_research, use_existing</td><td>needs_revision</td><td class="s-val">[0, 0, 1]</td></tr>
+        </tbody>
+      </table>
+      <p>Loss: $\mathcal{L} = \text{KL}(\hat{\mathbf{y}} \,\|\, \mathbf{y})$ where $\hat{\mathbf{y}} = \text{softmax}(f_\theta(\mathbf{x}))$.</p>
+
+      <h4>Verdict Reason Categories</h4>
+      <p>9-category enum stored alongside verdict labels for richer future training. Not used in the current loss — metadata only:</p>
+      <div class="d-tag-cloud d-tag-sm" style="margin-top:6px;">
+        <span class="d-tag">technical_weakness</span><span class="d-tag">missing_evidence</span>
+        <span class="d-tag">scope_mismatch</span><span class="d-tag">policy_safety</span>
+        <span class="d-tag">stale_documentation</span><span class="d-tag">unnecessary_duplication</span>
+        <span class="d-tag">preference_style</span><span class="d-tag">wrong_lane</span>
+        <span class="d-tag">other</span>
+      </div>
+
+      <h4>Shadow Prediction Artifacts</h4>
+      <p>Each plan review produces a persisted <code>ShadowPredictionArtifact</code> with full provenance for retrospective accuracy analysis:</p>
+      <table class="s-params">
+        <thead><tr><th>Field</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">acquisition_id, plan_id, plan_version</td><td>Unique pairing key</td></tr>
+          <tr><td class="s-const">predicted_probs, predicted_class</td><td>NN shadow output before human review</td></tr>
+          <tr><td class="s-const">actual_verdict, actual_class</td><td>Human decision (filled on resolution)</td></tr>
+          <tr><td class="s-const">reason_category</td><td>Structured verdict reason</td></tr>
+          <tr><td class="s-const">model_version</td><td>Hemisphere registry version ID</td></tr>
+          <tr><td class="s-const">risk_tier, outcome_class</td><td>Job metadata for stratified analysis</td></tr>
+          <tr><td class="s-const">feature_vector</td><td>32-dim input for debugging drift</td></tr>
+        </tbody>
+      </table>
+
+      <h4>Maturity Bands</h4>
+      <p>Based on resolved (not total) shadow predictions: <strong>bootstrap</strong> (&lt;15), <strong>early_noisy</strong> (&lt;50), <strong>preliminary</strong> (&lt;100), <strong>meaningful</strong> (&lt;250), <strong>stable</strong> (250+). Everything before ~100 is extremely noisy — dashboard labels this explicitly.</p>
+
+      <h3 style="margin-top:28px;">SKILL_ACQUISITION — Lifecycle Outcome Shadow</h3>
+      <p>Shadow-only skill/acquisition lifecycle specialist. It learns from handoff, planning, implementation, verification, and terminal outcome records. Synthetic weight-room samples can provide telemetry, but they are capped as synthetic signal and never count as lived operational proof.</p>
+      <table class="s-params">
+        <thead><tr><th>Property</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Feature vector</td><td class="s-val">40-dimensional bounded lifecycle vector</td></tr>
+          <tr><td>Label space</td><td class="s-val">5 outcome classes</td></tr>
+          <tr><td>Pairing</td><td>Acquisition/learning-job lifecycle metadata, not timestamp windows</td></tr>
+          <tr><td>Synthetic profiles</td><td><code>smoke</code> invariant-only; <code>coverage</code> telemetry; <code>strict</code>/<code>stress</code> operator-flag gated</td></tr>
+          <tr><td>Authority</td><td>No broadcast, no policy influence, no plugin activation, no SkillRegistry verification</td></tr>
+        </tbody>
+      </table>
+
+      <!-- DIAGNOSTIC Specialist -->
+      <h3 style="margin-top:28px;">DIAGNOSTIC — Feature Vector &amp; Detector Label</h3>
+      <p>Detector-pattern approximator. Shadow-only — learns to predict which detector category fires from the system health snapshot. Teacher signal: which of 6 detectors triggered. Data pairing by <code>scan_id</code> metadata key — each self-improvement scan produces a feature vector and (when detectors fire) one or more label vectors. Enriched with codebase structural features and live friction/correction signals.</p>
+
+      <h4>43-Dimensional Feature Vector</h4>
+      <p>Encoded by <code>DiagnosticEncoder</code> from detector snapshots, fired opportunities, and enriched system context. All dimensions clamped to $[0, 1]$.</p>
+      <table class="s-params">
+        <thead><tr><th>Block</th><th>Dims</th><th>Features</th></tr></thead>
+        <tbody>
+          <tr><td>Health</td><td class="s-val">0–5</td><td>overall, worst_score, reasoning_overall, coherence, volatility, current_confidence</td></tr>
+          <tr><td>Performance</td><td class="s-val">6–11</td><td>$(\text{trend} + 1)/2$, slow_ratio, avg_slow/30000, error_rate, tick_p95/200, uptime/86400</td></tr>
+          <tr><td>Context</td><td class="s-val">12–19</td><td>quarantine_pressure, soul_integrity, mode_ordinal, evolution/5, consciousness/4, health_trend, mutations/12, learning_jobs/5</td></tr>
+          <tr><td>History</td><td class="s-val">20–27</td><td>opportunity_count/10, max_sustained/5, improvements_today/6, last_age/86400, sandbox_pass_rate, friction_rate, correction_count/10, autonomy/3</td></tr>
+          <tr><td>Detector Pattern</td><td class="s-val">28–31</td><td>firing_count/6, max_priority/5, has_health_detector, has_perf_detector</td></tr>
+          <tr><td>Codebase Structure</td><td class="s-val">32–37</td><td>module_lines/500, import_fanout/15, importers/15, symbol_count/50, recently_modified, has_codebase_context</td></tr>
+          <tr><td>Friction/Correction</td><td class="s-val">38–42</td><td>severity_high_ratio, correction_ratio, identity_count/5, auto_accepted/5, has_friction_context</td></tr>
+        </tbody>
+      </table>
+      <p><strong>Codebase features</strong> from <code>CodebaseIndex</code>: module line count, import fanout (coupling outward), importers (coupling inward), symbol count (complexity), change recency. <strong>Primary-target aggregation</strong>: encodes the highest-priority/longest-sustained opportunity's module.</p>
+      <p><strong>Friction features</strong> from <code>FrictionMiner</code> (3600s window matching scan cadence): severity distribution, correction ratio, identity mismatch count. Context availability flags (<code>has_codebase_context</code>, <code>has_friction_context</code>) distinguish true zeros from unavailable data.</p>
+
+      <h4>6-Class Detector Label</h4>
+      <p>One-hot encoding of which detector fired:</p>
+      <table class="s-params">
+        <thead><tr><th>Index</th><th>Detector</th></tr></thead>
+        <tbody>
+          <tr><td class="s-val">0</td><td class="s-const">health_degraded</td></tr>
+          <tr><td class="s-val">1</td><td class="s-const">reasoning_decline</td></tr>
+          <tr><td class="s-val">2</td><td class="s-const">confidence_volatile</td></tr>
+          <tr><td class="s-val">3</td><td class="s-const">slow_responses</td></tr>
+          <tr><td class="s-val">4</td><td class="s-const">event_bus_errors</td></tr>
+          <tr><td class="s-val">5</td><td class="s-const">tick_performance</td></tr>
+        </tbody>
+      </table>
+      <p>Loss: $\mathcal{L} = f \cdot \text{KL}(\hat{\mathbf{y}} \,\|\, \mathbf{y})$ where $\hat{\mathbf{y}} = \text{softmax}(f_\theta(\mathbf{x}))$ and $f$ is fidelity weight. Rich metadata (sustained_count, fingerprint, top_metric, module_hint) stored alongside labels for future enrichment.</p>
+      <p><strong>Negative-example protocol:</strong> Every 5th healthy scan (no detectors fired) records a uniform distribution label $\mathbf{y}_{\text{neg}} = [1/6, \ldots, 1/6]$ at fidelity 0.6. This provides the specialist with "normal looks like this" training signal, preventing the model from training exclusively on anomalous positive examples. Without negative examples, the specialist cannot learn the decision boundary between healthy and degraded system states.</p>
+
+      <!-- CODE_QUALITY Specialist -->
+      <h3 style="margin-top:28px;">CODE_QUALITY — Feature Vector &amp; Verdict Label</h3>
+      <p>Patch outcome predictor. Shadow-only — learns to predict whether a self-improvement attempt will succeed or fail. Teacher signal: actual <code>SystemUpgradeReport.verdict</code> recorded after restart-verify. Data pairing by <code>upgrade_id</code> metadata key. Enriched with per-module patch history from <code>improvement_proposals.jsonl</code>.</p>
+
+      <h4>35-Dimensional Feature Vector</h4>
+      <p>Encoded by <code>CodeQualityEncoder</code> from <code>ImprovementRecord</code> (request + plan + patch + sandbox + system context) plus module patch history. All dimensions clamped to $[0, 1]$.</p>
+      <table class="s-params">
+        <thead><tr><th>Block</th><th>Dims</th><th>Features</th></tr></thead>
+        <tbody>
+          <tr><td>Request</td><td class="s-val">0–7</td><td>type one-hot (5 classes), priority, estimated_risk, requires_approval</td></tr>
+          <tr><td>Patch</td><td class="s-val">8–15</td><td>file_count/3, line_delta/500, new_files, confidence, has_escalation, (iterations−1)/4, provider_ordinal, write_category</td></tr>
+          <tr><td>Sandbox</td><td class="s-val">16–22</td><td>lint_passed, lint_executed, tests_passed, tests_executed, sim_passed, sim_executed, $(p95_\Delta/100 + 1)/2$</td></tr>
+          <tr><td>Diagnostics</td><td class="s-val">23–25</td><td>diagnostics_count/20, has_silent_stubs, recommendation</td></tr>
+          <tr><td>System Context</td><td class="s-val">26–27</td><td>quarantine_pressure, soul_integrity</td></tr>
+          <tr><td>Module History</td><td class="s-val">28–34</td><td>total_patches/10, success_rate, regression_rate, $e^{-\text{age}/86400}$, recidivism, avg_iterations/5, has_patch_history</td></tr>
+        </tbody>
+      </table>
+      <p><strong>Module history</strong> from <code>get_module_patch_history()</code>: scans <code>improvement_proposals.jsonl</code> newest-first (capped at 500 lines). <strong>Recidivism</strong>: exact same fingerprint on the same target module. <strong>Recency</strong>: $e^{-\text{age\_s}/86400}$ (1.0 if just patched, decays to ~0.37 after 24h).</p>
+      <p>Context availability flag <code>has_patch_history</code> (dim 34) distinguishes "clean module, never patched" from "no history data available."</p>
+
+      <h4>4-Class Verdict Target</h4>
+      <p>Actual post-verify verdicts mapped to one-hot:</p>
+      <table class="s-params">
+        <thead><tr><th>Index</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td class="s-val">0</td><td class="s-const">verified_improved</td></tr>
+          <tr><td class="s-val">1</td><td class="s-const">verified_stable</td></tr>
+          <tr><td class="s-val">2</td><td class="s-const">verified_regressed</td></tr>
+          <tr><td class="s-val">3</td><td class="s-const">rolled_back</td></tr>
+        </tbody>
+      </table>
+      <p>Loss: $\mathcal{L} = f \cdot \text{KL}(\hat{\mathbf{y}} \,\|\, \mathbf{y})$. Unknown verdicts default to <code>verified_stable</code>.</p>
+
+      <h4>Backward Compatibility</h4>
+      <p>Old shorter feature vectors (32-dim diagnostic from before Track 4, 28-dim code_quality from before Track 6) are zero-padded during tensor preparation in <code>data_feed.py</code>. The model learns to ignore padded zeros via the context availability flags.</p>
+
+      <!-- CLAIM_CLASSIFIER Specialist -->
+      <h3 style="margin-top:28px;">CLAIM_CLASSIFIER — Feature Vector &amp; Gate Action Label</h3>
+      <p>Gate action class predictor. Shadow-only — learns to predict what action the CapabilityGate will take on a claim (pass, block, rewrite). Teacher signal: gate decision tag from <code>CapabilityGate._evaluate_claim()</code>. Data pairing by <code>claim_id</code> metadata key. Corrective supervision from <code>FrictionMiner</code> friction events.</p>
+
+      <h4>28-Dimensional Feature Vector</h4>
+      <p>Encoded by <code>ClaimClassifierEncoder</code> from claim evaluation context at decision time. All dimensions clamped to $[0, 1]$.</p>
+      <table class="s-params">
+        <thead><tr><th>Dims</th><th>Block</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td class="s-val">0–3</td><td>Text shape</td><td>token_count/20, char_len/120, has_first_person, has_we_pronoun</td></tr>
+          <tr><td class="s-val">4–7</td><td>Pattern match</td><td>claim_pattern_index/15, is_readiness_frame, ability_category, intention_category</td></tr>
+          <tr><td class="s-val">8–13</td><td>Signal flags</td><td>has_blocked_verb, has_technical_signal, has_internal_ops, is_purely_conversational, is_preference_alignment, is_grounded_observation</td></tr>
+          <tr><td class="s-val">14–16</td><td>Context flags</td><td>has_subordinate_context, has_reflective_exclusion, has_verified_skill_context</td></tr>
+          <tr><td class="s-val">17–19</td><td>Route context</td><td>route_is_none, route_is_strict, status_mode</td></tr>
+          <tr><td class="s-val">20–22</td><td>Registry state</td><td>registry_verified, registry_learning, registry_unknown</td></tr>
+          <tr><td class="s-val">23–24</td><td>Evidence state</td><td>perception_evidence_fresh, identity_confirmed</td></tr>
+          <tr><td class="s-val">25–27</td><td>History</td><td>family_block_count/50, session_block_count/10, time_since_last_block/3600</td></tr>
+        </tbody>
+      </table>
+
+      <h4>8-Class Gate Action Label</h4>
+      <p>One-hot vector $\mathbf{y} \in \{0,1\}^8$ encoded by <code>ClaimClassifierEncoder.encode_label()</code>. Multiple gate decision tags map to each class.</p>
+      <table class="s-params">
+        <thead><tr><th>Index</th><th>Class</th><th>Gate Tags</th></tr></thead>
+        <tbody>
+          <tr><td class="s-val">0</td><td class="s-const">conversational</td><td>conversational, subordinate-conversational, route-conversational, conversational-offer</td></tr>
+          <tr><td class="s-val">1</td><td class="s-const">grounded</td><td>grounded</td></tr>
+          <tr><td class="s-val">2</td><td class="s-const">verified</td><td>verified, verified-context, verified-offer</td></tr>
+          <tr><td class="s-val">3</td><td class="s-const">preference</td><td>preference</td></tr>
+          <tr><td class="s-val">4</td><td class="s-const">reflective</td><td>reflective</td></tr>
+          <tr><td class="s-val">5</td><td class="s-const">learning_acknowledged</td><td>matrix:operational, matrix:limited</td></tr>
+          <tr><td class="s-val">6</td><td class="s-const">blocked</td><td>blocked</td></tr>
+          <tr><td class="s-val">7</td><td class="s-const">rewritten</td><td>rewritten</td></tr>
+        </tbody>
+      </table>
+
+      <h4>Friction Correction Protocol</h4>
+      <p>When <code>FrictionMiner</code> detects a <code>too_cautious</code> or <code>correction</code> event, <code>CapabilityGate.record_friction_correction()</code> searches a ring buffer of recent blocked/rewritten claims (max 10 entries, 60s eviction window). If a correlating claim is found within 30s of the friction event, a corrective label of class 0 (conversational) is recorded at fidelity 0.7. During tensor preparation, when multiple verdicts exist for the same <code>claim_id</code>, the highest-fidelity verdict wins — so the original gate decision (fidelity 1.0) takes precedence unless only the correction exists.</p>
+      <p>Loss: $\mathcal{L} = f \cdot \text{KL}(\hat{\mathbf{y}} \,\|\, \mathbf{y})$ where $f$ is the per-sample fidelity weight.</p>
+
+      <h4>Synthetic Claim Exercise</h4>
+      <p>Text-only distillation harness (<code>synthetic/claim_exercise.py</code>) parallel to the perception exercise. Generates diverse LLM-style response text across 12 categories (~130 templates) covering all 8 gate action classes, feeds through <code>CapabilityGate.check_text()</code>, and records teacher signals via the standard distillation pipeline. No audio, STT, or wake word involved. Profiles: smoke (20), coverage (200, weighted), strict (100, status mode), stress (500). Accuracy tracked per category against expected gate behavior.</p>
+
+      <h4>Synthetic Cognitive Exercises (5 Exercises)</h4>
+      <p>Additional distillation and validation harnesses covering cognitive subsystems. All enforce the <strong>Epistemic Isolation Contract</strong>: standalone instances, fidelity cap 0.7, <code>origin="synthetic"</code>, no EventBus emission, no real persistence writes.</p>
+      <table class="s-params">
+        <thead><tr><th>Exercise</th><th>Target NN</th><th>Feature Dim</th><th>Labels</th><th>Mechanism</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="s-const">Memory Retrieval</td>
+            <td class="s-val">MemoryRanker (12&rarr;1)<br>SalienceModel (11&rarr;3)</td>
+            <td class="s-val">12</td>
+            <td class="s-val">float [0,1]</td>
+            <td>Read-only vector search against existing memories, heuristic label assignment (similarity &times; tag overlap &times; weight), pairs written to separate JSONL and merged into cortex training at 0.7 weight</td>
+          </tr>
+          <tr>
+            <td class="s-const">World Model</td>
+            <td class="s-val">CausalEngine coverage</td>
+            <td class="s-val">—</td>
+            <td class="s-val">hit/miss per rule</td>
+            <td>Standalone <code>CausalEngine()</code>, synthetic <code>WorldState</code> + <code>WorldDelta</code> for all 18 rules (delta-triggered + steady-state), <code>validate_predictions()</code> against expected outcomes. Stats only — no distillation signals</td>
+          </tr>
+          <tr>
+            <td class="s-const">Contradiction</td>
+            <td class="s-val">Conflict classification</td>
+            <td class="s-val">—</td>
+            <td class="s-val">6-class + near-miss</td>
+            <td>Pure <code>extract_claims()</code> + standalone <code>ConflictClassifier.classify()</code>, synthetic belief pairs across factual, temporal, identity_tension, policy_norm, provenance, multi_perspective + near-miss negatives. Temp-dir <code>BeliefStore</code></td>
+          </tr>
+          <tr>
+            <td class="s-const">Diagnostic Encoder</td>
+            <td class="s-val">diagnostic Tier-1 (43&rarr;6)</td>
+            <td class="s-val">43</td>
+            <td class="s-val">6-class one-hot</td>
+            <td><code>DiagnosticEncoder.encode()</code> (@staticmethod) on fabricated health/performance snapshots covering all 6 detector types + negative examples. Records features + labels via <code>DistillationCollector</code> at fidelity 0.7</td>
+          </tr>
+          <tr>
+            <td class="s-const">Plan Evaluator</td>
+            <td class="s-val">plan_evaluator Tier-1 (32&rarr;3)</td>
+            <td class="s-val">32</td>
+            <td class="s-val">3-class softmax</td>
+            <td><code>PlanEvaluatorEncoder.encode()</code> (@staticmethod) on mock plan objects at 3 quality levels (approved / needs_revision / rejected). Records features + labels via <code>DistillationCollector</code> at fidelity 0.7</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Combined with the perception and claim exercises, the system has <strong>7 synthetic training lanes</strong> that grow NN training data safely, tested by 46 dedicated truth boundary tests in <code>tests/test_new_synthetic_exercises.py</code>.</p>
+
+      <h3 style="margin-top:28px;">Dream Synthesis — Feature Vector &amp; Validator Shadow</h3>
+      <p>Tier-1 specialist. Shadow-only — learns to predict the <code>ReflectiveValidator</code>'s artifact disposition decisions (promote/hold/discard/quarantine) from dream artifact features and system context. Teacher signal: validator outcome at validation time. Data pairing by <code>artifact_id</code>. Persistence: <code>distill_dream_features.jsonl</code> (16-dim feature vectors) and <code>distill_dream_validator.jsonl</code> (4-class labels + reason metadata).</p>
+
+      <h4>Feature Vector (16 dimensions)</h4>
+      <table class="s-params">
+        <thead><tr><th>Block</th><th>Dims</th><th>Features</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">Artifact Intrinsic</td><td class="s-val">0–7</td><td>Content length (÷500, clamp 1.0), coherence, type one-hot (pattern/connection/insight), confidence, cluster coherence, pending age (÷3600, clamp 1.0)</td></tr>
+          <tr><td class="s-const">System State</td><td class="s-val">8–12</td><td>Memory density, dream cycle count (÷100, clamp 1.0), awareness level, belief count (÷500, clamp 1.0), contradiction debt</td></tr>
+          <tr><td class="s-const">Governance Pressure</td><td class="s-val">13–15</td><td>Soul integrity index, quarantine pressure, promotion rate</td></tr>
+        </tbody>
+      </table>
+
+      <h4>Label Encoding (4 classes)</h4>
+      <p>One-hot vector over validation outcomes: <code>[promoted, held, discarded, quarantined]</code>. Each label carries structured reason metadata with 8 categories (mapped by <code>_classify_reason()</code> in <code>dream_artifact_encoder.py</code>):</p>
+      <table class="s-params">
+        <thead><tr><th>Reason Category</th><th>Trigger (validator notes substring)</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">no_sources</td><td>"no source"</td></tr>
+          <tr><td class="s-const">contradicts_beliefs</td><td>"contradict"</td></tr>
+          <tr><td class="s-const">informational_hold</td><td>"informational"</td></tr>
+          <tr><td class="s-const">low_coherence</td><td>"low coherence"</td></tr>
+          <tr><td class="s-const">low_confidence</td><td>"low confidence"</td></tr>
+          <tr><td class="s-const">meets_thresholds</td><td>"meets promotion" or "promotion thresholds"</td></tr>
+          <tr><td class="s-const">promotion_cap</td><td>"promotion cap"</td></tr>
+          <tr><td class="s-const">borderline_hold</td><td>"borderline", or default fallback (includes self-referential discards)</td></tr>
+        </tbody>
+      </table>
+
+      <p><strong>Self-referential discards:</strong> The validator now catches dream-about-dream artifacts via two layers: (1) content string check for consolidation_proposals mentioning "dream_artifact" or "dream_consolidation_proposal", (2) source-memory tag dominance check (≥50% of resolvable source memories tagged <code>dream_artifact</code> or <code>dream_consolidation_proposal</code>). Both produce "discarded" outcomes classified as <code>borderline_hold</code> in the encoder.</p>
+
+      <p><strong>Anti-authority contract:</strong> The NN learns validator tendencies — it never bypasses the validator, writes to memory, creates beliefs, or promotes artifacts. 8 structural AST tests enforce: no import path from <code>dream_artifact_encoder.py</code> to <code>dream_artifacts</code>, <code>memory/</code>, or <code>events.py</code>; no mutation methods; no event emission; validator source contains zero NN references. The NN suggests. The ReflectiveValidator decides.</p>
+
+      <p>Loss: $\mathcal{L} = f \cdot \text{KL}(\hat{\mathbf{y}} \,\|\, \mathbf{y}_{\text{validator}})$ where $f$ is the per-sample fidelity weight and $\mathbf{y}_{\text{validator}}$ is the one-hot validator decision.</p>
+
+      <!-- INTENTION_DELIVERY Specialist (Stage 2, inert) -->
+      <h3 style="margin-top:28px;">INTENTION_DELIVERY — Feature Vector &amp; Verdict Label <span style="color:#f90;font-size:0.7em;">(Stage 2, inert)</span></h3>
+      <p>Stage 1 ships the heuristic IntentionResolver and append-only verdict log. The 24-dim encoder shape exists for the future specialist, but the specialist is not registered and the feature/label training lane is Stage 2 work. Shadow-only — it will eventually learn to predict whether a resolved intention should be proactively delivered. Teacher signal: IntentionResolver heuristic verdict (Stage 1) plus user feedback labels (Stage 2). Data pairing by <code>intention_id</code>.</p>
+
+      <h4>Feature Vector (24 dimensions)</h4>
+      <table class="s-params">
+        <thead><tr><th>Block</th><th>Dims</th><th>Features</th></tr></thead>
+        <tbody>
+          <tr><td>A: Intention intrinsic</td><td>0–7</td><td><code>commitment_type</code> one-hot (4), <code>outcome_success</code>, <code>age_since_resolution</code> (log-normalized), <code>expected_duration_ratio</code>, <code>result_summary_len</code></td></tr>
+          <tr><td>B: Conversation context</td><td>8–15</td><td><code>turn_idx_same_speaker</code>, <code>time_since_last_message</code>, <code>topic_overlap</code> (Jaccard), <code>speaker_present</code>, <code>addressee_score</code>, <code>active_conversation</code>, <code>mood_valence</code>, <code>proactive_cooldown</code></td></tr>
+          <tr><td>C: System governance</td><td>16–23</td><td><code>quarantine_pressure</code>, <code>contradiction_debt</code>, <code>soul_integrity</code>, <code>belief_graph_integrity</code>, <code>autonomy_level</code>, <code>is_interruptible</code>, <code>is_reflective</code>, <code>friction_rate</code></td></tr>
+        </tbody>
+      </table>
+
+      <h4>Label Space (4 classes)</h4>
+      <table class="s-params">
+        <thead><tr><th>Index</th><th>Label</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td><code>deliver_accepted</code></td><td>User references resolved intention within 5 min of delivery (no friction)</td></tr>
+          <tr><td>1</td><td><code>deliver_rejected</code></td><td>User corrects/rephrases within 60s of delivery</td></tr>
+          <tr><td>2</td><td><code>suppressed_was_right</code></td><td>Suppressed intention; user didn't mention the topic in 10 min</td></tr>
+          <tr><td>3</td><td><code>suppressed_was_wrong</code></td><td>Suppressed intention; user directly referenced the topic within 10 min</td></tr>
+        </tbody>
+      </table>
+
+      <p><strong>Stage 2 placeholder:</strong> The encoder module defines an approximate label mapping for tests and future ingestion: <code>deliver_now/deliver_on_next_turn</code> → <code>deliver_accepted</code> (index 0), <code>suppress</code> → <code>suppressed_was_right</code> (index 2), <code>defer</code> → uniform distribution (no signal). Runtime Stage 1 does not yet record this as specialist training data. True labels from user feedback replace the approximation when Stage 2 lands.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- FRACTAL RECALL -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="score-resonance" class="d-section">
+      <h2>Fractal Recall — 8-Term Resonance Scoring</h2>
+      <p>Background associative recall that surfaces relevant memories without user query. Resonance is an 8-term weighted sum computed per memory candidate against the ambient cue (face, voice, speaker, context).</p>
+
+      <div class="s-math">$$R = w_s \cdot S_{\text{sem}} + w_t \cdot S_{\text{tag}} + w_\tau \cdot S_{\text{temporal}} + w_e \cdot S_{\text{emotion}} + w_a \cdot S_{\text{assoc}} + w_p \cdot S_{\text{prov}} + w_m \cdot S_{\text{mode}} - w_r \cdot P_{\text{recency}}$$</div>
+
+      <table class="s-params">
+        <thead><tr><th>Weight</th><th>Symbol</th><th>Value</th><th>Component</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">W_SEM</td><td>$w_s$</td><td class="s-val">0.25</td><td>Semantic similarity (embedding cosine)</td></tr>
+          <tr><td class="s-const">W_TAG</td><td>$w_t$</td><td class="s-val">0.18</td><td>Tag overlap score</td></tr>
+          <tr><td class="s-const">W_TEMPORAL</td><td>$w_\tau$</td><td class="s-val">0.12</td><td>Temporal relevance</td></tr>
+          <tr><td class="s-const">W_EMOTION</td><td>$w_e$</td><td class="s-val">0.12</td><td>Emotional match</td></tr>
+          <tr><td class="s-const">W_ASSOC</td><td>$w_a$</td><td class="s-val">0.08</td><td>Association count: $\min(\text{assoc\_count}, 10) / 10$</td></tr>
+          <tr><td class="s-const">W_PROVENANCE</td><td>$w_p$</td><td class="s-val">0.10</td><td>Provenance factor (peer-reviewed +0.12, codebase +0.10, ...)</td></tr>
+          <tr><td class="s-const">W_MODE_FIT</td><td>$w_m$</td><td class="s-val">0.05</td><td>Current mode compatibility</td></tr>
+          <tr><td class="s-const">W_RECENCY</td><td>$w_r$</td><td class="s-val">0.10</td><td>Recency penalty (subtractive)</td></tr>
+        </tbody>
+      </table>
+
+      <div class="s-weight-bar">
+        <div class="s-weight-seg" style="width:25%;background:#10b981">SEM 25%</div>
+        <div class="s-weight-seg" style="width:18%;background:#3b82f6">TAG 18%</div>
+        <div class="s-weight-seg" style="width:12%;background:#a855f7">TIME 12%</div>
+        <div class="s-weight-seg" style="width:12%;background:#f59e0b">EMO 12%</div>
+        <div class="s-weight-seg" style="width:10%;background:#ef4444">PROV 10%</div>
+        <div class="s-weight-seg" style="width:8%;background:#06b6d4">ASSOC 8%</div>
+        <div class="s-weight-seg" style="width:5%;background:#64748b">MODE 5%</div>
+        <div class="s-weight-seg" style="width:10%;background:#475569;color:#e2e8f0">−REC 10%</div>
+      </div>
+
+      <table class="s-params" style="margin-top:12px">
+        <thead><tr><th>Threshold</th><th>Value</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">RESONANCE_THRESHOLD</td><td class="s-val">0.40</td><td>Minimum resonance for seed selection</td></tr>
+          <tr><td class="s-const">CHAIN_CONTINUATION_THRESHOLD</td><td class="s-val">0.35</td><td>Minimum for chain walker continuation</td></tr>
+          <tr><td class="s-const">Max chain depth</td><td class="s-val">3 hops</td><td>Anti-drift limit</td></tr>
+          <tr><td class="s-const">Max surfaces/hour</td><td class="s-val">5</td><td>Rate limit</td></tr>
+          <tr><td class="s-const">Surface cooldown</td><td class="s-val">120s</td><td>Between successful surfaces</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- SOUL INTEGRITY -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="score-soul" class="d-section">
+      <h2>Soul Integrity Index — 10-Dimension Composite</h2>
+      <p>Layer 10 aggregates health across all epistemic layers into a single $[0, 1]$ score. The index is intentionally conservative — it reports worst-case cognitive health.</p>
+
+      <div class="s-math">$$\text{SII} = \sum_{i=1}^{10} w_i \cdot D_i, \quad \sum w_i = 1.0$$</div>
+
+      <table class="s-params">
+        <thead><tr><th>Dimension</th><th>Weight</th><th>Data Source</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">memory_coherence</td><td class="s-val">0.12</td><td>Memory system health</td></tr>
+          <tr><td class="s-const">belief_health</td><td class="s-val">0.12</td><td>Contradiction debt + belief consistency</td></tr>
+          <tr><td class="s-const">identity_integrity</td><td class="s-val">0.10</td><td>Identity boundary enforcement</td></tr>
+          <tr><td class="s-const">skill_honesty</td><td class="s-val">0.10</td><td>Capability gate accuracy</td></tr>
+          <tr><td class="s-const">truth_calibration</td><td class="s-val">0.12</td><td>Layer 6 composite truth score</td></tr>
+          <tr><td class="s-const">belief_graph_health</td><td class="s-val">0.08</td><td>Layer 7 graph integrity</td></tr>
+          <tr><td class="s-const">quarantine_pressure</td><td class="s-val">0.08</td><td>Layer 8 anomaly pressure (inverted)</td></tr>
+          <tr><td class="s-const">autonomy_effectiveness</td><td class="s-val">0.10</td><td>Autonomy pipeline win rate</td></tr>
+          <tr><td class="s-const">audit_score</td><td class="s-val">0.10</td><td>Layer 9 reflective audit</td></tr>
+          <tr><td class="s-const">system_stability</td><td class="s-val">0.08</td><td>Kernel perf + mutation health</td></tr>
+        </tbody>
+      </table>
+
+      <div class="s-weight-bar">
+        <div class="s-weight-seg" style="width:12%;background:#10b981">MEM 12%</div>
+        <div class="s-weight-seg" style="width:12%;background:#3b82f6">BEL 12%</div>
+        <div class="s-weight-seg" style="width:12%;background:#a855f7">TRU 12%</div>
+        <div class="s-weight-seg" style="width:10%;background:#f59e0b">IDN 10%</div>
+        <div class="s-weight-seg" style="width:10%;background:#ef4444">SKL 10%</div>
+        <div class="s-weight-seg" style="width:10%;background:#06b6d4">AUT 10%</div>
+        <div class="s-weight-seg" style="width:10%;background:#ec4899">AUD 10%</div>
+        <div class="s-weight-seg" style="width:8%;background:#64748b">GRH 8%</div>
+        <div class="s-weight-seg" style="width:8%;background:#475569;color:#e2e8f0">QUA 8%</div>
+        <div class="s-weight-seg" style="width:8%;background:#334155;color:#e2e8f0">STA 8%</div>
+      </div>
+
+      <table class="s-params" style="margin-top:12px">
+        <thead><tr><th>Threshold</th><th>Value</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">REPAIR_THRESHOLD</td><td class="s-val">0.50</td><td>Emit SOUL_INTEGRITY_REPAIR_NEEDED</td></tr>
+          <tr><td class="s-const">CRITICAL_THRESHOLD</td><td class="s-val">0.30</td><td>Recommend mutation pause + forced dream</td></tr>
+          <tr><td class="s-const">HISTORY_SIZE</td><td class="s-val">60</td><td>Rolling history window</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- TRUTH CALIBRATION -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="score-truth" class="d-section">
+      <h2>Truth Calibration — 11-Domain Weighted Composite</h2>
+      <p>Layer 6 scores epistemic accuracy across 11 domains. Each domain has its own scoring function; the composite is weighted.</p>
+
+      <div class="s-math">$$T = \sum_{d \in \mathcal{D}} w_d \cdot S_d, \quad \sum w_d = 1.0$$</div>
+
+      <table class="s-params">
+        <thead><tr><th>Domain</th><th>Weight</th><th>Scoring Basis</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">retrieval</td><td class="s-val">0.18</td><td>$0.30 \cdot \text{ref\_match} + 0.25 \cdot \text{ranker\_success} + 0.20 \cdot \text{clamp}(\text{lift}+0.5) + 0.25 \cdot \text{prov\_success}$</td></tr>
+          <tr><td class="s-const">reasoning</td><td class="s-val">0.18</td><td>Reasoning quality metrics</td></tr>
+          <tr><td class="s-const">epistemic</td><td class="s-val">0.18</td><td>Belief consistency + contradiction debt</td></tr>
+          <tr><td class="s-const">autonomy</td><td class="s-val">0.15</td><td>$0.35 \cdot \text{improvement\_rate} + 0.35 \cdot \text{win\_rate} + 0.30 \cdot \text{conversion\_rate}$</td></tr>
+          <tr><td class="s-const">prediction</td><td class="s-val">0.10</td><td>75% WM causal accuracy + 25% behavioral accuracy</td></tr>
+          <tr><td class="s-const">confidence</td><td class="s-val">0.10</td><td>Brier score, ECE (see below)</td></tr>
+          <tr><td class="s-const">salience</td><td class="s-val">0.03</td><td>Memory salience model accuracy</td></tr>
+          <tr><td class="s-const">skill</td><td class="s-val">0.02</td><td>Skill verification accuracy</td></tr>
+          <tr><td class="s-const">spatial_position</td><td class="s-val">0.02</td><td>Scene tracker position accuracy</td></tr>
+          <tr><td class="s-const">spatial_motion</td><td class="s-val">0.02</td><td>Scene tracker motion accuracy</td></tr>
+          <tr><td class="s-const">spatial_relation</td><td class="s-val">0.02</td><td>Scene tracker relation accuracy</td></tr>
+        </tbody>
+      </table>
+
+      <p>Domains returning <code>provisional=True</code> (signal unavailable) get score 0.5 by default. If more than 4 domains are provisional, the composite truth score is <code>None</code> (not computed).</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- BRIER / ECE -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="brier-ece" class="d-section">
+      <h2>Brier Score &amp; Expected Calibration Error</h2>
+      <p>Standard statistical measures of confidence calibration quality, computed in <code>epistemic/calibration/confidence_calibrator.py</code>.</p>
+
+      <div class="s-math">$$\text{Brier} = \frac{1}{N}\sum_{i=1}^{N}(p_i - o_i)^2$$</div>
+      <p>Where $p_i$ is the predicted confidence and $o_i \in \{0, 1\}$ is the observed outcome. Lower is better; 0 = perfect calibration.</p>
+
+      <div class="s-math">$$\text{ECE} = \sum_{b=1}^{B} \frac{|B_b|}{N} \cdot |\bar{p}_b - \bar{o}_b|$$</div>
+      <p>Where $B = 5$ bins, $\bar{p}_b$ is mean predicted confidence in bin $b$, and $\bar{o}_b$ is observed accuracy in bin $b$. Bins are $[0, 0.2), [0.2, 0.4), \ldots, [0.8, 1.0]$.</p>
+
+      <p><strong>Overconfidence detection</strong>: If $\bar{p}_b > \bar{o}_b$ across multiple bins → system is overconfident. This feeds back as a negative term in the reward function ($-0.15 \cdot \min(\text{oc}, 0.25)$) and triggers belief confidence adjustments (max ±0.05 per adjustment, bounded deque of 200).</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- OPPORTUNITY SCORER -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="score-opportunity" class="d-section">
+      <h2>Autonomy Opportunity Scorer</h2>
+      <p>Ranks research intents for the autonomy pipeline. The formula incorporates anti-gaming mechanisms: diminishing returns, action rate penalties, and policy memory adjustments.</p>
+
+      <div class="s-math">$$\text{Score} = (0.4 \cdot I + 0.3 \cdot E + 0.2 \cdot C) - (0.25 \cdot R) - (0.15 \cdot K) + P_{\text{adj}} - D_{\text{dim}} - A_{\text{rate}}$$</div>
+
+      <table class="s-params">
+        <thead><tr><th>Term</th><th>Symbol</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">Impact</td><td>$I$</td><td>Expected cognitive impact (goal-linked: 0.85, unlinked: 0.15)</td></tr>
+          <tr><td class="s-const">Evidence</td><td>$E$</td><td>Supporting evidence quality</td></tr>
+          <tr><td class="s-const">Confidence</td><td>$C$</td><td>Intent confidence</td></tr>
+          <tr><td class="s-const">Risk</td><td>$R$</td><td>Estimated risk factor</td></tr>
+          <tr><td class="s-const">Cost</td><td>$K$</td><td>Estimated resource cost</td></tr>
+          <tr><td class="s-const">Policy adj</td><td>$P_{\text{adj}}$</td><td>±0.3 from autonomy_policy.jsonl (what worked/regressed)</td></tr>
+          <tr><td class="s-const">Diminishing</td><td>$D_{\text{dim}}$</td><td>Penalty for repeated topics</td></tr>
+          <tr><td class="s-const">Action rate</td><td>$A_{\text{rate}}$</td><td>Penalty for high action frequency</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- CAUSAL ENGINE -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="causal-engine" class="d-section">
+      <h2>Causal Engine — 18 Heuristic Rules</h2>
+      <p>Heuristic causal rules predict concrete state changes from world deltas. Rules are priority-ranked; higher priority wins conflicts. Each rule specifies a horizon (validation window in seconds) and a confidence.</p>
+
+      <div class="s-section">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">Full Rule Inventory (18 rules)</span>
+          <span class="s-card-sub">cognition/causal_engine.py</span>
+        </div>
+        <div class="s-card-body">
+          <table class="s-params">
+            <thead><tr><th>Rule ID</th><th>Category</th><th>Priority</th><th>Confidence</th><th>Horizon</th><th>Predicted Delta</th></tr></thead>
+            <tbody>
+              <tr><td class="s-const">user_departed_engagement</td><td>user</td><td class="s-val">50</td><td>0.95</td><td>5s</td><td>engagement→0, conv→false</td></tr>
+              <tr><td class="s-const">user_arrived_conversation</td><td>user</td><td class="s-val">50</td><td>0.50</td><td>60s</td><td>conv→true</td></tr>
+              <tr><td class="s-const">speaker_changed_greeting</td><td>user</td><td class="s-val">50</td><td>0.70</td><td>30s</td><td>conv→true</td></tr>
+              <tr><td class="s-const">conversation_started_engagement</td><td>conversation</td><td class="s-val">40</td><td>0.90</td><td>5s</td><td>conv→true</td></tr>
+              <tr><td class="s-const">conversation_ended_followup</td><td>conversation</td><td class="s-val">40</td><td>0.40</td><td>30s</td><td>conv→true</td></tr>
+              <tr><td class="s-const">health_degraded_reduce_load</td><td>health</td><td class="s-val">100</td><td>0.70</td><td>0s</td><td>health→0.5</td></tr>
+              <tr><td class="s-const">mode_sleep_extended</td><td>system</td><td class="s-val">20</td><td>0.80</td><td>0s</td><td>user_present→false</td></tr>
+              <tr><td class="s-const">quiet_desk_stays_quiet</td><td>conversation</td><td class="s-val">30</td><td>0.85</td><td>45s</td><td>conv→false, user→true</td></tr>
+              <tr><td class="s-const">present_user_stays</td><td>user</td><td class="s-val">30</td><td>0.90</td><td>45s</td><td>user→true</td></tr>
+              <tr><td class="s-const">healthy_system_stays_healthy</td><td>system</td><td class="s-val">15</td><td>0.85</td><td>45s</td><td>health→0.9</td></tr>
+              <tr><td class="s-const">absent_room_stays_quiet</td><td>conversation</td><td class="s-val">25</td><td>0.95</td><td>45s</td><td>conv→false, user→false</td></tr>
+              <tr><td class="s-const">passive_mode_persists</td><td>system</td><td class="s-val">15</td><td>0.85</td><td>30s</td><td>mode→passive</td></tr>
+              <tr><td class="s-const">idle_user_no_conversation</td><td>user</td><td class="s-val">20</td><td>0.80</td><td>30s</td><td>user→true, conv→false</td></tr>
+              <tr><td class="s-const">active_conversation_persists</td><td>conversation</td><td class="s-val">35</td><td>0.80</td><td>30s</td><td>conv→true</td></tr>
+              <tr><td class="s-const">stable_scene_persists</td><td>physical</td><td class="s-val">25</td><td>0.80</td><td>45s</td><td>user→true</td></tr>
+              <tr><td class="s-const">display_zone_mode_stable</td><td>system</td><td class="s-val">20</td><td>0.85</td><td>45s</td><td>user→true</td></tr>
+              <tr><td class="s-const">workspace_person_stays</td><td>user</td><td class="s-val">35</td><td>0.90</td><td>45s</td><td>user→true, person_count→1</td></tr>
+              <tr><td class="s-const">multi_entity_scene_stable</td><td>physical</td><td class="s-val">20</td><td>0.85</td><td>45s</td><td>user→true</td></tr>
+            </tbody>
+          </table>
+          <p><strong>Priority-based conflict resolution</strong>: When multiple rules predict conflicting deltas for the same field, the higher-priority rule wins. <code>FLOAT_TOLERANCE = 0.1</code> for validation matching.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- WORLD MODEL -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="world-model" class="d-section">
+      <h2>World Model Promotion</h2>
+      <p>3-level promotion system: Shadow → Advisory → Active, accuracy-gated with auto-demotion.</p>
+
+      <table class="s-params">
+        <thead><tr><th>Level</th><th>Min Validated</th><th>Min Accuracy</th><th>Min Runtime</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">Shadow (L0)</td><td class="s-val">0</td><td class="s-val">—</td><td class="s-val">—</td><td>Runs predictions silently, validates against observed outcomes</td></tr>
+          <tr><td class="s-const">Advisory (L1)</td><td class="s-val">50</td><td class="s-val">65%</td><td class="s-val">4 hours</td><td>Injects "if X then likely Y" summaries into conversation context</td></tr>
+          <tr><td class="s-const">Active (L2)</td><td class="s-val">same gate re-evaluated</td><td class="s-val">65%</td><td class="s-val">advisory period</td><td>Full integration with auto-demotion on accuracy drop</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- SIMULATOR -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="simulator" class="d-section">
+      <h2>Mental Simulator (Phase 3)</h2>
+      <p>Takes a <code>WorldState</code> + hypothetical <code>WorldDelta</code>, projects forward N steps (max 3) using CausalEngine rules. Purely read-only — never mutates real state.</p>
+
+      <table class="s-params">
+        <thead><tr><th>Constant</th><th>Value</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">Max projection depth</td><td class="s-val">3</td><td>Steps of causal chain unrolling</td></tr>
+          <tr><td class="s-const">Shadow runtime</td><td class="s-val">48 hours</td><td>Required before advisory</td></tr>
+          <tr><td class="s-const">Min validated sims</td><td class="s-val">100</td><td>Required for promotion</td></tr>
+          <tr><td class="s-const">Min accuracy</td><td class="s-val">70%</td><td>Required for advisory promotion</td></tr>
+          <tr><td class="s-const">Shadow tick frequency</td><td class="s-val">every 3rd tick</td><td>When WM detects new deltas</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- IDENTITY MATH -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="identity-math" class="d-section">
+      <h2>Identity Fusion Mathematics</h2>
+      <p>Two biometric subsystems (voice + face) are fused with an evidence-weighted algorithm. Cosine similarity is the core distance metric.</p>
+
+      <div class="s-math">$$\text{sim}(\mathbf{a}, \mathbf{b}) = \frac{\mathbf{a} \cdot \mathbf{b}}{\|\mathbf{a}\| \cdot \|\mathbf{b}\|}$$</div>
+
+      <table class="s-params">
+        <thead><tr><th>Parameter</th><th>Speaker ID</th><th>Face ID</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">SIMILARITY_THRESHOLD</td><td class="s-val">0.50</td><td class="s-val">0.55</td><td>Known/unknown decision boundary</td></tr>
+          <tr><td class="s-const">SCORE_EMA_ALPHA</td><td class="s-val">0.35</td><td class="s-val">0.35</td><td>Pre-decision smoothing</td></tr>
+          <tr><td class="s-const">EMA_ALPHA (embedding)</td><td class="s-val">0.1</td><td class="s-val">0.1</td><td>Embedding adaptation rate</td></tr>
+          <tr><td class="s-const">EMA_MIN_CONFIDENCE</td><td class="s-val">0.55</td><td class="s-val">0.70</td><td>Min raw score to update embedding</td></tr>
+          <tr><td class="s-const">Enrollment dedup</td><td class="s-val" colspan="2">cos_sim &gt; 0.45 → warning</td><td>Prevents accidental duplicate</td></tr>
+          <tr><td class="s-const">Embedding model</td><td>ECAPA-TDNN (CUDA)</td><td>MobileFaceNet ONNX (CUDA)</td><td>perception/speaker_id.py, face_id.py</td></tr>
+          <tr><td class="s-const">Embedding dim</td><td class="s-val">192</td><td class="s-val">512</td><td></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- BIOMETRIC EMA -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="biometric-ema" class="d-section">
+      <h2>Biometric EMA Smoothing</h2>
+      <p>Both speaker and face recognition use Exponential Moving Average smoothing to reduce single-frame volatility in similarity scores.</p>
+
+      <div class="s-math">$$s_t^{\text{smooth}} = \alpha \cdot s_t^{\text{raw}} + (1 - \alpha) \cdot s_{t-1}^{\text{smooth}}$$</div>
+
+      <p>Where $\alpha = 0.35$ (SCORE_EMA_ALPHA). The smoothed score is used for the known/unknown decision. The raw score is still available for enrollment dedup checks.</p>
+
+      <p><strong>Embedding update</strong> (slower EMA for stored profiles): Only triggered when raw similarity exceeds EMA_MIN_CONFIDENCE. Uses $\alpha = 0.1$ to cautiously drift the stored embedding toward new observations:</p>
+      <div class="s-math">$$\mathbf{e}_{\text{stored}}' = (1 - 0.1) \cdot \mathbf{e}_{\text{stored}} + 0.1 \cdot \mathbf{e}_{\text{new}}$$</div>
+
+      <p><strong>Identity persistence</strong> (Layer 3A): Carries forward identity with exponential decay when biometric signal is lost:</p>
+      <div class="s-math">$$c_t = c_0 \cdot 2^{-t / 90}, \quad t_{\max} = 180\text{s}$$</div>
+      <p>Half-life of 90 seconds; maximum persistence of 180 seconds.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- BELIEF PROPAGATION -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="belief-propagation" class="d-section">
+      <h2>Belief Confidence Propagation (Layer 7)</h2>
+      <p>The Belief Graph uses a view-only propagation system with 6 sacred invariants. Effective confidence is computed via weighted single-pass traversal of evidence edges.</p>
+
+      <div class="s-section">
+        <div class="s-card-header" onclick="toggleSection(this)">
+          <span class="s-card-chevron">▶</span>
+          <span class="s-card-title">6 Sacred Invariants</span>
+        </div>
+        <div class="s-card-body">
+          <ol style="font-size:0.85rem;line-height:1.8">
+            <li>Identity-tension beliefs are immune to propagation</li>
+            <li><code>user_claim</code> provenance beliefs have a confidence floor of 0.5</li>
+            <li><code>refines</code> edges do NOT contribute to effective confidence</li>
+            <li>Propagation NEVER mutates <code>BeliefRecord</code></li>
+            <li>Confidence stays in $[0, 1]$</li>
+            <li>Orphan beliefs keep <code>base_confidence</code> as effective confidence</li>
+          </ol>
+          <p><strong>5 edge types</strong>: <code>supports</code>, <code>contradicts</code>, <code>refines</code>, <code>depends_on</code>, <code>derived_from</code>.</p>
+          <p><strong>Graph health metrics</strong>: orphan rate, fragmentation, cycle count, dangling deps, quarantined support rate, composite score.</p>
+          <p><strong>Edge budget</strong>: Max 20 support edges per subject (Layer 11 epistemic compaction).</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- INTENTION TRUTH LAYER (L12, STAGE 0) -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="intention-truth-layer" class="d-section">
+      <h2>Intention Truth Layer — Commitment Detection &amp; Registry (L12, Stage 0)</h2>
+      <p>Stage 0 is <strong>truth-only, no delivery</strong>. Jarvis must honestly record what it said it would do, link it to real background work, and refuse to make unbacked commitments. Judgment about when (or whether) to volunteer results is deferred to Stage 2+ once we have ~50 commitment/outcome pairs — in line with the <strong>NN Maturity Flywheel</strong> (deterministic truth boundaries first, neural specialist shadows later).</p>
+
+      <h3>Commitment Extractor (Regex Bootstrap)</h3>
+      <p>Feature space: token-level regex over gated outgoing text. ~15 patterns across 4 classes. Negative filter (<code>CONVERSATIONAL_SAFE_PATTERNS</code>) runs first so benign reflections never reach the registry.</p>
+      <table class="s-params">
+        <thead><tr><th>Class</th><th>Examples</th><th>Semantics</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">follow_up</td><td>"I'll get back to you", "let you know when"</td><td>Promise of future communication</td></tr>
+          <tr><td class="s-const">deferred_action</td><td>"give me a moment", "let me process"</td><td>Current-turn wait with implicit follow-up</td></tr>
+          <tr><td class="s-const">future_work</td><td>"I will analyze", "I'm going to"</td><td>Forward-looking work pledge</td></tr>
+          <tr><td class="s-const">task_started</td><td>"I've started", "I'm processing"</td><td>Claim of in-progress work</td></tr>
+          <tr><td class="s-const">— (filtered)</td><td>"I'll think about it", "keep that in mind"</td><td>Conversational reflection — NOT a commitment</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Backed-Commitment Policy (Route-Class, Not Verb Whitelist)</h3>
+      <p>The gate is <strong>backing-id authoritative</strong>. Let $B = \{b_1, \ldots, b_n\}$ be the set of backing job ids spawned this turn (LIBRARY_INGEST thread, skill learning job, autonomy research intent). For each commitment match $m \in M(\text{text})$:</p>
+      <div class="s-math">$$\text{action}(m) = \begin{cases} \text{pass} & \text{if } |B| &gt; 0 \\ \text{rewrite}(m) \to \text{``I don't have a background task to follow up on that right now.''} &amp; \text{otherwise} \end{cases}$$</div>
+      <p>Rewrite replaces the full sentence containing $m$; sibling sentences are preserved. No verb list, no route-specific bypass — the policy is the same on every route.</p>
+
+      <h3>Outcome Ledger &amp; 7-Day Histogram</h3>
+      <p>Intentions are registered at utterance time and resolved when the backing job finishes. The registry maintains a 7-day rolling outcome histogram over four terminal states:</p>
+      <div class="s-math">$$H_{7d} = \{\text{resolved}: c_r, \text{failed}: c_f, \text{stale}: c_s, \text{abandoned}: c_a\}$$</div>
+      <p>where $c_x$ counts all outcomes with <code>resolved_at</code> within the last 7 days. Stage 1 graduation requires real <strong>variance</strong> in $H_{7d}$ (not 100% one bucket), i.e. evidence that the registry has captured lived behaviour rich enough to be training signal.</p>
+
+      <h3>Stale Sweep</h3>
+      <p>Background cycle at 300s cadence (mode-gated via <code>ModeManager.allowed_cycles</code>, enabled in waking / sleep / dreaming). Open intentions older than <code>DEFAULT_STALE_AFTER_S = 7</code> days get outcome <code>stale</code>. Never emits user-facing events.</p>
+
+      <h3>Self-Status Surfacing (Deterministic)</h3>
+      <p>When <code>open_count &gt; 0</code>, <code>MeaningFrame(self_status)</code> is extended with two facts computed directly from the registry:</p>
+      <table class="s-params">
+        <thead><tr><th>Fact</th><th>Source</th><th>Articulation</th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">open_intentions_count</td><td><code>intention_registry.get_status()</code></td><td>"Open intentions: N"</td></tr>
+          <tr><td class="s-const">most_recent_open_intention_age_s</td><td><code>intention_registry.get_status()</code></td><td>"Most recent open intention age: ..."</td></tr>
+        </tbody>
+      </table>
+      <p>Bounded articulation only. No LLM free-text, no reflective branch spillover.</p>
+
+      <h3>Stage 1 Promotion Gates</h3>
+      <ul>
+        <li>≥30 backed commitments logged across real lived interactions.</li>
+        <li>Stale sweep correctness verified (no premature stale marks on active jobs).</li>
+        <li><code>test_intention_registry</code>, <code>test_commitment_extractor</code>, and <code>test_capability_gate</code> commitment regressions green for 2 consecutive weeks.</li>
+        <li>Eval sidecar <code>intention_truth</code> group at 100% contract coverage.</li>
+        <li>Zero confabulated commitment phrases in <code>conversation_history.json</code>.</li>
+        <li>Resolution-outcome histogram shows real variance.</li>
+      </ul>
+
+      <h3>Future Stage 2 Specialist (Planned, Inert)</h3>
+      <p>Once the ledger has enough paired (commitment, outcome, user-signal) triples, the reserved <code>intention_delivery</code> specialist can train against the 24-dim encoder above. It remains commented out in <code>hemisphere/types.py</code> until Stage 1 shadow evidence exists. Teacher signal: resolver verdict + next-turn user signal (did the user appreciate the follow-up, complain, ignore it, or ask where it went). The specialist shadows delivery relevance with no authority; ProactiveGovernor and the operator promotion ladder remain authoritative.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- L3 ESCALATION GOVERNANCE (Phase 6.5) -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="l3-escalation-governance" class="d-section">
+      <h2>L3 Escalation Governance — Evidence Class Separation (Phase 6.5)</h2>
+      <p>Phase 6.5 formalises the control-theoretic distinction between <strong>ever-proven capability</strong> and <strong>present-state readiness</strong>. The system maintains five explicit evidence fields instead of a single confidence scalar, so the rules that gate L3 activation can be stated as predicate logic over disjoint inputs rather than thresholds over a blended truth flag.</p>
+
+      <h3>Five-Field State Model</h3>
+      <p>Let <span>$\mathcal{E}$</span> denote the set of live policy evaluations and <span>$\mathcal{A}$</span> denote the attestation ledger (hash-verified, operator-seeded). Define:</p>
+      <div class="s-math">$$
+        \begin{aligned}
+        c_{\text{ok}} &amp;= \text{check\_promotion\_eligibility}(\mathcal{E}_t) \in \{0,1\} \\
+        p_{\text{ok}} &amp;= \mathbb{1}\!\left[\exists\, r \in \mathcal{A} :\; r.\text{capability}=\text{autonomy.l3} \;\land\; r.\text{artifact\_status} \in \{\text{hash\_verified},\text{missing}\}\right] \\
+        r_{\text{ok}} &amp;= c_{\text{ok}} \lor p_{\text{ok}} \\
+        a_{\text{ok}} &amp;= c_{\text{ok}} \land \mathbb{1}[\text{level}_t \geq 3]
+        \end{aligned}
+      $$</div>
+      <p>and <span>$\text{approval\_required} \equiv \text{true}$</span> as a policy constant. The cache builder computes <span>$c_{\text{ok}}$</span> from <span>$\mathcal{E}_t$</span> at snapshot time; no code path derives <span>$c_{\text{ok}}$</span> from any persisted file. This is the <strong>no-backfill invariant</strong> and it is the single rule that makes the distinction between "ever" and "now" structurally honest.</p>
+
+      <h3>Attestation Trust Lattice</h3>
+      <p>An attestation record's evidence strength is a total function of two discrete fields, not a scalar score:</p>
+      <table class="s-params">
+        <thead><tr><th><code>artifact_status</code></th><th>Condition</th><th>Counts for <span>$p_{\text{ok}}$</span>?</th><th><code>attestation_strength</code></th></tr></thead>
+        <tbody>
+          <tr><td class="s-const">hash_verified</td><td>File present ∧ SHA-256 matches</td><td>Yes</td><td><code>verified</code></td></tr>
+          <tr><td class="s-const">missing</td><td>File absent, hash in ledger</td><td>Yes (weaker)</td><td><code>archived_missing</code></td></tr>
+          <tr><td class="s-const">hash_mismatch</td><td>File present ∧ SHA-256 differs</td><td>No</td><td>—</td></tr>
+          <tr><td class="s-const">hash_unverifiable</td><td>No hash recorded</td><td>No</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <p>Define the strength aggregator over matching records <span>$R \subseteq \mathcal{A}$</span>:</p>
+      <div class="s-math">$$
+        \text{strength}(R) = \begin{cases}
+          \text{verified} &amp; \text{if } \exists\, r \in R : r.\text{artifact\_status}=\text{hash\_verified} \\
+          \text{archived\_missing} &amp; \text{else if } \exists\, r \in R : r.\text{artifact\_status}=\text{missing} \\
+          \text{none} &amp; \text{otherwise}
+        \end{cases}
+      $$</div>
+      <p>The dashboard and API always surface <code>strength(R)</code> alongside <span>$p_{\text{ok}}$</span>; operators never see the two continuity classes collapsed into one.</p>
+
+      <h3>Promotion Decision Predicate</h3>
+      <p>The evidence gate on <code>POST /api/autonomy/level</code> for <span>$\text{level} \geq 3$</span> is the predicate:</p>
+      <div class="s-math">$$
+        \text{accept} \iff
+        \underbrace{\bigl(|\text{reason}| \geq 20\bigr)}_{\text{human intent}}
+        \;\land\;
+        \underbrace{\bigl(\text{caller\_id} \neq \varnothing\bigr)}_{\text{identity}}
+        \;\land\;
+        \underbrace{\Bigl(c_{\text{ok}} \lor p_{\text{ok}} \lor \underbrace{(e \land o \land E)}_{\text{emergency}}\Bigr)}_{\text{evidence}}
+      $$</div>
+      <p>where <span>$e = \text{body.emergency}$</span>, <span>$o = \text{body.operator\_override}$</span>, and <span>$E = \mathbb{1}[\text{env: ALLOW\_EMERGENCY\_OVERRIDE}=1]$</span>. Every negated disjunct has its own deterministic 400/403 code path and every refusal emits <code>AUTONOMY_L3_ACTIVATION_DENIED</code> with full inputs.</p>
+
+      <h3>Manual vs. Auto-Generated Escalation — Separation Theorem</h3>
+      <p>Two escalation generation modes exist. They are kept permanently distinct by a single invariant:</p>
+      <div class="s-math">$$
+        \begin{aligned}
+        \text{manual L3 promotion} &amp;: \text{requires } r_{\text{ok}} \quad\text{(attestation may satisfy it)} \\
+        \text{auto-generated escalation request} &amp;: \text{requires live level}_t \geq 3 \quad\text{(attestation alone never suffices)}
+        \end{aligned}
+      $$</div>
+      <p>Attestation can flip <span>$r_{\text{ok}}$</span> from 0 to 1 without changing <span>$c_{\text{ok}}$</span> or <span>$\text{level}_t$</span>. This guarantees historical proof can unlock the right to <em>request</em> L3, but can never, by itself, start auto-generation of escalation requests.</p>
+
+      <h3>Event Taxonomy Constraint</h3>
+      <p>Let <span>$\Sigma$</span> be the space of autonomy events. The promotion event function <span>$\pi : \{2 \to 3\} \to \Sigma$</span> is constrained so that:</p>
+      <div class="s-math">$$
+        \pi(t) = \begin{cases}
+          \text{AUTONOMY\_L3\_PROMOTED}\bigl(\text{outcome}=\text{"clean"},\ldots\bigr) &amp; \text{if activation succeeded at } t \\
+          \text{AUTONOMY\_L3\_ACTIVATION\_DENIED}\bigl(\text{reason},\ldots\bigr) &amp; \text{if denied}
+        \end{cases}
+      $$</div>
+      <p>The domain of <code>AUTONOMY_L3_PROMOTED</code> is <em>clean activations only</em>. Any mixed-outcome payload is a taxonomy regression.</p>
+
+      <h3>Scope Narrowing on Approval</h3>
+      <p>An approved <code>EscalationRequest</code> carries <code>declared_scope</code> — a finite, narrow set of paths <span>$S \subseteq \text{repo}$</span>. The approval route calls <code>attempt_improvement(manual=True, declared_scope=S)</code>, and the following invariant holds globally:</p>
+      <div class="s-math">$$
+        \forall\, s \in \text{self\_improve\_runs}(t) :\; \text{paths\_touched}(s) \subseteq s.\text{declared\_scope}
+      $$</div>
+      <p>No code path anywhere in the governance layer widens <code>ALLOWED_PATHS</code> or unions scope across requests. Per-request scope is the <em>only</em> elevation mechanism.</p>
+
+      <h3>Durable Audit Invariant</h3>
+      <p>Let <span>$\tau$</span> be the set of audited event types (9 total: <code>AUTONOMY_L3_ELIGIBLE</code>, <code>AUTONOMY_L3_PROMOTED</code>, <code>AUTONOMY_L3_ACTIVATION_DENIED</code>, <code>AUTONOMY_ESCALATION_{REQUESTED, APPROVED, REJECTED, ROLLED_BACK, PARKED, EXPIRED}</code>). The audit ledger satisfies:</p>
+      <div class="s-math">$$
+        \forall\, e \in \text{bus.emit}^{-1}(\tau),\; \exists!\, \ell \in \text{autonomy\_audit.jsonl} : \ell \supseteq \text{sanitize}(e)
+      $$</div>
+      <p>modulo (1) bounded 10 MB rotation, which moves old entries to a rotated file rather than dropping them, and (2) disk failure, which the handler swallows rather than propagating into the bus. The subscriber is wired <em>before</em> <code>reconcile_on_boot()</code> so no boot-time event is lost.</p>
+
+      <h3>Why This Matters</h3>
+      <p>A believable high-agency system cannot treat "I proved this before" and "I can do it right now" as the same signal. Collapsing them lets any future convenience shortcut (e.g. backfilling <span>$c_{\text{ok}}$</span> from disk to "smooth" cold boot) silently erode the honesty boundary. The five-field model, the no-backfill invariant, the attestation trust lattice, and the durable audit together make that collapse <em>structurally impossible</em> rather than merely discouraged.</p>
+
+      <h3>Formal verification (TLA+, P3.1, 2026-04-25)</h3>
+      <p>The Phase 6.5 invariants are now <strong>formally model-checked in TLA+</strong>, not just asserted-by-example in Python tests. Specification at <code>docs/formal/phase_65.tla</code>, TLC config at <code>docs/formal/phase_65.cfg</code>, reproduction guide at <code>docs/formal/README.md</code>. Documentation-grade artifact only — zero production code changed.</p>
+      <p>State variables: <code>level</code>, <code>current_ok</code>, <code>prior_attested_ok</code>, <code>attestation_strength</code>, <code>request_ok</code>, <code>approval_required</code>, <code>activation_ok</code>, <code>audit_log</code> (sequence), <code>approved</code>, <code>request_state</code>, <code>clock</code>. Actions: <code>RequestEscalation</code>, <code>Approve</code>, <code>Reject</code>, <code>Apply</code>, <code>MarkClean</code>, <code>MarkRolledBack</code>, <code>Expire</code>, <code>RotateLedger</code>, <code>RestartProcess</code>. Bounded exploration via <code>StateBound == clock <= MAX_AUDIT_LEN * 4</code> wired through TLC as a <code>CONSTRAINT</code>.</p>
+      <p>TLC ran on the brain authority host (<code>duafoo@192.168.1.222</code>, OpenJDK 21.0.10, <code>tla2tools.jar</code> 2.19, 32 workers / 32 cores):</p>
+      <pre style="background:var(--bg-alt);border-left:3px solid var(--cyan);padding:0.6em 0.9em;margin:0.4em 0 0.8em 0;font-family:monospace;font-size:0.85em;">States generated:    9,724,247
+Distinct states:     2,528,932
+Diameter:            34
+Counterexamples:     0
+Wall time:           ~3 s
+Result:              Model checking completed. No error has been found.</pre>
+      <p>All five model-checked invariants passed: <code>TypeOK</code>, <code>NoAutoPromotion</code>, <code>AttestationImmutability</code>, <code>RequestOkDerivationInv</code>, <code>SafetyInvariants</code>. Three structurally enforced invariants — <code>CurrentOkIsLiveSourced</code>, <code>EvidenceClassSeparation</code>, <code>AuditLogAppendOnly</code> — are confirmed by the absence of any reachable state that would only be reachable via a forbidden assignment. Each is pinned to its Python anchor in the report's per-invariant cross-reference table. Brain-side post-spec audits all clean: schema audit <strong>0 violations</strong>, dashboard truth probe <strong>0 findings</strong>, validation pack guardrails <strong>all PASS</strong>.</p>
+      <p style="font-size:0.85em;color:var(--text-muted);margin-top:0.6em;">Validation report: <code>docs/validation_reports/tla_phase_65-2026-04-25.md</code>.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- HOLOGRAPHIC COGNITION / HRR-VSA (PRE-MATURE) -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="holographic-cognition-hrr" class="d-section">
+      <h2>Holographic Cognition / HRR-VSA — Derived Neural-Intuition Substrate (PRE-MATURE)</h2>
+      <p style="background:rgba(255,165,0,0.08); border-left:3px solid var(--amber,#f90); padding:0.6em 0.9em; margin-bottom:0.8em;"><strong>Status: PRE-MATURE / shadow-only.</strong> HRR is a <em>derived</em> neural-intuition representation. It is <strong>not</strong> canonical memory, <strong>not</strong> belief truth, and <strong>not</strong> policy authority. It must earn its way into the system through the normal specialist lifecycle + Phase 6.5 governance. Raw HRR vectors are never sent to the LLM articulation layer.</p>
+
+      <h3>Intent</h3>
+      <p>Holographic Reduced Representations (HRR) — a Vector-Symbolic Architecture (VSA) — allow JARVIS to represent a relation like <span>$\texttt{subject} \otimes \texttt{relation} \otimes \texttt{object}$</span> inside a single fixed-width vector, then <em>superpose</em> many such relations into one compact "mental scene" vector. That superposition can be queried, compared, unbound, cleaned up against a known symbol dictionary, and eventually consumed by world modeling, mental simulation, associative recall, and specialist training — without ever becoming canonical truth anywhere.</p>
+
+      <h3>Core Operations (Circular-Convolution HRR)</h3>
+      <p>Let <span>$\mathbf{x},\mathbf{y} \in \mathbb{R}^d$</span> be unit-norm symbol vectors, <span>$\mathcal{F}$</span> the FFT, and <span>$\overline{\cdot}$</span> the complex conjugate.</p>
+      <div class="s-math">$$
+        \begin{aligned}
+          \text{bind:}         \quad \mathbf{x} \circledast \mathbf{y} &amp;= \mathcal{F}^{-1}\!\bigl(\mathcal{F}(\mathbf{x}) \odot \mathcal{F}(\mathbf{y})\bigr) \\
+          \text{unbind (conjugate):} \quad \mathbf{b} \oslash \mathbf{k} &amp;= \mathcal{F}^{-1}\!\bigl(\mathcal{F}(\mathbf{b}) \odot \overline{\mathcal{F}(\mathbf{k})}\bigr) \\
+          \text{superpose:}    \quad \text{sup}(\mathbf{v}_{1..n}) &amp;= \text{proj}\!\left(\textstyle\sum_{i=1}^n \mathbf{v}_i\right) \\
+          \text{similarity:}   \quad s(\mathbf{a},\mathbf{b}) &amp;= \cos(\mathbf{a},\mathbf{b})
+        \end{aligned}
+      $$</div>
+      <p>Unbind uses <em>conjugate correlation</em>, not spectral division <span>$\mathcal{F}(\mathbf{b}) / \mathcal{F}(\mathbf{k})$</span>. Division is unstable when the key spectrum has small components; conjugate correlation is the approximate inverse and is the standard HRR choice.</p>
+
+      <h3>Role-Filler Fact Encoding</h3>
+      <p>A fact is encoded as a superposition of role-filler bindings, then projected:</p>
+      <div class="s-math">$$
+        \text{FACT} = \text{proj}\!\bigl(
+          \mathbf{r}_\text{SUBJ} \circledast \mathbf{s} \;+\;
+          \mathbf{r}_\text{REL}  \circledast \mathbf{r} \;+\;
+          \mathbf{r}_\text{OBJ}  \circledast \mathbf{o} \;+\;
+          \mathbf{r}_\text{CTX}  \circledast \mathbf{c} \;+\;
+          \mathbf{r}_\text{TIME} \circledast \mathbf{t}
+        \bigr)
+      $$</div>
+      <p>Each symbol vector is <strong>deterministic</strong> in <span>$(\text{namespace}, \text{name}, \text{seed}, d)$</span>: the same symbol produces an identical vector across restarts without any on-disk symbol store. Different symbols are near-orthogonal by construction (random projection in high <span>$d$</span>).</p>
+
+      <h3>Cleanup Memory</h3>
+      <p>Cleanup maps a noisy candidate <span>$\hat{\mathbf{s}} = \text{FACT} \oslash \mathbf{r}_\text{SUBJ}$</span> back to the nearest known symbol in a dictionary <span>$\mathcal{D}$</span>:</p>
+      <div class="s-math">$$
+        \text{cleanup}(\hat{\mathbf{s}}; \mathcal{D}) = \operatorname*{argmax}_{\mathbf{d} \in \mathcal{D}} \cos(\hat{\mathbf{s}}, \mathbf{d}) \quad \text{if}\; \max_\mathbf{d} \cos \geq \theta
+      $$</div>
+      <p>Reported with <span>$\text{top}\!-\!k$</span> scores and a false-positive rate against random decoys. Stage-0 threshold <span>$\theta = 0.35$</span>, re-tuned empirically.</p>
+
+      <h3>Stage 0 Acceptance Thresholds</h3>
+      <table class="s-params">
+        <thead><tr><th>Metric</th><th>Condition</th><th>Target</th></tr></thead>
+        <tbody>
+          <tr><td><code>cleanup_accuracy</code></td><td>≤ 8 facts, <span>$d=1024$</span>, no noise</td><td>≥ 0.90</td></tr>
+          <tr><td><code>cleanup_accuracy</code></td><td>≤ 16 facts, <span>$d=1024$</span>, no noise</td><td>≥ 0.75</td></tr>
+          <tr><td><code>false_positive_rate</code></td><td>random decoys</td><td>≤ 0.05</td></tr>
+          <tr><td><code>hrr_side_effects</code></td><td>before/after synthetic exercise</td><td>= 0</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Truth-Boundary Invariants</h3>
+      <p>The Stage-0 and Stage-1 synthetic exercises snapshot memory, identity, belief graph, conversation log, TTS output, transcription output, world model durable state, and autonomy state before and after any HRR operation. All side-effect counters must stay at <strong>0</strong>:</p>
+      <div class="s-math">$$
+        \sum_{c \,\in\, \{\text{hrr},\text{mem},\text{ident},\text{llm},\text{tts},\text{tx\_emit},\text{belief},\text{world},\text{auton}\}} \Delta_c \;=\; 0
+      $$</div>
+
+      <h3>Promotion Pathway</h3>
+      <p>HRR does not enter the system as a policy feature. It enters as a shadow specialist — Tier-1 <code>hrr_encoder</code> — through the exact same lifecycle used for every other learned component: <code>CANDIDATE_BIRTH</code> → <code>PROBATIONARY_TRAINING</code> → <code>VERIFIED_PROBATIONARY</code> → <code>BROADCAST_ELIGIBLE</code> → <code>PROMOTED</code> (or <code>RETIRED</code>). Minimum promotion gates: ≥ 500 training samples, <code>cleanup_accuracy ≥ 0.80</code>, <code>false_positive_rate ≤ 0.05</code>, positive <code>shadow_help_rate</code> over a named baseline, and zero truth-boundary leaks. A new non-critical validation-pack check, <code>hrr_policy_non_influence</code>, asserts the absence of any code path from HRR state into policy features until operator approval under Phase 6.5 governance.</p>
+
+      <p style="font-size:0.85em; color:var(--text-muted); margin-top:0.8em;">Plan: <code>docs/plans/p4_holographic_cognition_vsa.plan.md</code>. Governance: <code>AGENTS.md</code> → "HRR / VSA Governance Rules".</p>
+    </section>
+
+    <!-- P5 INTERNAL MENTAL WORLD / SPATIAL HRR SCENE (PRE-MATURE) -->
+    <section id="mental-world-spatial-hrr" class="d-section">
+      <h2>Internal Mental World / Spatial HRR Scene Graph (PRE-MATURE)</h2>
+      <p style="background:rgba(255,165,0,0.08); border-left:3px solid var(--amber,#f90); padding:0.6em 0.9em; margin-bottom:0.8em;"><strong>Status: PRE-MATURE / shadow-only / derived-only / zero authority.</strong> P5 is a <em>second-order render</em> of canonical perception, not a new perception stack. The <code>spatial_hrr_mental_world</code> status marker is <strong>not</strong> auto-promoted by any validation-pack check.</p>
+
+      <p>The <em>Internal Mental World</em> lane layers the P4 HRR substrate on top of canonical perception. Each tick, if a <code>SceneSnapshot</code> exists, the scene-graph adapter reads the canonical entities and spatial tracks/anchors through a single read-only accessor — <code>perception_orchestrator.get_scene_snapshot()</code>, which returns a deep-copy so P5 can never mutate truth — and derives an inventory of spatial relations (<code>LEFT_OF, RIGHT_OF, ABOVE, BELOW, IN_FRONT_OF, BEHIND, NEAR, CENTERED_IN</code>). Each <span>$\texttt{subject} \otimes \texttt{relation} \otimes \texttt{object}$</span> triple is bound with the shared <code>HRRConfig</code>, similarity and cleanup-confidence are retained as <em>derived metrics</em>, and the raw composite vector is stripped before serialisation.</p>
+
+      <h3>Derivation Pipeline</h3>
+      <ol>
+        <li><code>perception_orchestrator.get_scene_snapshot()</code> → deep-copied <code>SceneSnapshot</code>.</li>
+        <li><code>spatial_scene_graph.derive_scene_graph(...)</code> → <code>MentalWorldSceneGraph</code> with canonical entities and relations above <code>LATERAL_SEPARATION_MIN_M</code>.</li>
+        <li><code>hrr_spatial_encoder.encode_scene_graph(...)</code> → bind each triple, keep only <code>similarity</code> / <code>cleanup_confidence</code>.</li>
+        <li><code>mental_world.get_state()</code> → <code>/api/hrr/scene</code> payload with <code>status=PRE-MATURE</code>, <code>lane="spatial_hrr_mental_world"</code>, all authority flags <code>false</code>, <code>no_raw_vectors_in_api=true</code>.</li>
+      </ol>
+
+      <h3>Twin Gate</h3>
+      <p>The P5 lane only populates when both flags resolve to <code>true</code>:</p>
+      <pre style="background:var(--bg-alt,#161a22); padding:0.8em 1em; border-left:2px solid var(--cyan); overflow-x:auto; font-size:0.85em;">ENABLE_HRR_SHADOW         (P4 substrate)
+ENABLE_HRR_SPATIAL_SCENE  (P5 derivation)</pre>
+      <p>Public / fresh-clone default is <strong>off</strong>. The P5.1 runtime-flag persistence layer lets an operator's own brain persist both flags via <code>~/.jarvis/runtime_flags.json</code> (managed by <code>brain/scripts/set_hrr_runtime_flags.py</code>), while keeping the safe default for every other clone. Precedence: <code>safe default → runtime_flags.json → env vars</code>. Every API payload exposes <code>enabled_source ∈ {default, runtime_flags, environment}</code> so operators can see which layer enabled the lane.</p>
+
+      <h3>Authority Surface (all pinned false)</h3>
+      <table class="s-table">
+        <thead><tr><th>Flag</th><th>Value</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>writes_memory</code></td><td>false</td><td>P5 emits nothing into the memory cortex</td></tr>
+          <tr><td><code>writes_beliefs</code></td><td>false</td><td>No belief-graph edges derived from HRR</td></tr>
+          <tr><td><code>influences_policy</code></td><td>false</td><td>Policy does not read HRR-derived state</td></tr>
+          <tr><td><code>influences_autonomy</code></td><td>false</td><td>Autonomy level never advances on HRR evidence</td></tr>
+          <tr><td><code>soul_integrity_influence</code></td><td>false</td><td>Soul composite ignores HRR</td></tr>
+          <tr><td><code>llm_raw_vector_exposure</code></td><td>false</td><td>LLM articulation layer never sees raw HRR vectors</td></tr>
+          <tr><td><code>no_raw_vectors_in_api</code></td><td><strong>true</strong></td><td>No <code>vector</code> / <code>raw_vector</code> / <code>composite_vector</code> keys in any HRR API payload</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Dashboard &amp; Pi Surfaces</h3>
+      <ul>
+        <li><a href="/hrr" style="color:var(--cyan);"><code>/hrr</code></a> — P4 HRR shadow substrate live view (status, samples, authority flags).</li>
+        <li><a href="/hrr-scene" style="color:var(--cyan);"><code>/hrr-scene</code></a> — P5 Matrix view: derived entities, relations, similarity/cleanup metrics, provenance.</li>
+        <li><code>/api/hrr/scene</code>, <code>/api/hrr/scene/history</code>, <code>/api/full-snapshot::hrr_scene</code> — stable-shape JSON with provenance fields.</li>
+        <li>Pi 7" LCD — runs the consciousness particle visualizer (<code>pi/ui/static/particles.js</code>) and reads a bounded seven-scalar <code>scene</code> block on the existing <code>consciousness_feed</code> transport message. The Pi <strong>never</strong> computes HRR math locally and never receives entities, relations, raw vectors, or authority flags. (The standalone <code>/mind</code> kiosk view was deleted in P3.14, 2026-04-25, as a redundant duplicate of <code>/hrr-scene</code>.)</li>
+      </ul>
+
+      <h3>Mechanical Guardrails</h3>
+      <ul>
+        <li>Four non-critical validation-pack checks: <code>p5_mental_world_status_marker</code>, <code>p5_mental_world_structure</code>, <code>p5_mental_world_fixture_ok</code>, <code>p5_mental_world_live_ok</code>.</li>
+        <li><code>dashboard_truth_probe.py::check_hrr_scene_authority</code> hard-fails on authority-flag drift, status/lane drift, or raw-vector leak anywhere under <code>/api/full-snapshot::hrr_scene</code>.</li>
+        <li><code>_scan_p5_mental_world_imports</code> mechanically forbids private perception-orchestrator access from the P5 module roots.</li>
+        <li><code>test_p5_does_not_mutate_scene_snapshot</code> is mandatory — P5 never mutates canonical truth.</li>
+      </ul>
+
+      <h3>Promotion Pathway</h3>
+      <p>P5 <em>does not</em> advance when an operator flips the runtime flags. Runtime-flag activation is an <strong>observability</strong> decision, not a maturity claim. The <code>spatial_hrr_mental_world</code> marker can only advance <code>PRE-MATURE → PARTIAL</code> after a P4-style long-horizon live-scene soak <em>and</em> explicit formal criteria defined at that time; until then the marker is governance-pinned at <code>PRE-MATURE</code>.</p>
+
+      <p style="font-size:0.85em; color:var(--text-muted); margin-top:0.8em;">Plan: <code>docs/plans/p5_internal_mental_world_spatial_hrr.plan.md</code>. Governance: <code>AGENTS.md</code> → "P5 Mental World / Spatial HRR Scene addendum" (rules 1–12). Live evidence: <code>docs/validation_reports/p5_spatial_hrr_mental_world-2026-04-24.md</code>, <code>p5_spatial_hrr_populated_scene-2026-04-25.md</code>, <code>p5_hrr_runtime_flags-2026-04-25.md</code>.</p>
+    </section>
+
+    <!-- Footer -->
+    <footer class="d-footer">
+      <span>JARVIS Oracle Edition — Scientific Reference</span>
+      <span>All values traced from live source code</span>
+      <a href="/">← Back to Live Dashboard</a>
+    </footer>
+  </main>
+
+  <script src="/static/science.js"></script>
+</body>
+</html>

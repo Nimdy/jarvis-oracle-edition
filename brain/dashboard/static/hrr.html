@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS Oracle Edition — HRR / VSA Shadow Substrate</title>
+  <style>
+    :root {
+      --cyan:#00ccff; --green:#00ff99; --amber:#ff9900; --red:#ff4444; --magenta:#cc00ff;
+      --bg:#06060e; --bg-card:#0a0a16; --bg-hover:#0e0e1e; --border:#1a1a2e;
+      --text:#e0e0f0; --text-muted:#6a6a80; --text-dim:#444466;
+      --font-mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    * { box-sizing:border-box; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--text); }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; display:block; min-height:100vh; }
+    .wrap { max-width:1280px; margin:0 auto; padding:24px 28px 56px; display:flex; flex-direction:column; gap:18px; }
+    a { color:var(--cyan); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+
+    .hdr { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-bottom:20px; }
+    .hdr h1 { margin:0; font-size:1.4rem; letter-spacing:0.02em; }
+    .hdr .sub { color:var(--text-muted); font-size:0.78rem; }
+    .badge { display:inline-block; padding:4px 14px; border-radius:4px; font-size:0.72rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; }
+    .b-pre-mature { background:rgba(255,153,0,.12); color:var(--amber); border:1px solid var(--amber); }
+    .b-ok { background:rgba(0,255,136,.12); color:var(--green); border:1px solid var(--green); }
+    .b-off { background:rgba(106,106,128,.12); color:var(--text-muted); border:1px solid var(--text-dim); }
+    .b-err { background:rgba(255,68,68,.12); color:var(--red); border:1px solid var(--red); }
+
+    .grid { display:grid; gap:14px; }
+    .grid-3 { grid-template-columns:repeat(3, minmax(0,1fr)); }
+    .grid-2 { grid-template-columns:repeat(2, minmax(0,1fr)); }
+    @media (max-width:1100px) { .grid-3 { grid-template-columns:1fr 1fr; } }
+    @media (max-width:720px)  { .grid-3, .grid-2 { grid-template-columns:1fr; } }
+
+    .panel { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .panel-head { padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    .panel-title { font-weight:700; font-size:0.92rem; }
+    .panel-meta { font-size:0.68rem; color:var(--text-muted); font-family:var(--font-mono); }
+    .panel-body { padding:14px 16px; font-size:0.82rem; }
+    .panel-accent-cyan   { border-color:var(--cyan); }
+    .panel-accent-amber  { border-color:var(--amber); }
+    .panel-accent-green  { border-color:var(--green); }
+    .panel-accent-red    { border-color:var(--red); }
+
+    .kv { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:8px; }
+    .kv-item { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px 10px; }
+    .kv-label { font-size:0.62rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; }
+    .kv-value { font-size:0.98rem; font-weight:700; margin-top:2px; font-family:var(--font-mono); }
+    .kv-value.good  { color:var(--green); }
+    .kv-value.warn  { color:var(--amber); }
+    .kv-value.bad   { color:var(--red); }
+    .kv-value.muted { color:var(--text-muted); }
+
+    table.samples { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:0.75rem; }
+    table.samples th, table.samples td { padding:6px 8px; border-bottom:1px solid var(--border); text-align:right; }
+    table.samples th { color:var(--text-muted); font-weight:600; text-transform:uppercase; font-size:0.62rem; letter-spacing:0.05em; text-align:right; background:var(--bg); position:sticky; top:0; }
+    table.samples th:first-child, table.samples td:first-child { text-align:left; }
+    table.samples tr:hover td { background:var(--bg-hover); }
+    .samples-wrap { max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:6px; }
+    .empty { padding:16px; color:var(--text-muted); text-align:center; font-style:italic; }
+
+    .auth-row { display:flex; flex-wrap:wrap; gap:8px; }
+    .auth-chip { padding:4px 10px; border-radius:4px; font-size:0.7rem; font-family:var(--font-mono); }
+    .auth-false { background:rgba(0,255,136,.1); color:var(--green); border:1px solid rgba(0,255,136,.3); }
+    .auth-true  { background:rgba(255,68,68,.15); color:var(--red); border:1px solid var(--red); }
+
+    .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+    .btn { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 12px; border-radius:4px; font-size:0.75rem; cursor:pointer; font-family:inherit; }
+    .btn:hover { background:var(--bg-hover); border-color:var(--cyan); }
+    .btn.active { border-color:var(--cyan); color:var(--cyan); }
+    .mini-note { font-size:0.7rem; color:var(--text-muted); margin-top:10px; line-height:1.5; }
+    code { font-family:var(--font-mono); background:var(--bg); border:1px solid var(--border); padding:1px 6px; border-radius:3px; font-size:0.78rem; }
+
+    pre.raw { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:10px; max-height:300px; overflow:auto; font-size:0.72rem; color:var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="j-freshness-banner" id="j-freshness-banner" style="display:none;"></div>
+  <script src="/static/freshness-banner.js"></script>
+<div class="wrap">
+
+  <div class="hdr">
+    <h1 style="color:var(--cyan);">HRR / VSA Shadow Substrate</h1>
+    <span id="stageBadge" class="badge b-pre-mature">PRE-MATURE</span>
+    <span id="enabledBadge" class="badge b-off">unknown</span>
+    <span class="sub">Public marker: <code id="publicMarker">…</code></span>
+    <span class="sub" style="margin-left:auto;">Auto-refresh every <span id="pollRate">3</span>s · last <span id="lastRefresh">—</span></span>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn" onclick="toggleAutoRefresh()" id="autoBtn">Pause auto-refresh</button>
+    <button class="btn" onclick="refreshAll()">Refresh now</button>
+    <span class="sub">Sample size:
+      <button class="btn" data-sample="20" onclick="setSampleSize(20)">20</button>
+      <button class="btn" data-sample="50" onclick="setSampleSize(50)">50</button>
+      <button class="btn" data-sample="100" onclick="setSampleSize(100)">100</button>
+      <button class="btn" data-sample="200" onclick="setSampleSize(200)">200</button>
+    </span>
+    <a class="btn" href="/">← Live Dashboard</a>
+    <a class="btn" href="/hrr-scene">Mental World / Spatial Scene (P5) →</a>
+    <a class="btn" href="/learning">Companion Training & Learning</a>
+    <a class="btn" href="/science#holographic-cognition-hrr">Science: HRR-VSA</a>
+    <a class="btn" href="/maturity#25-hrr-vsa-shadow-internal-mental-world-p4-p5">Maturity Gates</a>
+    <a class="btn" href="/capability-pipeline" target="_blank">Capability Pipeline</a>
+    <a class="btn" href="/api/hrr/status" target="_blank">raw /api/hrr/status</a>
+    <a class="btn" href="/api/hrr/samples" target="_blank">raw /api/hrr/samples</a>
+  </div>
+
+  <!-- Summary header -->
+  <div class="panel panel-accent-cyan">
+    <div class="panel-head">
+      <span class="panel-title">Runtime</span>
+      <span class="panel-meta" id="runtimeMeta">…</span>
+    </div>
+    <div class="panel-body">
+      <div class="kv">
+        <div class="kv-item"><div class="kv-label">Enabled</div><div class="kv-value" id="rtEnabled">—</div></div>
+        <div class="kv-item"><div class="kv-label">Stage</div><div class="kv-value" id="rtStage">—</div></div>
+        <div class="kv-item"><div class="kv-label">Dim</div><div class="kv-value" id="rtDim">—</div></div>
+        <div class="kv-item"><div class="kv-label">Sample Every</div><div class="kv-value" id="rtEvery">—</div></div>
+        <div class="kv-item"><div class="kv-label">Sample Interval</div><div class="kv-value" id="rtInterval">—</div></div>
+        <div class="kv-item"><div class="kv-label">Backend</div><div class="kv-value" id="rtBackend">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Authority flags -->
+  <div class="panel panel-accent-green">
+    <div class="panel-head">
+      <span class="panel-title">Authority flags (all expected to be <code>false</code>)</span>
+      <span class="panel-meta">Structurally enforced by validation pack</span>
+    </div>
+    <div class="panel-body">
+      <div class="auth-row" id="authRow"></div>
+      <div class="mini-note">
+        If any flag flips to <code>true</code> here, the validation-pack's HRR
+        non-influence checks would fail first. The dashboard only visualizes
+        what the payload reports; it does not override it.
+      </div>
+    </div>
+  </div>
+
+  <!-- Stage 0 evidence -->
+  <div class="panel panel-accent-amber">
+    <div class="panel-head">
+      <span class="panel-title">Stage 0 Synthetic Exercise (latest)</span>
+      <span class="panel-meta" id="stage0Meta">—</span>
+    </div>
+    <div class="panel-body">
+      <div class="kv">
+        <div class="kv-item"><div class="kv-label">Generated</div><div class="kv-value" id="stgGen">—</div></div>
+        <div class="kv-item"><div class="kv-label">cleanup@8</div><div class="kv-value" id="stgAcc8">—</div></div>
+        <div class="kv-item"><div class="kv-label">cleanup@16</div><div class="kv-value" id="stgAcc16">—</div></div>
+        <div class="kv-item"><div class="kv-label">False Positive</div><div class="kv-value" id="stgFp">—</div></div>
+        <div class="kv-item"><div class="kv-label">All Gates Pass</div><div class="kv-value" id="stgGates">—</div></div>
+        <div class="kv-item"><div class="kv-label">hrr_side_effects</div><div class="kv-value" id="stgSide">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three shadows in a 3-up grid -->
+  <div class="grid grid-3">
+    <!-- World -->
+    <div class="panel panel-accent-cyan">
+      <div class="panel-head">
+        <span class="panel-title" style="color:var(--cyan);">World Shadow</span>
+        <span class="panel-meta" id="wsMeta">—</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><div class="kv-label">Enabled</div><div class="kv-value" id="wsEnabled">—</div></div>
+          <div class="kv-item"><div class="kv-label">Samples total</div><div class="kv-value" id="wsTot">0</div></div>
+          <div class="kv-item"><div class="kv-label">Samples retained</div><div class="kv-value" id="wsRet">0</div></div>
+          <div class="kv-item"><div class="kv-label">Ring capacity</div><div class="kv-value muted" id="wsCap">500</div></div>
+          <div class="kv-item"><div class="kv-label">Binding cleanliness</div><div class="kv-value" id="wsClean">—</div></div>
+          <div class="kv-item"><div class="kv-label">Cleanup accuracy</div><div class="kv-value" id="wsAcc">—</div></div>
+          <div class="kv-item"><div class="kv-label">Δ vs previous</div><div class="kv-value" id="wsSim">—</div></div>
+        </div>
+        <div class="samples-wrap" style="margin-top:12px;">
+          <table class="samples">
+            <thead>
+              <tr>
+                <th style="text-align:left;">tick</th>
+                <th>facts</th>
+                <th>bind. clean</th>
+                <th>cleanup acc</th>
+                <th>Δ prev</th>
+                <th>side_effects</th>
+              </tr>
+            </thead>
+            <tbody id="wsTbody">
+              <tr><td class="empty" colspan="6">no samples yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Simulation -->
+    <div class="panel" style="border-color:var(--magenta);">
+      <div class="panel-head">
+        <span class="panel-title" style="color:var(--magenta);">Simulation Shadow</span>
+        <span class="panel-meta" id="simMeta">—</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><div class="kv-label">Enabled</div><div class="kv-value" id="simEnabled">—</div></div>
+          <div class="kv-item"><div class="kv-label">Samples total</div><div class="kv-value" id="simTot">0</div></div>
+          <div class="kv-item"><div class="kv-label">Samples retained</div><div class="kv-value" id="simRet">0</div></div>
+          <div class="kv-item"><div class="kv-label">Ring capacity</div><div class="kv-value muted" id="simCap">200</div></div>
+          <div class="kv-item"><div class="kv-label">Last Δ similarity</div><div class="kv-value" id="simDelta">—</div></div>
+          <div class="kv-item"><div class="kv-label">Last bind. clean</div><div class="kv-value" id="simClean">—</div></div>
+        </div>
+        <div class="samples-wrap" style="margin-top:12px;">
+          <table class="samples">
+            <thead>
+              <tr>
+                <th style="text-align:left;">trace</th>
+                <th>steps</th>
+                <th>bind. clean</th>
+                <th>Δ similarity</th>
+                <th>side_effects</th>
+              </tr>
+            </thead>
+            <tbody id="simTbody">
+              <tr><td class="empty" colspan="5">no traces yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recall advisor -->
+    <div class="panel panel-accent-green">
+      <div class="panel-head">
+        <span class="panel-title" style="color:var(--green);">Recall Advisory</span>
+        <span class="panel-meta" id="recMeta">—</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><div class="kv-label">Enabled</div><div class="kv-value" id="recEnabled">—</div></div>
+          <div class="kv-item"><div class="kv-label">Samples total</div><div class="kv-value" id="recTot">0</div></div>
+          <div class="kv-item"><div class="kv-label">Samples retained</div><div class="kv-value" id="recRet">0</div></div>
+          <div class="kv-item"><div class="kv-label">Ring capacity</div><div class="kv-value muted" id="recCap">500</div></div>
+          <div class="kv-item"><div class="kv-label">LRU size</div><div class="kv-value" id="recCache">0 / 2000</div></div>
+          <div class="kv-item"><div class="kv-label">Help rate</div><div class="kv-value" id="recHelp">—</div></div>
+          <div class="kv-item"><div class="kv-label">Last overlap@k</div><div class="kv-value" id="recOverlap">—</div></div>
+        </div>
+        <div class="samples-wrap" style="margin-top:12px;">
+          <table class="samples">
+            <thead>
+              <tr>
+                <th style="text-align:left;">ts</th>
+                <th>cue</th>
+                <th>overlap</th>
+                <th>helped</th>
+                <th>fs_writes</th>
+              </tr>
+            </thead>
+            <tbody id="recTbody">
+              <tr><td class="empty" colspan="5">no observations yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:18px; border-color:var(--border);">
+    <div class="panel-head">
+      <span class="panel-title">Raw /api/hrr/status</span>
+      <span class="panel-meta">read-only; side-effect free</span>
+    </div>
+    <div class="panel-body">
+      <pre class="raw" id="rawStatus">loading…</pre>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:0; border-color:var(--border);">
+    <div class="panel-body" style="font-size:0.72rem; color:var(--text-muted); line-height:1.7;">
+      <strong style="color:var(--amber);">Non-negotiable boundaries:</strong>
+      HRR output is dormant. No writes to canonical memory, identity, belief
+      graph, policy, autonomy, Soul Integrity, or LLM raw-vector exposure.
+      The public status marker <code>holographic_cognition_hrr</code>
+      remains <code>PRE-MATURE</code> regardless of the informational
+      <code>stage</code> field above. Promotion requires operator approval
+      under Phase 6.5 governance. See
+      <a href="/science#holographic-cognition-hrr">science → Holographic Cognition</a>
+      and <code>AGENTS.md → HRR / VSA Governance Rules</code>.
+    </div>
+  </div>
+
+</div><!-- /.wrap -->
+
+<script>
+(function(){
+  var POLL_MS = 3000;
+  var sampleSize = 20;
+  var autoTimer = null;
+  var paused = false;
+
+  function fmt(v, digits) {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'number' && isFinite(v)) {
+      if (Math.abs(v) >= 1000) return v.toFixed(0);
+      return v.toFixed(digits === undefined ? 3 : digits);
+    }
+    return String(v);
+  }
+  function fmtTs(v) {
+    if (!v) return '—';
+    try {
+      var n = Number(v);
+      if (isFinite(n) && n > 1e9) {
+        return new Date(n*1000).toLocaleString();
+      }
+    } catch(e){}
+    return String(v);
+  }
+  function td(v, klass) {
+    return '<td'+(klass?(' class="'+klass+'"'):'')+'>'+v+'</td>';
+  }
+
+  function setEnabledBadge(enabled) {
+    var el = document.getElementById('enabledBadge');
+    if (enabled === true)  { el.className='badge b-ok';  el.textContent='ENABLED'; }
+    else if (enabled === false) { el.className='badge b-off'; el.textContent='DISABLED'; }
+    else { el.className='badge b-err'; el.textContent='unknown'; }
+  }
+
+  function renderAuthority(s) {
+    var keys = [
+      'policy_influence',
+      'belief_write_enabled',
+      'canonical_memory',
+      'autonomy_influence',
+      'llm_raw_vector_exposure',
+      'soul_integrity_influence',
+    ];
+    var row = document.getElementById('authRow');
+    row.innerHTML = '';
+    keys.forEach(function(k){
+      var v = s[k];
+      var span = document.createElement('span');
+      span.className = 'auth-chip ' + (v === false ? 'auth-false' : 'auth-true');
+      span.textContent = k + ' = ' + String(v);
+      row.appendChild(span);
+    });
+  }
+
+  function renderStage0(ex) {
+    if (!ex) {
+      ['stgGen','stgAcc8','stgAcc16','stgFp','stgGates','stgSide'].forEach(function(id){
+        document.getElementById(id).textContent='—';
+      });
+      document.getElementById('stage0Meta').textContent = 'no evidence file found';
+      return;
+    }
+    document.getElementById('stgGen').textContent = fmtTs(ex.generated_at);
+    document.getElementById('stgAcc8').textContent = fmt(ex.cleanup_accuracy_at_8);
+    document.getElementById('stgAcc16').textContent = fmt(ex.cleanup_accuracy_at_16);
+    document.getElementById('stgFp').textContent = fmt(ex.false_positive_rate);
+    var g = !!ex.all_pass;
+    var ge = document.getElementById('stgGates');
+    ge.textContent = g ? 'yes' : 'no';
+    ge.className = 'kv-value ' + (g ? 'good' : 'bad');
+    var se = document.getElementById('stgSide');
+    se.textContent = String(ex.hrr_side_effects !== undefined ? ex.hrr_side_effects : '—');
+    se.className = 'kv-value ' + (ex.hrr_side_effects === 0 ? 'good' : 'bad');
+    document.getElementById('stage0Meta').textContent = 'schema_version=' + (ex.schema_version || '?');
+  }
+
+  function renderRuntime(s) {
+    setEnabledBadge(s.enabled);
+    document.getElementById('rtEnabled').textContent = s.enabled ? 'yes' : 'no';
+    document.getElementById('rtEnabled').className = 'kv-value ' + (s.enabled ? 'good' : 'muted');
+    document.getElementById('rtStage').textContent = s.stage || '—';
+    document.getElementById('rtDim').textContent = s.dim || '—';
+    document.getElementById('rtEvery').textContent = s.sample_every_ticks ? (s.sample_every_ticks+' ticks') : '—';
+    document.getElementById('rtInterval').textContent = (s.sample_interval_s !== undefined) ? (s.sample_interval_s.toFixed(2)+'s') : '—';
+    document.getElementById('rtBackend').textContent = s.backend || '—';
+    document.getElementById('runtimeMeta').textContent = 'status=' + (s.status || '—');
+  }
+
+  function renderCounters(s) {
+    var w = s.world_shadow || {};
+    document.getElementById('wsEnabled').textContent = w.enabled ? 'yes':'no';
+    document.getElementById('wsEnabled').className = 'kv-value ' + (w.enabled?'good':'muted');
+    document.getElementById('wsTot').textContent = w.samples_total || 0;
+    document.getElementById('wsRet').textContent = w.samples_retained || 0;
+    document.getElementById('wsCap').textContent = w.ring_capacity || 500;
+    document.getElementById('wsClean').textContent = fmt(w.binding_cleanliness);
+    document.getElementById('wsAcc').textContent = fmt(w.cleanup_accuracy);
+    document.getElementById('wsSim').textContent = fmt(w.similarity_to_previous);
+    document.getElementById('wsMeta').textContent =
+      (w.samples_retained||0) + '/' + (w.ring_capacity||500) + ' retained';
+
+    var sim = s.simulation_shadow || {};
+    document.getElementById('simEnabled').textContent = sim.enabled ? 'yes':'no';
+    document.getElementById('simEnabled').className = 'kv-value ' + (sim.enabled?'good':'muted');
+    document.getElementById('simTot').textContent = sim.samples_total || 0;
+    document.getElementById('simRet').textContent = sim.samples_retained || 0;
+    document.getElementById('simCap').textContent = sim.ring_capacity || 200;
+    document.getElementById('simDelta').textContent = fmt(sim.last_delta_similarity !== undefined ? sim.last_delta_similarity : sim.last_similarity_delta);
+    document.getElementById('simClean').textContent = fmt(sim.last_cleanliness_after !== undefined ? sim.last_cleanliness_after : sim.last_binding_cleanliness);
+    document.getElementById('simMeta').textContent =
+      (sim.samples_retained||0) + '/' + (sim.ring_capacity||200) + ' retained';
+
+    var rec = s.recall_advisory || {};
+    document.getElementById('recEnabled').textContent = rec.enabled ? 'yes':'no';
+    document.getElementById('recEnabled').className = 'kv-value ' + (rec.enabled?'good':'muted');
+    document.getElementById('recTot').textContent = rec.samples_total || 0;
+    document.getElementById('recRet').textContent = rec.samples_retained || 0;
+    document.getElementById('recCap').textContent = rec.ring_capacity || 500;
+    document.getElementById('recCache').textContent = (rec.cache_size || 0) + ' / ' + (rec.cache_capacity || 2000);
+    document.getElementById('recHelp').textContent = fmt(rec.help_rate);
+    document.getElementById('recOverlap').textContent = fmt(rec.last_overlap_at_k);
+    document.getElementById('recMeta').textContent =
+      (rec.samples_retained||0) + '/' + (rec.ring_capacity||500) + ' retained';
+  }
+
+  function renderSamples(data) {
+    // World
+    var wbody = document.getElementById('wsTbody');
+    var ws = (data && data.world_shadow) || [];
+    if (!ws.length) {
+      wbody.innerHTML = '<tr><td class="empty" colspan="6">no samples yet</td></tr>';
+    } else {
+      wbody.innerHTML = ws.slice().reverse().map(function(r){
+        return '<tr>' +
+          td(r.tick !== undefined ? r.tick : '—') +
+          td(r.facts_encoded !== undefined ? r.facts_encoded : '—') +
+          td(fmt(r.binding_cleanliness)) +
+          td(fmt(r.cleanup_accuracy)) +
+          td(fmt(r.similarity_to_previous)) +
+          td((r.side_effects === 0 || r.side_effects === undefined) ? '0' : String(r.side_effects), (r.side_effects && r.side_effects !== 0) ? 'bad' : 'good') +
+          '</tr>';
+      }).join('');
+    }
+
+    // Simulation
+    var sbody = document.getElementById('simTbody');
+    var ss = (data && data.simulation_shadow) || [];
+    if (!ss.length) {
+      sbody.innerHTML = '<tr><td class="empty" colspan="5">no traces yet</td></tr>';
+    } else {
+      sbody.innerHTML = ss.slice().reverse().map(function(r){
+        var cleanness = r.binding_cleanliness !== undefined ? r.binding_cleanliness : r.cleanliness_after;
+        var delta = r.delta_similarity !== undefined ? r.delta_similarity : r.similarity_delta;
+        return '<tr>' +
+          td(r.trace_id !== undefined ? String(r.trace_id).slice(-8) : (r.tick !== undefined ? r.tick : '—')) +
+          td(r.steps !== undefined ? r.steps : (r.trace_steps !== undefined ? r.trace_steps : '—')) +
+          td(fmt(cleanness)) +
+          td(fmt(delta)) +
+          td((r.side_effects === 0 || r.side_effects === undefined) ? '0' : String(r.side_effects), (r.side_effects && r.side_effects !== 0) ? 'bad' : 'good') +
+          '</tr>';
+      }).join('');
+    }
+
+    // Recall
+    var rbody = document.getElementById('recTbody');
+    var rr = (data && data.recall_advisory) || [];
+    if (!rr.length) {
+      rbody.innerHTML = '<tr><td class="empty" colspan="5">no observations yet</td></tr>';
+    } else {
+      rbody.innerHTML = rr.slice().reverse().map(function(r){
+        var cue = r.cue || r.cue_kind || r.cue_hash || '—';
+        var overlap = r.overlap_at_k !== undefined ? r.overlap_at_k : r.overlap;
+        var helped = r.helped !== undefined ? (r.helped ? 'yes' : 'no') : (r.would_have_helped ? 'yes' : '—');
+        return '<tr>' +
+          td(fmtTs(r.ts || r.timestamp || r.observed_at)) +
+          td(String(cue).slice(0,20)) +
+          td(fmt(overlap)) +
+          td(helped) +
+          td((r.fs_writes === 0 || r.fs_writes === undefined) ? '0' : String(r.fs_writes), (r.fs_writes && r.fs_writes !== 0) ? 'bad' : 'good') +
+          '</tr>';
+      }).join('');
+    }
+  }
+
+  function fetchJSON(url) {
+    return fetch(url).then(function(r){
+      if (!r.ok) throw new Error(url+' → '+r.status);
+      return r.json();
+    });
+  }
+
+  function refreshAll() {
+    var p1 = fetchJSON('/api/hrr/status');
+    var p2 = fetchJSON('/api/hrr/samples?world='+sampleSize+'&simulation='+sampleSize+'&recall='+sampleSize);
+    var p3 = fetchJSON('/api/meta/status-markers').catch(function(){return null;});
+    Promise.all([p1, p2, p3]).then(function(results){
+      var s = results[0];
+      var samples = results[1];
+      var markers = results[2];
+
+      renderRuntime(s);
+      renderCounters(s);
+      renderAuthority(s);
+      renderStage0(s.latest_exercise);
+      renderSamples(samples);
+
+      document.getElementById('rawStatus').textContent = JSON.stringify(s, null, 2);
+      document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString();
+
+      var marker = (markers && (markers.markers || markers)) || {};
+      document.getElementById('publicMarker').textContent =
+        marker.holographic_cognition_hrr || '(unavailable)';
+      var sb = document.getElementById('stageBadge');
+      if ((marker.holographic_cognition_hrr || 'PRE-MATURE').toUpperCase() === 'PRE-MATURE') {
+        sb.className = 'badge b-pre-mature';
+        sb.textContent = 'PRE-MATURE';
+      }
+    }).catch(function(err){
+      document.getElementById('rawStatus').textContent = 'Error: ' + err.message;
+      var eb = document.getElementById('enabledBadge');
+      eb.className = 'badge b-err'; eb.textContent = 'offline';
+    });
+  }
+
+  function toggleAutoRefresh() {
+    paused = !paused;
+    document.getElementById('autoBtn').textContent = paused ? 'Resume auto-refresh' : 'Pause auto-refresh';
+    if (!paused) scheduleTimer();
+    else if (autoTimer) { clearInterval(autoTimer); autoTimer=null; }
+  }
+  function scheduleTimer() {
+    if (autoTimer) clearInterval(autoTimer);
+    autoTimer = setInterval(refreshAll, POLL_MS);
+  }
+  function setSampleSize(n) {
+    sampleSize = n;
+    document.querySelectorAll('.btn[data-sample]').forEach(function(b){
+      b.classList.toggle('active', Number(b.getAttribute('data-sample'))===n);
+    });
+    refreshAll();
+  }
+
+  document.getElementById('pollRate').textContent = (POLL_MS/1000).toFixed(0);
+  setSampleSize(20);
+  refreshAll();
+  scheduleTimer();
+  window.__hrrRefresh = refreshAll;
+})();
+</script>
+
+</body>
+</html>

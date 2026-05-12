@@ -1,0 +1,28 @@
+# Jarvis Brain — systemd service unit
+#
+# Install with: ./service-install.sh install
+# The install script patches __WORKING_DIR__, __EXEC_START__, __USER__,
+# and __ENV_FILE__ to match the actual install location.
+
+[Unit]
+Description=Jarvis Brain - AI Consciousness Engine
+After=network-online.target ollama.service
+Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+[Service]
+Type=simple
+WorkingDirectory=__WORKING_DIR__
+ExecStart=__EXEC_START__
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jarvis-brain
+EnvironmentFile=-__ENV_FILE__
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS Oracle Edition — Maturity Gates Reference</title>
+  <link rel="stylesheet" href="/static/docs.css">
+  <style>
+    .mg-hero { padding: 32px 36px 20px; border-bottom: 1px solid var(--border); }
+    .mg-hero h1 { margin: 0 0 8px; color: var(--cyan); }
+    .mg-hero p { color: var(--text-muted); max-width: 780px; }
+    .mg-section {
+      padding: 20px 36px;
+      border-bottom: 1px solid var(--border);
+    }
+    .mg-section h2 {
+      color: var(--magenta);
+      margin: 0 0 10px;
+      font-size: 1.1rem;
+    }
+    .mg-section pre {
+      white-space: pre-wrap;
+      font-family: inherit;
+      font-size: 0.88rem;
+      color: var(--text-primary);
+      line-height: 1.55;
+    }
+    .mg-overlay {
+      background: var(--bg-panel);
+      border: 1px solid var(--cyan);
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin: 20px 36px;
+      font-size: 0.88rem;
+    }
+    .mg-overlay h3 { margin: 0 0 8px; color: var(--cyan); font-size: 0.9rem; }
+    .mg-overlay .kv { display: inline-block; margin-right: 18px; }
+    .mg-overlay .k { color: var(--text-muted); margin-right: 4px; }
+    .mg-overlay .v { color: var(--green); font-family: monospace; }
+    .mg-freshness {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      padding: 6px 36px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-alt);
+    }
+    .mg-freshness code { color: var(--cyan); }
+  </style>
+</head>
+<body>
+  <div class="j-freshness-banner" id="j-freshness-banner" style="display:none;"></div>
+  <script src="/static/freshness-banner.js"></script>
+  <script src="/static/status-markers.js"></script>
+
+  <nav class="d-sidebar" id="sidebar">
+    <div class="d-sidebar-brand">
+      <span class="d-brand-text">JARVIS</span>
+      <span class="d-brand-sub" style="color:var(--cyan);font-size:0.58rem;letter-spacing:0.08em;">ORACLE EDITION</span>
+      <span class="d-brand-sub">Maturity Gates</span>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Sections</div>
+      <div id="mg-toc"></div>
+    </div>
+    <div class="d-nav-group d-nav-footer">
+      <a class="d-nav-link d-back-link" href="/">← Live Dashboard</a>
+      <a class="d-nav-link d-back-link" href="/docs">System Reference</a>
+      <a class="d-nav-link d-back-link" href="/science">Scientific Reference</a>
+      <a class="d-nav-link d-back-link" href="/learning">Companion Training & Learning</a>
+      <a class="d-nav-link d-back-link" href="/capability-pipeline">Capability Pipeline</a>
+      <a class="d-nav-link d-back-link" href="/hrr">HRR Shadow (P4)</a>
+      <a class="d-nav-link d-back-link" href="/hrr-scene">Mental World (P5)</a>
+    </div>
+  </nav>
+
+  <main class="d-main" id="main">
+    <div class="mg-hero">
+      <h1>Maturity Gates &amp; Threshold Reference</h1>
+      <p>
+        Live mirror of
+        <a href="https://github.com/duafoo/jarvis-oracle-edition/blob/main/docs/MATURITY_GATES_REFERENCE.md"
+           style="color:var(--cyan);">docs/MATURITY_GATES_REFERENCE.md</a>
+        rendered alongside current gate values from
+        <code style="color:var(--cyan);">/api/full-snapshot</code>. A fresh brain is not broken;
+        it is pre-mature. Consult this page before reporting a &ldquo;missing&rdquo; or
+        &ldquo;zero&rdquo; metric.
+      </p>
+      <p style="color:var(--text-muted);font-size:0.85rem;">
+        <strong style="color:var(--cyan);">Continuity-preserving release:</strong>
+        an existing operator's gates reflect their <em>accumulated</em> runtime state, not a wipe-reset. A fresh clone starts at the pre-mature baseline shown here;
+        a running brain advances only when each gate's evidence criteria are empirically met. The historical <code>reset-brain.sh</code>
+        ceremony is DEFERRED for the release — see
+        <code style="color:var(--cyan);">docs/validation_reports/phase_6_5_continuity_reverify-2026-04-23.md</code>.
+      </p>
+    </div>
+
+    <div class="mg-freshness" id="mg-freshness">Loading freshness...</div>
+
+    <div class="mg-overlay" id="mg-live-overlay" style="display:none;">
+      <h3>Live gate values</h3>
+      <div id="mg-live-body"></div>
+    </div>
+
+    <div id="mg-sections"><p style="padding:20px 36px;color:var(--text-muted);">Loading maturity gates...</p></div>
+  </main>
+
+  <script>
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, function(c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+      });
+    }
+    function fmtTs(ts) {
+      if (!ts) return '--';
+      var d = new Date(ts * 1000);
+      return d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+    }
+
+    function renderFreshness(data) {
+      var f = document.getElementById('mg-freshness');
+      if (!data || !data.exists) {
+        f.innerHTML = '<span style="color:var(--amber);">Source file unavailable.</span>';
+        return;
+      }
+      f.innerHTML = 'Source: <code>' + esc(data.source) + '</code> · '
+        + 'Last modified: ' + fmtTs(data.mtime) + ' · '
+        + 'Sections: ' + data.total_sections;
+    }
+
+    function renderLiveOverlay(live) {
+      if (!live || Object.keys(live).length === 0) return;
+      var box = document.getElementById('mg-live-overlay');
+      var body = document.getElementById('mg-live-body');
+      var html = '';
+      Object.keys(live).forEach(function(k) {
+        var v = live[k];
+        html += '<div style="margin-bottom:6px;"><strong style="color:var(--magenta);">'
+          + esc(k) + ':</strong> ';
+        if (typeof v === 'object' && v !== null) {
+          Object.keys(v).forEach(function(sk) {
+            html += '<span class="kv"><span class="k">' + esc(sk) + '</span>'
+              + '<span class="v">' + esc(JSON.stringify(v[sk])) + '</span></span>';
+          });
+        } else {
+          html += '<span class="v">' + esc(String(v)) + '</span>';
+        }
+        html += '</div>';
+      });
+      body.innerHTML = html;
+      box.style.display = '';
+    }
+
+    function renderSections(sections) {
+      var host = document.getElementById('mg-sections');
+      var toc = document.getElementById('mg-toc');
+      if (!sections || sections.length === 0) {
+        host.innerHTML = '<p style="padding:20px 36px;color:var(--text-muted);">No sections found.</p>';
+        return;
+      }
+      var html = '';
+      var tocHtml = '';
+      sections.forEach(function(s) {
+        var slug = s.slug || 'section-' + (s.section_num || 0);
+        tocHtml += '<a class="d-nav-link" href="#' + esc(slug) + '">'
+          + esc(s.title) + '</a>';
+        html += '<section class="mg-section" id="' + esc(slug) + '">'
+          + '<h2>' + esc(s.title) + '</h2>'
+          + '<pre>' + esc(s.body) + '</pre>'
+          + '</section>';
+      });
+      host.innerHTML = html;
+      toc.innerHTML = tocHtml;
+    }
+
+    fetch('/api/maturity-gates').then(function(r){ return r.json(); })
+      .then(function(data) {
+        renderFreshness(data);
+        renderLiveOverlay(data.live_overlay || {});
+        renderSections(data.sections || []);
+      }).catch(function(e) {
+        document.getElementById('mg-sections').innerHTML =
+          '<p style="padding:20px 36px;color:var(--red);">Failed to load: '
+          + esc(e && e.message ? e.message : 'unknown error') + '</p>';
+      });
+  </script>
+</body>
+</html>

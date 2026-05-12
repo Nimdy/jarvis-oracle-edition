@@ -1,0 +1,1976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS Oracle Edition — Capability Pipeline</title>
+  <link rel="stylesheet" href="/static/docs.css">
+  <style>
+    :root { --cyan:#00ccff; --green:#00ff99; --amber:#ff9900; --red:#ff4444; --magenta:#cc00ff;
+            --bg:#06060e; --bg-card:#0a0a16; --bg-hover:#0e0e1e; --border:#1a1a2e;
+            --text:#e0e0f0; --text-muted:#6a6a80; --text-dim:#444466; --font-mono:'JetBrains Mono',monospace; }
+    * { box-sizing:border-box; }
+    @keyframes toastIn { from { opacity:0; transform:translateY(-12px); } to { opacity:1; transform:translateY(0); } }
+
+    /* Layout */
+    .si-header { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-bottom:24px; }
+    .si-badge { display:inline-block; padding:4px 14px; border-radius:4px; font-size:0.78rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; }
+    .si-badge-frozen  { background:rgba(255,0,68,.12); color:var(--red); border:1px solid var(--red); }
+    .si-badge-dryrun  { background:rgba(255,153,0,.12); color:var(--amber); border:1px solid var(--amber); }
+    .si-badge-human   { background:rgba(0,255,136,.12); color:var(--green); border:1px solid var(--green); }
+    .si-stat-row { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin-bottom:20px; }
+    .si-stat { background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:10px 16px; }
+    .si-stat-label { font-size:0.62rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; }
+    .si-stat-value { font-size:1.2rem; font-weight:700; color:var(--text); margin-top:2px; }
+    .si-gate { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:4px; font-size:0.72rem; }
+    .si-gate-ok   { background:rgba(0,255,136,.1); color:var(--green); }
+    .si-gate-fail { background:rgba(255,0,68,.1); color:var(--red); }
+    .si-gate-dot  { width:8px; height:8px; border-radius:50%; display:inline-block; }
+    .si-gate-ok .si-gate-dot   { background:var(--green); }
+    .si-gate-fail .si-gate-dot { background:var(--red); }
+
+    /* Panels */
+    .panel { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; margin-bottom:20px; overflow:hidden; }
+    .panel-head { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+    .panel-title { font-weight:700; font-size:0.92rem; }
+    .panel-body { padding:16px 18px; }
+    .panel-accent-cyan .panel-title { color:var(--cyan); }
+    .panel-accent-magenta .panel-title { color:var(--magenta); }
+    .panel-accent-green .panel-title { color:var(--green); }
+    .panel-accent-amber .panel-title { color:var(--amber); }
+    .panel-accent-red .panel-title { color:var(--red); }
+
+    /* Grids */
+    .kv-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:10px; }
+    .kv-item { background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:8px 12px; }
+    .kv-label { font-size:0.62rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; }
+    .kv-value { font-size:1rem; font-weight:700; margin-top:2px; }
+    .detector-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:10px; }
+    .detector-card { background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:10px 14px; }
+    .detector-name { font-size:0.78rem; font-weight:600; color:var(--text); margin-bottom:4px; }
+    .detector-detail { font-size:0.72rem; color:var(--text-muted); }
+    .two-col { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    @media(max-width:900px) { .two-col { grid-template-columns:1fr; } }
+
+    /* Tags */
+    .si-tag { display:inline-block; padding:2px 8px; border-radius:3px; font-size:0.7rem; margin:2px 2px 2px 0; }
+    .si-tag-pass { background:rgba(0,255,136,.12); color:var(--green); }
+    .si-tag-fail { background:rgba(255,0,68,.12); color:var(--red); }
+    .si-tag-info { background:rgba(0,204,255,.1); color:var(--cyan); }
+    .si-tag-warn { background:rgba(255,153,0,.12); color:var(--amber); }
+    .si-tag-mag  { background:rgba(204,0,255,.12); color:var(--magenta); }
+    .si-tag-dedup { background:rgba(128,128,128,.15); color:var(--text-muted); }
+
+    /* Tables */
+    .si-table { width:100%; border-collapse:collapse; font-size:0.8rem; }
+    .si-table th { text-align:left; padding:8px 10px; font-size:0.66rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); }
+    .si-table td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+    .si-table tr:hover td { background:var(--bg-hover); }
+
+    /* Cards */
+    .si-card { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; margin-bottom:12px; overflow:hidden; }
+    .si-card-head { padding:12px 18px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); cursor:pointer; }
+    .si-card-head:hover { background:var(--bg-hover); }
+    .si-card-title { font-weight:600; font-size:0.88rem; }
+    .si-card-meta { font-size:0.7rem; color:var(--text-muted); display:flex; gap:10px; flex-wrap:wrap; }
+    .si-card-body { padding:16px 18px; display:none; }
+    .si-card.open .si-card-body { display:block; }
+
+    /* Diffs */
+    .si-diff { background:#080810; border:1px solid var(--border); border-radius:4px; padding:12px; overflow-x:auto; font-family:var(--font-mono); font-size:0.75rem; line-height:1.5; white-space:pre; max-height:400px; overflow-y:auto; }
+    .si-diff .d-add { color:#00ff88; }
+    .si-diff .d-del { color:#ff4466; }
+    .si-diff .d-hdr { color:#00ccff; font-weight:700; }
+    .si-diff .d-ctx { color:#6a6a80; }
+
+    /* 5Ws */
+    .si-5w { display:grid; grid-template-columns:80px 1fr; gap:4px 12px; font-size:0.82rem; }
+    .si-5w dt { color:var(--cyan); font-weight:600; text-transform:uppercase; font-size:0.72rem; padding-top:2px; }
+    .si-5w dd { color:var(--text); margin:0; }
+
+    /* Misc */
+    .si-section { margin-bottom:14px; }
+    .si-section-label { font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px; font-weight:600; }
+    .si-empty { text-align:center; padding:30px 20px; color:var(--text-muted); }
+    .si-evidence li { padding:2px 0; font-size:0.78rem; color:var(--text-muted); }
+    .si-evidence li::before { content:"\25B8 "; color:var(--cyan); }
+    .si-evidence { list-style:none; padding:0; margin:4px 0 0 0; }
+    .si-sandbox-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+    .si-sandbox-item { background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:8px 12px; text-align:center; }
+    .si-sandbox-item .label { font-size:0.62rem; color:var(--text-muted); text-transform:uppercase; }
+    .si-sandbox-item .val { font-size:0.9rem; font-weight:700; margin-top:2px; }
+    .si-btn { padding:4px 12px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--text); font-size:0.72rem; cursor:pointer; transition:all 0.15s; }
+    .si-btn:hover { border-color:var(--cyan); color:var(--cyan); }
+    .si-btn-danger:hover { border-color:var(--red); color:var(--red); }
+    .si-btn-promote:hover { border-color:var(--green); color:var(--green); }
+    .plugin-modal { position:fixed; inset:0; z-index:9998; display:none; align-items:flex-start; justify-content:center; padding:40px 20px; background:rgba(0,0,0,0.72); backdrop-filter:blur(4px); overflow:auto; }
+    .plugin-modal.open { display:flex; }
+    .plugin-modal-card { width:min(1100px, 96vw); background:var(--bg-card); border:1px solid var(--border); border-radius:8px; box-shadow:0 20px 80px rgba(0,0,0,0.55); }
+    .plugin-modal-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; padding:16px 18px; border-bottom:1px solid var(--border); }
+    .plugin-modal-title { color:var(--magenta); font-size:1rem; font-weight:700; }
+    .plugin-modal-body { padding:16px 18px; }
+    .plugin-code { margin:8px 0 14px; padding:12px; max-height:360px; overflow:auto; background:#05050b; border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:var(--font-mono); font-size:0.74rem; line-height:1.45; white-space:pre; }
+
+    /* Lane progress */
+    .lane-bar { display:flex; gap:2px; margin:4px 0; }
+    .lane-seg { height:6px; border-radius:3px; flex:1; }
+    .lane-seg-done { background:var(--green); }
+    .lane-seg-running { background:var(--cyan); animation:pulse 1.5s infinite; }
+    .lane-seg-pending { background:var(--border); }
+    .lane-seg-failed { background:var(--red); }
+    .lane-seg-skipped { background:var(--text-dim); }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+    /* Activity log */
+    .al-row { display:flex; gap:10px; padding:8px 16px; border-bottom:1px solid var(--border); font-size:0.78rem; align-items:flex-start; }
+    .al-row:hover { background:var(--bg-hover); }
+    .al-ts { color:var(--text-muted); font-size:0.66rem; min-width:60px; font-family:var(--font-mono); padding-top:2px; }
+    .al-phase { font-size:0.62rem; text-transform:uppercase; letter-spacing:0.04em; font-weight:600; min-width:70px; padding-top:2px; }
+    .al-msg { color:var(--text); flex:1; }
+    .al-detail { color:var(--text-muted); font-size:0.68rem; margin-top:2px; }
+    .al-lvl-info .al-phase { color:var(--cyan); }
+    .al-lvl-success .al-phase { color:var(--green); }
+    .al-lvl-warn .al-phase { color:var(--amber); }
+    .al-lvl-error .al-phase { color:var(--red); }
+    .al-lvl-thinking .al-phase { color:var(--magenta); }
+    .al-lvl-thinking .al-msg { color:var(--magenta); }
+
+    /* Tabs */
+    .si-tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:20px; }
+    .si-tab { padding:10px 20px; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text-muted); border-bottom:2px solid transparent; margin-bottom:-2px; transition:all 0.15s; }
+    .si-tab:hover { color:var(--text); }
+    .si-tab.active { color:var(--cyan); border-bottom-color:var(--cyan); }
+    .si-tab-content { display:none; }
+    .si-tab-content.active { display:block; }
+  </style>
+</head>
+<body>
+
+  <div class="j-freshness-banner" id="j-freshness-banner" style="display:none;"></div>
+  <script src="/static/freshness-banner.js"></script>
+  <script src="/static/status-markers.js"></script>
+
+  <nav class="d-sidebar" id="sidebar">
+    <div class="d-sidebar-brand">
+      <span class="d-brand-text">JARVIS</span>
+      <span class="d-brand-sub" style="color:var(--cyan);font-size:0.58rem;letter-spacing:0.08em;">ORACLE EDITION</span>
+      <span class="d-brand-sub">Capability Pipeline</span>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Navigation</div>
+      <a class="d-nav-link" href="/">Dashboard</a>
+      <a class="d-nav-link" href="/history">Build History</a>
+      <a class="d-nav-link" href="/docs">System Docs</a>
+      <a class="d-nav-link" href="/science">Science</a>
+      <a class="d-nav-link" href="/learning">Companion Training & Learning</a>
+      <a class="d-nav-link" href="/maturity">Maturity Gates</a>
+      <a class="d-nav-link" href="/hrr">HRR Shadow (P4)</a>
+      <a class="d-nav-link" href="/hrr-scene">Mental World (P5)</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Sections</div>
+      <a class="d-nav-link" href="#" onclick="switchTab('overview')">Overview</a>
+      <a class="d-nav-link" href="#" onclick="switchTab('acquisition')">Acquisition Jobs</a>
+      <a class="d-nav-link" href="#" onclick="switchTab('plugins')">Plugin Registry</a>
+      <a class="d-nav-link" href="#" onclick="switchTab('codegen')">CodeGen Service</a>
+      <a class="d-nav-link" href="#" onclick="switchTab('scanner')">Scanner</a>
+      <a class="d-nav-link" href="#" onclick="switchTab('specialists')">Specialists</a>
+      <a class="d-nav-link" href="#" onclick="switchTab('proposals')">Proposals</a>
+      <a class="d-nav-link" href="#" onclick="switchTab('analytics')">Analytics</a>
+    </div>
+  </nav>
+
+  <main class="d-content" style="margin-left:var(--sidebar-w);padding:28px 36px;max-width:1300px;">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <h1 style="color:var(--cyan);font-size:1.5rem;margin:0;">Capability Pipeline</h1>
+      <span id="refreshCounter" style="font-size:0.7rem;color:var(--text-muted);"></span>
+    </div>
+    <p style="color:var(--text-muted);font-size:0.78rem;margin-bottom:20px;">
+      Parent lifecycle for learned skills, generated plugins, shared CodeGen, sandbox proof, and self-improvement as one governed child lane.
+    </p>
+
+    <!-- Hero Stats -->
+    <div class="si-header" id="statusHeader">
+      <span class="si-badge si-badge-frozen" id="stageBadge">FROZEN</span>
+      <div class="si-gate si-gate-ok" id="gateQuarantine"><span class="si-gate-dot"></span> Quarantine OK</div>
+      <div class="si-gate si-gate-ok" id="gateSoulIntegrity"><span class="si-gate-dot"></span> Soul Integrity OK</div>
+      <span class="si-tag si-tag-info" id="acqBadge">Acquisition: --</span>
+      <span class="si-tag si-tag-mag" id="pluginBadge">Plugins: --</span>
+    </div>
+
+    <div class="si-stat-row">
+      <div class="si-stat"><div class="si-stat-label">Acq Active</div><div class="si-stat-value" id="statAcqActive">0</div></div>
+      <div class="si-stat"><div class="si-stat-label">Acq Total</div><div class="si-stat-value" id="statAcqTotal">0</div></div>
+      <div class="si-stat"><div class="si-stat-label">Plugins Active</div><div class="si-stat-value" id="statPlugActive">0</div></div>
+      <div class="si-stat"><div class="si-stat-label">Plugins Total</div><div class="si-stat-value" id="statPlugTotal">0</div></div>
+      <div class="si-stat"><div class="si-stat-label">SI Attempts</div><div class="si-stat-value" id="statAttemptsToday">0/6</div></div>
+      <div class="si-stat"><div class="si-stat-label">Sandbox Rate</div><div class="si-stat-value" id="statPassRate">--</div></div>
+      <div class="si-stat"><div class="si-stat-label">Coder Status</div><div class="si-stat-value" id="statCoderStatus">--</div></div>
+      <div class="si-stat"><div class="si-stat-label">Provider</div><div class="si-stat-value" id="statProvider">--</div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="si-tabs">
+      <div class="si-tab active" data-tab="overview" onclick="switchTab('overview')">Overview</div>
+      <div class="si-tab" data-tab="acquisition" onclick="switchTab('acquisition')">Acquisition</div>
+      <div class="si-tab" data-tab="plugins" onclick="switchTab('plugins')">Plugins</div>
+      <div class="si-tab" data-tab="codegen" onclick="switchTab('codegen')">CodeGen</div>
+      <div class="si-tab" data-tab="scanner" onclick="switchTab('scanner')">Scanner</div>
+      <div class="si-tab" data-tab="specialists" onclick="switchTab('specialists')">Specialists</div>
+      <div class="si-tab" data-tab="proposals" onclick="switchTab('proposals')">Proposals</div>
+      <div class="si-tab" data-tab="l3escalation" onclick="switchTab('l3escalation')">L3 Escalation</div>
+      <div class="si-tab" data-tab="intentshadow" onclick="switchTab('intentshadow')">Voice Intent Shadow</div>
+      <div class="si-tab" data-tab="phasekernel" onclick="switchTab('phasekernel')">Phase E Kernel</div>
+      <div class="si-tab" data-tab="hrrresearch" onclick="switchTab('hrrresearch')">HRR Research</div>
+      <div class="si-tab" data-tab="analytics" onclick="switchTab('analytics')">Analytics</div>
+    </div>
+
+    <!-- TAB: Overview -->
+    <div class="si-tab-content active" data-tab="overview">
+
+      <!-- Stage Control -->
+      <div class="panel panel-accent-green" id="stageControlPanel">
+        <div class="panel-head">
+          <span class="panel-title">Stage Control</span>
+          <span id="stageSourceBadge" class="si-tag si-tag-info" style="font-size:0.66rem;">--</span>
+        </div>
+        <div class="panel-body" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="si-btn" id="stageBtn0" onclick="setStage(0)">0 — Frozen</button>
+          <button class="si-btn" id="stageBtn1" onclick="setStage(1)">1 — Dry-Run</button>
+          <button class="si-btn si-btn-promote" id="stageBtn2" onclick="setStage(2)">2 — Human Approval</button>
+          <span id="stageInfo" style="font-size:0.72rem;color:var(--text-muted);margin-left:12px;"></span>
+        </div>
+      </div>
+
+      <!-- Pending SI Approvals -->
+      <div class="panel panel-accent-red" id="pendingApprovalsPanel" style="display:none;">
+        <div class="panel-head">
+          <span class="panel-title">Pending Self-Improvement Patch Approvals</span>
+          <span id="pendingCount" class="si-tag si-tag-warn">0</span>
+        </div>
+        <div class="panel-body" id="pendingApprovalsList"></div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel panel-accent-cyan">
+          <div class="panel-head"><span class="panel-title">Acquisition Pipeline</span></div>
+          <div class="panel-body" id="overviewAcq"><div class="si-empty">Loading...</div></div>
+        </div>
+        <div class="panel panel-accent-magenta">
+          <div class="panel-head"><span class="panel-title">Plugin Registry</span></div>
+          <div class="panel-body" id="overviewPlugins"><div class="si-empty">Loading...</div></div>
+        </div>
+      </div>
+      <div class="two-col">
+        <div class="panel panel-accent-green">
+          <div class="panel-head"><span class="panel-title">CodeGen Service</span></div>
+          <div class="panel-body" id="overviewCodegen"><div class="si-empty">Loading...</div></div>
+        </div>
+        <div class="panel panel-accent-amber">
+          <div class="panel-head"><span class="panel-title">Self-Improvement Child Lane</span></div>
+          <div class="panel-body" id="overviewSI"><div class="si-empty">Loading...</div></div>
+        </div>
+      </div>
+
+      <!-- Activity Log -->
+      <div class="panel" style="border-color:var(--cyan);">
+        <div class="panel-head">
+          <span class="panel-title" style="color:var(--cyan);">Activity Log</span>
+          <span id="activityCount" style="font-size:0.66rem;color:var(--text-muted);">0 entries</span>
+        </div>
+        <div class="panel-body" style="padding:0;max-height:400px;overflow-y:auto;" id="activityLogBody">
+          <div class="si-empty">No activity yet. Pipeline events will appear here.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Acquisition -->
+    <div class="si-tab-content" data-tab="acquisition">
+      <div class="panel panel-accent-cyan">
+        <div class="panel-head"><span class="panel-title">Capability Acquisition Jobs</span><span id="acqCount" style="font-size:0.72rem;color:var(--text-muted);"></span></div>
+        <div class="panel-body" id="acqJobList"><div class="si-empty">No acquisition jobs yet.</div></div>
+      </div>
+    </div>
+
+    <!-- TAB: Plugins -->
+    <div class="si-tab-content" data-tab="plugins">
+      <div class="panel panel-accent-magenta">
+        <div class="panel-head"><span class="panel-title">Plugin Registry</span><span id="plugCount" style="font-size:0.72rem;color:var(--text-muted);"></span></div>
+        <div class="panel-body" id="pluginList"><div class="si-empty">No plugins deployed yet.</div></div>
+      </div>
+    </div>
+
+    <!-- TAB: CodeGen -->
+    <div class="si-tab-content" data-tab="codegen">
+      <div class="panel panel-accent-green">
+        <div class="panel-head"><span class="panel-title">CodeGen Service — Coder Backend</span><span id="coderBadge" class="si-tag si-tag-info">--</span></div>
+        <div class="panel-body">
+          <div class="kv-grid" id="coderGrid">
+            <div class="kv-item"><div class="kv-label">Status</div><div class="kv-value" id="coderAvail">--</div></div>
+            <div class="kv-item"><div class="kv-label">Model</div><div class="kv-value" id="coderModel" style="font-size:0.78rem;">--</div></div>
+            <div class="kv-item"><div class="kv-label">Model Size</div><div class="kv-value" id="coderSize">--</div></div>
+            <div class="kv-item"><div class="kv-label">Execution Device</div><div class="kv-value" id="coderGPU">--</div></div>
+            <div class="kv-item"><div class="kv-label">Context Size</div><div class="kv-value" id="coderCtx">--</div></div>
+            <div class="kv-item"><div class="kv-label">Total Generations</div><div class="kv-value" id="coderGens">0</div></div>
+            <div class="kv-item"><div class="kv-label">Last Gen Time</div><div class="kv-value" id="coderLastTime">--</div></div>
+            <div class="kv-item"><div class="kv-label">Server PID</div><div class="kv-value" id="coderPID">--</div></div>
+          </div>
+          <div style="margin-top:16px;">
+            <div class="si-section-label" style="color:var(--green);">Pipeline Architecture</div>
+            <div style="font-size:0.78rem;color:var(--text-muted);line-height:1.6;">
+              <strong>Authority:</strong> CodeGen is shared infrastructure (<code>authority=infrastructure_only</code>), consumed by acquisition and self-improvement. Caller lanes own their own gates and proof.
+              <br>
+              <strong>Runtime expectation:</strong> CoderServer defaults to CPU-only execution so code design/generation never competes with live GPU perception, STT, TTS, or Ollama. Long generations are normal; speed is secondary to keeping the brain responsive.
+              <br>
+              <strong>Intent →</strong> IntentClassifier →
+              <strong>Evidence →</strong> Internal + MCP + Docs →
+              <strong>Plan →</strong> AcquisitionPlanner →
+              <strong>Review →</strong> Human approval gate →
+              <strong>CodeGen →</strong> CoderServer + Sandbox →
+              <strong>Plugin →</strong> Quarantine → Shadow → Active →
+              <strong>Verify →</strong> VerificationBundle →
+              <strong>Deploy →</strong> SkillRegistry + CapabilityGate
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Scanner -->
+    <div class="si-tab-content" data-tab="scanner">
+      <div class="panel panel-accent-amber">
+        <div class="panel-head"><span class="panel-title">Scanner — Metric Detectors</span><span id="scannerSummary" style="font-size:0.72rem;color:var(--text-muted);"></span></div>
+        <div class="panel-body">
+          <div class="detector-grid" id="detectorGrid"><div style="color:var(--text-muted);">Waiting for first scan...</div></div>
+          <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;">
+            <div><span class="si-section-label" style="color:var(--amber);">Sustained Counts</span><div id="sustainedCounts" style="font-size:0.8rem;color:var(--text-muted);">--</div></div>
+            <div><span class="si-section-label" style="color:var(--amber);">Fingerprints (4h / 24h)</span><div><span id="firedFP" style="font-size:1rem;font-weight:700;">0</span> / <span id="pastFP" style="font-size:1rem;font-weight:700;">0</span></div></div>
+            <div><span class="si-section-label" style="color:var(--amber);">Active Cooldowns</span><div id="activeCooldowns" style="font-size:0.82rem;">--</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Specialists -->
+    <div class="si-tab-content" data-tab="specialists">
+      <div class="panel panel-accent-magenta">
+        <div class="panel-head">
+          <span class="panel-title">Shadow Intelligence Specialists</span>
+          <span id="specSummary" style="font-size:0.72rem;color:var(--text-muted);"></span>
+        </div>
+        <div class="panel-body">
+          <div style="font-size:0.78rem;color:var(--text-muted);line-height:1.6;margin:0 0 12px;padding:10px 12px;border:1px solid rgba(255,153,0,.25);border-left:3px solid var(--amber);border-radius:4px;background:rgba(255,153,0,.04);">
+            <strong style="color:var(--amber);">Interpretation boundary:</strong>
+            These cards are shadow meta-learning specialists, not the pass/fail status of the skill or plugin you just created.
+            <code>DIAGNOSTIC</code> and <code>CODE_QUALITY</code> mature from self-improvement scanner/patch outcomes;
+            <code>PLAN_EVALUATOR</code> matures from many acquisition plan-review verdicts;
+            <code>CLAIM_CLASSIFIER</code> matures from CapabilityGate decisions;
+            <code>DREAM_SYNTHESIS</code> matures from dream validation outcomes;
+            <code>SKILL_ACQUISITION</code> synthetic data is telemetry-only.
+            They do not gate patch application, plugin activation, skill verification, or policy decisions.
+          </div>
+          <div style="margin-bottom:16px;">
+            <div class="si-stat-row" id="specDistillStats">
+              <div class="si-stat"><div class="si-stat-label">Total Signals</div><div class="si-stat-value" id="specTotalSignals">0</div></div>
+              <div class="si-stat"><div class="si-stat-label">Quarantined</div><div class="si-stat-value" id="specTotalQuarantined">0</div></div>
+            </div>
+          </div>
+          <div id="specGrid" class="detector-grid"><div style="color:var(--text-muted);">Loading specialist data...</div></div>
+        </div>
+      </div>
+      <div class="panel panel-accent-cyan">
+        <div class="panel-head"><span class="panel-title">Maturity Reference</span></div>
+        <div class="panel-body" style="font-size:0.78rem;color:var(--text-muted);line-height:1.8;">
+          <span class="si-tag si-tag-fail">bootstrap</span> &lt;15 signals &mdash;
+          <span class="si-tag si-tag-warn">early_noisy</span> 15-49 &mdash;
+          <span class="si-tag si-tag-info">preliminary</span> 50-99 &mdash;
+          <span class="si-tag si-tag-pass">meaningful</span> 100-249 &mdash;
+          <span class="si-tag si-tag-mag">stable</span> 250+
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Proposals -->
+    <div class="si-tab-content" data-tab="proposals">
+      <div class="panel panel-accent-red">
+        <div class="panel-head"><span class="panel-title">Self-Improvement Proposals</span><span id="proposalCount" style="font-size:0.72rem;color:var(--text-muted);"></span></div>
+        <div class="panel-body" id="proposalList"><div class="si-empty">No proposals yet.</div></div>
+      </div>
+    </div>
+
+    <!-- TAB: L3 Escalation (Phase 6.5) -->
+    <div class="si-tab-content" data-tab="l3escalation">
+      <!-- Panel 1: Current Live Health — current_ok sourced strictly
+           from live orchestrator memory. Never backfilled from disk. -->
+      <div class="panel panel-accent-green" id="l3LivePanel">
+        <div class="panel-head">
+          <span class="panel-title">Current Live Health</span>
+          <span id="l3LiveBadge" class="si-tag si-tag-info">--</span>
+        </div>
+        <div class="panel-body">
+          <div class="kv-grid">
+            <div class="kv-item"><div class="kv-label">Live Autonomy Level</div><div class="kv-value" id="l3LiveLevel">--</div></div>
+            <div class="kv-item"><div class="kv-label">current_ok</div><div class="kv-value" id="l3CurrentOk">--</div></div>
+            <div class="kv-item"><div class="kv-label">Wins</div><div class="kv-value" id="l3Wins">--</div></div>
+            <div class="kv-item"><div class="kv-label">Win Rate</div><div class="kv-value" id="l3WinRate">--</div></div>
+            <div class="kv-item"><div class="kv-label">Recent Regressions (last 10)</div><div class="kv-value" id="l3Regressions">--</div></div>
+            <div class="kv-item"><div class="kv-label">activation_ok</div><div class="kv-value" id="l3ActivationOk">--</div></div>
+          </div>
+          <div id="l3LiveReason" style="margin-top:12px;font-size:0.78rem;color:var(--text-muted);"></div>
+        </div>
+      </div>
+
+      <!-- Panel 2: Prior Attestation — separate evidence class from the
+           hash-attested operator-seeded ledger. Never contaminates
+           current health. -->
+      <div class="panel panel-accent-magenta" id="l3AttestationPanel">
+        <div class="panel-head">
+          <span class="panel-title">Prior Attestation (Historical Evidence)</span>
+          <span id="l3AttestBadge" class="si-tag si-tag-info">--</span>
+        </div>
+        <div class="panel-body">
+          <div class="kv-grid">
+            <div class="kv-item"><div class="kv-label">prior_attested_ok</div><div class="kv-value" id="l3PriorAttestedOk">--</div></div>
+            <div class="kv-item"><div class="kv-label">attestation_strength</div><div class="kv-value" id="l3AttestStrength">--</div></div>
+            <div class="kv-item"><div class="kv-label">request_ok</div><div class="kv-value" id="l3RequestOk">--</div></div>
+          </div>
+          <div style="margin-top:14px;">
+            <div class="si-section-label" style="color:var(--magenta);">Records</div>
+            <div id="l3AttestRecords"><div class="si-empty">No attestation records on file.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 3: Escalation Queue + Lifecycle -->
+      <div class="panel panel-accent-amber" id="l3QueuePanel">
+        <div class="panel-head">
+          <span class="panel-title">Escalation Queue</span>
+          <span id="l3QueueBadge" class="si-tag si-tag-info">--</span>
+        </div>
+        <div class="panel-body">
+          <div style="margin-bottom:16px;">
+            <div class="si-section-label" style="color:var(--amber);">Pending</div>
+            <div id="l3PendingList"><div class="si-empty">No pending escalations.</div></div>
+          </div>
+          <div>
+            <div class="si-section-label" style="color:var(--amber);">Recent Lifecycle</div>
+            <div id="l3LifecycleList"><div class="si-empty">No terminal escalation records.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer: evidence-boundary rule -->
+      <div class="panel" style="border-color:var(--border);background:var(--bg);">
+        <div class="panel-body" style="font-size:0.75rem;color:var(--text-muted);line-height:1.7;">
+          <strong style="color:var(--cyan);">Evidence boundary.</strong>
+          <code>current_ok</code> is sourced strictly from live orchestrator memory and is never backfilled from any persisted file.
+          <code>prior_attested_ok</code> is a separate evidence class backed by the hash-attested operator-seeded ledger; it can make L3 promotion <em>requestable</em> via the manual API, but it does not generate auto-escalation requests, which still require <code>live autonomy_level &ge; 3</code>.
+          Records with <code>artifact_status</code> of <code>hash_mismatch</code> or <code>hash_unverifiable</code> are displayed but do not count toward <code>prior_attested_ok</code>; <code>missing</code> still counts but surfaces as <code>attestation_strength = archived_missing</code>.
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Voice Intent Shadow (P1.4) -->
+    <div class="si-tab-content" data-tab="intentshadow">
+      <div class="panel panel-accent-cyan">
+        <div class="panel-head">
+          <span class="panel-title">Voice Intent NN Shadow Runner</span>
+          <span class="panel-meta" id="isLevelBadge" style="font-weight:600;">--</span>
+        </div>
+        <div class="panel-body">
+          <div class="kv-grid">
+            <div class="kv-item"><div class="kv-label">Level</div><div class="kv-value" id="isLevel">--</div></div>
+            <div class="kv-item"><div class="kv-label">Next Level</div><div class="kv-value" id="isNextLevel">--</div></div>
+            <div class="kv-item"><div class="kv-label">Ready For Promotion</div><div class="kv-value" id="isReady">--</div></div>
+            <div class="kv-item"><div class="kv-label">Observations Total</div><div class="kv-value" id="isObs">0</div></div>
+            <div class="kv-item"><div class="kv-label">NN Predictions</div><div class="kv-value" id="isNN">0</div></div>
+            <div class="kv-item"><div class="kv-label">Rolling Agreement</div><div class="kv-value" id="isAgree">--</div></div>
+            <div class="kv-item"><div class="kv-label">Window Size</div><div class="kv-value" id="isWin">0</div></div>
+            <div class="kv-item"><div class="kv-label">NONE-Rescues Applied</div><div class="kv-value" id="isRescues">0</div></div>
+            <div class="kv-item"><div class="kv-label">Primary Overrides</div><div class="kv-value" id="isPrim">0</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel panel-accent-magenta">
+        <div class="panel-head"><span class="panel-title">Promotion Gates</span></div>
+        <div class="panel-body" id="isGates">
+          <div class="si-empty" style="padding:16px;">Loading gates...</div>
+        </div>
+      </div>
+      <div class="panel panel-accent-amber">
+        <div class="panel-head"><span class="panel-title">Recent Rollbacks</span></div>
+        <div class="panel-body" id="isRollbacks">
+          <div class="si-empty" style="padding:16px;">No rollbacks yet.</div>
+        </div>
+      </div>
+      <div class="panel" style="border-color:var(--border);background:var(--bg);">
+        <div class="panel-body" style="font-size:0.75rem;color:var(--text-muted);line-height:1.7;">
+          <strong style="color:var(--cyan);">Three-level governor.</strong>
+          <code>shadow</code> logs NN-vs-regex agreement only.
+          <code>advisory</code> applies <em>NONE-rescue</em>: if regex returns NONE and the NN is confident in a non-general bucket, the runner rewrites to that tool.
+          <code>primary</code> takes over on disagreement when the NN beats regex confidence by the configured margin. Promotion requires
+          <code>&ge; 500</code> teacher samples, rolling agreement <code>&ge; 0.80</code> over the last 200 observations, and a 100-observation dwell window.
+          Auto-rollback fires when rolling agreement drops below <code>0.65</code>. State is persisted to
+          <code>~/.jarvis/intent_shadow_state.json</code> and is restart-continuous.
+          This panel is PRE-MATURE on a fresh brain (zero NN predictions until the voice_intent specialist trains).
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Phase E Kernel (P1.5) -->
+    <div class="si-tab-content" data-tab="phasekernel">
+      <div class="panel panel-accent-cyan">
+        <div class="panel-head">
+          <span class="panel-title">Phase E Language Kernel Artifact</span>
+          <span class="panel-meta" id="lkStatusBadge" style="font-weight:600;">--</span>
+        </div>
+        <div class="panel-body">
+          <div class="kv-grid">
+            <div class="kv-item"><div class="kv-label">Status</div><div class="kv-value" id="lkStatus">--</div></div>
+            <div class="kv-item"><div class="kv-label">Live Artifact ID</div><div class="kv-value" id="lkLiveId" style="font-family:monospace;font-size:0.78rem;">--</div></div>
+            <div class="kv-item"><div class="kv-label">Live Version</div><div class="kv-value" id="lkLiveVersion">--</div></div>
+            <div class="kv-item"><div class="kv-label">Live Hash</div><div class="kv-value" id="lkLiveHash" style="font-family:monospace;font-size:0.78rem;">--</div></div>
+            <div class="kv-item"><div class="kv-label">Schema Version</div><div class="kv-value" id="lkSchemaVer">--</div></div>
+            <div class="kv-item"><div class="kv-label">Total Artifacts</div><div class="kv-value" id="lkTotal">0</div></div>
+            <div class="kv-item"><div class="kv-label">Checkpoint Exists</div><div class="kv-value" id="lkCheckpointExists">--</div></div>
+            <div class="kv-item"><div class="kv-label">On-disk Matches Live</div><div class="kv-value" id="lkMatches">--</div></div>
+            <div class="kv-item"><div class="kv-label">Promoted At</div><div class="kv-value" id="lkPromotedAt">--</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel panel-accent-magenta">
+        <div class="panel-head"><span class="panel-title">Artifact History (last 10)</span></div>
+        <div class="panel-body" id="lkArtifacts">
+          <div class="si-empty" style="padding:16px;">No artifacts registered yet.</div>
+        </div>
+      </div>
+      <div class="panel panel-accent-amber">
+        <div class="panel-head"><span class="panel-title">Rollback History</span></div>
+        <div class="panel-body" id="lkRollbacks">
+          <div class="si-empty" style="padding:16px;">No rollbacks yet.</div>
+        </div>
+      </div>
+      <div class="panel" id="lkPrematurePanel" data-status-marker="PRE-MATURE"
+           style="border-color:var(--border);background:var(--bg);">
+        <div class="panel-body" style="font-size:0.75rem;color:var(--text-muted);line-height:1.7;">
+          <strong style="color:var(--cyan);">Phase E kernel identity.</strong>
+          Wraps the existing Phase C checkpoint with an addressable artifact id
+          (<code>phasec-v{version}-{hash[:12]}</code>) so the system can reference <em>which</em>
+          kernel is currently live and roll back to a prior identity at the artifact level.
+          This is <strong>PRE-MATURE</strong> on a fresh brain &mdash; no checkpoint exists until
+          Phase C training produces one, and registration is explicit (never automatic).
+          Artifact rollback restores the checkpoint bytes on disk; it does NOT flip the
+          Phase D <code>shadow</code>/<code>canary</code>/<code>live</code> promotion levels,
+          which continue to enforce their own gates independently.
+        </div>
+      </div>
+      <div class="panel" id="lkRegisteredPanel" data-status-marker="SHIPPED"
+           style="display:none;border-color:var(--border);background:var(--bg);">
+        <div class="panel-body" style="font-size:0.75rem;color:var(--text-muted);line-height:1.7;">
+          <strong style="color:var(--green);">Phase E kernel identity &mdash; registered.</strong>
+          A live Phase C artifact is bound to the registry; the system can now reference
+          <em>which</em> kernel is active and roll back to a prior identity at the artifact level.
+          Artifact rollback restores the checkpoint bytes on disk; it does NOT flip the
+          Phase D <code>shadow</code>/<code>canary</code>/<code>live</code> promotion levels,
+          which continue to enforce their own gates independently.
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: HRR Research (P4 Holographic Cognition / HRR-VSA) -->
+    <div class="si-tab-content" data-tab="hrrresearch">
+      <div class="panel panel-accent-amber" data-status-marker="PRE-MATURE">
+        <div class="panel-head">
+          <span class="panel-title">Holographic Cognition / HRR-VSA</span>
+          <span class="panel-meta" style="font-weight:600;color:var(--amber,#f90);">PRE-MATURE</span>
+        </div>
+        <div class="panel-body" style="font-size:0.78rem;line-height:1.7;color:var(--text-muted);">
+          <p><strong style="color:var(--cyan);">P4: Holographic Reduced Representations (HRR / VSA) research lane.</strong>
+          A derived neural-intuition substrate for compositional internal representations
+          (<code>subject &otimes; relation &otimes; object</code>). HRR is <strong>not</strong>
+          canonical truth, does <strong>not</strong> write beliefs directly, does <strong>not</strong>
+          influence policy until promoted through the normal specialist lifecycle and operator
+          approval under Phase 6.5 governance.</p>
+
+          <p><strong>Non-negotiable boundaries</strong> (all enforced by test):</p>
+          <ul>
+            <li>HRR side-effect counter <code>hrr_side_effects</code> must equal <code>0</code> in Stage 0 and Stage 1.</li>
+            <li>No writes to persistent memory, identity state, conversation history, TTS, transcription, belief graph, world-model durable state, or autonomy state.</li>
+            <li>Raw HRR vectors must never enter the LLM articulation layer. Only deterministic human-readable summaries (e.g. cleanup metrics) may.</li>
+            <li>Specialist promotion uses the canonical lifecycle: <code>CANDIDATE_BIRTH</code> &rarr; <code>PROBATIONARY_TRAINING</code> &rarr; <code>VERIFIED_PROBATIONARY</code> &rarr; <code>BROADCAST_ELIGIBLE</code> &rarr; <code>PROMOTED</code> (or <code>RETIRED</code>).</li>
+          </ul>
+
+          <p><strong>Staged plan</strong>:</p>
+          <ol>
+            <li><strong>P4.0</strong> &mdash; primitive library (<code>brain/library/vsa/*</code>) + symbol dictionary + cleanup memory + synthetic capacity exercise + truth-boundary test. <em>First sprint.</em></li>
+            <li>P4.1 &mdash; world-state shadow encoder (pure function, no mutation).</li>
+            <li>P4.2 &mdash; mental simulation shadow traces (simulator output unchanged).</li>
+            <li>P4.3 &mdash; HRR-assisted recall advisory (candidate overlap measured; ranker not influenced).</li>
+            <li>P4.4 &mdash; HRR specialist candidate (Tier-1 <code>hrr_encoder</code>) through real lifecycle.</li>
+            <li>P4.5 &mdash; dashboard + API surface (<code>/api/hrr/status</code>).</li>
+            <li>P4.6 &mdash; validation-pack integration (<code>hrr_primitive_library</code>, <code>hrr_truth_boundary</code>, <code>hrr_world_shadow</code>, <code>hrr_recall_advisory</code>, <code>hrr_policy_non_influence</code>).</li>
+            <li>P4.7 &mdash; long-run promotion study (&geq; 7 days) with operator-approved promotion only.</li>
+          </ol>
+
+          <p style="color:var(--text-muted);font-size:0.72rem;margin-top:0.6em;">
+            Plan: <code>docs/plans/p4_holographic_cognition_vsa.plan.md</code>.
+            Governance rules: <code>AGENTS.md</code> &rarr; "HRR / VSA Governance Rules".
+            Science writeup: <a href="/science#holographic-cognition-hrr">science &rarr; Holographic Cognition</a>.
+          </p>
+        </div>
+      </div>
+
+      <!-- Live /api/hrr/status panel (P4 shadow substrate) -->
+      <div class="panel panel-accent-cyan" data-hrr-status-panel>
+        <div class="panel-head">
+          <span class="panel-title">HRR Shadow Substrate (live)</span>
+          <span style="display:flex;gap:6px;align-items:center;">
+            <a href="/hrr" target="_blank" class="si-tag" style="font-size:0.66rem;text-decoration:none;border:1px solid var(--cyan);color:var(--cyan);padding:2px 8px;border-radius:3px;">open full HRR dashboard &rarr;</a>
+            <span id="hrrStatusBadge" class="si-tag si-tag-info" style="font-size:0.66rem;">--</span>
+          </span>
+        </div>
+        <div class="panel-body" style="font-size:0.78rem;line-height:1.6;">
+          <div class="kv-grid">
+            <div class="kv-item"><div class="kv-label">Enabled</div><div class="kv-value" id="hrrEnabled">--</div></div>
+            <div class="kv-item"><div class="kv-label">Stage</div><div class="kv-value" id="hrrStage">--</div></div>
+            <div class="kv-item"><div class="kv-label">Dim</div><div class="kv-value" id="hrrDim">--</div></div>
+            <div class="kv-item"><div class="kv-label">Sample Every</div><div class="kv-value" id="hrrSampleEvery">--</div></div>
+            <div class="kv-item"><div class="kv-label">Sample Interval</div><div class="kv-value" id="hrrSampleInterval">--</div></div>
+            <div class="kv-item"><div class="kv-label">Backend</div><div class="kv-value" id="hrrBackend">--</div></div>
+          </div>
+          <div style="margin-top:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+            <div class="panel" style="background:var(--bg);border-color:var(--border);">
+              <div class="panel-head"><span class="panel-title" style="font-size:0.72rem;">World Shadow</span></div>
+              <div class="panel-body" style="font-size:0.72rem;">
+                <div class="kv-grid">
+                  <div class="kv-item"><div class="kv-label">Samples (total / retained)</div><div class="kv-value" id="hrrWorldSamples">0 / 0</div></div>
+                  <div class="kv-item"><div class="kv-label">Ring Capacity</div><div class="kv-value" id="hrrWorldCap">500</div></div>
+                  <div class="kv-item"><div class="kv-label">Binding Cleanliness</div><div class="kv-value" id="hrrWorldClean">--</div></div>
+                  <div class="kv-item"><div class="kv-label">Cleanup Accuracy</div><div class="kv-value" id="hrrWorldAcc">--</div></div>
+                  <div class="kv-item"><div class="kv-label">Sim to Previous</div><div class="kv-value" id="hrrWorldSim">--</div></div>
+                </div>
+              </div>
+            </div>
+            <div class="panel" style="background:var(--bg);border-color:var(--border);">
+              <div class="panel-head"><span class="panel-title" style="font-size:0.72rem;">Simulation Shadow</span></div>
+              <div class="panel-body" style="font-size:0.72rem;">
+                <div class="kv-grid">
+                  <div class="kv-item"><div class="kv-label">Samples (total / retained)</div><div class="kv-value" id="hrrSimSamples">0 / 0</div></div>
+                  <div class="kv-item"><div class="kv-label">Ring Capacity</div><div class="kv-value" id="hrrSimCap">200</div></div>
+                  <div class="kv-item"><div class="kv-label">Last Delta Similarity</div><div class="kv-value" id="hrrSimDeltaSim">--</div></div>
+                  <div class="kv-item"><div class="kv-label">Last Cleanliness</div><div class="kv-value" id="hrrSimClean">--</div></div>
+                </div>
+              </div>
+            </div>
+            <div class="panel" style="background:var(--bg);border-color:var(--border);">
+              <div class="panel-head"><span class="panel-title" style="font-size:0.72rem;">Recall Advisory</span></div>
+              <div class="panel-body" style="font-size:0.72rem;">
+                <div class="kv-grid">
+                  <div class="kv-item"><div class="kv-label">Samples (total / retained)</div><div class="kv-value" id="hrrRecallSamples">0 / 0</div></div>
+                  <div class="kv-item"><div class="kv-label">Ring Capacity</div><div class="kv-value" id="hrrRecallCap">500</div></div>
+                  <div class="kv-item"><div class="kv-label">LRU Cache Size</div><div class="kv-value" id="hrrRecallCache">0 / 2000</div></div>
+                  <div class="kv-item"><div class="kv-label">Help Rate</div><div class="kv-value" id="hrrRecallHelp">--</div></div>
+                  <div class="kv-item"><div class="kv-label">Last Seed Overlap</div><div class="kv-value" id="hrrRecallOverlap">--</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:10px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;">
+            <strong style="color:var(--cyan);font-size:0.72rem;">Latest Stage 0 Exercise</strong>
+            <div class="kv-grid" style="margin-top:6px;font-size:0.72rem;">
+              <div class="kv-item"><div class="kv-label">Generated At</div><div class="kv-value" id="hrrExGen">--</div></div>
+              <div class="kv-item"><div class="kv-label">cleanup@8</div><div class="kv-value" id="hrrExAcc8">--</div></div>
+              <div class="kv-item"><div class="kv-label">cleanup@16</div><div class="kv-value" id="hrrExAcc16">--</div></div>
+              <div class="kv-item"><div class="kv-label">FP Rate</div><div class="kv-value" id="hrrExFp">--</div></div>
+              <div class="kv-item"><div class="kv-label">All Gates Pass</div><div class="kv-value" id="hrrExGates">--</div></div>
+              <div class="kv-item"><div class="kv-label">hrr_side_effects</div><div class="kv-value" id="hrrExSide">--</div></div>
+            </div>
+          </div>
+          <div style="margin-top:8px;font-size:0.68rem;color:var(--text-muted);">
+            The public status marker <code>holographic_cognition_hrr</code> remains
+            <strong style="color:var(--amber,#f90);">PRE-MATURE</strong> regardless of
+            the live <code>stage</code> field. Promotion requires operator approval
+            under Phase 6.5 governance.
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="border-color:var(--border);background:var(--bg);">
+        <div class="panel-body" style="font-size:0.72rem;color:var(--text-muted);line-height:1.7;">
+          <strong>Derived representation, not canonical state.</strong>
+          HRR vectors summarize or propose; they do not write belief edges. The belief graph writer
+          still enforces evidence basis, confidence, subject identity, provenance, and schema
+          constraints. A new non-critical validation-pack check, <code>hrr_policy_non_influence</code>,
+          asserts the absence of any code path from HRR state into policy features until operator
+          approval.
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Analytics -->
+    <div class="si-tab-content" data-tab="analytics">
+      <div class="two-col">
+        <div class="panel panel-accent-cyan">
+          <div class="panel-head"><span class="panel-title">Self-Improvement Win Rate</span></div>
+          <div class="panel-body">
+            <div class="kv-grid">
+              <div class="kv-item"><div class="kv-label">Total Attempts</div><div class="kv-value" id="anaTotal">0</div></div>
+              <div class="kv-item"><div class="kv-label">Sandbox Passed</div><div class="kv-value" id="anaSbPass">0</div></div>
+              <div class="kv-item"><div class="kv-label">Sandbox Failed</div><div class="kv-value" id="anaSbFail">0</div></div>
+              <div class="kv-item"><div class="kv-label">Pass Rate</div><div class="kv-value" id="anaSbRate">--</div></div>
+              <div class="kv-item"><div class="kv-label">Review Approved</div><div class="kv-value" id="anaRevApp">0</div></div>
+              <div class="kv-item"><div class="kv-label">Review Rejected</div><div class="kv-value" id="anaRevRej">0</div></div>
+              <div class="kv-item"><div class="kv-label">Improvements</div><div class="kv-value" id="anaImprov" style="color:var(--green);">0</div></div>
+              <div class="kv-item"><div class="kv-label">Rollbacks</div><div class="kv-value" id="anaRollbacks" style="color:var(--red);">0</div></div>
+              <div class="kv-item"><div class="kv-label">Failures</div><div class="kv-value" id="anaFails">0</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel panel-accent-green">
+          <div class="panel-head"><span class="panel-title">Recent Conversations</span></div>
+          <div class="panel-body" id="convList"><div class="si-empty" style="padding:16px;">No conversations yet.</div></div>
+        </div>
+      </div>
+      <div class="panel panel-accent-amber">
+        <div class="panel-head"><span class="panel-title">Pipeline History</span></div>
+        <div class="panel-body"><ul style="list-style:none;padding:0;" id="timelineList"><li style="color:var(--text-muted);">No history yet.</li></ul></div>
+      </div>
+    </div>
+
+  </main>
+
+  <div class="plugin-modal" id="pluginDetailModal" onclick="if(event.target===this)closePluginDetail();">
+    <div class="plugin-modal-card">
+      <div class="plugin-modal-head">
+        <div>
+          <div class="plugin-modal-title" id="pluginDetailTitle">Plugin Detail</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;" id="pluginDetailSubtitle"></div>
+        </div>
+        <button class="si-btn" onclick="closePluginDetail()">Close</button>
+      </div>
+      <div class="plugin-modal-body" id="pluginDetailBody">
+        <div class="si-empty">Loading plugin detail...</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function() {
+  var APIS = {
+    full: '/api/self-improve',
+    proposals: '/api/self-improve/proposals',
+    scanner: '/api/self-improve/scanner',
+    coder: '/api/self-improve/coder',
+    specialists: '/api/self-improve/specialists',
+    acquisition: '/api/acquisition',
+    plugins: '/api/plugins',
+    codegen: '/api/codegen',
+    autonomyLevel: '/api/autonomy/level',
+    autonomyEscalations: '/api/autonomy/escalations',
+    autonomyAttestation: '/api/autonomy/attestation',
+    intentShadow: '/api/intent-shadow',
+    languageKernel: '/api/language-kernel',
+    hrrStatus: '/api/hrr/status',
+  };
+  var refreshCount = 0;
+  var _apiKey = '';
+  (function loadApiKey() {
+    fetch('/api/config').then(function(r){return r.json();}).then(function(d){
+      _apiKey = d.api_key || '';
+    }).catch(function(){});
+  })();
+
+  function fmt(ts) { if (!ts) return '--'; var d = new Date(ts * 1000); return d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}); }
+  function pct(v) { return (v == null || isNaN(v)) ? '--' : (v * 100).toFixed(0) + '%'; }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function el(id) { return document.getElementById(id); }
+  function colorDiff(raw) {
+    if (!raw) return '<span class="d-ctx">(no diff)</span>';
+    return raw.split('\n').map(function(l) {
+      if (l.startsWith('+++')||l.startsWith('---')||l.startsWith('@@')) return '<span class="d-hdr">'+esc(l)+'</span>';
+      if (l.startsWith('+')) return '<span class="d-add">'+esc(l)+'</span>';
+      if (l.startsWith('-')) return '<span class="d-del">'+esc(l)+'</span>';
+      return '<span class="d-ctx">'+esc(l)+'</span>';
+    }).join('\n');
+  }
+  function stateColor(s) {
+    var m = {completed:'var(--green)',running:'var(--cyan)',failed:'var(--red)',pending:'var(--text-muted)',
+             active:'var(--green)',shadow:'var(--cyan)',supervised:'var(--magenta)',quarantined:'var(--amber)',disabled:'var(--red)'};
+    return m[s] || 'var(--text-muted)';
+  }
+
+  window.switchTab = function(name) {
+    document.querySelectorAll('.si-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab===name); });
+    document.querySelectorAll('.si-tab-content').forEach(function(c){ c.classList.toggle('active', c.dataset.tab===name); });
+    var currentHash = (location.hash || '').replace(/^#/, '');
+    if (currentHash !== name && currentHash.indexOf(name + ':') !== 0) {
+      history.replaceState(null, '', '#'+name);
+    }
+  };
+
+  function getInitialTab() {
+    var hash = (location.hash || '').replace(/^#/, '');
+    if (hash.indexOf('acquisition') === 0) return 'acquisition';
+    if (hash) {
+      var tab = hash.split(':')[0];
+      if (document.querySelector('.si-tab[data-tab="'+tab+'"]')) return tab;
+    }
+    return 'overview';
+  }
+
+  function getHashAcquisitionId() {
+    var hash = (location.hash || '').replace(/^#/, '');
+    if (hash.indexOf('acquisition:') !== 0) return '';
+    try { return decodeURIComponent(hash.split(':').slice(1).join(':')); }
+    catch (_) { return hash.split(':').slice(1).join(':'); }
+  }
+
+  function updateGate(id, ok, text) {
+    var e = el(id); if (!e) return;
+    e.className = 'si-gate ' + (ok ? 'si-gate-ok' : 'si-gate-fail');
+    e.innerHTML = '<span class="si-gate-dot"></span> ' + esc(text);
+  }
+
+  function renderOverview(full, acq, plugs, coder) {
+    // Acquisition overview
+    var ah = '<div style="font-size:0.82rem;">';
+    ah += '<div style="display:flex;gap:16px;margin-bottom:8px;"><span>Active: <strong>' + (acq.active_count||0) + '</strong></span>';
+    ah += '<span>Total: <strong>' + (acq.total_count||0) + '</strong></span></div>';
+    var recent = acq.recent || [];
+    if (recent.length) {
+      ah += recent.slice(0,3).map(function(j) {
+        return '<div style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;">' +
+          '<span>' + esc(j.title||'--') + '</span>' +
+          '<span class="si-tag" style="color:'+stateColor(j.status)+'">' + esc(j.status||'--') + '</span></div>';
+      }).join('');
+    } else { ah += '<div style="color:var(--text-muted);">No jobs yet. Pipeline ready.</div>'; }
+    ah += '</div>';
+    el('overviewAcq').innerHTML = ah;
+
+    // Plugin overview
+    var plist = plugs.plugins || plugs.total_plugins != null ? plugs : {plugins:[],total_plugins:0};
+    var ph = '<div style="font-size:0.82rem;">';
+    var byState = plist.by_state || {};
+    ph += '<div style="display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap;">';
+    ph += '<span>Total: <strong>' + (plist.total_plugins||0) + '</strong></span>';
+    Object.keys(byState).forEach(function(s) {
+      ph += '<span style="color:'+stateColor(s)+'">' + s + ': <strong>' + byState[s] + '</strong></span>';
+    });
+    ph += '</div>';
+    var pl = plist.plugins || [];
+    if (pl.length) {
+      ph += pl.slice(0,4).map(function(p) {
+        return '<div style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;">' +
+          '<span>' + esc(p.name) + '</span>' +
+          '<span class="si-tag" style="color:'+stateColor(p.state)+'">' + esc(p.state) + '</span></div>';
+      }).join('');
+    } else { ph += '<div style="color:var(--text-muted);">No plugins deployed.</div>'; }
+    ph += '</div>';
+    el('overviewPlugins').innerHTML = ph;
+
+    // CodeGen overview
+    var c = coder.coder || {};
+    var ch = '<div class="kv-grid" style="grid-template-columns:repeat(3,1fr);">';
+    ch += '<div class="kv-item"><div class="kv-label">Status</div><div class="kv-value" style="color:'+(c.available?'var(--green)':'var(--red)')+'">'+(c.available?'Ready':'N/A')+'</div></div>';
+    ch += '<div class="kv-item"><div class="kv-label">Model</div><div class="kv-value" style="font-size:0.72rem;">'+esc((c.model_path||'').split('/').pop()||'N/A')+'</div></div>';
+    ch += '<div class="kv-item"><div class="kv-label">Generations</div><div class="kv-value">'+(c.total_generations||0)+'</div></div>';
+    ch += '</div>';
+    el('overviewCodegen').innerHTML = ch;
+
+    // SI overview
+    var specData = (full.specialists||{}).specialists||[];
+    var sh = '<div class="kv-grid" style="grid-template-columns:repeat(3,1fr);">';
+    sh += '<div class="kv-item"><div class="kv-label">Improvements</div><div class="kv-value" style="color:var(--green);">'+(full.total_improvements||0)+'</div></div>';
+    sh += '<div class="kv-item"><div class="kv-label">Failures</div><div class="kv-value" style="color:var(--red);">'+(full.total_failures||0)+'</div></div>';
+    sh += '<div class="kv-item"><div class="kv-label">Rollbacks</div><div class="kv-value">'+(full.total_rollbacks||0)+'</div></div>';
+    sh += '</div>';
+    if (specData.length) {
+      sh += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">';
+      sh += '<div style="font-size:0.66rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:6px;">SI Specialists</div>';
+      sh += specData.map(function(s){
+        var mc = {bootstrap:'var(--red)',early_noisy:'var(--amber)',preliminary:'var(--cyan)',meaningful:'var(--green)',stable:'var(--magenta)'}[s.maturity]||'var(--text-muted)';
+        return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.78rem;"><span>'+esc(s.focus)+'</span><span style="color:'+mc+'">'+esc(s.maturity)+' ('+(s.signals_features||0)+'F / '+(s.signals_labels||0)+'L)</span></div>';
+      }).join('');
+      sh += '</div>';
+    }
+    el('overviewSI').innerHTML = sh;
+  }
+
+  function renderAcquisitionJobs(acq) {
+    var jobs = acq.recent || [];
+    var sched = acq.scheduler || {};
+    el('acqCount').textContent = (acq.active_count||0) + ' active / ' + (acq.total_count||0) + ' total';
+    if (!jobs.length) { el('acqJobList').innerHTML = '<div class="si-empty">No acquisition jobs. The pipeline is ready to accept "learn X" requests.</div>'; return; }
+    el('acqJobList').innerHTML = jobs.map(function(j,i) {
+      var lanes = j.lanes || {};
+      var laneNames = Object.keys(lanes);
+      var deferred = sched.deferred_lanes || [];
+      var laneBar = '<div class="lane-bar">' + laneNames.map(function(ln) {
+        var ls = typeof lanes[ln] === 'string' ? lanes[ln] : (lanes[ln]||{}).status||'pending';
+        var cls = ls === 'completed' ? 'lane-seg-done' : ls === 'running' ? 'lane-seg-running' : ls === 'failed' ? 'lane-seg-failed' : ls === 'skipped' ? 'lane-seg-skipped' : 'lane-seg-pending';
+        return '<div class="lane-seg '+cls+'" title="'+esc(ln)+': '+esc(ls)+'"></div>';
+      }).join('') + '</div>';
+      var laneDetail = laneNames.map(function(ln) {
+        var ls = typeof lanes[ln] === 'string' ? lanes[ln] : (lanes[ln]||{}).status||'pending';
+        var isDef = deferred.indexOf(ln) >= 0;
+        var extra = isDef ? ' (deferred: '+esc(sched.current_mode||'?')+')' : '';
+        return '<span class="si-tag" style="color:'+stateColor(ls)+(isDef?';opacity:0.5':'')+'">'+esc(ln)+esc(extra)+'</span>';
+      }).join(' ');
+      var needsPlanReview = j.status==='awaiting_plan_review';
+      var needsDeployApproval = j.status==='awaiting_approval';
+      var isOpen = needsPlanReview || needsDeployApproval;
+      var isCompleted = j.status==='completed'||j.status==='deployed';
+      var hashTarget = getHashAcquisitionId();
+      var isHashTarget = hashTarget && hashTarget === j.acquisition_id;
+      return '<div class="si-card'+((isOpen||isHashTarget)?' open':'')+'" id="acq-'+esc(j.acquisition_id||i)+'">' +
+        '<div class="si-card-head" onclick="this.parentElement.classList.toggle(\'open\')">' +
+          '<div><div class="si-card-title">'+esc(j.title||j.acquisition_id)+'</div>' +
+            '<div class="si-card-meta"><span>'+esc(j.outcome_class||'--')+'</span><span>Risk T'+
+            (j.risk_tier!=null?j.risk_tier:'?')+'</span><span>'+fmt(j.created_at)+'</span></div>'+laneBar+'</div>' +
+          '<span class="si-tag" style="color:'+stateColor(j.status)+'">'+esc(j.status||'--')+'</span>' +
+        '</div>' +
+        '<div class="si-card-body">' +
+          '<div class="si-section"><div class="si-section-label" style="color:var(--cyan);">Lane Progress</div>'+laneDetail+'</div>' +
+          '<div class="si-section"><div class="si-section-label" style="color:var(--cyan);">IDs</div>' +
+            '<div style="font-size:0.75rem;font-family:var(--font-mono);color:var(--text-muted);">' +
+              'acquisition_id: '+esc(j.acquisition_id||'')+'<br>'+
+              'plan_id: '+esc(j.plan_id||'none')+'<br>'+
+              'plugin_id: '+esc(j.plugin_id||'none')+'<br>'+
+              'verification_id: '+esc(j.verification_id||'none')+'</div></div>' +
+          (needsPlanReview ?
+            '<div class="si-section" id="plan-detail-'+esc(j.acquisition_id)+'">' +
+              '<div class="si-section-label" style="color:var(--amber);">Plan Review</div>' +
+              '<div style="color:var(--text-muted);font-size:0.8rem;">Loading plan details...</div></div>' +
+            '<div class="si-section">' +
+              '<button class="si-btn si-btn-promote" onclick="approveAcq(\''+esc(j.acquisition_id)+'\')">Approve Plan</button> ' +
+              '<button class="si-btn si-btn-danger" onclick="denyAcq(\''+esc(j.acquisition_id)+'\')">Reject Plan</button></div>' : '') +
+          (needsDeployApproval ?
+            '<div class="si-section" style="padding:12px;background:rgba(0,255,136,0.05);border:1px solid rgba(0,255,136,0.2);border-radius:6px;">' +
+              '<div class="si-section-label" style="color:var(--green);">Deployment Approval Required</div>' +
+              '<div style="font-size:0.8rem;color:var(--text-muted);margin:6px 0;">Plugin has completed shadow observation and verification. Approve to activate as a routable tool.</div>' +
+              '<button class="si-btn si-btn-promote" onclick="approveDeploy(\''+esc(j.acquisition_id)+'\')">Approve Deployment</button>' +
+            '</div>' : '') +
+          (isCompleted ?
+            '<div class="si-section" style="padding:8px 12px;background:rgba(0,255,136,0.04);border-left:3px solid var(--green);border-radius:4px;">' +
+              '<span style="color:var(--green);font-weight:600;font-size:0.8rem;">&#x2713; Pipeline Complete</span>' +
+              (j.plugin_id ? '<span style="color:var(--text-muted);font-size:0.75rem;margin-left:8px;">Plugin: '+esc(j.plugin_id)+'</span>' : '') +
+            '</div>' : '') +
+        '</div></div>';
+    }).join('');
+    jobs.forEach(function(j) {
+      if (j.status==='awaiting_plan_review') {
+        loadPlanDetail(j.acquisition_id);
+      }
+    });
+    var hashTarget = getHashAcquisitionId();
+    if (hashTarget) {
+      setTimeout(function(){
+        var target = document.getElementById('acq-'+hashTarget);
+        if (target) target.scrollIntoView({behavior:'smooth', block:'start'});
+      }, 100);
+    }
+  }
+  function loadPlanDetail(acqId) {
+    fetch('/api/acquisition/'+encodeURIComponent(acqId))
+      .then(function(r){return r.json();})
+      .then(function(d) {
+        var container = document.getElementById('plan-detail-'+acqId);
+        if (!container) return;
+        var plan = d.plan;
+        if (!plan) { container.innerHTML = '<div class="si-section-label" style="color:var(--amber);">Plan Review</div><div style="color:var(--text-muted);font-size:0.8rem;">No plan data available.</div>'; return; }
+        var html = '<div class="si-section-label" style="color:var(--amber);">Plan Review</div>';
+        html += '<div style="margin:8px 0;padding:10px 12px;background:rgba(255,191,0,0.06);border:1px solid rgba(255,191,0,0.2);border-radius:6px;font-size:0.82rem;">';
+        html += '<div style="margin-bottom:8px;"><strong style="color:var(--amber);">Objective:</strong> <span style="color:var(--text);">'+esc(plan.objective||'')+'</span></div>';
+        html += '<div style="margin-bottom:8px;"><strong style="color:var(--amber);">Risk Level:</strong> <span style="color:'+(plan.risk_level==='high'?'var(--red)':plan.risk_level==='medium'?'var(--amber)':'var(--green)')+';">'+esc(plan.risk_level||'unknown')+'</span></div>';
+
+        if (plan.user_story) {
+          html += '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(0,255,170,0.05);border-left:3px solid var(--green);border-radius:4px;">';
+          html += '<strong style="color:var(--green);">User Story</strong>';
+          html += '<div style="margin-top:4px;color:var(--text);white-space:pre-wrap;">'+esc(plan.user_story)+'</div></div>';
+        }
+        if (plan.technical_approach) {
+          html += '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(0,200,255,0.05);border-left:3px solid var(--cyan);border-radius:4px;">';
+          html += '<strong style="color:var(--cyan);">Technical Approach</strong>';
+          html += '<div style="margin-top:4px;color:var(--text);white-space:pre-wrap;">'+esc(plan.technical_approach)+'</div></div>';
+        }
+        if (plan.implementation_sketch) {
+          html += '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(180,130,255,0.05);border-left:3px solid var(--purple);border-radius:4px;">';
+          html += '<strong style="color:var(--purple);">Implementation Sketch</strong>';
+          html += '<pre style="margin-top:4px;color:var(--text);white-space:pre-wrap;font-family:var(--font-mono);font-size:0.76rem;overflow-x:auto;">'+esc(plan.implementation_sketch)+'</pre></div>';
+        }
+        if (plan.dependencies && plan.dependencies.length) {
+          html += '<div style="margin-bottom:8px;"><strong style="color:var(--amber);">Dependencies:</strong> '+plan.dependencies.map(function(d){return '<span class="si-tag" style="color:var(--cyan);">'+esc(d)+'</span>';}).join(' ')+'</div>';
+        }
+        if (plan.test_cases && plan.test_cases.length) {
+          html += '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(255,191,0,0.04);border-left:3px solid var(--amber);border-radius:4px;">';
+          html += '<strong style="color:var(--amber);">Test Cases</strong>';
+          plan.test_cases.forEach(function(tc) { html += '<div style="margin-top:3px;font-size:0.78rem;color:var(--text);">'+esc(tc)+'</div>'; });
+          html += '</div>';
+        }
+        if (plan.risk_analysis) {
+          html += '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(255,60,60,0.05);border-left:3px solid var(--red);border-radius:4px;">';
+          html += '<strong style="color:var(--red);">Risk Analysis</strong>';
+          html += '<div style="margin-top:4px;color:var(--text);white-space:pre-wrap;">'+esc(plan.risk_analysis)+'</div></div>';
+        }
+
+        if (plan.required_capabilities && plan.required_capabilities.length) {
+          html += '<div style="margin-bottom:8px;"><strong style="color:var(--amber);">Required Capabilities:</strong> '+plan.required_capabilities.map(function(c){return '<span class="si-tag" style="color:var(--cyan);">'+esc(c)+'</span>';}).join(' ')+'</div>';
+        }
+
+        var showStructural = !plan.user_story && !plan.technical_approach;
+        if (showStructural && plan.implementation_path && plan.implementation_path.length) {
+          html += '<div style="margin-bottom:8px;"><strong style="color:var(--amber);">Execution Steps:</strong></div>';
+          html += '<table style="width:100%;font-size:0.78rem;border-collapse:collapse;">';
+          html += '<tr style="color:var(--text-muted);border-bottom:1px solid rgba(255,255,255,0.1);"><th style="text-align:left;padding:3px 6px;">Step</th><th style="text-align:left;padding:3px 6px;">Lane</th><th style="text-align:left;padding:3px 6px;">Description</th><th style="text-align:left;padding:3px 6px;">Depends On</th></tr>';
+          plan.implementation_path.forEach(function(step,idx) {
+            html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">';
+            html += '<td style="padding:3px 6px;color:var(--text-muted);">'+(idx+1)+'</td>';
+            html += '<td style="padding:3px 6px;color:var(--green);font-family:var(--font-mono);">'+esc(step.lane||'')+'</td>';
+            html += '<td style="padding:3px 6px;color:var(--text);">'+esc(step.description||'')+'</td>';
+            html += '<td style="padding:3px 6px;color:var(--text-muted);font-size:0.75rem;">'+esc((step.depends_on||[]).join(', ')||'none')+'</td>';
+            html += '</tr>';
+          });
+          html += '</table>';
+        }
+        if (plan.verification_path && plan.verification_path.length) {
+          html += '<div style="margin:8px 0 4px;"><strong style="color:var(--amber);">Verification:</strong></div>';
+          plan.verification_path.forEach(function(v) { html += '<div style="font-size:0.78rem;color:var(--text);margin-left:8px;">&#x2022; <span style="color:var(--cyan);">'+esc(v.type||'')+'</span>: '+esc(v.description||'')+'</div>'; });
+        }
+        if (plan.rollback_path && plan.rollback_path.length) {
+          html += '<div style="margin:8px 0 4px;"><strong style="color:var(--amber);">Rollback:</strong></div>';
+          plan.rollback_path.forEach(function(r) { html += '<div style="font-size:0.78rem;color:var(--text);margin-left:8px;">&#x2022; <span style="color:var(--red);">'+esc(r.type||'')+'</span>: '+esc(r.description||'')+'</div>'; });
+        }
+        if (plan.promotion_criteria && plan.promotion_criteria.length) {
+          html += '<div style="margin:8px 0 4px;"><strong style="color:var(--amber);">Promotion Criteria:</strong></div>';
+          plan.promotion_criteria.forEach(function(c) { html += '<div style="font-size:0.78rem;color:var(--text);margin-left:8px;">&#x2713; '+esc(c)+'</div>'; });
+        }
+        html += '</div>';
+        container.innerHTML = html;
+      })
+      .catch(function(e) {
+        var container = document.getElementById('plan-detail-'+acqId);
+        if (container) container.innerHTML = '<div class="si-section-label" style="color:var(--amber);">Plan Review</div><div style="color:var(--red);font-size:0.8rem;">Failed to load plan: '+esc(String(e))+'</div>';
+      });
+  }
+
+  function renderPlugins(plugs) {
+    var list = plugs.plugins || [];
+    el('plugCount').textContent = (plugs.total_plugins||0) + ' plugin(s)';
+    if (!list.length) { el('pluginList').innerHTML = '<div class="si-empty">No plugins deployed. Plugins are created by the Capability Acquisition Pipeline when code generation is needed.</div>'; return; }
+    var html = '<table class="si-table"><thead><tr><th>Plugin</th><th>State</th><th>Risk</th><th>Invocations</th><th>Failures</th><th>Version</th><th>Actions</th></tr></thead><tbody>';
+    list.forEach(function(p) {
+      html += '<tr>' +
+        '<td style="font-weight:600;"><button class="si-btn" style="font-family:var(--font-mono);font-size:0.72rem;" onclick="openPluginDetail(\''+esc(p.name)+'\')">'+esc(p.name)+'</button></td>' +
+        '<td><span class="si-tag" style="color:'+stateColor(p.state)+'">'+esc(p.state)+'</span></td>' +
+        '<td>T'+(p.risk_tier!=null?p.risk_tier:'?')+'</td>' +
+        '<td>'+(p.invocation_count||p.invoke_count||0)+'</td>' +
+        '<td style="color:'+((p.failure_count||0)>0?'var(--red)':'var(--text-muted)')+';">'+(p.failure_count||0)+'</td>' +
+        '<td style="font-family:var(--font-mono);font-size:0.75rem;">'+(p.version||'1.0')+'</td>' +
+        '<td style="display:flex;gap:4px;">' +
+          '<button class="si-btn" onclick="openPluginDetail(\''+esc(p.name)+'\')">Details</button>' +
+          (p.state!=='active'&&p.state!=='disabled' ? '<button class="si-btn si-btn-promote" title="Manual registry promotion. For acquisition-owned plugins, prefer waiting for the acquisition activation gate." onclick="pluginAction(\''+esc(p.name)+'\',\'promote\')">'+(p.acquisition_id?'Manual Promote':'Promote')+'</button>' : '') +
+          (p.state!=='disabled' ? '<button class="si-btn si-btn-danger" onclick="pluginAction(\''+esc(p.name)+'\',\'disable\')">Disable</button>' : '') +
+          (p.state==='quarantined'||p.state==='disabled' ? '<button class="si-btn" onclick="pluginAction(\''+esc(p.name)+'\',\'activate\')">Activate</button>' : '') +
+          '<button class="si-btn si-btn-danger" onclick="pluginAction(\''+esc(p.name)+'\',\'rollback\')">Rollback</button>' +
+        '</td></tr>';
+    });
+    html += '</tbody></table>';
+    el('pluginList').innerHTML = html;
+  }
+
+  function renderPluginDetail(d) {
+    var acq = d.acquisition || {};
+    var req = acq.requested_by || {};
+    var verify = d.verification || {};
+    var risk = verify.risk_assessment || {};
+    var smoke = (risk.skill_contract_results || [])[0] || {};
+    var activation = acq.activation_diagnostics || {};
+    var shadowSmoke = activation.shadow_runtime_smoke || {};
+    var bundle = d.code_bundle || {};
+    var codeFiles = bundle.code_files || {};
+    var html = '';
+    var pluginDir = d.plugin_directory || ('brain/tools/plugins/' + (d.name || '') + '/');
+    html += '<div class="kv-grid" style="margin-bottom:14px;">' +
+      '<div class="kv-item"><div class="kv-label">State</div><div class="kv-value" style="color:'+stateColor(d.state)+'">'+esc(d.state||'--')+'</div></div>' +
+      '<div class="kv-item"><div class="kv-label">Risk</div><div class="kv-value">T'+esc(d.risk_tier||0)+'</div></div>' +
+      '<div class="kv-item"><div class="kv-label">Mode</div><div class="kv-value">'+esc(d.supervision_mode||'--')+'</div></div>' +
+      '<div class="kv-item"><div class="kv-label">Invocations</div><div class="kv-value">'+esc(d.invocation_count||0)+'</div></div>' +
+      '<div class="kv-item"><div class="kv-label">Success Rate</div><div class="kv-value">'+pct(d.success_rate||0)+'</div></div>' +
+      '<div class="kv-item"><div class="kv-label">Failures</div><div class="kv-value" style="color:'+((d.failure_count||0)>0?'var(--red)':'var(--text)')+'">'+esc(d.failure_count||0)+'</div></div>' +
+    '</div>';
+    html += '<div class="si-section" style="padding:10px 12px;border:1px solid rgba(0,204,255,.22);border-left:3px solid var(--cyan);border-radius:4px;background:rgba(0,204,255,.035);">' +
+      '<div class="si-section-label" style="color:var(--cyan);">Storage Boundary</div>' +
+      '<div style="font-size:0.78rem;color:var(--text-muted);line-height:1.55;">' +
+      'Hosted package: <code>'+esc(pluginDir)+'</code><br>' +
+      'Runtime authority: loaded by <code>PluginRegistry</code> from its plugin swimlane; this is not a core-code patch and does not edit acquisition, memory, policy, or consciousness modules.<br>' +
+      'Promotion authority: acquisition-owned plugins should advance through the acquisition activation gate after shadow observation; direct registry promotion is an operator override.<br>' +
+      'Files below are the generated plugin package contents, shown for operator review.' +
+      '</div></div>';
+    html += '<div class="si-section"><div class="si-section-label" style="color:var(--cyan);">Why It Exists</div>' +
+      '<div style="font-size:0.8rem;color:var(--text-muted);line-height:1.55;">' +
+      '<strong style="color:var(--text);">'+esc(acq.title || 'Generated plugin')+'</strong><br>' +
+      'Acquisition: <code>'+esc(acq.acquisition_id || d.acquisition_id || 'unknown')+'</code><br>' +
+      'Source: <code>'+esc(req.source || 'unknown')+'</code>' +
+      (req.skill_id ? ' · Skill: <code>'+esc(req.skill_id)+'</code>' : '') +
+      (req.contract_id ? ' · Contract: <code>'+esc(req.contract_id)+'</code>' : '') +
+      '</div></div>';
+    html += '<div class="two-col"><div class="si-section"><div class="si-section-label" style="color:var(--green);">Verification Proof</div>' +
+      '<div style="font-size:0.78rem;color:var(--text-muted);line-height:1.55;">' +
+      'Overall: <span class="si-tag '+(verify.overall_passed?'si-tag-pass':'si-tag-fail')+'">'+(verify.overall_passed?'passed':'not passed')+'</span><br>' +
+      'Contract status: <code>'+esc(risk.skill_contract_status || '--')+'</code><br>' +
+      'Sandbox status: <code>'+esc(risk.sandbox_status || '--')+'</code><br>' +
+      (smoke.name ? 'Fixture: <code>'+esc(smoke.name)+'</code> <span class="si-tag '+(smoke.passed?'si-tag-pass':'si-tag-fail')+'">'+(smoke.passed?'passed':'failed')+'</span>' : 'No fixture detail') +
+      '</div></div>';
+    html += '<div class="si-section"><div class="si-section-label" style="color:var(--amber);">Shadow Observation</div>' +
+      '<div style="font-size:0.78rem;color:var(--text-muted);line-height:1.55;">' +
+      'Runtime smoke: <span class="si-tag '+(shadowSmoke.passed?'si-tag-pass':'si-tag-warn')+'">'+(shadowSmoke.passed?'passed':'pending')+'</span><br>' +
+      'Request: <code>'+esc(shadowSmoke.request_id || 'not run yet')+'</code><br>' +
+      'Fixture: <code>'+esc(shadowSmoke.fixture_name || '--')+'</code><br>' +
+      (shadowSmoke.error ? 'Error: <code>'+esc(shadowSmoke.error)+'</code>' : 'Error: <code>none</code>') +
+      '</div></div></div>';
+    Object.keys(codeFiles).sort().forEach(function(name) {
+      html += '<div class="si-section"><div class="si-section-label" style="color:var(--magenta);">'+esc(name)+'</div>' +
+        '<div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px;">Generated file in <code>'+esc(pluginDir + name)+'</code></div>' +
+        '<pre class="plugin-code">'+esc(codeFiles[name])+'</pre></div>';
+    });
+    if (!Object.keys(codeFiles).length) {
+      html += '<div class="si-empty" style="padding:14px;">No generated code available for this plugin.</div>';
+    }
+    return html;
+  }
+
+  window.openPluginDetail = function(name) {
+    var modal = el('pluginDetailModal');
+    el('pluginDetailTitle').textContent = name;
+    el('pluginDetailSubtitle').textContent = 'Loading code, acquisition context, and proof artifacts...';
+    el('pluginDetailBody').innerHTML = '<div class="si-empty">Loading plugin detail...</div>';
+    modal.classList.add('open');
+    fetch('/api/plugins/' + encodeURIComponent(name))
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
+      .then(function(r) {
+        if (!r.ok) {
+          el('pluginDetailBody').innerHTML = '<div class="si-empty" style="color:var(--red);">Failed to load plugin: '+esc(r.data.error||'unknown')+'</div>';
+          return;
+        }
+        el('pluginDetailSubtitle').textContent = 'Created by acquisition ' + (r.data.acquisition_id || 'unknown') + ' · code hash ' + (r.data.code_hash || '--');
+        el('pluginDetailBody').innerHTML = renderPluginDetail(r.data);
+      })
+      .catch(function(e) {
+        el('pluginDetailBody').innerHTML = '<div class="si-empty" style="color:var(--red);">Plugin detail error: '+esc(e)+'</div>';
+      });
+  };
+  window.closePluginDetail = function() {
+    el('pluginDetailModal').classList.remove('open');
+  };
+
+  function updateHeader(full, acq, plugs) {
+    var stage = full.stage || 0;
+    var label = full.stage_label || 'frozen';
+    var badge = el('stageBadge');
+    badge.textContent = label.toUpperCase().replace('_',' ');
+    badge.className = 'si-badge ' + (stage===0?'si-badge-frozen':stage===1?'si-badge-dryrun':'si-badge-human');
+
+    var gates = full.safety_gates || {};
+    updateGate('gateQuarantine', gates.quarantine_ok!==false, 'Quarantine '+(gates.quarantine_ok!==false?'OK':'HIGH')+(gates.quarantine_composite!=null?' ('+pct(gates.quarantine_composite)+')':''));
+    updateGate('gateSoulIntegrity', gates.soul_integrity_ok!==false, 'Soul '+(gates.soul_integrity_ok!==false?'OK':'LOW')+(gates.soul_integrity_index!=null?' ('+gates.soul_integrity_index.toFixed(2)+')':''));
+    el('acqBadge').textContent = 'Acq: '+(acq.active_count||0)+' active / '+(acq.total_count||0);
+    el('pluginBadge').textContent = 'Plugins: '+(plugs.total_plugins||0);
+    el('statAcqActive').textContent = acq.active_count || 0;
+    el('statAcqTotal').textContent = acq.total_count || 0;
+    el('statPlugActive').textContent = (plugs.by_state||{}).active || 0;
+    el('statPlugTotal').textContent = plugs.total_plugins || 0;
+
+    var wr = full.win_rate || {};
+    el('statPassRate').textContent = pct(wr.sandbox_pass_rate);
+    var prov = full.provider || {};
+    var coderAvail = (prov.coder||{}).available;
+    el('statProvider').textContent = coderAvail ? 'CoderServer' : prov.claude_available ? 'Claude' : prov.openai_available ? 'OpenAI' : 'Ollama';
+  }
+
+  function updateScanner(s) {
+    if (!s || !Object.keys(s).length) return;
+    el('statAttemptsToday').textContent = (s.attempts_today||0)+'/'+(s.max_attempts_per_day||6);
+    el('scannerSummary').textContent = 'Scan #'+(s.scan_count||0)+' | '+(s.fired_fingerprints||0)+' deduped';
+    el('firedFP').textContent = s.fired_fingerprints||0;
+    el('pastFP').textContent = s.past_proposal_fingerprints||0;
+    var sustained=s.sustained_counts||{};
+    var sKeys=Object.keys(sustained);
+    el('sustainedCounts').textContent = sKeys.length ? sKeys.map(function(k){return k+': '+sustained[k]+'/3';}).join(', ') : 'None active';
+    var cooldowns=s.category_cooldowns||{};
+    var cKeys=Object.keys(cooldowns);
+    el('activeCooldowns').textContent = cKeys.length ? cKeys.map(function(k){return k+': '+Math.round(cooldowns[k]/60)+'m';}).join(', ') : 'None';
+    var snap=s.detector_snapshot||{};
+    var grid=el('detectorGrid');
+    if (snap.skipped) { grid.innerHTML='<div style="color:var(--amber);font-size:0.82rem;">Skipped: '+esc(snap.skipped)+'</div>'; return; }
+    var detectors=['health','reasoning','confidence','latency','event_bus','tick'];
+    grid.innerHTML=detectors.map(function(name){
+      var d=snap[name];
+      if(!d)return'<div class="detector-card"><div class="detector-name">'+esc(name)+'</div><div class="detector-detail">No data</div></div>';
+      var details=Object.entries(d).map(function(kv){var v=typeof kv[1]==='number'?(kv[1]%1?kv[1].toFixed(3):kv[1]):kv[1];return kv[0]+': '+v;}).join(' | ');
+      return'<div class="detector-card"><div class="detector-name">'+esc(name)+'</div><div class="detector-detail">'+esc(details)+'</div></div>';
+    }).join('');
+  }
+
+  function updateCoder(c) {
+    if (!c||!Object.keys(c).length){el('coderBadge').textContent='NOT CONFIGURED';el('coderBadge').className='si-tag si-tag-fail';el('statCoderStatus').textContent='N/A';return;}
+    var avail=c.available;var running=c.running;
+    el('coderBadge').textContent=running?'RUNNING':avail?'AVAILABLE':'NOT AVAILABLE';
+    el('coderBadge').className='si-tag '+(running?'si-tag-pass':avail?'si-tag-info':'si-tag-fail');
+    el('statCoderStatus').textContent=running?'Running':avail?'Ready':'N/A';
+    el('coderAvail').textContent=avail?'Ready':'Missing';el('coderAvail').style.color=avail?'var(--green)':'var(--red)';
+    el('coderModel').textContent=(c.model_path||'').split('/').pop()||'N/A';el('coderModel').title=c.model_path||'';
+    el('coderSize').textContent=c.model_size_gb!=null?c.model_size_gb+' GB':'--';
+    el('coderGPU').textContent=c.gpu_layers!=null?(c.gpu_layers===0?'CPU only (safe default)':c.gpu_layers+' GPU layers'):'--';
+    el('coderGPU').title=c.gpu_layers===0?'Expected: CodeGen runs on CPU to preserve GPU VRAM for live brain models.':'GPU layers are an explicit hardware override for larger systems.';
+    el('coderCtx').textContent=c.ctx_size?(c.ctx_size/1024).toFixed(0)+'k':'--';
+    el('coderGens').textContent=c.total_generations||0;
+    el('coderLastTime').textContent=c.last_generation_time_s?c.last_generation_time_s+'s':'--';
+    el('coderPID').textContent=c.pid||'Stopped';
+  }
+
+  function renderProposals(proposals) {
+    el('proposalCount').textContent=proposals.length+' proposal(s)';
+    if(!proposals||!proposals.length){el('proposalList').innerHTML='<div class="si-empty">No proposals yet. Set <code>SELF_IMPROVE_STAGE=1</code> to enable dry-run mode.</div>';return;}
+    el('proposalList').innerHTML=proposals.map(function(p,i){
+      var what=p.what||{};var why=p.why||{};var where=p.where||{};var who=p.who||{};var sandbox=p.sandbox||{};var review=p.review||{};var diffs=p.diffs||[];
+      var sandboxOk=sandbox.overall_passed;
+      var evidenceHtml='';if(why.evidence&&why.evidence.length){evidenceHtml='<ul class="si-evidence">'+why.evidence.map(function(e){return'<li>'+esc(String(e))+'</li>';}).join('')+'</ul>';}
+      var diffHtml=diffs.map(function(d){return'<div style="margin-bottom:8px;"><div style="font-size:0.72rem;color:var(--cyan);margin-bottom:4px;font-weight:600;">'+esc(d.path)+'</div><div class="si-diff">'+colorDiff(d.diff)+'</div></div>';}).join('');
+      if(!diffHtml)diffHtml='<div style="color:var(--text-muted);font-size:0.8rem;">No diff data.</div>';
+      return '<div class="si-card" id="proposal-'+i+'"><div class="si-card-head" onclick="this.parentElement.classList.toggle(\'open\')"><div><div class="si-card-title">'+esc((what.description||'Unnamed').substring(0,120))+'</div><div class="si-card-meta"><span>'+esc(what.type||'')+'</span><span>'+fmt(p.timestamp)+'</span><span>'+esc(who.provider||'')+'</span><span>'+(p.iterations||0)+' iter</span></div></div><span class="si-tag '+(sandboxOk?'si-tag-pass':'si-tag-fail')+'">'+(sandboxOk?'PASS':'FAIL')+'</span></div>' +
+        '<div class="si-card-body"><div class="si-section"><div class="si-section-label" style="color:var(--red);">5Ws</div><dl class="si-5w"><dt>What</dt><dd>'+esc(what.type||'')+' — '+esc(what.description||'')+'</dd><dt>Why</dt><dd>'+(why.evidence?why.evidence.length+' evidence':'')+evidenceHtml+'</dd><dt>Where</dt><dd>'+esc((where.files_modified||[]).join(', ')||'N/A')+'</dd><dt>Who</dt><dd>'+esc(who.provider||'N/A')+' / '+esc(who.trigger||'N/A')+'</dd><dt>When</dt><dd>'+fmt(p.timestamp)+'</dd></dl></div>' +
+        '<div class="si-section"><div class="si-section-label" style="color:var(--red);">Sandbox</div><div class="si-sandbox-grid"><div class="si-sandbox-item"><div class="label">Lint</div><div class="val" style="color:'+(sandbox.lint_passed?'var(--green)':'var(--red)')+'">'+(sandbox.lint_executed?(sandbox.lint_passed?'PASS':'FAIL'):'SKIP')+'</div></div><div class="si-sandbox-item"><div class="label">Tests</div><div class="val" style="color:'+(sandbox.tests_passed?'var(--green)':'var(--red)')+'">'+(sandbox.tests_executed?(sandbox.tests_passed?'PASS':'FAIL'):'SKIP')+'</div></div><div class="si-sandbox-item"><div class="label">Sim</div><div class="val" style="color:'+(sandbox.sim_passed?'var(--green)':'var(--red)')+'">'+(sandbox.sim_executed?(sandbox.sim_passed?'PASS':'FAIL'):'SKIP')+'</div></div><div class="si-sandbox-item"><div class="label">Overall</div><div class="val" style="color:'+(sandbox.overall_passed?'var(--green)':'var(--red)')+'">'+(sandbox.overall_passed?'PASS':'FAIL')+'</div></div></div></div>' +
+        '<div class="si-section"><div class="si-section-label" style="color:var(--red);">Diff</div>'+diffHtml+'</div></div></div>';
+    }).join('');
+  }
+
+  function updateAnalytics(d) {
+    var wr=d.win_rate||{};
+    el('anaTotal').textContent=wr.total||0;el('anaSbPass').textContent=wr.sandbox_passed||0;el('anaSbFail').textContent=wr.sandbox_failed||0;
+    el('anaSbRate').textContent=pct(wr.sandbox_pass_rate);el('anaRevApp').textContent=wr.review_approved||0;el('anaRevRej').textContent=wr.review_rejected||0;
+    el('anaImprov').textContent=d.total_improvements||0;el('anaRollbacks').textContent=d.total_rollbacks||0;el('anaFails').textContent=d.total_failures||0;
+    var convs=d.recent_conversations||[];
+    el('convList').innerHTML=convs.length?convs.map(function(cv){return'<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:0.8rem;display:flex;justify-content:space-between;"><span style="font-family:var(--font-mono);color:var(--cyan);font-size:0.72rem;">'+esc(cv.id||'')+'</span><span class="si-tag si-tag-info">'+esc(cv.status||'?')+'</span><span>'+esc((cv.request_description||'').substring(0,60))+'</span><span style="color:var(--text-dim);font-size:0.72rem;">'+(cv.turns||0)+' turns</span></div>';}).join(''):'<div style="color:var(--text-muted);padding:16px;">No conversations yet.</div>';
+    var history=d.recent_history||[];
+    el('timelineList').innerHTML=history.length?history.map(function(h){var color=h.status==='promoted'?'var(--green)':h.status==='dry_run'?'var(--amber)':h.status==='failed'?'var(--red)':'var(--text-muted)';return'<li style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.8rem;display:flex;gap:10px;align-items:center;"><span style="color:var(--text-dim);min-width:80px;font-family:var(--font-mono);font-size:0.72rem;">'+esc((h.id||'').substring(0,12))+'</span><span class="si-tag" style="background:'+color+'22;color:'+color+'">'+esc(h.status||'?')+'</span><span>'+esc((h.description||'').substring(0,80))+'</span></li>';}).join(''):'<li style="color:var(--text-muted);">No history yet.</li>';
+  }
+
+  function _renderDistributionBar(s) {
+    var dist = s.claim_label_distribution || s.reason_distribution || null;
+    if (!dist || !Object.keys(dist).length) return '';
+    var title = s.claim_label_distribution ? 'Label Distribution' : 'Reason Distribution';
+    var colors = s.claim_label_distribution
+      ? {conversational:'var(--cyan)',grounded:'var(--green)',verified:'var(--magenta)',preference:'var(--amber)',reflective:'var(--purple, #c0f)',learning_acknowledged:'var(--teal, #0f9)',blocked:'var(--red)',rewritten:'var(--orange, #fa0)'}
+      : {coherence_pass:'var(--green)',novel_insight:'var(--cyan)',redundant:'var(--amber)',low_coherence:'var(--red)',low_confidence:'var(--orange, #fa0)',stale:'var(--text-muted)',anomalous:'var(--magenta)',uncategorized:'var(--text-dim)'};
+    var keys = Object.keys(dist).sort(function(a,b){return (dist[b]||0)-(dist[a]||0);});
+    var total = keys.reduce(function(acc,k){return acc+(dist[k]||0);},0);
+    if (!total) return '';
+    var html = '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;"><div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px;">'+esc(title)+'</div>';
+    html += '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin-bottom:4px;">';
+    keys.forEach(function(k){var pct=((dist[k]||0)/total)*100;html+='<div style="width:'+pct+'%;background:'+(colors[k]||'var(--text-dim)')+';min-width:'+(pct>0?'1px':'0')+';"></div>';});
+    html += '</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:4px 8px;font-size:0.68rem;">';
+    keys.forEach(function(k){html+='<span style="color:'+(colors[k]||'var(--text-dim)')+';">'+esc(k)+': <b>'+dist[k]+'</b></span>';});
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderSpecialists(spec) {
+    var specialists = (spec && spec.specialists) || [];
+    var distill = spec && spec.distillation || {};
+    el('specTotalSignals').textContent = distill.total_signals || 0;
+    el('specTotalQuarantined').textContent = distill.total_quarantined || 0;
+    el('specSummary').textContent = specialists.length + ' specialist(s)';
+    if (!specialists.length) {
+      el('specGrid').innerHTML = '<div style="color:var(--text-muted);padding:20px;text-align:center;">No SI specialists detected. Hemisphere data not yet available.</div>';
+      return;
+    }
+    var matColors = {bootstrap:'var(--red)',early_noisy:'var(--amber)',preliminary:'var(--cyan)',meaningful:'var(--green)',stable:'var(--magenta)'};
+    var matClasses = {bootstrap:'si-tag-fail',early_noisy:'si-tag-warn',preliminary:'si-tag-info',meaningful:'si-tag-pass',stable:'si-tag-mag'};
+    el('specGrid').innerHTML = specialists.map(function(s) {
+      var mc = matColors[s.maturity] || 'var(--text-muted)';
+      var statusCol = s.disabled ? 'var(--red)' : s.status === 'active' ? 'var(--green)' : s.status === 'quarantined' ? 'var(--amber)' : 'var(--text-muted)';
+      var statusLabel = s.disabled ? 'DISABLED' : (s.status || 'idle').toUpperCase();
+      var lastSig = s.last_signal_s != null ? (s.last_signal_s < 120 ? Math.round(s.last_signal_s)+'s ago' : Math.round(s.last_signal_s/60)+'m ago') : 'never';
+      return '<div class="detector-card" style="border-left:3px solid '+mc+';">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+          '<div class="detector-name" style="font-size:0.88rem;color:var(--text);">'+esc(s.focus.toUpperCase().replace('_',' '))+'</div>' +
+          '<span class="si-tag" style="color:'+statusCol+'">'+statusLabel+'</span>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:0.78rem;">' +
+          '<div><span style="color:var(--text-muted);">Maturity</span><div style="margin-top:2px;"><span class="si-tag '+(matClasses[s.maturity]||'si-tag-info')+'">'+esc(s.maturity||'unknown')+'</span></div></div>' +
+          '<div><span style="color:var(--text-muted);">Signals</span><div style="font-weight:700;color:var(--text);margin-top:2px;">'+s.signals_total+' <span style="font-weight:400;color:var(--text-dim);font-size:0.7rem;">(F:'+(s.signals_features||0)+' L:'+(s.signals_labels||0)+')</span></div></div>' +
+          '<div><span style="color:var(--text-muted);">Best Accuracy</span><div style="font-weight:700;color:'+(s.best_accuracy>0?'var(--green)':'var(--text-dim)')+';margin-top:2px;">'+pct(s.best_accuracy)+'</div></div>' +
+          '<div><span style="color:var(--text-muted);">Train Accuracy</span><div style="font-weight:700;color:'+(s.best_training_accuracy>0?'var(--green)':'var(--text-dim)')+';margin-top:2px;">'+pct(s.best_training_accuracy)+'</div></div>' +
+          '<div><span style="color:var(--text-muted);">Training Attempts</span><div style="font-weight:700;color:var(--text);margin-top:2px;">'+s.total_attempts+'</div></div>' +
+          '<div><span style="color:var(--text-muted);">Networks</span><div style="font-weight:700;color:var(--text);margin-top:2px;">'+s.network_count+'</div></div>' +
+          '<div><span style="color:var(--text-muted);">Last Signal</span><div style="color:var(--text-muted);margin-top:2px;">'+esc(lastSig)+'</div></div>' +
+          '<div><span style="color:var(--text-muted);">Quarantined</span><div style="color:'+(s.signals_quarantined>0?'var(--amber)':'var(--text-dim)')+';margin-top:2px;">'+s.signals_quarantined+'</div></div>' +
+          (s.failure_count > 0 ? '<div><span style="color:var(--text-muted);">Failures</span><div style="color:var(--red);font-weight:700;margin-top:2px;">'+s.failure_count+'/3</div></div>' : '') +
+        '</div>' +
+        _renderDistributionBar(s) +
+      '</div>';
+    }).join('');
+  }
+
+  // Toast notification system
+  function showToast(msg, type) {
+    var t = document.createElement('div');
+    t.textContent = msg;
+    var bg = type === 'success' ? 'rgba(0,255,136,.15)' : type === 'error' ? 'rgba(255,0,68,.15)' : 'rgba(255,153,0,.15)';
+    var clr = type === 'success' ? 'var(--green)' : type === 'error' ? 'var(--red)' : 'var(--amber)';
+    var bdr = type === 'success' ? 'var(--green)' : type === 'error' ? 'var(--red)' : 'var(--amber)';
+    t.style.cssText = 'position:fixed;top:16px;right:16px;z-index:9999;padding:12px 20px;border-radius:6px;font-size:0.82rem;font-weight:600;color:'+clr+';background:'+bg+';border:1px solid '+bdr+';backdrop-filter:blur(8px);animation:toastIn .3s ease;max-width:420px;';
+    document.body.appendChild(t);
+    setTimeout(function(){ t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(function(){ t.remove(); }, 300); }, 4000);
+  }
+
+  // Plugin management actions
+  window.pluginAction = function(name, action) {
+    var url = '/api/plugins/' + encodeURIComponent(name) + '/' + action;
+    var body = action === 'activate' ? JSON.stringify({supervision_mode:'shadow'}) : '{}';
+    fetch(url, {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_apiKey},body:body})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(r){ showToast('Plugin '+name+': '+action+(r.ok?' succeeded':' failed'), r.ok?'success':'error'); refresh(); })
+      .catch(function(e){ showToast('Plugin '+action+' error: '+e, 'error'); });
+  };
+  window.approveAcq = function(id) {
+    if (!confirm('Approve this plan for execution?')) return;
+    showToast('Approving plan for '+id+'...', 'info');
+    fetch('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_apiKey},body:JSON.stringify({verdict:'approved'})})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(r){ showToast(r.ok ? 'Plan approved — pipeline advancing to implementation' : 'Approval failed: '+(r.data.error||'unknown'), r.ok?'success':'error'); refresh(); })
+      .catch(function(e){ showToast('Approve error: '+e, 'error'); });
+  };
+  window.denyAcq = function(id) {
+    var notes = prompt('Rejection reason (required for re-planning feedback):');
+    if (!notes) return;
+    showToast('Rejecting plan for '+id+'...', 'info');
+    fetch('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_apiKey},body:JSON.stringify({verdict:'rejected',notes:notes})})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(r){ showToast(r.ok ? 'Plan rejected — sent back for re-planning' : 'Rejection failed: '+(r.data.error||'unknown'), r.ok?'success':'error'); refresh(); })
+      .catch(function(e){ showToast('Reject error: '+e, 'error'); });
+  };
+  window.approveDeploy = function(id) {
+    if (!confirm('Approve deployment of this plugin to active state?')) return;
+    showToast('Approving deployment for '+id+'...', 'info');
+    fetch('/api/acquisition/'+encodeURIComponent(id)+'/approve-deploy',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_apiKey},body:JSON.stringify({approved:true})})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(r){ showToast(r.ok ? 'Deployment approved — plugin activated' : 'Deploy approval failed: '+(r.data.error||'unknown'), r.ok?'success':'error'); refresh(); })
+      .catch(function(e){ showToast('Deploy approve error: '+e, 'error'); });
+  };
+
+  function renderActivityLog(full) {
+    var log = full.activity_log || [];
+    el('activityCount').textContent = log.length + ' entries';
+    var body = el('activityLogBody');
+    if (!log.length) {
+      body.innerHTML = '<div class="si-empty">No activity yet. Pipeline events will appear here.</div>';
+      return;
+    }
+    body.innerHTML = log.map(function(e) {
+      var d = new Date(e.ts * 1000);
+      var ts = d.toLocaleTimeString('en-US', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+      var detail = '';
+      if (e.detail) {
+        var parts = [];
+        Object.keys(e.detail).forEach(function(k) { parts.push(esc(k) + '=' + esc(String(e.detail[k]))); });
+        if (parts.length) detail = '<div class="al-detail">' + parts.join(' · ') + '</div>';
+      }
+      return '<div class="al-row al-lvl-' + esc(e.level||'info') + '">' +
+        '<span class="al-ts">' + ts + '</span>' +
+        '<span class="al-phase">' + esc(e.phase||'') + '</span>' +
+        '<div class="al-msg">' + esc(e.message||'') + detail + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderPendingApprovals(full) {
+    var pending = full.pending_approval_details || [];
+    var panel = el('pendingApprovalsPanel');
+    var list = el('pendingApprovalsList');
+    el('pendingCount').textContent = pending.length;
+    if (!pending.length) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    list.innerHTML = pending.map(function(p, i) {
+      var reasons = (p.why_requires_approval || []).map(function(r) {
+        return '<span class="si-tag si-tag-warn">' + esc(r.replace(/_/g,' ')) + '</span>';
+      }).join(' ');
+      var sb = p.sandbox_summary || {};
+      var sandboxHtml = '<div class="si-sandbox-grid">' +
+        '<div class="si-sandbox-item"><div class="label">Overall</div><div class="val" style="color:' + (sb.overall_passed ? 'var(--green)' : 'var(--red)') + '">' + (sb.overall_passed ? 'PASS' : 'FAIL') + '</div></div>' +
+        '<div class="si-sandbox-item"><div class="label">Lint</div><div class="val" style="color:' + (sb.lint_passed ? 'var(--green)' : 'var(--red)') + '">' + (sb.lint_passed ? 'PASS' : 'FAIL') + '</div></div>' +
+        '<div class="si-sandbox-item"><div class="label">Tests</div><div class="val" style="color:' + (sb.all_tests_passed ? 'var(--green)' : 'var(--red)') + '">' + (sb.all_tests_passed ? 'PASS' : 'FAIL') + '</div></div>' +
+        '<div class="si-sandbox-item"><div class="label">Sim</div><div class="val" style="color:' + (sb.sim_passed ? 'var(--green)' : 'var(--red)') + '">' + (sb.sim_passed ? 'PASS' : 'FAIL') + '</div></div>' +
+        '</div>';
+      var diffsHtml = (p.diffs || []).map(function(d) {
+        return '<div style="margin-top:8px;"><div style="font-size:0.72rem;color:var(--cyan);font-weight:600;">' + esc(d.path) + '</div>' +
+          '<div class="si-diff">' + colorDiff(d.diff) + '</div></div>';
+      }).join('');
+      var evidenceHtml = (p.evidence || []).length ? '<ul class="si-evidence">' + p.evidence.map(function(e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>' : '';
+      return '<div class="si-card open" id="pending-' + i + '">' +
+        '<div class="si-card-head" onclick="this.parentElement.classList.toggle(\'open\')">' +
+          '<div><div class="si-card-title">' + esc(p.description) + '</div>' +
+            '<div class="si-card-meta"><span>' + esc(p.type) + '</span><span>Target: ' + esc(p.target) + '</span><span>Provider: ' + esc(p.provider) + '</span><span>Iters: ' + (p.iterations||0) + '</span></div></div>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<button class="si-btn si-btn-promote" onclick="event.stopPropagation();approveSI(\'' + esc(p.request_id) + '\')">Approve</button>' +
+            '<button class="si-btn si-btn-danger" onclick="event.stopPropagation();rejectSI(\'' + esc(p.request_id) + '\')">Reject</button></div>' +
+        '</div>' +
+        '<div class="si-card-body">' +
+          '<div class="si-section"><div class="si-section-label" style="color:var(--amber);">Why Approval Required</div>' + reasons + '</div>' +
+          (evidenceHtml ? '<div class="si-section"><div class="si-section-label" style="color:var(--cyan);">Evidence</div>' + evidenceHtml + '</div>' : '') +
+          '<div class="si-section"><div class="si-section-label" style="color:var(--green);">Sandbox Results</div>' + sandboxHtml + '</div>' +
+          '<div class="si-section"><div class="si-section-label" style="color:var(--cyan);">Diffs</div>' + (diffsHtml || '<div style="color:var(--text-muted);">No diffs available</div>') + '</div>' +
+        '</div></div>';
+    }).join('');
+  }
+
+  function updateStageControl(full) {
+    var stage = full.stage || 0;
+    var source = full.stage_source || 'default';
+    el('stageSourceBadge').textContent = 'resolved from: ' + source;
+    [0,1,2].forEach(function(s) {
+      var btn = el('stageBtn' + s);
+      if (btn) {
+        btn.style.borderColor = s === stage ? 'var(--cyan)' : '';
+        btn.style.color = s === stage ? 'var(--cyan)' : '';
+        btn.style.fontWeight = s === stage ? '700' : '';
+      }
+    });
+    var info = '';
+    if (source === 'env_var') info = 'Locked by SELF_IMPROVE_STAGE env var — runtime changes will not persist over this.';
+    el('stageInfo').textContent = info;
+  }
+
+  window.setStage = function(stage) {
+    var labels = {0:'frozen',1:'dry-run',2:'human-approval'};
+    if (stage === 2 && !confirm('Enable Stage 2 (human-approval)? All auto-triggered patches will require your explicit approval before applying to disk.')) return;
+    showToast('Setting stage to ' + stage + ' (' + labels[stage] + ')...', 'info');
+    fetch('/api/self-improve/stage', {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_apiKey},body:JSON.stringify({stage:stage})})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(r){
+        if (r.ok && r.data.changed) {
+          showToast('Stage changed to ' + r.data.new_stage + ' (' + (r.data.stage_label||'') + ')' + (r.data.warnings&&r.data.warnings.length ? ' — Warning: '+r.data.warnings.join(', ') : ''), 'success');
+        } else if (r.ok && !r.data.changed) {
+          showToast('Already at stage ' + stage, 'info');
+        } else {
+          showToast('Stage change failed: ' + (r.data.error||'unknown'), 'error');
+        }
+        refresh();
+      })
+      .catch(function(e){ showToast('Stage change error: '+e, 'error'); });
+  };
+
+  window.approveSI = function(id) {
+    if (!confirm('Approve this self-improvement patch for disk apply? Post-apply health monitoring will run automatically.')) return;
+    showToast('Approving patch ' + id + '...', 'info');
+    fetch('/api/self-improve/approve', {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_apiKey},body:JSON.stringify({patch_id:id,approved:true})})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(r){
+        var res = r.data.result || {};
+        if (r.ok && res.applied && !res.rolled_back) {
+          var msg = 'Patch approved and applied.';
+          if (res.restart_verify_scheduled) msg += ' Restart-verify scheduled.';
+          showToast(msg, 'success');
+        } else if (r.ok && res.rolled_back) {
+          showToast('Patch applied but ROLLED BACK: ' + (res.reason||'health regression'), 'error');
+        } else {
+          showToast('Approval failed: ' + (res.reason || r.data.error || 'unknown'), 'error');
+        }
+        refresh();
+      })
+      .catch(function(e){ showToast('Approve error: '+e, 'error'); });
+  };
+
+  window.rejectSI = function(id) {
+    if (!confirm('Reject this self-improvement patch?')) return;
+    showToast('Rejecting patch ' + id + '...', 'info');
+    fetch('/api/self-improve/approve', {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_apiKey},body:JSON.stringify({patch_id:id,approved:false})})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(r){
+        showToast(r.ok ? 'Patch rejected' : 'Rejection failed: '+(r.data.error||'unknown'), r.ok?'success':'error');
+        refresh();
+      })
+      .catch(function(e){ showToast('Reject error: '+e, 'error'); });
+  };
+
+  // ─────────────────────────────────────────────────────────────────
+  // Phase 6.5 L3 Escalation tab renderers.
+  //
+  // Three-axis model surfaced verbatim: current_ok (live), 
+  // prior_attested_ok (ledger), activation_ok (live level >= 3).
+  // Attestation strength is distinguished into verified vs
+  // archived_missing; hash_mismatch / hash_unverifiable records are
+  // rendered but do not contribute to prior_attested_ok.
+  // ─────────────────────────────────────────────────────────────────
+  function _setBool(elid, v) {
+    var e = el(elid); if (!e) return;
+    if (v === true)  { e.textContent = 'true';  e.style.color = 'var(--green)'; }
+    else if (v === false) { e.textContent = 'false'; e.style.color = 'var(--red)'; }
+    else { e.textContent = '--'; e.style.color = 'var(--text-muted)'; }
+  }
+  function _strengthTagClass(s) {
+    if (s === 'verified') return 'si-tag si-tag-pass';
+    if (s === 'archived_missing') return 'si-tag si-tag-warn';
+    if (s === 'hash_mismatch' || s === 'hash_unverifiable') return 'si-tag si-tag-fail';
+    return 'si-tag si-tag-dedup';
+  }
+  function _artifactTagClass(s) {
+    if (s === 'hash_verified') return 'si-tag si-tag-pass';
+    if (s === 'missing') return 'si-tag si-tag-warn';
+    if (s === 'hash_mismatch') return 'si-tag si-tag-fail';
+    if (s === 'hash_unverifiable') return 'si-tag si-tag-fail';
+    return 'si-tag si-tag-dedup';
+  }
+
+  function renderL3Live(levelData) {
+    // Live gate only. current_ok / activation_ok come from the top
+    // level of /api/autonomy/level (live-sourced, never backfilled).
+    // eligibility_detail holds the supporting live metrics.
+    var d = levelData || {};
+    var detail = d.eligibility_detail || {};
+    var currentLevel = d.current_level != null ? d.current_level : '--';
+    var currentOk = !!d.current_ok;
+    var activationOk = !!d.activation_ok;
+    el('l3LiveLevel').textContent = 'L' + currentLevel;
+    _setBool('l3CurrentOk', currentOk);
+    el('l3Wins').textContent = (detail.wins != null ? detail.wins : '--')
+      + (detail.total_outcomes != null ? (' / ' + detail.total_outcomes) : '');
+    el('l3WinRate').textContent = detail.win_rate != null ? pct(detail.win_rate) : '--';
+    el('l3Regressions').textContent = detail.recent_regressions != null ? detail.recent_regressions : '--';
+    _setBool('l3ActivationOk', activationOk);
+
+    var reason = detail.reason || detail.l3_reason || '';
+    el('l3LiveReason').textContent = reason ? 'L3 reason: ' + reason : '';
+
+    var badge = el('l3LiveBadge');
+    if (currentOk) {
+      badge.className = 'si-tag si-tag-pass';
+      badge.textContent = 'live: eligible';
+    } else {
+      badge.className = 'si-tag si-tag-warn';
+      badge.textContent = 'live: not-eligible';
+    }
+  }
+
+  function renderL3Attestation(levelData, attestData) {
+    var ld = levelData || {};
+    var ad = attestData || {};
+    var priorOk = !!ld.prior_attested_ok;
+    var strength = ld.attestation_strength || 'none';
+    var requestOk = !!ld.request_ok;
+
+    _setBool('l3PriorAttestedOk', priorOk);
+    var strEl = el('l3AttestStrength');
+    strEl.textContent = strength;
+    strEl.style.color = (strength === 'verified') ? 'var(--green)'
+      : (strength === 'archived_missing') ? 'var(--amber)'
+      : 'var(--text-muted)';
+    _setBool('l3RequestOk', requestOk);
+
+    var badge = el('l3AttestBadge');
+    if (priorOk) {
+      badge.className = _strengthTagClass(strength);
+      badge.textContent = 'ledger: ' + strength;
+    } else {
+      badge.className = 'si-tag si-tag-dedup';
+      badge.textContent = 'ledger: empty';
+    }
+
+    var records = (ad.records || []);
+    var host = el('l3AttestRecords');
+    if (!records.length) {
+      host.innerHTML = '<div class="si-empty">No attestation records on file.</div>';
+      return;
+    }
+    var html = '<table class="si-table">';
+    html += '<thead><tr><th>Capability</th><th>Artifact</th><th>Strength</th><th>Accepted By</th><th>Window</th><th>Hash</th></tr></thead><tbody>';
+    records.forEach(function(r) {
+      var hashShort = (r.report_hash || '').replace(/^sha256:/, '').slice(0, 10);
+      html += '<tr>'
+        + '<td>' + esc(r.capability_id || '--') + '</td>'
+        + '<td><span class="' + _artifactTagClass(r.artifact_status) + '">' + esc(r.artifact_status || '--') + '</span></td>'
+        + '<td><span class="' + _strengthTagClass(r.attestation_strength || 'none') + '">' + esc(r.attestation_strength || 'none') + '</span></td>'
+        + '<td style="font-size:0.72rem;color:var(--text-muted);">' + esc(r.accepted_by || '--') + '</td>'
+        + '<td style="font-size:0.72rem;color:var(--text-muted);">' + esc(r.evidence_window_start || '--') + ' → ' + esc(r.evidence_window_end || '--') + '</td>'
+        + '<td style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-muted);">' + esc(hashShort) + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    host.innerHTML = html;
+  }
+
+  function renderL3Queue(escData) {
+    var d = escData || {};
+    var pending = d.pending || [];
+    var lifecycle = d.recent_lifecycle || [];
+
+    var badge = el('l3QueueBadge');
+    badge.className = pending.length ? 'si-tag si-tag-warn' : 'si-tag si-tag-info';
+    badge.textContent = pending.length + ' pending · ' + lifecycle.length + ' recent';
+
+    var pHost = el('l3PendingList');
+    if (!pending.length) {
+      pHost.innerHTML = '<div class="si-empty">No pending escalations.</div>';
+    } else {
+      var pHtml = '<table class="si-table"><thead><tr><th>ID</th><th>Metric</th><th>Severity</th><th>Target</th><th>Scope</th><th>Submitted At Level</th><th>Expires</th><th>Actions</th></tr></thead><tbody>';
+      pending.forEach(function(r) {
+        pHtml += '<tr>'
+          + '<td style="font-family:var(--font-mono);font-size:0.72rem;">' + esc(r.id || '') + '</td>'
+          + '<td>' + esc(r.metric || '--') + '</td>'
+          + '<td><span class="si-tag si-tag-warn">' + esc(r.severity || '--') + '</span></td>'
+          + '<td style="font-size:0.72rem;">' + esc(r.target_module || '--') + '</td>'
+          + '<td style="font-size:0.7rem;color:var(--text-muted);">' + esc((r.declared_scope || []).join(', ')) + '</td>'
+          + '<td>L' + (r.submitted_autonomy_level != null ? r.submitted_autonomy_level : '?') + '</td>'
+          + '<td style="font-size:0.72rem;color:var(--text-muted);">' + esc(fmt(r.expires_at)) + '</td>'
+          + '<td>'
+          + '<button class="si-btn" style="padding:4px 10px;font-size:0.7rem;" onclick="approveEscalation(\'' + esc(r.id) + '\')">Approve</button> '
+          + '<button class="si-btn" style="padding:4px 10px;font-size:0.7rem;" onclick="rejectEscalation(\'' + esc(r.id) + '\')">Reject</button>'
+          + '</td>'
+          + '</tr>';
+      });
+      pHtml += '</tbody></table>';
+      pHost.innerHTML = pHtml;
+    }
+
+    var lHost = el('l3LifecycleList');
+    if (!lifecycle.length) {
+      lHost.innerHTML = '<div class="si-empty">No terminal escalation records.</div>';
+    } else {
+      var lHtml = '<table class="si-table"><thead><tr><th>ID</th><th>Metric</th><th>Status</th><th>Outcome</th><th>Approved By</th><th>Rollback Reason</th></tr></thead><tbody>';
+      lifecycle.forEach(function(r) {
+        var statusClass = 'si-tag si-tag-info';
+        if (r.status === 'approved') statusClass = 'si-tag si-tag-pass';
+        else if (r.status === 'rejected') statusClass = 'si-tag si-tag-fail';
+        else if (r.status === 'rolled_back') statusClass = 'si-tag si-tag-fail';
+        else if (r.status === 'parked') statusClass = 'si-tag si-tag-warn';
+        else if (r.status === 'expired') statusClass = 'si-tag si-tag-dedup';
+        lHtml += '<tr>'
+          + '<td style="font-family:var(--font-mono);font-size:0.72rem;">' + esc(r.id || '') + '</td>'
+          + '<td>' + esc(r.metric || '--') + '</td>'
+          + '<td><span class="' + statusClass + '">' + esc(r.status || '--') + '</span></td>'
+          + '<td>' + esc(r.outcome || '--') + '</td>'
+          + '<td style="font-size:0.72rem;color:var(--text-muted);">' + esc(r.approved_by || r.rejected_by || '--') + '</td>'
+          + '<td style="font-size:0.72rem;color:var(--text-muted);max-width:320px;">' + esc(r.rollback_reason || '--') + '</td>'
+          + '</tr>';
+      });
+      lHtml += '</tbody></table>';
+      lHost.innerHTML = lHtml;
+    }
+  }
+
+  window.approveEscalation = function(id) {
+    var reason = prompt('Approval reason (visible in audit log):', '');
+    if (reason === null) return;
+    fetch('/api/autonomy/escalations/' + encodeURIComponent(id) + '/approve', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _apiKey},
+      body: JSON.stringify({reason: reason})
+    }).then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(r){
+        showToast(r.ok ? 'Escalation approved' : ('Approve failed: ' + (r.data.error || r.data.detail || 'unknown')), r.ok ? 'success' : 'error');
+        refresh();
+      }).catch(function(e){ showToast('Approve error: ' + e, 'error'); });
+  };
+
+  window.rejectEscalation = function(id) {
+    var reason = prompt('Rejection reason (visible in audit log):', '');
+    if (reason === null) return;
+    fetch('/api/autonomy/escalations/' + encodeURIComponent(id) + '/reject', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _apiKey},
+      body: JSON.stringify({reason: reason})
+    }).then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(r){
+        showToast(r.ok ? 'Escalation rejected' : ('Reject failed: ' + (r.data.error || r.data.detail || 'unknown')), r.ok ? 'success' : 'error');
+        refresh();
+      }).catch(function(e){ showToast('Reject error: ' + e, 'error'); });
+  };
+
+  async function refreshL3() {
+    // Isolated from the main Promise.all so a missing/failing autonomy
+    // endpoint cannot kill the rest of the dashboard refresh.
+    try {
+      var [lvlRes, escRes, attRes] = await Promise.all([
+        fetch(APIS.autonomyLevel),
+        fetch(APIS.autonomyEscalations),
+        fetch(APIS.autonomyAttestation),
+      ]);
+      var lvlData = lvlRes.ok ? await lvlRes.json() : {};
+      var escData = escRes.ok ? await escRes.json() : {};
+      var attData = attRes.ok ? await attRes.json() : {};
+      renderL3Live(lvlData);
+      renderL3Attestation(lvlData, attData);
+      renderL3Queue(escData);
+    } catch (e) {
+      console.warn('L3 refresh failed:', e);
+    }
+  }
+
+  async function refresh() {
+    refreshCount++;
+    el('refreshCounter').textContent = 'Refresh #'+refreshCount;
+    try {
+      var [fullRes,propRes,scanRes,coderRes,specRes,acqRes,plugRes] = await Promise.all([
+        fetch(APIS.full),fetch(APIS.proposals),fetch(APIS.scanner),fetch(APIS.coder),fetch(APIS.specialists),fetch(APIS.acquisition),fetch(APIS.plugins)
+      ]);
+      var full=await fullRes.json();var prop=await propRes.json();var scanner=await scanRes.json();
+      var coder=await coderRes.json();var spec=await specRes.json();var acq=await acqRes.json();var plugs=await plugRes.json();
+    } catch(e){ console.warn('Fetch failed:',e); return; }
+
+    updateHeader(full, acq, plugs);
+    updateStageControl(full);
+    renderPendingApprovals(full);
+    renderActivityLog(full);
+    renderOverview(full, acq, plugs, coder);
+    renderAcquisitionJobs(acq);
+    renderPlugins(plugs);
+    updateCoder(coder);
+    updateScanner(scanner);
+    renderSpecialists(spec);
+    renderProposals(prop.proposals||[]);
+    updateAnalytics(full);
+    refreshL3();
+    refreshIntentShadow();
+    refreshLanguageKernel();
+    refreshHrrStatus();
+  }
+
+  function _hrrFmt(v, digits) {
+    if (v === null || v === undefined) return '--';
+    if (typeof v === 'number' && isFinite(v)) {
+      return v.toFixed(digits === undefined ? 3 : digits);
+    }
+    return String(v);
+  }
+
+  function refreshHrrStatus() {
+    fetch(APIS.hrrStatus).then(function(r){
+      if (!r.ok) throw new Error('hrr-status status='+r.status);
+      return r.json();
+    }).then(function(s) {
+      var badge = document.getElementById('hrrStatusBadge');
+      if (badge) {
+        // Public marker is always PRE-MATURE even when stage=operational.
+        badge.textContent = 'PRE-MATURE';
+        badge.className = 'si-tag';
+        badge.style.background = 'var(--amber-bg,rgba(255,153,0,0.15))';
+        badge.style.color = 'var(--amber,#f90)';
+        badge.style.fontSize = '0.66rem';
+      }
+      document.getElementById('hrrEnabled').textContent = s.enabled ? 'yes' : 'no';
+      document.getElementById('hrrStage').textContent = s.stage || '--';
+      document.getElementById('hrrDim').textContent = s.dim || '--';
+      document.getElementById('hrrSampleEvery').textContent =
+        s.sample_every_ticks ? (s.sample_every_ticks + ' ticks') : '--';
+      document.getElementById('hrrSampleInterval').textContent =
+        s.sample_interval_s !== undefined ? (s.sample_interval_s.toFixed(2) + 's') : '--';
+      document.getElementById('hrrBackend').textContent = s.backend || '--';
+
+      var w = s.world_shadow || {};
+      document.getElementById('hrrWorldSamples').textContent =
+        (w.samples_total || 0) + ' / ' + (w.samples_retained || 0);
+      document.getElementById('hrrWorldCap').textContent = w.ring_capacity || 500;
+      document.getElementById('hrrWorldClean').textContent = _hrrFmt(w.binding_cleanliness);
+      document.getElementById('hrrWorldAcc').textContent = _hrrFmt(w.cleanup_accuracy);
+      document.getElementById('hrrWorldSim').textContent = _hrrFmt(w.similarity_to_previous);
+
+      var sim = s.simulation_shadow || {};
+      document.getElementById('hrrSimSamples').textContent =
+        (sim.samples_total || 0) + ' / ' + (sim.samples_retained || 0);
+      document.getElementById('hrrSimCap').textContent = sim.ring_capacity || 200;
+      document.getElementById('hrrSimDeltaSim').textContent =
+        _hrrFmt(sim.last_delta_similarity !== undefined ? sim.last_delta_similarity : sim.last_similarity_delta);
+      document.getElementById('hrrSimClean').textContent =
+        _hrrFmt(sim.last_cleanliness_after !== undefined ? sim.last_cleanliness_after : sim.last_binding_cleanliness);
+
+      var rec = s.recall_advisory || {};
+      document.getElementById('hrrRecallSamples').textContent =
+        (rec.samples_total || 0) + ' / ' + (rec.samples_retained || 0);
+      document.getElementById('hrrRecallCap').textContent = rec.ring_capacity || 500;
+      document.getElementById('hrrRecallCache').textContent =
+        (rec.cache_size || 0) + ' / ' + (rec.cache_capacity || 2000);
+      document.getElementById('hrrRecallHelp').textContent = _hrrFmt(rec.help_rate);
+      document.getElementById('hrrRecallOverlap').textContent = _hrrFmt(rec.last_overlap_at_k);
+
+      var ex = s.latest_exercise || {};
+      document.getElementById('hrrExGen').textContent = ex.generated_at || '--';
+      var acc = ex.cleanup_accuracy || {};
+      document.getElementById('hrrExAcc8').textContent = _hrrFmt(acc['8']);
+      document.getElementById('hrrExAcc16').textContent = _hrrFmt(acc['16']);
+      document.getElementById('hrrExFp').textContent = _hrrFmt(ex.false_positive_rate);
+      document.getElementById('hrrExGates').textContent = ex.all_gates_pass ? 'yes' : 'no';
+      document.getElementById('hrrExSide').textContent =
+        (ex.authority_flags && ex.authority_flags.hrr_side_effects !== undefined)
+          ? ex.authority_flags.hrr_side_effects
+          : (ex.hrr_side_effects !== undefined ? ex.hrr_side_effects : '--');
+    }).catch(function(e) {
+      console.warn('hrr-status fetch failed:', e);
+      var badge = document.getElementById('hrrStatusBadge');
+      if (badge) {
+        badge.textContent = 'offline';
+        badge.className = 'si-tag si-tag-danger';
+        badge.style.fontSize = '0.66rem';
+      }
+    });
+  }
+
+  function refreshLanguageKernel() {
+    fetch(APIS.languageKernel).then(function(r){
+      if (!r.ok) throw new Error('language-kernel status='+r.status);
+      return r.json();
+    }).then(function(s) {
+      if (!s || s.error) {
+        el('lkStatusBadge').textContent = s && s.error ? 'error' : 'unavailable';
+        return;
+      }
+      var badgeColor = s.status === 'registered' ? 'var(--green)' : 'var(--amber)';
+      el('lkStatusBadge').textContent = (s.status || '--').toUpperCase();
+      el('lkStatusBadge').style.color = badgeColor;
+      el('lkStatus').textContent = s.status || '--';
+
+      var prematurePanel = el('lkPrematurePanel');
+      var registeredPanel = el('lkRegisteredPanel');
+      if (prematurePanel && registeredPanel) {
+        if (s.status === 'registered') {
+          prematurePanel.style.display = 'none';
+          registeredPanel.style.display = '';
+        } else {
+          prematurePanel.style.display = '';
+          registeredPanel.style.display = 'none';
+        }
+      }
+
+      var live = s.live_artifact;
+      if (live) {
+        el('lkLiveId').textContent = live.artifact_id || '--';
+        el('lkLiveVersion').textContent = live.version || '--';
+        el('lkLiveHash').textContent = live.hash ? live.hash.substring(0, 12) + '...' : '--';
+        el('lkSchemaVer').textContent = live.checkpoint_schema_version != null
+          ? live.checkpoint_schema_version : '--';
+        el('lkPromotedAt').textContent = live.promoted_at ? fmt(live.promoted_at) : '--';
+      } else {
+        el('lkLiveId').textContent = '(none)';
+        el('lkLiveVersion').textContent = '--';
+        el('lkLiveHash').textContent = '--';
+        el('lkSchemaVer').textContent = '--';
+        el('lkPromotedAt').textContent = '--';
+      }
+      el('lkTotal').textContent = s.total_artifacts || 0;
+      el('lkCheckpointExists').textContent = s.checkpoint_exists ? 'yes' : 'no';
+      el('lkCheckpointExists').style.color = s.checkpoint_exists
+        ? 'var(--green)' : 'var(--text-muted)';
+      var matchTxt = (live == null) ? '--' : (s.matches_live_artifact ? 'yes' : 'NO (drift)');
+      el('lkMatches').textContent = matchTxt;
+      el('lkMatches').style.color = s.matches_live_artifact ? 'var(--green)'
+        : (live ? 'var(--red)' : 'var(--text-muted)');
+
+      var arts = (s.artifacts || []).slice().reverse();
+      if (arts.length === 0) {
+        el('lkArtifacts').innerHTML = '<div class="si-empty" style="padding:16px;">No artifacts registered yet.</div>';
+      } else {
+        el('lkArtifacts').innerHTML = '<ul style="list-style:none;padding:0;margin:0;">'
+          + arts.map(function(a) {
+            var isLive = live && a.artifact_id === live.artifact_id;
+            return '<li style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.82rem;'
+              + (isLive ? 'background:rgba(0,255,136,0.05);' : '') + '">'
+              + '<code style="color:' + (isLive ? 'var(--green)' : 'var(--text-muted)') + ';">'
+              + esc(a.artifact_id) + '</code> '
+              + '<span style="color:var(--text-muted);">v' + esc(String(a.version)) + '</span> '
+              + '@ ' + fmt(a.promoted_at)
+              + (isLive ? ' <span style="color:var(--green);">[LIVE]</span>' : '')
+              + '</li>';
+          }).join('') + '</ul>';
+      }
+
+      var rb = s.rollback_history || [];
+      if (rb.length === 0) {
+        el('lkRollbacks').innerHTML = '<div class="si-empty" style="padding:16px;">No rollbacks yet.</div>';
+      } else {
+        el('lkRollbacks').innerHTML = '<ul style="list-style:none;padding:0;margin:0;">'
+          + rb.slice().reverse().map(function(r) {
+            return '<li style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.82rem;">'
+              + '<code style="color:var(--amber);">' + esc(r.from_artifact_id || '(none)')
+              + '</code> &rarr; <code style="color:var(--cyan);">' + esc(r.to_artifact_id) + '</code> '
+              + '@ <span style="color:var(--text-muted);">' + fmt(r.ts) + '</span> '
+              + '(' + esc(r.reason || 'manual') + ')'
+              + '</li>';
+          }).join('') + '</ul>';
+      }
+    }).catch(function(e) {
+      console.warn('language-kernel fetch failed:', e);
+      el('lkStatusBadge').textContent = 'error';
+    });
+  }
+
+  function fmtPct(v) { return (v == null || isNaN(v)) ? '--' : (v * 100).toFixed(1) + '%'; }
+
+  function refreshIntentShadow() {
+    fetch(APIS.intentShadow).then(function(r){
+      if (!r.ok) throw new Error('intent-shadow status='+r.status);
+      return r.json();
+    }).then(function(s) {
+      if (!s || s.error) {
+        el('isLevelBadge').textContent = s && s.error ? 'error' : 'unavailable';
+        return;
+      }
+      el('isLevel').textContent = s.level || '--';
+      el('isLevelBadge').textContent = (s.level || '--').toUpperCase();
+      el('isLevelBadge').style.color = s.level === 'primary' ? 'var(--green)'
+        : s.level === 'advisory' ? 'var(--cyan)' : 'var(--text-muted)';
+      el('isNextLevel').textContent = s.next_level || '(top)';
+      el('isReady').textContent = s.ready_for_promotion ? 'YES' : 'no';
+      el('isReady').style.color = s.ready_for_promotion ? 'var(--green)' : 'var(--text-muted)';
+      el('isObs').textContent = s.observations_total || 0;
+      el('isNN').textContent = s.nn_predictions_total || 0;
+      el('isAgree').textContent = fmtPct(s.rolling_agreement);
+      el('isWin').textContent = s.rolling_window_size || 0;
+      el('isRescues').textContent = s.rescues_applied || 0;
+      el('isPrim').textContent = s.primary_overrides_applied || 0;
+
+      var gates = s.gates || {};
+      var gatesHtml = '<div class="kv-grid">';
+      Object.keys(gates).forEach(function(k) {
+        var g = gates[k];
+        var color = g.ok ? 'var(--green)' : 'var(--amber)';
+        var actual = (g.actual !== undefined && g.actual !== null) ? g.actual : '--';
+        var required = (g.required !== undefined && g.required !== null)
+          ? g.required : (g.required_s !== undefined ? g.required_s + 's' : '--');
+        gatesHtml += '<div class="kv-item">'
+          + '<div class="kv-label">' + esc(k) + '</div>'
+          + '<div class="kv-value" style="color:' + color + ';">'
+          + esc(String(actual)) + ' / ' + esc(String(required)) + '</div>'
+          + '</div>';
+      });
+      gatesHtml += '</div>';
+      el('isGates').innerHTML = gatesHtml;
+
+      var rb = s.rollback_history || [];
+      if (rb.length === 0) {
+        el('isRollbacks').innerHTML = '<div class="si-empty" style="padding:16px;">No rollbacks yet.</div>';
+      } else {
+        el('isRollbacks').innerHTML = '<ul style="list-style:none;padding:0;margin:0;">'
+          + rb.slice().reverse().map(function(r) {
+            return '<li style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.82rem;">'
+              + '<span style="color:var(--amber);">' + esc(r.from_level) + '</span> &rarr; '
+              + '<span style="color:var(--text-muted);">' + esc(r.to_level) + '</span> '
+              + '@ <span style="color:var(--text-muted);">' + fmt(r.ts) + '</span> '
+              + '(agreement=' + fmtPct(r.agreement_at_rollback) + ', '
+              + esc(r.reason || '--') + ')'
+              + '</li>';
+          }).join('') + '</ul>';
+      }
+    }).catch(function(e) {
+      console.warn('intent-shadow fetch failed:', e);
+      el('isLevelBadge').textContent = 'error';
+    });
+  }
+
+  switchTab(getInitialTab());
+  refresh();
+  setInterval(refresh, 10000);
+})();
+</script>
+</body>
+</html>

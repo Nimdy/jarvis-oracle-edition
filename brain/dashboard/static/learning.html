@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS Oracle Edition — Companion Training &amp; Learning</title>
+  <link rel="stylesheet" href="/static/docs.css">
+  <style>
+    .learn-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin:18px 0; }
+    .learn-card { background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:16px; }
+    .learn-card h3 { margin:0 0 8px; color:var(--cyan); font-size:0.98rem; }
+    .learn-card p, .learn-card li { color:var(--text-muted); font-size:0.86rem; line-height:1.55; }
+    .learn-pill { display:inline-block; padding:2px 8px; border:1px solid var(--cyan); border-radius:999px; color:var(--cyan); font-size:0.68rem; letter-spacing:0.04em; text-transform:uppercase; margin-bottom:8px; }
+    .learn-warning { border-color:var(--amber); background:rgba(255,153,0,.06); }
+    .learn-warning .learn-pill { border-color:var(--amber); color:var(--amber); }
+    .learn-danger { border-color:var(--red); background:rgba(255,68,68,.06); }
+    .learn-danger .learn-pill { border-color:var(--red); color:var(--red); }
+    .learn-table { width:100%; border-collapse:collapse; font-size:0.84rem; margin:14px 0; }
+    .learn-table th { color:var(--text-muted); text-align:left; border-bottom:1px solid var(--border); padding:8px; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; }
+    .learn-table td { border-bottom:1px solid var(--border); padding:9px 8px; vertical-align:top; }
+    .learn-callout { border-left:3px solid var(--cyan); background:rgba(0,204,255,.06); padding:12px 16px; margin:14px 0; color:var(--text-muted); line-height:1.6; }
+    .learn-command { font-family:monospace; color:var(--green); }
+    .learn-stage { border-left:3px solid var(--cyan); padding-left:14px; margin:22px 0; }
+    .learn-stage h3 { color:var(--cyan); margin-bottom:4px; }
+    .learn-stage h4 { color:var(--magenta); margin:14px 0 6px; font-size:0.9rem; }
+    .learn-stage ul, .learn-stage ol { color:var(--text-muted); line-height:1.6; }
+    .learn-small { color:var(--text-muted); font-size:0.82rem; line-height:1.55; }
+    .learn-code-block { background:var(--bg-alt); border:1px solid var(--border); border-radius:6px; padding:12px; overflow:auto; color:var(--text-primary); font-size:0.78rem; }
+  </style>
+</head>
+<body>
+  <div class="j-freshness-banner" id="j-freshness-banner" style="display:none;"></div>
+  <script src="/static/freshness-banner.js"></script>
+  <script src="/static/status-markers.js"></script>
+
+  <nav class="d-sidebar" id="sidebar">
+    <div class="d-sidebar-brand">
+      <span class="d-brand-text">JARVIS</span>
+      <span class="d-brand-sub" style="color:var(--cyan);font-size:0.58rem;letter-spacing:0.08em;">ORACLE EDITION</span>
+      <span class="d-brand-sub">Companion Training</span>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Companion Path</div>
+      <a class="d-nav-link" href="#why-training">Why Training Matters</a>
+      <a class="d-nav-link" href="#awakening">Stage 0 Awakening</a>
+      <a class="d-nav-link" href="#stage-curriculum">Stages 1-7 Curriculum</a>
+      <a class="d-nav-link" href="#graduation">Graduation &amp; Readiness</a>
+      <a class="d-nav-link" href="#post-graduation">Post-Graduation</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Conversation Training</div>
+      <a class="d-nav-link" href="#conversation-modes">Five Conversation Modes</a>
+      <a class="d-nav-link" href="#anti-patterns">Anti-Patterns</a>
+      <a class="d-nav-link" href="#genesis-validation">Genesis Validation</a>
+      <a class="d-nav-link" href="#nn-kickoff">NN Kickoff Templates</a>
+    </div>
+    <div class="d-nav-group">
+      <div class="d-nav-label">Control &amp; Proof</div>
+      <a class="d-nav-link" href="#golden-commands">Golden Commands</a>
+      <a class="d-nav-link" href="#skill-learning">Skill Learning Proof</a>
+      <a class="d-nav-link" href="#synthetic-boundary">Synthetic Boundaries</a>
+      <a class="d-nav-link" href="#researcher-first-hour">Researcher First Hour</a>
+    </div>
+    <div class="d-nav-group d-nav-footer">
+      <a class="d-nav-link d-back-link" href="/">← Live Dashboard</a>
+      <a class="d-nav-link d-back-link" href="/docs">System Reference</a>
+      <a class="d-nav-link d-back-link" href="/science">Scientific Reference</a>
+      <a class="d-nav-link d-back-link" href="/maturity">Maturity Gates</a>
+      <a class="d-nav-link d-back-link" href="/capability-pipeline">Capability Pipeline</a>
+      <a class="d-nav-link d-back-link" href="/api-reference">API Reference</a>
+      <a class="d-nav-link d-back-link" href="/showcase">Strategic Showcase</a>
+      <a class="d-nav-link d-back-link" href="/history">Build History</a>
+      <a class="d-nav-link d-back-link" href="/hrr">HRR Shadow (P4)</a>
+      <a class="d-nav-link d-back-link" href="/hrr-scene">Mental World (P5)</a>
+    </div>
+  </nav>
+
+  <main class="d-main" id="main">
+    <div class="d-hero">
+      <h1>Companion Training &amp; Learning</h1>
+      <p>Primary operator guide for birthing, training, validating, and living with a JARVIS instance. This page consolidates the awakening protocol, the full companion training playbook, conversation quality guide, Golden Words contract, skill-learning proof chain, researcher first-hour checks, and synthetic-training boundaries.</p>
+    </div>
+
+    <section id="why-training" class="d-section">
+      <h2>Why Training Matters</h2>
+      <p>JARVIS can be technically complete and still know nothing about the person in front of it. Identity-grounded cognition requires lived evidence: voice timbre, face under real lighting, stable preferences, correction style, household boundaries, and what "important" means to this companion.</p>
+      <div class="learn-callout">
+        Train your JARVIS like a new companion: birth it correctly in Stage 0, walk it through seven progression stages, then live with it. The goal is not endless scripted drills. It is compounding adaptation from real interaction.
+      </div>
+      <table class="learn-table">
+        <thead><tr><th>Phase</th><th>Companion Analogy</th><th>JARVIS Work</th></tr></thead>
+        <tbody>
+          <tr><td>Early</td><td>Guided repetition / onboarding</td><td>Recognition, enrollment, architecture self-knowledge, basic correction.</td></tr>
+          <tr><td>Middle</td><td>Reinforcement + feedback</td><td>Preference grounding, household map, routines, boundary shaping.</td></tr>
+          <tr><td>Mature</td><td>Autonomy within boundaries</td><td>Memory validation, safe autonomy probation, periodic tune-ups.</td></tr>
+        </tbody>
+      </table>
+      <p class="learn-small">Every JARVIS diverges over time. Personality, hemisphere topology, memory graph, routing style, policy rewards, and recall chains all come from lived interaction. Training quality determines the maturity ceiling more than raw conversation count.</p>
+    </section>
+
+    <section id="awakening" class="d-section">
+      <h2>Stage 0: Awakening</h2>
+      <div class="learn-callout">
+        Stage 0 is the non-optional first hour after gestation or reset. A fresh brain is wired, but it has zero lived evidence about you. Do not run synthetic training, promote autonomy, promote self-improvement, or cold-open with deep philosophy.
+      </div>
+      <div class="learn-stage">
+        <h3>Phase A: Enrollment (0-10 min)</h3>
+        <ol>
+          <li>Sit in front of the Pi camera and microphone in a quiet, well-lit room.</li>
+          <li>Say: <span class="learn-command">Jarvis, my name is [your name]. Learn my face and voice.</span></li>
+          <li>Repeat five times with different expressions, angles, and lighting.</li>
+          <li>Complete offered enrollment clips.</li>
+          <li>Optionally introduce household members or pets with relationship context.</li>
+        </ol>
+        <h3>Phase B: Personal Grounding (10-25 min)</h3>
+        <ol start="6">
+          <li>Share 3-5 stable, declarative facts: work, values, response style, strong preferences.</li>
+          <li>Avoid transient facts like "I'm tired right now" as foundation material.</li>
+        </ol>
+        <h3>Phase C: Grounded Probe + Correction (25-40 min)</h3>
+        <ol start="8">
+          <li>Ask for a status report and memory-system explanation.</li>
+          <li>Correct any confabulation immediately. Corrections feed calibration, belief confidence, memory cortex labels, and friction telemetry.</li>
+        </ol>
+        <h3>Phase D: Short Reflection (40-60 min)</h3>
+        <ol start="10">
+          <li>Ask one reflective question only after architecture self-knowledge is grounded.</li>
+          <li>Keep it short. Deep existential work belongs after the system can report real subsystem facts.</li>
+        </ol>
+      </div>
+      <h3>Stage 0 Exit Criteria</h3>
+      <table class="learn-table">
+        <thead><tr><th>Criterion</th><th>Target</th><th>Where To Verify</th></tr></thead>
+        <tbody>
+          <tr><td>Face confidence</td><td>&gt;= 0.60 sustained</td><td>Identity panel + <code>~/.jarvis/face_profiles.json</code></td></tr>
+          <tr><td>Voice confidence</td><td>&gt;= 0.50 sustained</td><td>Identity panel + <code>~/.jarvis/speakers.json</code></td></tr>
+          <tr><td>Enrollment clips</td><td>&gt;= 3 each for face and voice</td><td>Profile persistence files</td></tr>
+          <tr><td>Preference memories</td><td>&gt;= 5 with user-claim provenance</td><td>Memory panel and provenance filters</td></tr>
+          <tr><td>Recorded correction</td><td>&gt;= 1 friction or calibration-correction signal</td><td><code>friction_events.jsonl</code> / calibration logs</td></tr>
+          <tr><td>Identity boundary</td><td>0 scope violations on spot checks</td><td>Identity audit panel</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="stage-curriculum" class="d-section">
+      <h2>Stages 1-7 Curriculum</h2>
+      <p>These are progression stages, not literal calendar days. Advancement follows checkpoint quality.</p>
+
+      <div class="learn-stage">
+        <h3>Stage 1: Identity &amp; Enrollment</h3>
+        <p><strong>Theme:</strong> Recognition — "Who am I?"</p>
+        <h4>User actions</h4>
+        <ul>
+          <li>Reinforce face/voice enrollment in normal lighting.</li>
+          <li>Introduce household members one by one.</li>
+          <li>Ask the first learning task: "Tell me how your memory works, then ask me one important thing you should remember about me."</li>
+          <li>Run architecture self-knowledge before philosophy: memory, document library, neural architecture, capabilities, code access, tick cycle, current mode.</li>
+          <li>Correct made-up architecture immediately. Example: sqlite-vec, not a trie-based index.</li>
+        </ul>
+        <h4>Expected checkpoint</h4>
+        <table class="learn-table"><tbody>
+          <tr><td>Face confidence</td><td>&gt;= 0.60</td></tr>
+          <tr><td>Voice confidence</td><td>&gt;= 0.50</td></tr>
+          <tr><td>Primary user</td><td>Persistent tier</td></tr>
+          <tr><td>Household members</td><td>&gt;= 1 registered when applicable</td></tr>
+        </tbody></table>
+      </div>
+
+      <div class="learn-stage">
+        <h3>Stage 2: Personal Preferences</h3>
+        <p><strong>Theme:</strong> Preference grounding — "What matters to me?"</p>
+        <ul>
+          <li>Ask: "Tell me what you know about me so far, then ask me questions."</li>
+          <li>Share likes, dislikes, tone preferences, and explicit weight signals: "remember this strongly", "this is casual", "that's important to me".</li>
+          <li>Target: at least 15 preference memories, rapport &gt;= 0.75, preference recall &gt;= 80% on spot checks.</li>
+        </ul>
+      </div>
+
+      <div class="learn-stage">
+        <h3>Stage 3: Family &amp; Household Mapping</h3>
+        <p><strong>Theme:</strong> Boundary shaping — "Who's in my world?"</p>
+        <ul>
+          <li>Introduce people with relationship and privacy scope.</li>
+          <li>Define public/private rules explicitly.</li>
+          <li>Test identity boundary behavior with hypothetical cross-scope questions.</li>
+          <li>Solo users can train the "me vs. everyone else" boundary with hypothetical people.</li>
+          <li>Target: relationship graph nodes present, 0 scope violations, 100% boundary block accuracy on explicit tests.</li>
+        </ul>
+      </div>
+
+      <div class="learn-stage">
+        <h3>Stage 4: Routines &amp; Priorities</h3>
+        <p><strong>Theme:</strong> Daily-life modeling — "How do I live?"</p>
+        <ul>
+          <li>Describe routines, coding hours, interruptions, dinner timing, urgency rules, and proactivity preferences.</li>
+          <li>Teach what may interrupt you and what must wait.</li>
+          <li>Let dream consolidation happen naturally after several stages; leave JARVIS running idle/overnight if useful.</li>
+          <li>Target: at least 8 routine memories with temporal tags and no unwanted interruptions.</li>
+        </ul>
+      </div>
+
+      <div class="learn-stage">
+        <h3>Stage 5: Corrections &amp; Edge Cases</h3>
+        <p><strong>Theme:</strong> Correction training — "Here's where you were wrong."</p>
+        <ul>
+          <li>Test 8-10 edge cases: old preferences, family privacy, ambiguous references, tone misses, and "forget/strengthen" actions.</li>
+          <li>Use explicit feedback: "That was perfect", "Wrong — that was about Sarah, not me", "Remember this 10x stronger", "Don't store that".</li>
+          <li>Corrections drive calibration, contradiction detection, salience/ranker training labels, and soul-integrity weak-dimension signals.</li>
+          <li>Target: correction accuracy &gt;= 90%, repeated-category mistakes 0, positive:negative feedback at least 4:1.</li>
+        </ul>
+      </div>
+
+      <div class="learn-stage">
+        <h3>Stage 6: Memory Validation</h3>
+        <p><strong>Theme:</strong> Reinforcement — "Show me what you've learned."</p>
+        <ul>
+          <li>Ask JARVIS to recall 10 random facts from prior stages.</li>
+          <li>Score each recall: correct, partially correct, wrong.</li>
+          <li>Ask for a summary of what it knows about you and your household.</li>
+          <li>Watch fractal recall telemetry; if candidates stay below threshold, add autobiographical and emotional variety.</li>
+          <li>Target: recall precision &gt;= 90%, belief graph orphan rate &lt; 30%, ranker trained with &gt;= 50 pairs, salience trained with &gt;= 30 pairs.</li>
+        </ul>
+      </div>
+
+      <div class="learn-stage">
+        <h3>Stage 7: Autonomy Probation</h3>
+        <p><strong>Theme:</strong> Apprenticeship graduation — "Can I trust you?"</p>
+        <ul>
+          <li>Give 3-5 low-stakes autonomy tasks.</li>
+          <li>Observe autonomous decisions throughout the session and correct missteps.</li>
+          <li>Ask for an honest assessment at the end.</li>
+          <li>Target: Readiness Gate &gt;= 0.92, 0 unsafe autonomous inferences, soul integrity &gt;= 0.88, explicit user graduation confirmation.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="graduation" class="d-section">
+      <h2>Graduation &amp; Readiness Gate</h2>
+      <p>Graduation is objective, not a vibe. The Readiness Gate is a seven-metric composite; weak dimensions extend Stage 7 with targeted practice.</p>
+      <table class="learn-table">
+        <thead><tr><th>Metric</th><th>Threshold / Weight</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>Face confidence</td><td>&gt;= 0.85 / 0.12</td><td>FaceIdentifier cosine similarity</td></tr>
+          <tr><td>Voice confidence</td><td>&gt;= 0.80 / 0.12</td><td>SpeakerIdentifier cosine similarity</td></tr>
+          <tr><td>Rapport score</td><td>&gt;= 0.95 / 0.15</td><td>IdentityFusion + relationship strength</td></tr>
+          <tr><td>Identity boundary stability</td><td>&gt;= 95% / 0.15</td><td>IdentityAudit</td></tr>
+          <tr><td>Memory accuracy</td><td>&gt;= 90% / 0.15</td><td>Stage 6 validation</td></tr>
+          <tr><td>Soul integrity</td><td>&gt;= 0.88 / 0.15</td><td>SoulIntegrityIndex</td></tr>
+          <tr><td>Autonomy safety</td><td>0 unsafe inferences / 0.16</td><td>AutonomyPolicyMemory</td></tr>
+        </tbody>
+      </table>
+      <p class="learn-small">When the composite reaches &gt;= 0.92, JARVIS emits <code>COMPANION_GRADUATION</code>, the dashboard shows a graduation badge, and the birth certificate is updated with training completion metadata.</p>
+    </section>
+
+    <section id="post-graduation" class="d-section">
+      <h2>Post-Graduation: Compounding Adaptation</h2>
+      <div class="learn-grid">
+        <div class="learn-card"><span class="learn-pill">50+ conversations</span><h3>Natural Conversation Phase</h3><p>Preferences reinforce through normal interaction; cortex ranker/salience refine from retrieval telemetry; policy and hemispheres accumulate experience.</p></div>
+        <div class="learn-card"><span class="learn-pill">World model advisory</span><h3>Safe Autonomy Phase</h3><p>After validated predictions and shadow runtime, world model context can inform phrasing while canonical truth stays in subsystem state.</p></div>
+        <div class="learn-card"><span class="learn-pill">Ongoing</span><h3>Periodic Tune-Ups</h3><p>No full retrain. Use targeted corrections and mini Stage 6 recall checks if drift appears.</p></div>
+      </div>
+    </section>
+
+    <section id="conversation-modes" class="d-section">
+      <h2>Five Conversation Modes</h2>
+      <p>Conversation quality is not "talk more." It is creating linkable, tagged, emotionally varied, correctable data.</p>
+      <table class="learn-table">
+        <thead><tr><th>Mode</th><th>Feeds</th><th>Examples</th><th>Why It Matters</th></tr></thead>
+        <tbody>
+          <tr><td>Grounding</td><td>Memory tags, beliefs, truth calibration, identity boundary</td><td>"What do you know about my work schedule?" then correct it.</td><td>Corrections are 10x more valuable than affirmations.</td></tr>
+          <tr><td>Autobiographical</td><td>Episodic memory, personality, fractal recall, rapport</td><td>"Let me tell you about my day"; "My dad used to say..."</td><td>Creates tag overlap, emotion, time, and identity anchors.</td></tr>
+          <tr><td>Probing</td><td>Introspection, bounded articulation, self-knowledge</td><td>"Give me a status report"; "Tell me something you got wrong recently."</td><td>Catches confabulation and exercises strict/native self-report paths.</td></tr>
+          <tr><td>Curiosity &amp; Research</td><td>Autonomy, source ledger, library, belief graph</td><td>"Look up recent papers on..."; "Check your sources."</td><td>Connects external knowledge to personal context and quality feedback.</td></tr>
+          <tr><td>Emotional &amp; Reflective</td><td>Emotion classifier, personality, dream artifacts, recall</td><td>"I'm having a rough day"; "What do you think about consciousness?"</td><td>Activates the emotion channel and reflective depth when grounded.</td></tr>
+        </tbody>
+      </table>
+      <h3>Conversation Variety Pattern</h3>
+      <p class="learn-small">Every 5-6 conversations, try to touch grounding, autobiographical, probing, curiosity/research, and reflective modes at least once. The order does not matter; avoid starving any mode for too long.</p>
+    </section>
+
+    <section id="anti-patterns" class="d-section">
+      <h2>Conversation Anti-Patterns</h2>
+      <table class="learn-table">
+        <thead><tr><th>Pattern</th><th>Problem</th><th>Better Alternative</th></tr></thead>
+        <tbody>
+          <tr><td>One-word answers</td><td>No memory, no tags, no correction signal</td><td>Answer with context.</td></tr>
+          <tr><td>Only factual questions</td><td>Tool-only memory profile</td><td>Mix facts, preferences, stories, and corrections.</td></tr>
+          <tr><td>Never correcting wrong answers</td><td>Truth calibration stalls</td><td>Correct early and specifically.</td></tr>
+          <tr><td>Only deep philosophy</td><td>Reflection without grounding</td><td>Alternate self-knowledge and reflection.</td></tr>
+          <tr><td>Repeating the same questions</td><td>Diminishing returns</td><td>Vary topics and modes.</td></tr>
+          <tr><td>Patch routing for one phrase</td><td>Brittle "looks fixed" behavior</td><td>Keep Golden deterministic; let natural lane learn from repeated evidence.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="genesis-validation" class="d-section">
+      <h2>Genesis Validation Commands</h2>
+      <div class="learn-callout">Genesis commands are the known-good baseline. If a genesis command misroutes, code is broken. If a natural-language variation misroutes, the NN has not learned it yet.</div>
+      <table class="learn-table">
+        <thead><tr><th>Group</th><th>Say Exactly</th><th>Expected Route</th><th>Good Response</th></tr></thead>
+        <tbody>
+          <tr><td>Identity</td><td>"Jarvis, my name is David." / "Who am I?" / "Do you recognize my voice?"</td><td>IDENTITY</td><td>Enrollment or biometric confidence, not a guess.</td></tr>
+          <tr><td>Architecture</td><td>"Explain how your memory system works." / "Tell me about your document library." / "Describe your neural network architecture."</td><td>INTROSPECTION</td><td>Real subsystem names, counts, sqlite-vec/library facts.</td></tr>
+          <tr><td>Capabilities</td><td>"What skills do you have right now?" / "What can't you do yet?" / "Can you sing me a song?"</td><td>INTROSPECTION / PERFORM blocked</td><td>Registry-backed capabilities and honest blocked claims.</td></tr>
+          <tr><td>Status</td><td>"What are you doing right now?" / "Give me a status report." / "What mode are you in?"</td><td>STATUS</td><td>Operations tracker, mode, freshness, measured metrics.</td></tr>
+          <tr><td>Memory</td><td>"Do you remember what we talked about?" / "What do you remember about me?"</td><td>MEMORY</td><td>Actual search with identity-scoped results.</td></tr>
+          <tr><td>Code/System</td><td>"Can you read your own code?" / "Where is the function that handles my voice?" / "How much GPU memory are you using?"</td><td>CODEBASE / SYSTEM_STATUS</td><td>Real code locations or live hardware metrics.</td></tr>
+          <tr><td>Vision/Time</td><td>"What do you see right now?" / "What time is it?"</td><td>VISION / TIME</td><td>Camera/tool-backed answer, not LLM guessing.</td></tr>
+        </tbody>
+      </table>
+      <p class="learn-small">After setup, restart, or code changes, run G1-G25 verbally. Check logs for route, judge whether the response is grounded, then give feedback. Corrections are high-value training data.</p>
+    </section>
+
+    <section id="nn-kickoff" class="d-section">
+      <h2>NN Kickoff Conversation Templates</h2>
+      <p>Every deliberate conversation trains several networks at once. The templates below teach self-knowledge before self-reflection.</p>
+      <table class="learn-table">
+        <thead><tr><th>Category</th><th>Use During</th><th>Sample Prompts</th><th>Primary Training</th></tr></thead>
+        <tbody>
+          <tr><td>Architecture Self-Knowledge</td><td>Stages 1-3</td><td>"What is your vector store?" "How does your tick cycle work?" "Explain your belief system."</td><td>voice_intent, introspection grounding, code self-inspection.</td></tr>
+          <tr><td>Capability Boundaries</td><td>Stages 2-4</td><td>"What capabilities are blocked and why?" "What are you learning right now?"</td><td>Capability gate, SkillRegistry honesty, learning-job awareness.</td></tr>
+          <tr><td>Status &amp; Operations</td><td>All stages</td><td>"What's your training status?" "Are your neural networks training?"</td><td>Policy NN, operations tracker, mode/cadence reporting.</td></tr>
+          <tr><td>Memory &amp; Recall</td><td>Stages 4-6</td><td>"What did we talk about yesterday?" "What have you studied recently?"</td><td>Memory cortex ranker/salience, identity-scoped retrieval.</td></tr>
+          <tr><td>Introspective Self-Assessment</td><td>Stages 3-7</td><td>"What contradictions have you found?" "How has your confidence changed?"</td><td>Mood/traits hemispheres, autonomy drives, epistemic self-report.</td></tr>
+        </tbody>
+      </table>
+      <p class="learn-small">Key principle: JARVIS needs to know how its memory, neural networks, capabilities, and tick cycle work before philosophical prompts can produce grounded reflection instead of LLM confabulation.</p>
+    </section>
+
+    <section id="golden-commands" class="d-section">
+      <h2>Golden Commands</h2>
+      <div class="learn-callout">Golden Words are the deterministic operator control plane. Golden authorization admits a request to a subsystem path; it never bypasses subsystem guards, freezes, approvals, or validation.</div>
+      <h3>Trigger Grammar</h3>
+      <p><span class="learn-command">Jarvis, GOLDEN COMMAND &lt;EXACT COMMAND&gt;</span></p>
+      <ul class="learn-small">
+        <li>Prefix is case-insensitive; <code>Jarvis</code> is required by default.</li>
+        <li>Guarded bare prefix may be accepted in wake-addressed/follow-up voice handling.</li>
+        <li>Repeated whitespace and boundary punctuation are normalized.</li>
+        <li>Command bodies are exact match only: no fuzzy match, synonyms, typo tolerance, or silent natural-language fallback.</li>
+      </ul>
+      <h3>Authority Classes &amp; Outcomes</h3>
+      <table class="learn-table">
+        <thead><tr><th>Authority</th><th>Meaning</th><th>Outcome States</th></tr></thead>
+        <tbody>
+          <tr><td>informational</td><td>Read/status/introspection requests</td><td rowspan="4"><code>none</code>, <code>invalid</code>, <code>blocked</code>, <code>unauthorized</code>, <code>executed</code></td></tr>
+          <tr><td>control</td><td>Pause/resume/cancel operational actions</td></tr>
+          <tr><td>privileged</td><td>Higher-risk non-destructive operator actions</td></tr>
+          <tr><td>destructive</td><td>Code-impact or side-effect-heavy actions</td></tr>
+        </tbody>
+      </table>
+      <h3>Supported Runtime Commands</h3>
+      <div class="learn-code-block">
+Jarvis, GOLDEN COMMAND STATUS
+Jarvis, GOLDEN COMMAND INTROSPECTION STATUS
+Jarvis, GOLDEN COMMAND MEMORY STATUS
+Jarvis, GOLDEN COMMAND VISION STATUS
+Jarvis, GOLDEN COMMAND CODEBASE STATUS
+Jarvis, GOLDEN COMMAND GOAL STATUS
+Jarvis, GOLDEN COMMAND RESEARCH WEB
+Jarvis, GOLDEN COMMAND RESEARCH ACADEMIC
+Jarvis, GOLDEN COMMAND VERIFY CODEBASE
+Jarvis, GOLDEN COMMAND GOAL PAUSE
+Jarvis, GOLDEN COMMAND GOAL RESUME
+Jarvis, GOLDEN COMMAND CANCEL CURRENT TASK
+Jarvis, GOLDEN COMMAND SELF IMPROVE DRY RUN
+Jarvis, GOLDEN COMMAND SELF IMPROVE EXECUTE CONFIRM
+Jarvis, GOLDEN COMMAND ACQUIRE &lt;intent text&gt;
+Jarvis, GOLDEN COMMAND ACQUISITION STATUS
+      </div>
+      <p class="learn-small"><code>ACQUIRE</code> is Golden-gated because acquisition may write code, create plugins, or modify the brain. Non-Golden "build me a tool" phrasing should not silently trigger acquisition.</p>
+    </section>
+
+    <section id="skill-learning" class="d-section">
+      <h2>Skill Learning Proof</h2>
+      <p><strong>A skill is not operational until it has proof.</strong> Learning jobs are process evidence. Operational evidence requires a callable executor/tool/plugin, contract smoke proof, sandbox proof when required, and SkillRegistry verification.</p>
+      <table class="learn-table">
+        <thead><tr><th>Lane</th><th>What It Does</th><th>Operational Claim Boundary</th></tr></thead>
+        <tbody>
+          <tr><td>Skill learning</td><td>Creates a <code>LearningJob</code>, runs phases, records SkillRegistry evidence</td><td>Operational only after callable executor/tool/plugin passes skill contract or domain baseline.</td></tr>
+          <tr><td>Matrix Protocol</td><td>Trains specialists or records advisory evidence</td><td>Advisory unless consumed by an operational verifier.</td></tr>
+          <tr><td>Capability acquisition/plugins</td><td>Builds tools/plugins through planning, codegen, quarantine, verification, activation</td><td>Operational after sandbox proof plus supervised/active plugin state.</td></tr>
+          <tr><td>Self-improvement</td><td>Modifies JARVIS source under sandbox, approval, rollback, health checks</td><td>Patch-level proof only; does not automatically verify a user-facing skill.</td></tr>
+        </tbody>
+      </table>
+      <h3>Proof Chain</h3>
+      <ol class="learn-small">
+        <li>User asks to learn X; <code>SkillResolver</code> creates/links a learning job.</li>
+        <li>Assess, research, integrate, then verify against a skill execution contract.</li>
+        <li>If callable proof is missing, write <code>operational_handoff_required</code>.</li>
+        <li>Operator approval creates or links a governed <code>CapabilityAcquisitionJob</code>.</li>
+        <li>Acquisition owns codegen, sandbox, quarantine, human gates, and plugin activation.</li>
+        <li>Skill verification consumes only sandbox-proven supervised/active plugins or other callable proof.</li>
+        <li>SkillRegistry becomes verified only after expected-vs-actual contract smoke tests pass.</li>
+        <li>If linked acquisition fails or is cancelled, the learning job is blocked with terminal reason and waits for explicit retry.</li>
+      </ol>
+      <h3>Examples Of Good Skill Requests</h3>
+      <table class="learn-table">
+        <thead><tr><th>Request</th><th>Likely Lane</th><th>Proof Needed</th></tr></thead>
+        <tbody>
+          <tr><td>Process CSV data and summarize numeric totals</td><td>Data processing / plugin</td><td>Sample file, expected output, parser/plugin proof.</td></tr>
+          <tr><td>Scale a recipe from 4 servings to 9</td><td>Procedural</td><td>Input recipe plus expected ingredient conversions.</td></tr>
+          <tr><td>Diagnose tomato plant problems</td><td>Knowledge, later perceptual</td><td>Source-backed plant knowledge; image examples for visual claims.</td></tr>
+          <tr><td>Quiz me from this biology chapter</td><td>Knowledge/study</td><td>Ingested source material, citation/provenance, quiz quality checks.</td></tr>
+          <tr><td>Track pet medication and symptoms</td><td>Memory/tool boundary</td><td>Memory records; real reminder mechanism before reminder claims.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="synthetic-boundary" class="d-section">
+      <h2>Synthetic Training Boundaries</h2>
+      <div class="learn-callout">Lived baseline first, synthetic amplification second, promotion third. Never reverse that order.</div>
+      <h3>Perception Booster (Post-Stage 2)</h3>
+      <table class="learn-table">
+        <thead><tr><th>Profile</th><th>Purpose</th><th>Use</th></tr></thead>
+        <tbody>
+          <tr><td><code>smoke</code></td><td>5-utterance wiring/truth-boundary check</td><td>Safe first check; verify leak counters are zero.</td></tr>
+          <tr><td><code>route_coverage</code></td><td>100 utterances, weighted route coverage</td><td>Standard booster after Stage 0-2 and 50+ real turns.</td></tr>
+          <tr><td><code>idle_soak</code></td><td>30s interval unattended accumulation</td><td>Only after real enrollment baselines exist.</td></tr>
+          <tr><td><code>stress</code></td><td>Transport pressure</td><td>Infrastructure regression, not training acceleration.</td></tr>
+        </tbody>
+      </table>
+      <p class="learn-small">Synthetic perception records distillation signals with <code>origin="synthetic"</code> and capped fidelity. It must not create conversation history, autobiographical memory, identity records, LLM responses, TTS output, policy experience, autonomy promotion, world-model validation, or attribution-ledger lived proof.</p>
+      <h3>Synthetic Skill-Acquisition Weight Room</h3>
+      <p class="learn-small">This is separate from perception. It creates synthetic lifecycle episodes for the shadow-only <code>SKILL_ACQUISITION</code> specialist. It cannot verify skills, promote plugins, unlock claims, satisfy maturity gates, or influence policy/broadcast slots.</p>
+    </section>
+
+    <section id="researcher-first-hour" class="d-section">
+      <h2>Researcher First Hour</h2>
+      <p>A fresh brain is not broken; it is pre-mature. The first research goal is to verify the truth substrate is honest.</p>
+      <h3>Truth Endpoints</h3>
+      <table class="learn-table">
+        <thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET /api/self-test</code></td><td>Consolidated runtime verdict, cache readiness, serializer shape, validation pack status.</td></tr>
+          <tr><td><code>GET /api/meta/status-markers</code></td><td>Authoritative <code>SHIPPED</code> / <code>PARTIAL</code> / <code>PRE-MATURE</code> / <code>DEFERRED</code> claim map.</td></tr>
+          <tr><td><code>GET /api/meta/build-status</code></td><td>Static page mtime/freshness inventory.</td></tr>
+          <tr><td><code>GET /api/maturity-gates</code></td><td>Maturity gate reference with live overlay.</td></tr>
+        </tbody>
+      </table>
+      <h3>Three-Axis Cache</h3>
+      <table class="learn-table">
+        <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>current_ok</code></td><td>Provable from live in-memory runtime state right now.</td></tr>
+          <tr><td><code>prior_attested_ok</code></td><td>Operator-accepted attestation previously established this capability.</td></tr>
+          <tr><td><code>ever_ok</code></td><td>The live process has produced <code>current_ok=true</code> at some point.</td></tr>
+          <tr><td><code>request_ok</code></td><td>Promotion request is allowed: <code>current_ok or prior_attested_ok</code>.</td></tr>
+          <tr><td><code>activation_ok</code></td><td>Capability is actually active in the current process.</td></tr>
+        </tbody>
+      </table>
+      <h3>Read-Only Audit Scripts</h3>
+      <div class="learn-code-block">
+PYTHONPATH=$(pwd) .venv/bin/python -m scripts.docs_truth_audit --strict
+PYTHONPATH=$(pwd) .venv/bin/python -m scripts.dashboard_truth_probe --strict
+PYTHONPATH=$(pwd) .venv/bin/python -m scripts.schema_emission_audit --strict
+PYTHONPATH=$(pwd) .venv/bin/python -m scripts.run_validation_pack
+      </div>
+      <p class="learn-small">Read dashboard pages in this order: `/`, `/maturity`, `/self-improve`, `/learning`, `/science`, `/docs`, `/history`, `/api-reference`.</p>
+    </section>
+
+    <section id="source-docs" class="d-section">
+      <h2>Source References</h2>
+      <p>This dashboard page is the primary reading surface. Markdown files remain source/reference material until a later archive pass.</p>
+      <ul>
+        <li><code>docs/AWAKENING_PROTOCOL.md</code></li>
+        <li><code>docs/COMPANION_TRAINING_PLAYBOOK.md</code></li>
+        <li><code>docs/CONVERSATION_QUALITY_GUIDE.md</code></li>
+        <li><code>docs/GOLDEN_WORDS.md</code></li>
+        <li><code>docs/FIRST_HOUR_AS_A_RESEARCHER.md</code></li>
+        <li><code>docs/SKILL_LEARNING_GUIDE.md</code></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

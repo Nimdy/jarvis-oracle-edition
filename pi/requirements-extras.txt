@@ -1,0 +1,18 @@
+# Jarvis Pi 5 — Optional Heavy ML Dependencies
+# These are large packages (2GB+ with PyTorch). Install separately:
+#   pip install -r requirements-extras.txt
+#
+# Each module gracefully degrades if these are missing.
+
+# STT — Moonshine v2 (primary engine, ~200MB with deps)
+useful-moonshine-onnx
+
+# TTS — Kokoro (primary engine, ~300MB)
+kokoro-onnx
+
+# Speaker identification — ECAPA-TDNN (~2GB with torch)
+speechbrain>=1.0
+torchaudio>=2.0
+
+# Voice emotion detection — Wav2Vec2 (uses torch from above)
+transformers>=4.40
