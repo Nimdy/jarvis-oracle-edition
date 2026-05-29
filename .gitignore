@@ -1,0 +1,69 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+.tox/
+.nox/
+
+# Virtual environments
+venv*/
+.venv/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Models (large, downloaded by setup.sh)
+pi/models/
+*.onnx
+*.onnx.json
+*.tflite
+*.hef
+*.bin
+*.gguf
+*.pt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Memory / runtime data
+*.log
+
+# Operator-only HRR runtime flag persistence (P5.1).
+# These belong in ``~/.jarvis/`` per host, never in the repo, so that the
+# owner brain can opt-in to HRR/P5 while fresh clones stay safe-by-default.
+runtime_flags.json
+.jarvis/
+
+# Temp
+*.tmp
+*.wav
+!pi/assets/fillers/*.wav
+
+# Yarn
+.yarn/cache
+.yarn/install-state.gz
+.pnp.*
