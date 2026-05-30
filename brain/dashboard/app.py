@@ -346,6 +346,20 @@ def _create_app() -> FastAPI:
         with open(hrr_scene_path) as f:
             return HTMLResponse(f.read())
 
+    @app.get("/mind", response_class=HTMLResponse)
+    async def mind_page():
+        """Mind's-eye Matrix world view — the world JARVIS *believes* is here.
+
+        Purely observational — the page polls ``/api/hrr/scene`` and
+        ``/api/hrr/scene/history`` on a timer and renders the mental-world
+        scene graph as a 2.5D wireframe room with epistemic-colored object
+        markers and motion trails. Estimated (monocular) positions, not a
+        depth scan; a dense depth mesh is a future phase. Zero authority.
+        """
+        mind_path = os.path.join(_STATIC_DIR, "mind.html")
+        with open(mind_path) as f:
+            return HTMLResponse(f.read())
+
     @app.get("/eval")
     async def eval_page():
         from fastapi.responses import RedirectResponse
