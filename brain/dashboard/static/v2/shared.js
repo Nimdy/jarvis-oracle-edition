@@ -24,6 +24,7 @@ window.V2 = (function(){
   // ---- centralized nav: add a page here once; every page picks it up ----
   // [href, label, stub?] — drop the stub flag when a page ships.
   var NAVPAGES=[
+    ['/static/v2/awakening.html','awakening'],
     ['/static/v2/integrity.html','integrity'],
     ['/static/v2/maturity.html','maturity'],
     ['/static/v2/yardsticks.html','yardsticks'],
@@ -32,7 +33,9 @@ window.V2 = (function(){
     ['/static/v2/cognition.html','cognition'],
     ['/static/v2/identity.html','identity'],
     ['/static/v2/spatial.html','spatial'],
-    ['/static/v2/ops.html','ops']
+    ['/static/v2/ops.html','ops'],
+    ['/static/v2/training.html','training'],
+    ['/static/v2/lab.html','lab',1]
   ];
   // render the shared nav into <nav id="v2nav"></nav>, marking `active`.
   function renderNav(active){

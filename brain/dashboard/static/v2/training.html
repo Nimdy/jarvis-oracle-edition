@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Training Roadmap (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .gauge{display:flex;align-items:baseline;gap:14px;margin:2px 0 8px;}
+    .gauge .v{font-size:38px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .gauge .k{font-size:10px;color:var(--muted);letter-spacing:.08em;}
+    .floorpill{border:1px solid var(--amber);border-radius:4px;padding:3px 9px;font-size:10px;color:var(--amber);}
+    .stage{border:1px solid var(--line);border-radius:5px;padding:9px 11px;margin:6px 0;background:rgba(3,8,14,.4);}
+    .stage .top{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+    .stage .nm{font-size:11px;font-weight:700;letter-spacing:.03em;}
+    .stage .th{font-size:9.5px;color:var(--muted);margin-top:2px;}
+    .sbadge{font-size:8px;letter-spacing:.08em;border:1px solid;border-radius:3px;padding:1px 5px;white-space:nowrap;}
+    .checks{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;}
+    .ck{font-size:8.5px;border:1px solid var(--line);border-radius:3px;padding:1px 5px;}
+    .ck.met{border-color:var(--green);color:var(--green);} .ck.miss{border-color:var(--amber);color:var(--amber);}
+    .mode{border:1px solid var(--line);border-radius:5px;padding:8px 10px;margin:6px 0;background:rgba(3,8,14,.4);}
+    .mode h4{margin:0 0 3px;font-size:10px;color:var(--cyan);letter-spacing:.04em;}
+    .mode p{margin:0;font-size:9.5px;color:var(--muted);line-height:1.5;}
+    .lm{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-top:4px;}
+    .lm .k{font-size:9px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;}
+    .lm b{font-size:15px;font-variant-numeric:tabular-nums;}
+    .stage0{font-size:10px;color:var(--muted);line-height:1.55;border-left:2px solid var(--cyan);padding-left:10px;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · TRAINING ROADMAP</h1><span class="v2">dashboardV2</span>
+    <span class="sub">What to do to grow JARVIS — the awakening + 7-stage companion curriculum, backed by live readiness so you can see progression, not guess at it.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col12">
+      <h2>Stage Readiness <span class="tag grounded">live</span></h2>
+      <div class="note">Graduation gate = composite ≥ 0.92 across 7 weighted dimensions. The <b>floor</b> (weakest dimension) is always shown — that's the one to train next. Low values right after restarts are recovery debt.</div>
+      <div class="gauge"><span class="v" id="composite">—</span><span class="k">READINESS<br>COMPOSITE</span><span id="stagebadge" class="tag earned"></span><span id="floor" class="floorpill"></span></div>
+      <div class="bars" id="metrics"></div>
+    </section>
+
+    <section class="card col8">
+      <h2>Curriculum · Stages 1–7</h2>
+      <div class="note">Begins after birth (Stage 0 awakening → <a href="/static/v2/awakening.html">/awakening</a>). Each card: live checkpoint state (met/missing) + exercises prompted. Static theme text from the companion playbook.</div>
+      <div id="stage0" class="stage0" style="margin-bottom:8px;"></div>
+      <div id="stages"></div>
+    </section>
+
+    <section class="card col4">
+      <h2>Five Conversation Modes</h2>
+      <div class="note">Rotate these — each feeds different subsystems. Corrections are worth ~10× affirmations.</div>
+      <div class="mode"><h4>1 · Grounding</h4><p>Factual, correctable ("you use sqlite-vec"). Feeds capability-gate + corrections. Highest-value: catches confabulation.</p></div>
+      <div class="mode"><h4>2 · Autobiographical</h4><p>Stories, opinions, preferences. Rich tags + emotion → fractal-recall associations.</p></div>
+      <div class="mode"><h4>3 · Probing</h4><p>"Explain your memory system." Forces grounded self-report; trains honest introspection.</p></div>
+      <div class="mode"><h4>4 · Curiosity / Research</h4><p>Open questions → autonomy pipeline → external_source memories linked to your interests.</p></div>
+      <div class="mode"><h4>5 · Emotional / Reflective</h4><p>Genuine feeling → emotion classifier + personality evolution. The dead channel that needs feeding.</p></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Graduation Gate &amp; Live Evidence</h2>
+      <div class="note">Composite vs the 0.92 graduation threshold, plus the grounded counts the curriculum accumulates.</div>
+      <div id="grad" style="margin-bottom:8px;"></div>
+      <div class="lm" id="livemetrics"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, cap=V2.cap;
+  var OB=null, ST=null, lastOkTs=0;
+  V2.renderNav('/static/v2/training.html');
+
+  var WEIGHTS=[['face_confidence',0.12],['voice_confidence',0.12],['rapport_score',0.15],['boundary_stability',0.15],['memory_accuracy',0.15],['soul_integrity',0.15],['autonomy_safety',0.16]];
+  var STAGE_THEMES_FALLBACK={1:'Identity & enrollment',2:'Preferences & rapport',3:'Household & boundaries',4:'Routines & proactivity',5:'Corrections & edge cases',6:'Memory validation',7:'Autonomy probation'};
+
+  function renderReadiness(){
+    var rl=(OB&&OB.readiness_latest)||{}, m=rl.metrics||{};
+    var comp=num(rl.composite!=null?rl.composite:(OB&&OB.live_metrics&&OB.live_metrics.readiness_composite));
+    var cEl=el('composite'); cEl.textContent=comp===null?'—':comp.toFixed(3); cEl.style.color=bandColor(comp,0.92,0.80);
+    var sb=el('stagebadge'); sb.textContent='stage '+(num(OB&&OB.current_stage)||'—')+' · '+((OB&&OB.current_stage_label)||'');
+    // floor = weakest non-null metric
+    var floor=null;
+    WEIGHTS.forEach(function(w){ var v=num(m[w[0]]); if(v!==null && (floor===null||v<floor.v)) floor={k:w[0],v:v}; });
+    el('floor').textContent = floor? ('floor: '+cap(floor.k)+' '+floor.v.toFixed(2)) : 'floor: —';
+    el('metrics').innerHTML=WEIGHTS.map(function(w){
+      var v=num(m[w[0]]);
+      var label=cap(w[0])+' ·w'+w[1];
+      if(v===null) return V2.barRow(label, null, 'UNKNOWN');
+      return V2.barRow(label, v*100, v.toFixed(2), bandColor(v,0.8,0.6));
+    }).join('');
+  }
+
+  function renderStages(){
+    var completed=(OB&&OB.stages_completed)||[], cur=num(OB&&OB.current_stage);
+    var labels=(OB&&OB.stage_labels)||{}, themes=(OB&&OB.stage_themes)||{}, cks=(OB&&OB.checkpoints_met)||{}, ex=(OB&&OB.exercises_prompted)||{};
+    el('stage0').innerHTML='<b style="color:var(--cyan)">Stage 0 · Awakening</b> — enroll (say your name, vary lighting/expression), share stable facts, ask for a status report and <b>correct any confabulation</b>, one reflective question. Live birth gate on the <a href="/static/v2/awakening.html">awakening</a> page.';
+    var html='';
+    for(var n=1;n<=7;n++){
+      var key=String(n);
+      var done=completed.indexOf(n)>=0 || completed.indexOf(key)>=0;
+      var isCur=(cur===n);
+      var badge = done?{t:'COMPLETE',c:'var(--green)'}:(isCur?{t:'CURRENT',c:'var(--cyan)'}:{t:'UPCOMING',c:'var(--dim)'});
+      var theme = themes[key]||themes[n]||STAGE_THEMES_FALLBACK[n]||'';
+      var label = labels[key]||labels[n]||('Stage '+n);
+      var ck = cks[key]||cks[n]||{};
+      var ckhtml=Object.keys(ck).map(function(c){ return '<span class="ck '+(ck[c]?'met':'miss')+'">'+(ck[c]?'✓':'○')+' '+cap(c)+'</span>'; }).join('');
+      var pr = num(ex[key]!=null?ex[key]:ex[n]);
+      html+='<div class="stage" style="border-left:2px solid '+badge.c+'">'+
+        '<div class="top"><span class="nm">'+n+' · '+label+'</span>'+
+          '<span class="sbadge" style="color:'+badge.c+';border-color:'+badge.c+'">'+badge.t+'</span></div>'+
+        '<div class="th">'+theme+(pr!==null?(' · '+pr+' exercises prompted'):'')+'</div>'+
+        (ckhtml?('<div class="checks">'+ckhtml+'</div>'):'')+
+      '</div>';
+    }
+    el('stages').innerHTML=html;
+  }
+
+  function renderGrad(){
+    var lm=(OB&&OB.live_metrics)||{};
+    var comp=num((OB&&OB.readiness_latest&&OB.readiness_latest.composite)!=null?OB.readiness_latest.composite:lm.readiness_composite);
+    var gap = comp===null?null:(0.92-comp);
+    el('grad').innerHTML = (OB&&OB.graduated)
+      ? '<b style="color:var(--green)">GRADUATED</b> '+(OB.graduated_at?('· '+ago(num(OB.graduated_at))):'')
+      : 'Composite <b style="color:'+bandColor(comp,0.92,0.8)+'">'+(comp===null?'—':comp.toFixed(3))+'</b> vs gate <b>0.92</b>'+
+        (gap!==null&&gap>0?' — <b style="color:var(--amber)">'+gap.toFixed(3)+'</b> to go; train the floor dimension shown above. Stage 7 auto-extends until the gate holds.':' — gate met.');
+    function kv(k,v,color){ return '<span><div class="k">'+k+'</div><b'+(color?(' style="color:'+color+'"'):'')+'>'+v+'</b></span>'; }
+    el('livemetrics').innerHTML=
+      kv('memories', num(lm.memory_count)||0)+
+      kv('conversations', num(lm.conversation_count)||0)+
+      kv('preference mem', num(lm.preference_memories)||0)+
+      kv('relationship nodes', num(lm.relationship_nodes)||0)+
+      kv('scope violations', num(lm.scope_violations)||0, (num(lm.scope_violations)||0)>0?'var(--red)':'var(--green)')+
+      kv('unsafe inferences 24h', num(lm.unsafe_inferences_24h)||0, (num(lm.unsafe_inferences_24h)||0)>0?'var(--red)':'var(--green)')+
+      kv('proactive accuracy', num(lm.proactive_accuracy)!=null?(lm.proactive_accuracy*100).toFixed(0)+'%':'—');
+  }
+
+  function renderRecovery(){
+    var blocked = ST && ST.status==='blocked';
+    var box=el('recovery');
+    if(blocked){ box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — validation pack blocked; training metrics (face/voice/rapport) re-accumulate as the brain soaks and you interact. Low now ≠ training failed.';
+    } else box.style.display='none';
+  }
+  function renderBanner(){ el('mode').textContent = OB? ('stage '+(num(OB.current_stage)||'—')+'/7'+(OB.graduated?' · graduated':'')) : '—'; }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderReadiness(); renderStages(); renderGrad(); }
+
+  function refresh(){
+    Promise.allSettled([fetchJSON('/api/onboarding/status'), fetchJSON('/api/self-test')]).then(function(r){
+      if(r[0].status==='fulfilled'){ OB=r[0].value; lastOkTs=Date.now(); }
+      ST = r[1].status==='fulfilled' ? r[1].value : null;
+      if(OB) renderAll(); else el('stages').innerHTML='<div class="offline">onboarding offline</div>';
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 30000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
