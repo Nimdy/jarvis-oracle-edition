@@ -264,10 +264,19 @@ endpoints (no new API).
   entities with a resolved `position_room_m` are placed in the room (monocular
   estimate); others list in the HUD. Verified live: HTTP 200, scene lane on,
   calib v17.
-- **Phase 1.5 — last-known positions** — `FUTURE`. Render occluded/remembered
-  entities at their last-seen position (dimmed/ghosted) so the room reflects
-  everything JARVIS *believes* is there, not just freshly-positioned objects.
-  Pure renderer + last-seen lookup; no depth, no Pi change.
+- **Phase 1.5 — ghost layer + honest "unplaced" dock** — **SHIPPED** `4dcdc5d`.
+  A live-data check killed the original premise (the entities to "place at
+  last-known position" — desk/monitor/cat/keyboard/mouse — have *never* been
+  localized: `position_room_m` null in the live scene and every history frame, so
+  there is no last-seen *position*; placing them would fabricate coordinates).
+  Instead `/mind` classifies each entity into three honest buckets: **solid**
+  (`visible` + current position → filled diamond), **ghost** (has a position but
+  not live-confirmed → dashed hollow diamond + `↺ age · state`, "where JARVIS last
+  saw it"), and **dock** (believed-present but never localized → off-floor
+  "BELIEVED PRESENT · UNPLACED" panel, *not* drawn on the grid). Positions come
+  from a `lastKnownPos` map seeded from history + updated live; nothing is
+  invented. Drive-by fix: history seeding was silently dead (`(hist||[]).forEach`
+  on a `{scenes:[...]}` object → swallowed by `.catch`) — now reads `hist.scenes`.
 - **Phase 2 — dense depth mesh** — `FUTURE`. The Vision-Pro-style triangulated
   room mesh + flowing point cloud needs dense per-pixel depth the system does not
   have. Path: a monocular depth model (Depth Anything v2 / MiDaS) on the brain

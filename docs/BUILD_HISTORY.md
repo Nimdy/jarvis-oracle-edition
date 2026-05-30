@@ -49,7 +49,7 @@ HRR vectors ever written to disk.
 | `GET /api/hrr/scene/episode?session=<id>&limit=<n>` | `{session_id,count,worlds:[<stored world records>], ...}` — page stored worlds |
 | `GET /api/hrr/scene/explore?world_id=<id>` | `{world_id, world, explore_traces:[<nav trace>], loaded_from_store:true, ...}` — re-walk a stored world via the pure `mental_navigation` ops (turn-left -> move-forward -> turn-right), returning imagined-step traces |
 
-### C) Matrix world view — the `/mind` page (P5 visualization, commits `457b3f2` + `bc9f5b0`, SHIPPED)
+### C) Matrix world view — the `/mind` page (P5 visualization, commits `457b3f2` + `bc9f5b0` + `4dcdc5d`, SHIPPED)
 
 The "Matrix view": letting JARVIS *see what it sees / where it is* — a
 foundational prerequisite in the digital-consciousness theory (explicitly NOT a
@@ -68,11 +68,17 @@ endpoints, cannot write beliefs or affect the belief graph.
 
 Verified live: `/mind` HTTP 200; scene lane `enabled=True`; live scene ~10 entities / 3 relations / calibration_version 17.
 
-**Honest Phase-1 limitation:** only entities with a resolved `position_room_m` are *placed* in the room (monocular estimate; resolves for some confirmed detections). Others appear in the HUD list but not on the floor. The dense triangulated room mesh + flowing point cloud aesthetic (the reference image) is **Phase 2** — it needs dense per-pixel depth the system does not have yet (path: a monocular depth model on the brain GPU → point cloud → mesh; tradeoff is the Pi must stream frames/keyframes). `/mind` is built so that layer drops in later.
+**Phase 1.5 — ghost layer + honest "unplaced" dock (commit `4dcdc5d`, SHIPPED).** The Phase 1.5 plan was "render the occluded/remembered entities (desk/monitor/cat/keyboard/mouse) at their last-known position." **A live-data check killed that premise:** those entities have *never* been localized — `position_room_m` is null in the live scene **and** in every retained `/api/hrr/scene/history` frame; they only ever reach state `candidate`/`occluded` in region `unknown`. There is no last-seen *position* to place them at, and placing them would fabricate coordinates the system never computed (forbidden). So `/mind` now classifies every scene entity into three honest buckets:
+- **solid (live):** `state=visible` AND a current `position_room_m` → filled diamond + glow (unchanged Phase-1 look).
+- **ghost (remembered/inferred):** has a position (current or last-known) but is not live-confirmed (occluded/removed/missing) → dashed hollow diamond, dimmed pole/ring, `↺ <age> · <state>` tag — shows where JARVIS last saw it.
+- **dock (believed-but-unplaced):** in the belief set but no position anywhere → listed in a new off-floor **"BELIEVED PRESENT · UNPLACED"** panel, *not* drawn on the grid. The floor stays strictly truthful.
+
+Last-known positions come from a `lastKnownPos` map seeded once from history and updated from every live frame; `resolvePos()` never invents a position. **Drive-by fix:** history seeding had been silently dead — the endpoint returns `{scenes:[...]}` but the code called `(hist||[]).forEach(...)` on the response object, which threw straight into the `.catch`, so trail seeding from history never ran. Now reads `hist.scenes`. Readout split to "ON THE FLOOR" (placed only); stat line reports live/remembered/unplaced counts; `age()` uses the server scene timestamp to avoid client/server clock skew. Verified: classification reproduced against live data (2 solid / 1 ghost / 7 dock at check time); script syntax validated.
+
+**Honest Phase-1 limitation (still true for the dense look):** only entities with a resolved `position_room_m` are *placed on the floor* (monocular estimate; resolves for some confirmed detections). The dense triangulated room mesh + flowing point cloud aesthetic (the reference image) is **Phase 2** — it needs dense per-pixel depth the system does not have yet (path: a monocular depth model on the brain GPU → point cloud → mesh; tradeoff is the Pi must stream frames/keyframes). `/mind` is built so that layer drops in later.
 
 ### Future (not yet built)
 
-- `/mind` Phase 1.5 = render occluded/remembered entities at last-known position (dimmed/ghosted) so the room reflects everything JARVIS *believes* is there. Pure renderer; no depth, no Pi change.
 - `/mind` Phase 2 = monocular depth (Depth Anything v2 / MiDaS) → dense mesh (the reference-image aesthetic). Needs Pi frame/keyframe streaming or a depth camera.
 - Stone 3 = room-stitcher (room extent / coverage / "what's still unseen"; metric scale needs an extrinsic calibration step — intrinsics are at `calibration_version=17`).
 - Stone 4 = human-reviewed `SpatialMemoryGate` promotion of rare, high-confidence, human-relevant changes to compact STRING memories only ("you left X at Y"), never coordinates.
