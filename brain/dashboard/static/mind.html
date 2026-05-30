@@ -90,12 +90,18 @@
   window.addEventListener('resize', resize); resize();
 
   // --- pseudo-3D camera: looks into +z, slightly elevated. room x=[-w/2,w/2], y up, z fwd ---
+  // --- pseudo-3D camera: eye at (0, CAM_Y, -CAM_DIST) looking into +z, tilted down.
+  // Framed so the NEAR floor edge (z=0) lands at NEAR_FRAC of the screen height
+  // (fully visible) and the horizon sits at HORIZON_FRAC (high) — this makes the
+  // floor grid the hero band instead of letting the room shell balloon center-screen.
+  var HORIZON_FRAC = 0.33, NEAR_FRAC = 0.90, CAM_Y = 1.5, CAM_DIST = 3.0;
   function project(x,y,z){
-    var camY=1.45, camZ=-2.6, f=Math.min(W,H)*0.95;
-    var rz = z - camZ;                       // depth from camera
+    var horizon = H*HORIZON_FRAC;
+    var f = (NEAR_FRAC - HORIZON_FRAC) * H * CAM_DIST / CAM_Y;  // self-consistent framing
+    var rz = z + CAM_DIST;                    // depth from camera
     if (rz < 0.05) rz = 0.05;
     var sx = W/2 + f*(x)/rz;
-    var sy = H*0.52 - f*(y-camY)/rz;
+    var sy = horizon + f*(CAM_Y - y)/rz;
     return {x:sx, y:sy, d:rz};
   }
 
@@ -127,14 +133,16 @@
     if(!layers.grid) return;
     var w=ROOM.w, d=ROOM.d, step=0.5;
     ctx.lineWidth=1;
+    // depth lines (run away from camera) — brighter; center line accented
     for(var x=-w/2; x<=w/2+1e-6; x+=step){
       var a=project(x,0,0), b=project(x,0,d);
-      ctx.strokeStyle='rgba(10,255,200,'+(x===0?0.5:0.12)+')';
+      ctx.strokeStyle='rgba(10,255,200,'+(x===0?0.55:0.18)+')';
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
     }
+    // cross lines (parallel to camera) — fade with depth
     for(var z=0; z<=d+1e-6; z+=step){
       var c=project(-w/2,0,z), e2=project(w/2,0,z);
-      ctx.strokeStyle='rgba(10,255,200,'+(0.05+0.10*(1-z/d))+')';
+      ctx.strokeStyle='rgba(10,255,200,'+(0.08+0.16*(1-z/d))+')';
       ctx.beginPath(); ctx.moveTo(c.x,c.y); ctx.lineTo(e2.x,e2.y); ctx.stroke();
     }
   }
@@ -142,17 +150,21 @@
   function drawWalls(){
     if(!layers.walls) return;
     var w=ROOM.w/2, d=ROOM.d, h=ROOM.h;
-    ctx.strokeStyle='rgba(0,204,255,0.22)'; ctx.lineWidth=1;
-    function seg(p1,p2){var a=project(p1[0],p1[1],p1[2]),b=project(p2[0],p2[1],p2[2]);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
-    // vertical corners
-    seg([-w,0,0],[-w,h,0]); seg([w,0,0],[w,h,0]); seg([-w,0,d],[-w,h,d]); seg([w,0,d],[w,h,d]);
-    // top frame
-    seg([-w,h,0],[w,h,0]); seg([-w,h,d],[w,h,d]); seg([-w,h,0],[-w,h,d]); seg([w,h,0],[w,h,d]);
-    // back wall horizontals
-    seg([-w,0,d],[w,0,d]);
-    // faint ceiling grid lines
-    ctx.strokeStyle='rgba(0,204,255,0.07)';
-    for(var x=-w; x<=w+1e-6; x+=1.0) seg([x,h,0],[x,h,d]);
+    ctx.lineWidth=1;
+    function seg(p1,p2,a){
+      ctx.strokeStyle='rgba(0,204,255,'+a+')';
+      var A=project(p1[0],p1[1],p1[2]),B=project(p2[0],p2[1],p2[2]);
+      ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+    }
+    // Subtle room hint: back wall + receding top edges only. The near corners
+    // project off-screen by design, so we draw the back frame (the "horizon room")
+    // and the two receding ceiling edges — enough to read as a room, not a box.
+    seg([-w,0,d],[ w,0,d], 0.16);   // back wall base
+    seg([-w,0,d],[-w,h,d], 0.16);   // back-left vertical
+    seg([ w,0,d],[ w,h,d], 0.16);   // back-right vertical
+    seg([-w,h,d],[ w,h,d], 0.16);   // back wall top
+    seg([-w,h,0],[-w,h,d], 0.07);   // receding top-left edge
+    seg([ w,h,0],[ w,h,d], 0.07);   // receding top-right edge
   }
 
   function drawTrails(){
