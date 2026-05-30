@@ -26,6 +26,17 @@
     .sensors .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
     .scenefoot{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
     .scenefoot b{color:var(--text);}
+    /* operator actions (add-only) */
+    .opgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:4px;}
+    @media(max-width:900px){.opgrid{grid-template-columns:1fr;}}
+    .opblk{border:1px solid var(--line);border-radius:5px;padding:10px 12px;background:rgba(3,8,14,.5);}
+    .opblk .opt{font-size:9.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:7px;}
+    .opblk .opd{font-size:9.5px;color:var(--dim);margin-bottom:8px;line-height:1.5;}
+    .opfield{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+    .opfield .v2-field{flex:1;min-width:120px;width:auto;margin:0;}
+    .modrow{display:flex;gap:6px;align-items:center;margin:8px 0;}
+    .modrow .v2-field{flex:1;width:auto;margin:0;}
+    .recnote{font-size:10px;color:var(--dim);margin-top:8px;line-height:1.5;}
   </style>
 </head>
 <body>
@@ -71,6 +82,39 @@
       <div class="sensors" id="sensors"></div>
       <div class="bars" id="scene-bars"></div>
       <div class="scenefoot" id="scene-foot"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Operator Actions</h2>
+      <div class="note">Human-initiated writes to the biometric registry and live fusion. These fire <b>only</b> when you click — never automatically. Enrollment quality is unverified until a live match; removals and forget-all are destructive and irreversible (typed gate).</div>
+      <div class="opgrid">
+        <div class="opblk">
+          <div class="opt">Enrollment</div>
+          <div class="opd">Add a person's voice (mic clips) or face (camera frame) to the durable registry. Quick voice-enroll uses the last buffered audio.</div>
+          <div class="actrow">
+            <button class="btn-act" id="op-enroll-speaker">Enroll Speaker</button>
+            <button class="btn-act" id="op-enroll-face">Enroll Face</button>
+          </div>
+        </div>
+        <div class="opblk">
+          <div class="opt">Candidates</div>
+          <div class="opd">Override the automatic promotion gate: force a candidate to persistent identity, or reject and discard one.</div>
+          <div class="actrow">
+            <button class="btn-act" id="op-promote">Promote Candidate</button>
+            <button class="btn-act" id="op-reject">Reject Candidate</button>
+          </div>
+        </div>
+        <div class="opblk">
+          <div class="opt">Fusion / Registry</div>
+          <div class="opd">Toggle live face recognition, remove a single enrolled profile, or wipe ALL biometric data for a person.</div>
+          <div class="actrow">
+            <button class="btn-act" id="op-toggle-face">Toggle Face Recognition</button>
+            <button class="btn-danger" id="op-remove-speaker">Remove Speaker</button>
+            <button class="btn-danger" id="op-remove-face">Remove Face</button>
+            <button class="btn-danger" id="op-forget-all">Forget ALL Identity</button>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -268,6 +312,229 @@
     });
   }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+
+  // ===== OPERATOR ACTIONS (add-only) — writes fire ONLY on a human click =====
+  // Endpoints/bodies ported verbatim from v1 interactives.js + brain/dashboard/app.py.
+  // V2.post/V2.del are NEVER called at top level or on load — only inside handlers.
+  function _statusLine(node, msg, ok){ if(!node) return; node.textContent=msg; node.style.color=ok===false?'var(--red)':(ok===true?'var(--green)':'var(--amber)'); }
+
+  // ---- Enroll Speaker: getUserMedia mic -> MediaRecorder -> base64 clips ----
+  // POST /api/speakers/enroll {name, clips:[b64...]}  (quick-enroll = clips:[])
+  var _spkRecorder=null;
+  function openEnrollSpeaker(){
+    var bd=V2.modal('Enroll Speaker',
+      '<div class="modrow"><input id="es-name" class="v2-field" autocomplete="off" placeholder="Person name"></div>'+
+      '<div class="actrow">'+
+        '<button class="btn-act" id="es-quick">Quick Enroll (last audio)</button>'+
+        '<button class="btn-act" id="es-record">Record 8s</button>'+
+      '</div>'+
+      '<div class="recnote">Quick Enroll uses the last buffered audio on the brain. Record captures 8s from this browser’s mic and ships it as a base64 clip. Click Record again to stop early.</div>'+
+      '<div id="es-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#es-name'), st=bd.querySelector('#es-status');
+    nameEl.focus();
+    function postEnroll(clips){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name first', false); return; }
+      _statusLine(st, clips.length? 'Enrolling from recorded clip…' : 'Enrolling from last audio…', null);
+      V2.act(V2.post('/api/speakers/enroll', {name:name, clips:clips}), 'speaker enroll submitted')
+        .then(function(d){
+          if(d && d.status==='enrolled'){ _statusLine(st, 'Enrolled: '+d.name+(d.clips!=null?(' ('+d.clips+' clips)'):''), true); refresh(); }
+          else { _statusLine(st, (d&&(d.detail||d.error))||'Failed', false); }
+        }).catch(function(e){ _statusLine(st, e.message, false); });
+    }
+    bd.querySelector('#es-quick').addEventListener('click', function(){ postEnroll([]); });
+    bd.querySelector('#es-record').addEventListener('click', function(){
+      if(_spkRecorder){ _spkRecorder.stop(); _statusLine(st,'Processing…',null); return; }
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name first', false); return; }
+      navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+        _statusLine(st,'Recording 8 seconds…',null);
+        var recorder=new MediaRecorder(stream,{mimeType:'audio/webm'}), chunks=[];
+        recorder.ondataavailable=function(e){ chunks.push(e.data); };
+        recorder.onstop=function(){
+          _spkRecorder=null; stream.getTracks().forEach(function(t){ t.stop(); });
+          var blob=new Blob(chunks,{type:'audio/webm'}), reader=new FileReader();
+          reader.onload=function(){ postEnroll([reader.result.split(',')[1]]); };
+          reader.readAsDataURL(blob);
+        };
+        recorder.start(); _spkRecorder=recorder;
+        setTimeout(function(){ if(_spkRecorder) _spkRecorder.stop(); }, 8000);
+      }).catch(function(err){ _statusLine(st,'Mic error: '+err.message, false); });
+    });
+  }
+
+  // ---- Enroll Face: video frame -> canvas -> base64 crop ----
+  // POST /api/faces/enroll {name, crops:[b64...]}  (also supports crops:[] quick)
+  var _faceStream=null;
+  function _stopFaceStream(){ if(_faceStream){ _faceStream.getTracks().forEach(function(t){ t.stop(); }); _faceStream=null; } }
+  function openEnrollFace(){
+    var bd=V2.modal('Enroll Face',
+      '<div class="modrow"><input id="ef-name" class="v2-field" autocomplete="off" placeholder="Person name"></div>'+
+      '<video id="ef-video" autoplay playsinline muted style="width:100%;border:1px solid var(--line);border-radius:4px;background:#000;max-height:240px"></video>'+
+      '<div class="actrow">'+
+        '<button class="btn-act" id="ef-capture">Capture Frame</button>'+
+        '<button class="btn-act" id="ef-quick">Quick Enroll (no crop)</button>'+
+      '</div>'+
+      '<div class="recnote">Capture grabs the current camera frame from this browser, encodes it as a base64 JPEG crop, and ships it. Quick Enroll registers the name with no crop (server-side capture).</div>'+
+      '<div id="ef-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#ef-name'), vid=bd.querySelector('#ef-video'), st=bd.querySelector('#ef-status');
+    nameEl.focus();
+    navigator.mediaDevices.getUserMedia({video:true}).then(function(stream){ _faceStream=stream; vid.srcObject=stream; })
+      .catch(function(err){ _statusLine(st,'Camera error: '+err.message+' — Quick Enroll still works.', false); });
+    // stop the camera when the modal closes
+    var ov=document.getElementById('v2-overlay');
+    if(ov){ var onClose=function(){ _stopFaceStream(); }; ov.addEventListener('click', onClose, {once:false}); ov.querySelector('#v2-modal-x').addEventListener('click', onClose, {once:false}); }
+    function postFace(crops){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name first', false); return; }
+      _statusLine(st, crops.length?'Enrolling captured frame…':'Enrolling (server capture)…', null);
+      V2.act(V2.post('/api/faces/enroll', {name:name, crops:crops}), 'face enroll submitted')
+        .then(function(d){
+          if(d && d.status==='enrolled'){ _statusLine(st,'Face enrolled: '+d.name, true); _stopFaceStream(); refresh(); }
+          else { _statusLine(st,(d&&(d.detail||d.error))||'Failed', false); }
+        }).catch(function(e){ _statusLine(st, e.message, false); });
+    }
+    bd.querySelector('#ef-capture').addEventListener('click', function(){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name first', false); return; }
+      if(!vid.videoWidth){ _statusLine(st,'Camera not ready', false); return; }
+      var cv=document.createElement('canvas'); cv.width=vid.videoWidth; cv.height=vid.videoHeight;
+      cv.getContext('2d').drawImage(vid,0,0,cv.width,cv.height);
+      postFace([cv.toDataURL('image/jpeg',0.92).split(',')[1]]);
+    });
+    bd.querySelector('#ef-quick').addEventListener('click', function(){ postFace([]); });
+  }
+
+  // ---- name-prompt form helper for candidate promote/reject ----
+  function openNamePrompt(title, label, btnLabel, onSubmit){
+    var prefill = CAND && (CAND.candidates||[])[0] ? (CAND.candidates[0].name||'') : '';
+    var bd=V2.modal(title,
+      '<div class="recnote" style="margin-top:0">'+label+'</div>'+
+      '<div class="modrow"><input id="np-name" class="v2-field" autocomplete="off" placeholder="Candidate name" value="'+prefill+'">'+
+      '<button class="btn-act" id="np-go">'+btnLabel+'</button></div>'+
+      '<div id="np-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#np-name'), st=bd.querySelector('#np-status');
+    nameEl.focus();
+    bd.querySelector('#np-go').addEventListener('click', function(){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name', false); return; }
+      onSubmit(name, st);
+    });
+  }
+
+  // POST /api/identity/candidates/promote {name}
+  function openPromote(){
+    openNamePrompt('Promote Candidate', 'Force-promote a candidate to persistent identity, bypassing the automatic evidence gate.', 'Promote', function(name, st){
+      _statusLine(st,'Promoting…',null);
+      V2.act(V2.post('/api/identity/candidates/promote', {name:name}), 'candidate promoted')
+        .then(function(){ _statusLine(st,'Promoted: '+name, true); refresh(); })
+        .catch(function(e){ _statusLine(st, e.message, false); });
+    });
+  }
+  // POST /api/identity/candidates/reject {name}
+  function openReject(){
+    openNamePrompt('Reject Candidate', 'Reject and discard a candidate. This drops its accumulated evidence.', 'Reject', function(name, st){
+      _statusLine(st,'Rejecting…',null);
+      V2.act(V2.post('/api/identity/candidates/reject', {name:name}), 'candidate rejected')
+        .then(function(){ _statusLine(st,'Rejected: '+name, true); refresh(); })
+        .catch(function(e){ _statusLine(st, e.message, false); });
+    });
+  }
+
+  // POST /api/identity/toggle-face {enabled}
+  function openToggleFace(){
+    var faceOn = (FACE && FACE.available===true) || (ID && ID.fusion && ID.fusion.face_signal && ID.fusion.enabled===true);
+    var next = !faceOn;
+    var bd=V2.modal('Toggle Face Recognition',
+      '<div class="recnote" style="margin-top:0">Face recognition currently looks <b>'+(faceOn?'enabled':'disabled/unknown')+'</b>. This will set it to <b>'+(next?'enabled':'disabled')+'</b> for live fusion.</div>'+
+      '<div class="actrow">'+
+        '<button class="btn-act" id="tf-enable">Enable</button>'+
+        '<button class="btn-act" id="tf-disable">Disable</button>'+
+      '</div>'+
+      '<div id="tf-status" class="recnote"></div>');
+    var st=bd.querySelector('#tf-status');
+    function send(enabled){
+      _statusLine(st,(enabled?'Enabling…':'Disabling…'),null);
+      V2.act(V2.post('/api/identity/toggle-face', {enabled:enabled}), 'face recognition '+(enabled?'enabled':'disabled'))
+        .then(function(d){ _statusLine(st,'face_enabled='+(d&&d.face_enabled!=null?d.face_enabled:enabled), true); refresh(); })
+        .catch(function(e){ _statusLine(st, e.message, false); });
+    }
+    bd.querySelector('#tf-enable').addEventListener('click', function(){ send(true); });
+    bd.querySelector('#tf-disable').addEventListener('click', function(){ send(false); });
+  }
+
+  // DELETE /api/speakers/{name}  — destructive, typed REMOVE gate
+  function openRemoveSpeaker(){
+    var prefill = SPK && (SPK.speakers||[])[0] ? (SPK.speakers[0].name||'') : '';
+    var bd=V2.modal('Remove Speaker',
+      '<div class="recnote" style="margin-top:0">Delete a single enrolled <b>voice</b> profile. The face profile (if any) is kept.</div>'+
+      '<div class="modrow"><input id="rs-name" class="v2-field" autocomplete="off" placeholder="Speaker name" value="'+prefill+'">'+
+      '<button class="btn-danger" id="rs-go">Remove…</button></div>'+
+      '<div id="rs-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#rs-name'), st=bd.querySelector('#rs-status');
+    nameEl.focus();
+    bd.querySelector('#rs-go').addEventListener('click', function(){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name', false); return; }
+      V2.confirm('Remove Speaker', 'Permanently remove the voice profile for <b>'+name+'</b>? This cannot be undone.', function(){
+        V2.act(V2.del('/api/speakers/'+encodeURIComponent(name)), 'speaker removed: '+name)
+          .then(function(){ refresh(); }).catch(function(){});
+      }, {typed:'REMOVE', yesLabel:'Remove Speaker'});
+    });
+  }
+
+  // DELETE /api/faces/{name}  — destructive, typed REMOVE gate
+  function openRemoveFace(){
+    var prefill = FACE && (FACE.faces||[])[0] ? (FACE.faces[0].name||'') : '';
+    var bd=V2.modal('Remove Face',
+      '<div class="recnote" style="margin-top:0">Delete a single enrolled <b>face</b> profile. The voice profile (if any) is kept.</div>'+
+      '<div class="modrow"><input id="rf-name" class="v2-field" autocomplete="off" placeholder="Face name" value="'+prefill+'">'+
+      '<button class="btn-danger" id="rf-go">Remove…</button></div>'+
+      '<div id="rf-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#rf-name'), st=bd.querySelector('#rf-status');
+    nameEl.focus();
+    bd.querySelector('#rf-go').addEventListener('click', function(){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name', false); return; }
+      V2.confirm('Remove Face', 'Permanently remove the face profile for <b>'+name+'</b>? This cannot be undone.', function(){
+        V2.act(V2.del('/api/faces/'+encodeURIComponent(name)), 'face removed: '+name)
+          .then(function(){ refresh(); }).catch(function(){});
+      }, {typed:'REMOVE', yesLabel:'Remove Face'});
+    });
+  }
+
+  // POST /api/identity/forget-all {name}  — DANGER, typed FORGET gate
+  function openForgetAll(){
+    var bd=V2.modal('Forget ALL Identity',
+      '<div class="recnote" style="margin-top:0">Wipe <b>both</b> voice and face biometrics for a person. This is irreversible — re-enrollment is required to recognize them again.</div>'+
+      '<div class="modrow"><input id="fa-name" class="v2-field" autocomplete="off" placeholder="Name to forget">'+
+      '<button class="btn-danger" id="fa-go">Forget…</button></div>'+
+      '<div id="fa-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#fa-name'), st=bd.querySelector('#fa-status');
+    nameEl.focus();
+    bd.querySelector('#fa-go').addEventListener('click', function(){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name', false); return; }
+      V2.confirm('Forget ALL Identity', 'Permanently forget ALL biometric data (voice + face) for <b>'+name+'</b>? This DANGER action cannot be undone.', function(){
+        V2.act(V2.post('/api/identity/forget-all', {name:name}), 'forgot all identity for '+name)
+          .then(function(d){ V2.toast('voice='+(d&&d.voice_removed)+' face='+(d&&d.face_removed), true); refresh(); })
+          .catch(function(){});
+      }, {typed:'FORGET', yesLabel:'Forget ALL'});
+    });
+  }
+
+  function wireOps(){
+    var map={
+      'op-enroll-speaker':openEnrollSpeaker, 'op-enroll-face':openEnrollFace,
+      'op-promote':openPromote, 'op-reject':openReject,
+      'op-toggle-face':openToggleFace, 'op-remove-speaker':openRemoveSpeaker,
+      'op-remove-face':openRemoveFace, 'op-forget-all':openForgetAll
+    };
+    Object.keys(map).forEach(function(id){ var b=el(id); if(b) b.addEventListener('click', map[id]); });
+  }
+  wireOps();
+  // ===========================================================================
+
   refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
 })();
 </script>

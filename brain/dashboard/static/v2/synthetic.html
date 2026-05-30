@@ -43,6 +43,14 @@
     .opnote{margin-top:10px;border:1px dashed var(--line);border-radius:4px;padding:8px 11px;font-size:10px;color:var(--dim);}
     .opnote code{color:var(--amber);background:rgba(255,176,0,.07);padding:0 4px;border-radius:3px;}
     .opnote b{color:var(--muted);}
+    /* operator actions */
+    .opact{display:flex;flex-wrap:wrap;gap:14px;}
+    .opact .lane{flex:1 1 280px;border:1px solid var(--line);border-radius:6px;padding:11px 13px;background:rgba(3,8,14,.45);}
+    .opact .lane h3{margin:0 0 4px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--text);}
+    .opact .lane p{margin:0 0 9px;font-size:10px;color:var(--muted);line-height:1.5;}
+    .v2-field-row{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+    .v2-field-row label{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .v2-field-row select.v2-field{width:100%;}
   </style>
 </head>
 <body>
@@ -75,6 +83,23 @@
       <div id="wr-head"></div>
       <div class="bars" id="wr-profiles" style="margin-top:10px"></div>
       <div class="opnote" id="wr-op"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Operator Actions</h2>
+      <div class="note">Operator-initiated training runs. These are <b>operator-only writes</b> — they fire only on a click, never automatically. Everything launched here stays <span style="color:var(--magenta)">synthetic-only / telemetry-only</span>: a run cannot promote a plugin, unlock a capability, or satisfy a lived maturity gate. Runs execute in a background thread; concurrent runs of the same lane are refused server-side. After a successful start the panels above re-poll on the next refresh.</div>
+      <div class="opact" style="margin-top:10px">
+        <div class="lane">
+          <h3>Run synthetic exercise</h3>
+          <p>Fire a text-only exercise lane through the route/distillation path inside the quarantine. <code style="color:var(--amber)">POST /api/synthetic/exercises/run</code></p>
+          <div class="actrow"><button class="btn-act" id="op-run-exercise">Run synthetic exercise…</button></div>
+        </div>
+        <div class="lane">
+          <h3>Run skill-acquisition weight room</h3>
+          <p>Start a gated synthetic skill-acquisition workout. <code style="color:var(--amber)">POST /api/synthetic/skill-acquisition/run</code> · <b>strict</b>/<b>stress</b> are operator-heavy and additionally gated server-side by the heavy-profile flag.</p>
+          <div class="actrow"><button class="btn-act" id="op-run-weightroom">Run weight room…</button></div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -265,6 +290,52 @@
       .catch(function(){ if(!FS) el('active').innerHTML='<div class="offline">full-snapshot offline</div>'; });
   }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+
+  // ---- Operator actions (writes — fire ONLY on a user click, never on load) ----
+  // POST /api/synthetic/exercises/run  body {exercise, profile}
+  // POST /api/synthetic/skill-acquisition/run  body {profile}
+  // Both are synthetic-only/telemetry-only: not destructive => .btn-act, no typed gate.
+  var EXERCISES=['commitment','claim','retrieval','world_model','contradiction','diagnostic','plan_evaluator'];
+  var EX_PROFILES=['smoke','coverage','strict','stress'];
+  var WR_PROFILES=['smoke','coverage','strict','stress'];
+  function opt(v){ return '<option value="'+v+'">'+v.replace(/_/g,' ')+'</option>'; }
+
+  function openRunExercise(){
+    var bd=V2.modal('Run synthetic exercise',
+      '<div class="cfm-msg">Pumps synthetic text through one exercise lane in the quarantine. Synthetic-only — no live LLM/TTS/memory/identity side-effects, no promotion.</div>'+
+      '<div class="v2-field-row"><label>exercise lane (required)</label>'+
+        '<select id="ex-lane" class="v2-field">'+EXERCISES.map(opt).join('')+'</select></div>'+
+      '<div class="v2-field-row"><label>profile</label>'+
+        '<select id="ex-prof" class="v2-field">'+EX_PROFILES.map(opt).join('')+'</select></div>'+
+      '<div class="cfm-btns"><button class="btn-act" id="ex-cancel">Cancel</button>'+
+        '<button class="btn-act" id="ex-go">Run exercise</button></div>');
+    bd.querySelector('#ex-cancel').addEventListener('click', V2.closeModal);
+    bd.querySelector('#ex-go').addEventListener('click', function(){
+      var exercise=bd.querySelector('#ex-lane').value, profile=bd.querySelector('#ex-prof').value;
+      V2.closeModal();
+      V2.act(V2.post('/api/synthetic/exercises/run', {exercise:exercise, profile:profile}),
+             'exercise "'+exercise+'" ('+profile+') started').then(refresh).catch(function(){});
+    });
+  }
+
+  function openRunWeightRoom(){
+    var bd=V2.modal('Run skill-acquisition weight room',
+      '<div class="cfm-msg">Starts a gated synthetic skill-acquisition workout. Telemetry-only — cannot verify skills, promote plugins, or unlock capability claims. <b>strict</b>/<b>stress</b> are operator-heavy and may be refused server-side until the heavy-profile flag is set.</div>'+
+      '<div class="v2-field-row"><label>profile</label>'+
+        '<select id="wr-prof" class="v2-field">'+WR_PROFILES.map(opt).join('')+'</select></div>'+
+      '<div class="cfm-btns"><button class="btn-act" id="wr-cancel">Cancel</button>'+
+        '<button class="btn-act" id="wr-go">Run weight room</button></div>');
+    bd.querySelector('#wr-cancel').addEventListener('click', V2.closeModal);
+    bd.querySelector('#wr-go').addEventListener('click', function(){
+      var profile=bd.querySelector('#wr-prof').value;
+      V2.closeModal();
+      V2.act(V2.post('/api/synthetic/skill-acquisition/run', {profile:profile}),
+             'weight room "'+profile+'" started').then(refresh).catch(function(){});
+    });
+  }
+  el('op-run-exercise').addEventListener('click', openRunExercise);
+  el('op-run-weightroom').addEventListener('click', openRunWeightRoom);
+
   refresh(); setInterval(refresh, 8000); tick(); setInterval(tick, 1000);
 })();
 </script>

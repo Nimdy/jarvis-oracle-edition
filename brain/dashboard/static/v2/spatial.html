@@ -32,6 +32,8 @@
     .sess:last-child{border-bottom:0;}
     .sess .sid{font-family:ui-monospace,monospace;font-size:9.5px;color:var(--muted);}
     .sess .rec{font-variant-numeric:tabular-nums;color:var(--text);font-weight:600;}
+    .opwarn{font-size:10px;color:var(--amber);line-height:1.5;margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
+    .opwarn b{color:var(--amber);}
   </style>
 </head>
 <body>
@@ -83,6 +85,16 @@
       <div class="note">The durable P5 episodic store — past mental-world scenes indexed by time-window session. <b>READ-ONLY</b>, vector-stripped, authority-free. Exploration of these worlds is pure simulation with zero canonical effect; not shown here to avoid implying a live write path.</div>
       <div class="kv" id="sess-kv"></div>
       <div id="sess-list"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Operator Actions <span class="tag self">operator</span></h2>
+      <div class="note">Operator-initiated writes — they fire <b>only</b> when you click, never on load. The metric backbone above stays read-only otherwise.</div>
+      <div class="actrow">
+        <button class="btn-act" id="act-run-calibration">Run extrinsic calibration</button>
+        <span class="opnote">POST /api/spatial/calibration · re-verifies the camera extrinsic profile (calibration-version bump)</span>
+      </div>
+      <div class="opwarn" id="act-calibration-note"><b>Requires physical presence.</b> Extrinsic calibration measures where the camera sits in the room. The operator must be physically present and correctly positioned in front of the sensor before running — otherwise the re-verified transform will encode a wrong vantage point into every downstream spatial fix.</div>
     </section>
   </main>
 
@@ -282,7 +294,27 @@
     });
   }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
-  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+
+  // ---- operator actions (writes fire ONLY on click, never on load/refresh) ----
+  function wireActions(){
+    var b=el('act-run-calibration');
+    if(b) b.addEventListener('click', function(){
+      // meaningful but non-destructive: confirm (no typed gate), then V2.act for toast feedback.
+      V2.confirm('Run extrinsic calibration',
+        'Re-verify the camera extrinsic profile? <b>This requires you to be physically present and correctly positioned</b> in front of the sensor — calibrating from the wrong vantage point will skew every downstream spatial fix.',
+        function(){
+          // backend body fields are all optional; an empty POST re-verifies the existing transform.
+          V2.act(V2.post('/api/spatial/calibration', {}), 'calibration re-verified').then(function(d){
+            var v=d&&d.calibration&&d.calibration.version;
+            if(v!=null) V2.toast('calibration v'+v, true);
+            refresh();
+          });
+        },
+        {yesLabel:'Run calibration'});
+    });
+  }
+
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000); wireActions();
 })();
 </script>
 </body>

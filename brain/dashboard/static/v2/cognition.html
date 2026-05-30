@@ -37,6 +37,16 @@
     .safebox{font-size:10px;color:var(--muted);border:1px solid var(--green);border-left-width:3px;border-radius:4px;padding:8px 11px;background:rgba(0,210,140,.05);margin-top:9px;}
     .safebox.amber{border-color:var(--amber);background:rgba(255,176,0,.05);}
     .safebox b{color:var(--text);}
+    /* operator-actions block (appended; does not touch read-only rules above) */
+    .opgoal{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:10px;color:var(--muted);padding:7px 0;border-top:1px dashed var(--line);}
+    .opgoal:first-child{border-top:none;}
+    .opgoal .ti{color:var(--text);font-size:11px;flex:1;min-width:160px;}
+    .opgoal .st{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);}
+    .opgoal .acts{display:flex;gap:6px;flex-wrap:wrap;}
+    .opdiv{border-top:1px dashed var(--line);margin:12px 0 9px;}
+    .opsub{font-size:11px;color:var(--text);font-weight:700;letter-spacing:.04em;}
+    .opnote2{font-size:9px;color:var(--dim);margin:3px 0 8px;}
+    .opnote2 b{color:var(--text);}
   </style>
 </head>
 <body>
@@ -105,6 +115,21 @@
       <div class="statline" id="rb-stats"></div>
       <div id="rb-safebox"></div>
       <div class="contrast" id="rb-contrast"></div>
+    </section>
+
+    <!-- ===== OPERATOR ACTIONS (append-only; writes fire ONLY on click, never on load) ===== -->
+    <section class="card col12">
+      <h2>Operator Actions</h2>
+      <div class="note"><b>Operator-initiated writes</b> — these fire only when you click, never automatically. Goal lifecycle actions (complete/abandon/pause/resume) and intention-resolver stage changes mutate live cognition state. Reflects the same <code>/api/goals</code> feed shown above; re-renders on the page's 5s refresh.</div>
+      <div id="op-goals"></div>
+      <div class="actrow">
+        <button class="btn-act" id="op-observe">Observe a Goal…</button>
+        <span class="opnote">submit an observation the goal engine evaluates against active goals</span>
+      </div>
+      <div class="opdiv"></div>
+      <div class="opsub">Intention Resolver · promotion ladder</div>
+      <div class="opnote2">Set the resolver stage on the 5-rung ladder, or roll it back one rung. <b>active</b> grants real delivery authority — gated.</div>
+      <div class="actrow" id="op-resolver"></div>
     </section>
   </main>
 
@@ -296,7 +321,108 @@
 
   function renderParity(){ renderRapport(); renderRollback(); }
 
-  function renderAll(){ renderRecovery(); renderCore(); renderPers(); renderExi(); renderPhi(); renderGoals(); }
+  // ===== OPERATOR ACTIONS (writes fire ONLY inside click handlers below) =====
+  // Action -> default reason (PORTED from v1 interactives.js goalAction reasonMap).
+  var GOAL_REASONS={complete:'Manual completion', abandon:'Manual abandonment', pause:'', resume:''};
+  // resolver promotion ladder (PORTED from dashboard.js _renderIntentionResolver).
+  var RESOLVER_STAGES=['shadow_only','shadow_advisory','advisory_canary','advisory','active'];
+  var RESOLVER=null; // isolated read-only state for current stage highlight
+
+  function escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // PORT of v1 goalAction: POST /api/goals/{id}/{action}; body {reason} except resume (no body).
+  function doGoalAction(goalId, action){
+    var body = action==='resume' ? undefined : { reason: GOAL_REASONS[action]||'' };
+    V2.act(V2.post('/api/goals/'+encodeURIComponent(goalId)+'/'+action, body), 'goal '+action+'ed').then(refresh).catch(function(){});
+  }
+
+  function goalActrow(goalId){
+    var safe=escAttr(goalId);
+    return '<span class="acts">'+
+      '<button class="btn-act sm" data-op="goal" data-action="complete" data-id="'+safe+'">complete</button>'+
+      '<button class="btn-act sm" data-op="goal" data-action="pause" data-id="'+safe+'">pause</button>'+
+      '<button class="btn-act sm" data-op="goal" data-action="resume" data-id="'+safe+'">resume</button>'+
+      '<button class="btn-danger sm" data-op="goal" data-action="abandon" data-id="'+safe+'">abandon</button>'+
+      '</span>';
+  }
+
+  function renderOpGoals(){
+    var g=GOALS;
+    var box=el('op-goals'); if(!box) return;
+    if(!g){ box.innerHTML='<div class="offline">goals offline — actions unavailable</div>'; return; }
+    var rows=[];
+    (g.active_goals||[]).forEach(function(x){
+      var id=x.goal_id||x.id; if(!id) return;
+      rows.push('<div class="opgoal"><span class="ti">'+(x.title||x.description||id)+'</span><span class="st">active</span>'+goalActrow(id)+'</div>');
+    });
+    (g.paused_goals||[]).forEach(function(x){
+      var id=x.goal_id||x.id; if(!id) return;
+      rows.push('<div class="opgoal"><span class="ti">'+(x.title||x.description||id)+'</span><span class="st">paused</span>'+goalActrow(id)+'</div>');
+    });
+    box.innerHTML=rows.length?rows.join(''):'<div class="offline">no active or paused goals with ids — nothing to action (recovery debt)</div>';
+  }
+
+  function renderOpResolver(){
+    var box=el('op-resolver'); if(!box) return;
+    var cur=(RESOLVER||{}).stage;
+    var btns=RESOLVER_STAGES.map(function(s){
+      var danger=(s==='active'); var on=(s===cur);
+      return '<button class="'+(danger?'btn-danger':'btn-act')+' sm" data-op="resolver-stage" data-stage="'+s+'"'+(on?' disabled title="current stage"':'')+'>'+s.replace(/_/g,' ')+(on?' ✓':'')+'</button>';
+    }).join('');
+    btns+='<button class="btn-danger sm" data-op="resolver-rollback">rollback ↓</button>';
+    box.innerHTML=btns;
+  }
+
+  function openObserveGoal(){
+    var bd=V2.modal('Observe a Goal',
+      '<div class="cfm-msg">Submit an observation the goal engine evaluates against active goals (PORT of v1 <code>/api/goals/observe</code>).</div>'+
+      '<textarea id="op-obs-content" class="v2-field" rows="3" placeholder="Observation content…"></textarea>'+
+      '<div style="margin-top:8px;"><label class="opnote2" for="op-obs-scope">source scope</label>'+
+      '<select id="op-obs-scope" class="v2-field"><option value="user">user</option><option value="system">system</option><option value="world">world</option></select></div>'+
+      '<div class="cfm-btns"><button class="btn-act" id="op-obs-cancel">Cancel</button><button class="btn-act" id="op-obs-submit">Submit Observation</button></div>');
+    bd.querySelector('#op-obs-cancel').addEventListener('click', V2.closeModal);
+    bd.querySelector('#op-obs-submit').addEventListener('click', function(){
+      var content=(bd.querySelector('#op-obs-content').value||'').trim();
+      if(!content){ V2.toast('observation content required', false); return; }
+      var scope=bd.querySelector('#op-obs-scope').value;
+      V2.closeModal();
+      // PORT of v1 _submitGoalObservation: POST /api/goals/observe {content, source_scope}
+      V2.act(V2.post('/api/goals/observe', { content: content, source_scope: scope }), 'observation submitted').then(refresh).catch(function(){});
+    });
+  }
+
+  // event delegation — ALL operator writes fire from here, only on a real click.
+  el('op-goals').parentNode.addEventListener('click', function(ev){
+    var b=ev.target.closest && ev.target.closest('button[data-op]'); if(!b) return;
+    var op=b.getAttribute('data-op');
+    if(op==='goal'){
+      var id=b.getAttribute('data-id'), action=b.getAttribute('data-action');
+      if(action==='abandon'){
+        V2.confirm('Abandon goal', 'Permanently abandon goal <b>'+escAttr(id)+'</b>? This drops it from the active set and cannot be undone.',
+          function(){ doGoalAction(id,'abandon'); }, { typed:'ABANDON', yesLabel:'Abandon' });
+      } else { doGoalAction(id, action); }
+    } else if(op==='resolver-stage'){
+      var stage=b.getAttribute('data-stage');
+      if(stage==='active'){
+        V2.confirm('Promote resolver to ACTIVE', 'Set the intention resolver to <b>active</b>? This grants REAL delivery authority — verdicts will fire proactive delivery, not just shadow-log. Type ACTIVE to confirm.',
+          function(){ V2.act(V2.post('/api/intention-resolver/stage', { stage:'active' }), 'resolver stage → active').then(refreshResolver).catch(function(){}); },
+          { typed:'ACTIVE', yesLabel:'Promote' });
+      } else {
+        // PORT of v1 setStage body shape: POST /api/intention-resolver/stage {stage}
+        V2.act(V2.post('/api/intention-resolver/stage', { stage:stage }), 'resolver stage → '+stage).then(refreshResolver).catch(function(){});
+      }
+    } else if(op==='resolver-rollback'){
+      V2.confirm('Roll back resolver', 'Demote the intention resolver one rung down the promotion ladder? Use this if a promotion is misbehaving.',
+        function(){ V2.act(V2.post('/api/intention-resolver/rollback'), 'resolver rolled back').then(refreshResolver).catch(function(){}); },
+        { typed:'ROLLBACK', yesLabel:'Roll back' });
+    }
+  });
+  el('op-observe').addEventListener('click', openObserveGoal);
+
+  // isolated READ-ONLY fetch for resolver stage highlight (a GET; writes still click-only)
+  function refreshResolver(){ V2.fetchJSON('/api/intention-resolver').then(function(d){ RESOLVER=d; renderOpResolver(); }).catch(function(){ renderOpResolver(); }); }
+
+  function renderAll(){ renderRecovery(); renderCore(); renderPers(); renderExi(); renderPhi(); renderGoals(); renderOpGoals(); }
 
   function refresh(){
     Promise.allSettled([
@@ -316,6 +442,9 @@
   // ===== ISOLATED parity fetch (full-snapshot) — independent of refresh() above =====
   function refreshParity(){ V2.fetchJSON('/api/full-snapshot').then(function(s){ FS=s; parityOkTs=Date.now(); renderParity(); }).catch(function(){ renderParity(); }); }
   refreshParity(); setInterval(refreshParity, 8000);
+
+  // operator-actions: render resolver buttons + warm the current-stage highlight (read-only GET)
+  renderOpResolver(); refreshResolver(); setInterval(refreshResolver, 12000);
 })();
 </script>
 </body>

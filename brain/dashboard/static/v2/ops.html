@@ -25,6 +25,17 @@
     .hwgrid .hv{color:var(--text);font-variant-numeric:tabular-nums;word-break:break-word;}
     .hwgrid .hv.unk{color:var(--dim);}
     .stackhdr{font-size:9px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;border-top:1px dashed var(--line);padding-top:8px;margin-top:9px;}
+    /* operator actions panel (add-only) */
+    .opsgrp{margin-top:4px;}
+    .opsgrp .ghdr{font-size:9px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin:2px 0 5px;}
+    .opsgrp .opnote{flex-basis:100%;font-size:9.5px;color:var(--dim);line-height:1.5;margin-top:2px;}
+    .danger-zone{margin-top:13px;border:1px solid var(--red);border-left:3px solid var(--red);border-radius:5px;
+      padding:10px 12px;background:rgba(255,59,92,.05);}
+    .danger-zone .dzhdr{font-size:9px;color:var(--red);letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:6px;}
+    .danger-zone .dznote{font-size:9.5px;color:var(--muted);line-height:1.5;margin-top:7px;}
+    .danger-zone .dznote b{color:var(--text);}
+    .v2-field.lbl{margin-top:9px;}
+    .fld-lbl{font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;display:block;margin:9px 0 3px;}
   </style>
 </head>
 <body>
@@ -38,6 +49,29 @@
   <div id="recovery" class="banner-recovery"></div>
 
   <main>
+    <section class="card col12">
+      <h2>Operator Actions</h2>
+      <div class="note">Operator-initiated <b>writes</b>, run only when <b>you</b> click — Claude never fires these. The api_key is warmed from <span class="mono">/api/config</span>. Reads elsewhere on this page are unchanged. Destructive actions require a typed confirmation.</div>
+      <div class="opsgrp">
+        <div class="ghdr">runtime</div>
+        <div class="actrow" id="ops-actrow">
+          <button class="btn-act" id="op-save">Save state</button>
+          <button class="btn-act" id="op-settings">Settings</button>
+          <button class="btn-act" id="op-feedback">Send feedback</button>
+          <button class="btn-act" id="op-export">Export soul</button>
+          <span class="opnote">Save persists current state; Settings tunes tone + kernel budget live (no restart); Feedback logs a satisfaction signal on the last conversation; Export downloads the governed soul snapshot as JSON.</span>
+        </div>
+      </div>
+      <div class="danger-zone">
+        <div class="dzhdr">⚠ danger zone — brain lifecycle</div>
+        <div class="actrow">
+          <button class="btn-danger" id="op-restart">Restart brain</button>
+          <button class="btn-danger" id="op-shutdown">Shutdown brain</button>
+        </div>
+        <div class="dznote"><b>Restart</b> is the safe exit-10 restart — the supervisor brings the brain back in <b>~seconds of downtime</b>; active conversations are interrupted. <b>Shutdown</b> stops all processes and the brain will <b>NOT come back without a manual start</b>. Both require typing the confirmation word.</div>
+      </div>
+    </section>
+
     <section class="card col5">
       <h2>Brain Responsive</h2>
       <div class="note">The kernel heartbeat (<span class="mono">/api/status .tick</span>) must <b>increment</b> between polls — a frozen tick means the engine is hung even if the HTTP layer answers. Process flags fail <b>closed</b>: anything other than explicit <code>true</code> renders UNKNOWN, never green.</div>
@@ -424,6 +458,82 @@
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
   refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
   refreshHW(); setInterval(refreshHW, 8000);
+
+  // ===== Operator Actions (ADD-ONLY): writes fire ONLY inside these click handlers =====
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // -- Save state: POST /api/system/save (no body) --
+  el('op-save').addEventListener('click', function(){
+    V2.act(V2.post('/api/system/save'), 'state saved');
+  });
+
+  // -- Settings: GET /api/settings to prefill, POST /api/settings {tone,budget_ms} --
+  el('op-settings').addEventListener('click', function(){
+    var bd=V2.modal('Settings', '<div id="op-set-body" class="cfm-msg">loading current settings…</div>');
+    V2.fetchJSON('/api/settings').then(function(s){
+      var tones=['professional','casual','urgent','empathetic','playful'];
+      var tone=(s&&s.tone)||'professional';
+      var budget=(s&&s.kernel&&s.kernel.budget_ms)||16;
+      var opts=tones.map(function(t){ return '<option value="'+t+'"'+(t===tone?' selected':'')+'>'+t+'</option>'; }).join('');
+      bd.innerHTML=
+        '<label class="fld-lbl">Tone</label>'+
+        '<select id="op-set-tone" class="v2-field">'+opts+'</select>'+
+        '<label class="fld-lbl">Kernel budget (ms)</label>'+
+        '<input id="op-set-budget" class="v2-field" type="number" min="5" max="100" value="'+esc(budget)+'">'+
+        '<div class="cfm-btns"><button class="btn-act" id="op-set-cancel">Cancel</button>'+
+        '<button class="btn-act" id="op-set-save">Save settings</button></div>';
+      bd.querySelector('#op-set-cancel').addEventListener('click', V2.closeModal);
+      bd.querySelector('#op-set-save').addEventListener('click', function(){
+        var tone=bd.querySelector('#op-set-tone').value;
+        var budget=parseFloat(bd.querySelector('#op-set-budget').value);
+        var body={tone:tone}; if(!isNaN(budget)) body.budget_ms=budget;
+        V2.closeModal();
+        V2.act(V2.post('/api/settings', body), 'settings saved').then(function(d){
+          var u=(d&&d.updated)||[]; if(u.length) V2.toast('updated: '+u.join(', '), true);
+          refresh();
+        }).catch(function(){});
+      });
+    }).catch(function(e){ bd.innerHTML='<div class="cfm-msg">could not load settings: '+esc(e.message)+'</div>'; });
+  });
+
+  // -- Send feedback: POST /api/feedback {signal:'positive'|'negative'} (backend rejects other values) --
+  el('op-feedback').addEventListener('click', function(){
+    var bd=V2.modal('Send feedback',
+      '<div class="cfm-msg">Log an explicit satisfaction signal on the brain’s <b>most recent conversation</b>. The signal must be positive or negative — it resolves the outcome on the last conversation in the retrieval log.</div>'+
+      '<div class="cfm-btns"><button class="btn-act" id="op-fb-pos">👍 Positive</button>'+
+      '<button class="btn-danger" id="op-fb-neg">👎 Negative</button></div>');
+    function send(signal){ V2.closeModal(); V2.act(V2.post('/api/feedback', {signal:signal}), 'feedback sent: '+signal); }
+    bd.querySelector('#op-fb-pos').addEventListener('click', function(){ send('positive'); });
+    bd.querySelector('#op-fb-neg').addEventListener('click', function(){ send('negative'); });
+  });
+
+  // -- Export soul: POST /api/soul/export -> download JSON blob --
+  el('op-export').addEventListener('click', function(){
+    V2.act(V2.post('/api/soul/export'), 'soul exported').then(function(d){
+      try{
+        var blob=new Blob([JSON.stringify(d,null,2)], {type:'application/json'});
+        var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+        a.download='jarvis_soul_export.json'; a.click();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+      }catch(e){ V2.toast('export downloaded but blob save failed: '+e.message, false); }
+    }).catch(function(){});
+  });
+
+  // -- Restart brain: POST /api/system/restart (DANGER, typed 'RESTART') --
+  el('op-restart').addEventListener('click', function(){
+    V2.confirm('Restart brain',
+      'Safe <b>exit-10 restart</b> — the supervisor brings the brain back in <b>~seconds of downtime</b>. Active conversations will be interrupted.',
+      function(){ V2.act(V2.post('/api/system/restart'), 'restart requested — back in seconds'); },
+      {typed:'RESTART', yesLabel:'Restart'});
+  });
+
+  // -- Shutdown brain: POST /api/system/shutdown (DANGER, typed 'SHUTDOWN') --
+  el('op-shutdown').addEventListener('click', function(){
+    V2.confirm('Shutdown brain',
+      'Stops all processes. The brain will <b>NOT come back without a manual start</b> — there is no auto-restart after a shutdown.',
+      function(){ V2.act(V2.post('/api/system/shutdown'), 'shutdown requested — brain going offline'); },
+      {typed:'SHUTDOWN', yesLabel:'Shutdown'});
+  });
 })();
 </script>
 </body>

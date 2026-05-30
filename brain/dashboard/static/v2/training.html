@@ -68,6 +68,15 @@
       <div id="grad" style="margin-bottom:8px;"></div>
       <div class="lm" id="livemetrics"></div>
     </section>
+
+    <section class="card col12">
+      <h2>Operator Actions <span class="tag self">operator</span></h2>
+      <div class="note">Operator-initiated writes — fire only when you click. Onboarding bootstraps the companion-training curriculum (Stage 0 awakening → Stage 1).</div>
+      <div class="actrow">
+        <button class="btn-act" id="act-start-onboarding">Start onboarding</button>
+        <span class="opnote">POST /api/onboarding/start · begins the awakening + 7-stage curriculum</span>
+      </div>
+    </section>
   </main>
 
 <script src="/static/v2/shared.js"></script>
@@ -162,7 +171,24 @@
     });
   }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
-  refresh(); setInterval(refresh, 30000); tick(); setInterval(tick, 1000);
+
+  // ---- operator actions (writes fire ONLY on click, never on load) ----
+  function wireActions(){
+    var b=el('act-start-onboarding');
+    if(b) b.addEventListener('click', function(){
+      // meaningful but non-destructive: confirm (no typed gate), then V2.act for toast feedback.
+      V2.confirm('Start onboarding',
+        'Start the companion-training onboarding (awakening → 7-stage curriculum)?',
+        function(){
+          V2.act(V2.post('/api/onboarding/start'), 'onboarding started').then(function(d){
+            if(d && d.day!=null) V2.toast('onboarding: day '+d.day, true);
+            refresh();
+          });
+        });
+    });
+  }
+
+  refresh(); setInterval(refresh, 30000); tick(); setInterval(tick, 1000); wireActions();
 })();
 </script>
 </body>

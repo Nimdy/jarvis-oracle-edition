@@ -26,6 +26,15 @@
     .ni{margin-top:8px;border:1px dashed var(--line);border-radius:4px;padding:10px 12px;font-size:10.5px;color:var(--muted);line-height:1.55;}
     .ni b{color:#ffd27a;}
     .barwrap{margin-top:8px;}
+    /* operator actions (add-only) */
+    .opsec .note{margin-bottom:4px;}
+    .opgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+    @media(max-width:1000px){.opgrid{grid-template-columns:1fr;}}
+    .opblk{border:1px solid var(--line);border-radius:5px;padding:9px 11px;}
+    .opblk h4{margin:0 0 7px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+    .opblk .opnote{font-size:9px;color:var(--dim);line-height:1.5;margin-top:6px;}
+    .opblk .v2-field{margin:4px 0;}
+    .stagebtns{display:flex;gap:6px;flex-wrap:wrap;}
   </style>
 </head>
 <body>
@@ -76,6 +85,74 @@
       <div class="note">The human-in-the-loop ledgers: L3 escalations awaiting review, and the attestation ledger of proven capabilities.</div>
       <div class="statline" id="esc-stats"></div>
       <div class="ni" id="esc-ni"></div>
+    </section>
+
+    <section class="card col12 opsec">
+      <h2>Operator Actions</h2>
+      <div class="note">Human-in-the-loop write controls. Nothing here fires automatically — each runs only on your click, authenticated with the operator api_key. Destructive / authority-raising actions require a typed confirmation.</div>
+      <div class="opgrid">
+
+        <div class="opblk">
+          <h4>Self-Improve Pipeline</h4>
+          <div class="actrow">
+            <button class="btn-act" id="op-si-dryrun">Dry-run</button>
+            <button class="btn-danger" id="op-si-trigger">Trigger real attempt</button>
+          </div>
+          <div class="actrow">
+            <span class="opnote">Set stage:</span>
+            <span class="stagebtns">
+              <button class="btn-act sm" id="op-si-stage0">0 · frozen</button>
+              <button class="btn-act sm" id="op-si-stage1">1 · dry-run</button>
+              <button class="btn-danger sm" id="op-si-stage2">2 · human-approval</button>
+            </span>
+          </div>
+          <input id="op-si-patch" class="v2-field" autocomplete="off" placeholder="patch / request id for approve / reject">
+          <div class="actrow">
+            <button class="btn-act" id="op-si-approve">Approve patch</button>
+            <button class="btn-danger" id="op-si-reject">Reject patch</button>
+          </div>
+          <div class="opnote">Trigger queues a real (non-dry-run) Stage-2 patch for your approval. Raising to stage 2 is authority-raising and typed-gated. Approve/Reject act on the patch id from the pending-approvals queue.</div>
+        </div>
+
+        <div class="opblk">
+          <h4>Acquisition Job</h4>
+          <input id="op-acq-id" class="v2-field" autocomplete="off" placeholder="acquisition id">
+          <div class="actrow">
+            <button class="btn-act" id="op-acq-approve-plan">Approve plan</button>
+            <button class="btn-act" id="op-acq-approve-deploy">Approve deploy</button>
+            <button class="btn-danger" id="op-acq-cancel">Cancel job</button>
+          </div>
+          <div class="opnote">Approve-plan advances to implementation; approve-deploy activates the built plugin; cancel removes the job from the active set (typed-gated).</div>
+        </div>
+
+        <div class="opblk">
+          <h4>Plugin Lifecycle</h4>
+          <input id="op-plug-name" class="v2-field" autocomplete="off" placeholder="plugin name">
+          <div class="actrow">
+            <button class="btn-act" id="op-plug-activate">Activate</button>
+            <button class="btn-act" id="op-plug-promote">Promote</button>
+            <button class="btn-danger" id="op-plug-disable">Disable</button>
+            <button class="btn-danger" id="op-plug-rollback">Rollback</button>
+          </div>
+          <div class="opnote">Activate brings a quarantined/disabled plugin into shadow mode; promote raises supervision tier. Disable and rollback are typed-gated.</div>
+        </div>
+
+        <div class="opblk">
+          <h4>Specialist / Skill Handoff</h4>
+          <input id="op-skill-id" class="v2-field" autocomplete="off" placeholder="skill id">
+          <div class="actrow">
+            <button class="btn-act" id="op-skill-approve">Approve handoff</button>
+            <button class="btn-act" id="op-skill-reject">Reject handoff</button>
+            <button class="btn-act" id="op-skill-retry">Retry handoff</button>
+          </div>
+          <div class="actrow">
+            <button class="btn-danger" id="op-skill-delete">Delete skill</button>
+            <button class="btn-act" id="op-lj-cleanup">Cleanup learning jobs</button>
+          </div>
+          <div class="opnote">Approve lets JARVIS build an operational plugin/tool for a learned skill; reject sends it back. Delete forgets the skill entirely (typed DELETE gate).</div>
+        </div>
+
+      </div>
     </section>
   </main>
 
@@ -270,6 +347,122 @@
     });
   }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+
+  // ===== Operator actions (add-only) — bind click handlers only; never fire on load =====
+  // Each handler calls V2.post/del INSIDE the click, wraps with V2.act for toast, then
+  // re-runs the page's existing refresh() on success. Destructive / authority-raising
+  // actions go through V2.confirm with a typed gate.
+  function on(id, fn){ var b=el(id); if(b) b.addEventListener('click', fn); }
+  function val(id){ var i=el(id); return i?i.value.trim():''; }
+  function need(v, what){ if(!v){ V2.toast('enter a '+what+' first', false); return false; } return true; }
+  function done(){ refresh(); }
+
+  function wireOps(){
+    // ---- self-improve ----
+    on('op-si-dryrun', function(){
+      V2.act(V2.post('/api/self-improve/dry-run', {}), 'dry-run started').then(done).catch(function(){});
+    });
+    on('op-si-trigger', function(){
+      V2.confirm('Trigger real improvement attempt',
+        'This queues a <b>real (non-dry-run)</b> Stage-2 self-modification campaign. At stage 2 it enters the approval queue for your review before anything touches disk.',
+        function(){ V2.act(V2.post('/api/self-improve/trigger', {}), 'improvement attempt triggered').then(done).catch(function(){}); },
+        { typed:'TRIGGER', yesLabel:'Trigger' });
+    });
+    on('op-si-stage0', function(){ V2.act(V2.post('/api/self-improve/stage', {stage:0}), 'stage set to 0 (frozen)').then(done).catch(function(){}); });
+    on('op-si-stage1', function(){ V2.act(V2.post('/api/self-improve/stage', {stage:1}), 'stage set to 1 (dry-run)').then(done).catch(function(){}); });
+    on('op-si-stage2', function(){
+      V2.confirm('Raise to Stage 2 (human-approval)',
+        'Stage 2 lets auto-triggered patches enter the approval queue and be applied to disk after your explicit approval. This raises the self-modification authority of the system.',
+        function(){ V2.act(V2.post('/api/self-improve/stage', {stage:2}), 'stage set to 2 (human-approval)').then(done).catch(function(){}); },
+        { typed:'STAGE2', yesLabel:'Raise to Stage 2' });
+    });
+    on('op-si-approve', function(){
+      var id=val('op-si-patch'); if(!need(id,'patch id')) return;
+      V2.act(V2.post('/api/self-improve/approve', {patch_id:id, approved:true}), 'patch approved').then(done).catch(function(){});
+    });
+    on('op-si-reject', function(){
+      var id=val('op-si-patch'); if(!need(id,'patch id')) return;
+      V2.act(V2.post('/api/self-improve/approve', {patch_id:id, approved:false}), 'patch rejected').then(done).catch(function(){});
+    });
+
+    // ---- acquisition ----
+    on('op-acq-approve-plan', function(){
+      var id=val('op-acq-id'); if(!need(id,'acquisition id')) return;
+      V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan', {verdict:'approved'}), 'plan approved').then(done).catch(function(){});
+    });
+    on('op-acq-approve-deploy', function(){
+      var id=val('op-acq-id'); if(!need(id,'acquisition id')) return;
+      V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-deploy', {approved:true}), 'deploy approved').then(done).catch(function(){});
+    });
+    on('op-acq-cancel', function(){
+      var id=val('op-acq-id'); if(!need(id,'acquisition id')) return;
+      V2.confirm('Cancel acquisition job',
+        'Remove acquisition <b>'+id+'</b> from the active set. This cannot be undone.',
+        function(){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/cancel', {reason:'operator_removed'}), 'job removed').then(done).catch(function(){}); },
+        { typed:'CANCEL', yesLabel:'Cancel job' });
+    });
+
+    // ---- plugins ----
+    on('op-plug-activate', function(){
+      var n=val('op-plug-name'); if(!need(n,'plugin name')) return;
+      V2.act(V2.post('/api/plugins/'+encodeURIComponent(n)+'/activate', {supervision_mode:'shadow'}), 'plugin activated (shadow)').then(done).catch(function(){});
+    });
+    on('op-plug-promote', function(){
+      var n=val('op-plug-name'); if(!need(n,'plugin name')) return;
+      V2.act(V2.post('/api/plugins/'+encodeURIComponent(n)+'/promote', {}), 'plugin promoted').then(done).catch(function(){});
+    });
+    on('op-plug-disable', function(){
+      var n=val('op-plug-name'); if(!need(n,'plugin name')) return;
+      V2.confirm('Disable plugin',
+        'Disable plugin <b>'+n+'</b> (circuit-break it out of service).',
+        function(){ V2.act(V2.post('/api/plugins/'+encodeURIComponent(n)+'/disable', {}), 'plugin disabled').then(done).catch(function(){}); },
+        { typed:'DISABLE', yesLabel:'Disable' });
+    });
+    on('op-plug-rollback', function(){
+      var n=val('op-plug-name'); if(!need(n,'plugin name')) return;
+      V2.confirm('Rollback plugin',
+        'Roll plugin <b>'+n+'</b> back to its previous version.',
+        function(){ V2.act(V2.post('/api/plugins/'+encodeURIComponent(n)+'/rollback', {}), 'plugin rolled back').then(done).catch(function(){}); },
+        { typed:'ROLLBACK', yesLabel:'Rollback' });
+    });
+
+    // ---- skills / handoff ----
+    on('op-skill-approve', function(){
+      var id=val('op-skill-id'); if(!need(id,'skill id')) return;
+      V2.act(V2.post('/api/skills/'+encodeURIComponent(id)+'/handoff/approve', {approved_by:'dashboardV2', notes:'Operator approved operational proof build.'}), 'handoff approved').then(done).catch(function(){});
+    });
+    on('op-skill-reject', function(){
+      var id=val('op-skill-id'); if(!need(id,'skill id')) return;
+      var bd=V2.modal('Reject skill handoff',
+        '<div class="cfm-msg">Why reject the operational build for <b>'+id+'</b>? (required)</div>'+
+        '<input id="op-skill-reason" class="v2-field" autocomplete="off" placeholder="rejection reason">'+
+        '<div class="cfm-btns"><button class="btn-act" id="op-skill-reason-no">Cancel</button>'+
+        '<button class="btn-danger" id="op-skill-reason-yes">Reject</button></div>');
+      bd.querySelector('#op-skill-reason-no').addEventListener('click', V2.closeModal);
+      bd.querySelector('#op-skill-reason-yes').addEventListener('click', function(){
+        var reason=(bd.querySelector('#op-skill-reason').value||'').trim();
+        if(reason.length<5){ V2.toast('rejection reason is required', false); return; }
+        V2.closeModal();
+        V2.act(V2.post('/api/skills/'+encodeURIComponent(id)+'/handoff/reject', {rejected_by:'dashboardV2', reason:reason}), 'handoff rejected').then(done).catch(function(){});
+      });
+    });
+    on('op-skill-retry', function(){
+      var id=val('op-skill-id'); if(!need(id,'skill id')) return;
+      V2.act(V2.post('/api/skills/'+encodeURIComponent(id)+'/handoff/retry', {approved_by:'dashboardV2', notes:'Retry with a concrete implementation plan and sandbox-backed proof.'}), 'handoff retried').then(done).catch(function(){});
+    });
+    on('op-skill-delete', function(){
+      var id=val('op-skill-id'); if(!need(id,'skill id')) return;
+      V2.confirm('Delete skill',
+        'Forget skill <b>'+id+'</b> entirely. This removes its record and cannot be undone.',
+        function(){ V2.act(V2.del('/api/skills/'+encodeURIComponent(id)), 'skill deleted').then(done).catch(function(){}); },
+        { typed:'DELETE', yesLabel:'Delete skill' });
+    });
+    on('op-lj-cleanup', function(){
+      V2.act(V2.post('/api/learning-jobs/cleanup', {}), 'stale learning jobs cleaned').then(done).catch(function(){});
+    });
+  }
+  wireOps();
+
   refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
 })();
 </script>

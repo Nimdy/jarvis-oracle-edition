@@ -51,6 +51,17 @@
     .gpmx .tot{text-align:center;align-self:center;font-variant-numeric:tabular-nums;color:var(--muted);}
     .gpmisc{display:flex;gap:16px;flex-wrap:wrap;margin-top:9px;font-size:10px;color:var(--muted);}
     .gpmisc b{color:var(--text);font-variant-numeric:tabular-nums;}
+    /* operator level-picker (inside V2.modal) */
+    .lvpick{display:flex;flex-direction:column;gap:6px;margin:4px 0 10px;}
+    .lvpick label{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:5px;padding:8px 10px;cursor:pointer;font-size:10.5px;line-height:1.4;}
+    .lvpick label:hover{border-color:var(--cyan);}
+    .lvpick label.cur{border-color:var(--green);}
+    .lvpick input{margin-top:2px;}
+    .lvpick .lvl{font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);}
+    .lvpick .lvn{color:var(--muted);}
+    .lvpick .lvd{display:block;color:var(--dim);font-size:9.5px;margin-top:2px;}
+    .lvpick label.raise .lvl{color:var(--amber);}
+    .lvwarn{font-size:10px;color:var(--amber);border:1px solid var(--amber);border-radius:5px;padding:8px 10px;margin-bottom:8px;line-height:1.5;background:rgba(255,176,32,.06);}
   </style>
 </head>
 <body>
@@ -93,6 +104,15 @@
       <h2>Goal Provenance — created vs ignored, by origin <span class="asof" id="gp-asof">goals.producer_health · —</span></h2>
       <div class="note">Where goal candidates come from (<code>conversation</code> / <code>metric</code> / <code>autonomy</code>) and what the loop does with them. <code>created</code> = committed into the goal set; <code>ignored</code> = seen-then-declined. This is the producer side of the <b>lived-vs-internal-metric-churn</b> signal (FIDELITY_ROADMAP §6): high ignore + zero create means the loop is <b>proposing but not committing</b>.</div>
       <div id="goalprov"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Operator Actions <span class="tag self">operator</span></h2>
+      <div class="note">Operator-initiated writes — fire only when you click, never on load. Raising the autonomy level <b>grants the self-improvement loop more authority</b>: <b>L2</b> lets it apply changes that measurably improved metrics, <b>L3</b> broadens self-applied scope (human-attested). This is the only knob here that <em>changes</em> the loop; everything above is read-only.</div>
+      <div class="actrow">
+        <button class="btn-danger" id="act-set-level">Set autonomy level…</button>
+        <span class="opnote">POST /api/autonomy/level · {level, reason, caller_id} · typed-gated (LEVEL&lt;n&gt;); L2/L3 grant apply/act authority</span>
+      </div>
     </section>
   </main>
 
@@ -343,7 +363,67 @@
       .catch(function(){ if(!FS){ el('status').innerHTML='<div class="offline">full-snapshot offline</div>'; el('log').innerHTML='<div class="offline">full-snapshot offline</div>'; } });
   }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
-  refresh(); setInterval(refresh, 8000); tick(); setInterval(tick, 1000);
+
+  // ---- operator actions (writes fire ONLY on a human click, never on load/refresh) ----
+  // Set autonomy level: POST /api/autonomy/level  body {level, reason, caller_id}.
+  // RAISING authority is destructive — typed gate 'LEVEL'+n via V2.confirm, plus an
+  // L2/L3 warning. A level picker is offered in a V2.modal first.
+  function escAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+  function openLevelPicker(){
+    var a=(FS&&FS.autonomy)||{};
+    var cur=num(a.autonomy_level);
+    var rows=LEVELS.map(function(L){
+      var isCur=(L[0]===cur);
+      var raise=(cur!==null && L[0]>cur);
+      return '<label class="'+(isCur?'cur ':'')+(raise?'raise':'')+'">'+
+        '<input type="radio" name="lv" value="'+L[0]+'">'+
+        '<span><span class="lvl">L'+L[0]+'</span> <span class="lvn">'+escAttr(L[1].replace(/_/g,' '))+'</span>'+
+        (isCur?' <span class="tag grounded">current</span>':'')+
+        '<span class="lvd">'+L[2]+'</span></span></label>';
+    }).join('');
+    var bd=V2.modal('Set autonomy level',
+      '<div class="cfm-msg">Choose the target level for the self-improvement loop. Current live level: '+
+        '<b>L'+(cur===null?'?':cur)+'</b>. Raising authority (toward L2/L3) is gated — you will be asked to type a confirmation token.</div>'+
+      '<div class="lvpick">'+rows+'</div>'+
+      '<label class="cfm-msg" style="display:block;margin-bottom:3px">Reason (audit trail, ≥20 chars, required)</label>'+
+      '<input id="lv-reason" class="v2-field" autocomplete="off" placeholder="why this level change — recorded in the autonomy audit ledger">'+
+      '<div class="cfm-btns"><button class="btn-act" id="lv-cancel">Cancel</button>'+
+      '<button class="btn-danger" id="lv-next" disabled>Continue…</button></div>');
+    if(!bd) return;
+    function chosen(){ var r=bd.querySelector('input[name="lv"]:checked'); return r?+r.value:null; }
+    function syncBtn(){
+      var lvl=chosen(), reason=(bd.querySelector('#lv-reason').value||'').trim();
+      bd.querySelector('#lv-next').disabled = (lvl===null || reason.length<20);
+    }
+    Array.prototype.forEach.call(bd.querySelectorAll('input[name="lv"]'), function(i){ i.addEventListener('change', syncBtn); });
+    bd.querySelector('#lv-reason').addEventListener('input', syncBtn);
+    bd.querySelector('#lv-cancel').addEventListener('click', V2.closeModal);
+    bd.querySelector('#lv-next').addEventListener('click', function(){
+      var lvl=chosen(), reason=(bd.querySelector('#lv-reason').value||'').trim();
+      if(lvl===null || reason.length<20) return;
+      var a2=(FS&&FS.autonomy)||{}, cur2=num(a2.autonomy_level);
+      var raising=(cur2!==null && lvl>cur2);
+      V2.closeModal();
+      var warn = (lvl>=2)
+        ? '<div class="lvwarn"><b>L'+lvl+' grants the loop '+(lvl>=3?'<b>broadened self-applied scope (human-attested)</b>':'<b>safe-apply authority</b>')+'.</b> '+
+            'At L2 JARVIS may <b>apply</b> changes that measurably improved metrics without asking; at L3 it may <b>act</b> across a broader self-applied scope. L3 is additionally evidence-gated server-side (current eligibility or prior attestation).</div>'
+        : '';
+      V2.confirm('Set autonomy level → L'+lvl,
+        warn+'<div class="cfm-msg">'+(raising?'<b style="color:var(--amber)">Raising</b>':'Setting')+' the autonomy level to '+
+          '<b>L'+lvl+'</b> ('+LEVELS[lvl][1].replace(/_/g,' ')+').<br>Reason: <i>'+escAttr(reason)+'</i></div>',
+        function(){
+          V2.act(V2.post('/api/autonomy/level', {level: lvl, reason: reason, caller_id: 'dashboardV2-operator'}),
+                 'autonomy level set → L'+lvl).then(function(){ refresh(); });
+        },
+        {typed:'LEVEL'+lvl, yesLabel:'Set L'+lvl});
+    });
+  }
+  function wireActions(){
+    var b=el('act-set-level');
+    if(b) b.addEventListener('click', openLevelPicker);
+  }
+
+  refresh(); setInterval(refresh, 8000); tick(); setInterval(tick, 1000); wireActions();
 })();
 </script>
 </body>
