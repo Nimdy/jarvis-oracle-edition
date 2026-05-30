@@ -34,6 +34,17 @@
     .btn.on{border-color:var(--green);color:var(--green);}
     .btn.link{color:var(--cyan);border-color:#16202c;}
     #stat{position:fixed;bottom:40px;right:18px;text-align:right;color:var(--muted);font-size:10px;pointer-events:none;}
+    #readout .hdr{color:var(--green);font-size:10px;letter-spacing:.08em;margin-bottom:5px;}
+    .obj.ghost{opacity:.72;border-left-style:dashed;}
+    /* off-floor dock: things JARVIS believes are present but never localized */
+    #unplaced{position:fixed;pointer-events:none;top:120px;right:18px;max-width:236px;text-align:left;}
+    #unplaced .hdr{color:var(--amber);font-size:10px;letter-spacing:.07em;margin-bottom:3px;}
+    #unplaced .note{color:var(--muted);font-size:9px;line-height:1.45;margin-bottom:6px;max-width:228px;}
+    .uitem{margin:3px 0;padding:3px 8px;border:1px solid #16202c;border-left-width:2px;
+      border-left-style:dashed;background:rgba(8,16,24,.5);border-radius:3px;}
+    .uitem .l{font-weight:700;font-size:10px;letter-spacing:.02em;}
+    .uitem .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;
+      vertical-align:middle;box-shadow:0 0 5px currentColor;}
   </style>
 </head>
 <body>
@@ -52,8 +63,10 @@
     <div class="row">occluded / inferred<span class="dot" style="color:var(--amber);background:var(--amber)"></span></div>
     <div class="row">conflicting<span class="dot" style="color:var(--red);background:var(--red)"></span></div>
     <div class="row">candidate / unknown<span class="dot" style="color:var(--gray);background:var(--gray)"></span></div>
+    <div class="row" style="margin-top:6px;color:var(--muted);font-size:9px;">● solid = live pos · ◇ dashed = last-known</div>
   </div>
 
+  <div class="hud" id="unplaced"></div>
   <div class="hud" id="readout"></div>
   <div id="stat"></div>
 
@@ -80,6 +93,8 @@
   var paused = false, timer = null;
   var scene = null;            // latest /api/hrr/scene
   var trails = {};             // entity_id -> [{x,z,t}, ...]
+  var lastKnownPos = {};       // entity_id -> {x,y,z,ts,label} last RESOLVED room position
+                               //   (seeded from history, updated live) — never invented
   var ROOM = {w:4.0, d:4.0, h:2.6};   // metres; auto-grown to fit observed extent
 
   function resize(){
@@ -113,19 +128,50 @@
   }
 
   function epi(e){
-    // epistemic color from state/confidence + remembered flag
+    // epistemic color from belief STATE (ghosting conveys remembered-vs-live separately)
     var s=(e.state||'').toLowerCase(), c=e.confidence==null?0:e.confidence;
-    if (e.__remembered) return {c:'#00ccff', glow:'#00ccff'};        // remembered, not live
-    if (s==='visible') return {c:'#00ff99', glow:'#00ff99'};         // live
+    if (s==='visible') return {c:'#00ff99', glow:'#00ff99'};         // live, sensor-confirmed
     if (s==='occluded') return {c:'#ffb000', glow:'#ffb000'};        // occluded/inferred
     if (s==='missing'||s==='removed') return {c:'#ff3b5c', glow:'#ff3b5c'};
     if (s==='candidate'||c<0.45) return {c:'#5a6072', glow:'#5a6072'};
+    if (!s) return {c:'#00ccff', glow:'#00ccff'};                    // remembered, state unknown
     return {c:'#9fb0c0', glow:'#9fb0c0'};
+  }
+
+  // nowTs: server clock from the scene payload (avoids client/server skew); fall back to local.
+  function nowTs(){ return (scene && scene.timestamp) || (Date.now()/1000); }
+  function age(ts){
+    if(!ts) return '?';
+    var s=Math.max(0, nowTs()-ts);
+    if(s<90) return Math.round(s)+'s';
+    if(s<5400) return Math.round(s/60)+'m';
+    return (s/3600).toFixed(1)+'h';
+  }
+
+  // Resolve a render position WITHOUT inventing geometry:
+  //   1) the entity's current position_room_m if present (live),
+  //   2) else the last position we ever saw for this id (remembered),
+  //   3) else null — it has no room position and cannot go on the floor.
+  function resolvePos(e){
+    var p=posOf(e);
+    if(p) return {x:p.x, y:p.y, z:p.z, remembered:false};
+    var lk=lastKnownPos[e && e.entity_id];
+    if(lk) return {x:lk.x, y:lk.y, z:lk.z, remembered:true};
+    return null;
+  }
+  // Classify for rendering: 'solid' (live & visible), 'ghost' (has a position but not
+  // live-confirmed — occluded/removed/remembered), or 'dock' (believed present, no position).
+  function classify(e){
+    var r=resolvePos(e);
+    if(!r) return {kind:'dock', pos:null};
+    var s=(e.state||'').toLowerCase();
+    var live=(s==='visible') && !r.remembered;
+    return {kind: live?'solid':'ghost', pos:r, remembered:r.remembered};
   }
 
   function growRoom(ents){
     var mx=ROOM.w/2, md=ROOM.d;
-    ents.forEach(function(e){ var p=posOf(e); if(p){ mx=Math.max(mx,Math.abs(p.x)+0.6); md=Math.max(md,p.z+0.8);} });
+    ents.forEach(function(e){ var p=resolvePos(e); if(p){ mx=Math.max(mx,Math.abs(p.x)+0.6); md=Math.max(md,p.z+0.8);} });
     ROOM.w = Math.min(12, Math.max(4, mx*2)); ROOM.d = Math.min(14, Math.max(4, md));
   }
 
@@ -191,7 +237,7 @@
     scene.relations.forEach(function(r){
       var a=byId[r.source_entity_id], b=byId[r.target_entity_id];
       if(!a||!b||r.source_entity_id===r.target_entity_id) return;
-      var pa=posOf(a), pb=posOf(b); if(!pa||!pb) return;
+      var pa=resolvePos(a), pb=resolvePos(b); if(!pa||!pb) return;
       var A=project(pa.x,pa.y||0.4,pa.z), B=project(pb.x,pb.y||0.4,pb.z);
       ctx.strokeStyle='rgba(255,43,214,0.30)'; ctx.setLineDash([4,4]);
       ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke(); ctx.setLineDash([]);
@@ -200,30 +246,42 @@
 
   function drawObjects(ents){
     if(!layers.objects) return;
-    // far-to-near so near objects draw on top
-    var withPos=ents.map(function(e){return {e:e,p:posOf(e)};}).filter(function(o){return o.p;});
-    withPos.sort(function(a,b){return b.p.z-a.p.z;});
-    withPos.forEach(function(o){
-      var e=o.e, p=o.p, col=epi(e);
+    // place only entities that resolve to a real position (live or remembered) — never invent
+    var placed=[];
+    ents.forEach(function(e){ var c=classify(e); if(c.kind!=='dock') placed.push({e:e,c:c}); });
+    placed.sort(function(a,b){return b.c.pos.z-a.c.pos.z;});   // far-to-near so near draw on top
+    placed.forEach(function(o){
+      var e=o.e, p=o.c.pos, col=epi(e), ghost=(o.c.kind==='ghost');
       var foot=project(p.x,0,p.z), top=project(p.x,Math.max(0.3,p.y||0.4),p.z);
-      // vertical pole to floor (depth cue)
-      ctx.strokeStyle=col.c; ctx.globalAlpha=0.35; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(foot.x,foot.y); ctx.lineTo(top.x,top.y); ctx.stroke(); ctx.globalAlpha=1;
+      // vertical pole to floor (depth cue) — dashed + fainter when remembered
+      ctx.strokeStyle=col.c; ctx.lineWidth=1; ctx.globalAlpha=ghost?0.18:0.35;
+      if(ghost) ctx.setLineDash([3,4]);
+      ctx.beginPath(); ctx.moveTo(foot.x,foot.y); ctx.lineTo(top.x,top.y); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha=1;
       // floor footprint ring
-      ctx.strokeStyle=col.c; ctx.globalAlpha=0.4;
-      ctx.beginPath(); ctx.ellipse(foot.x,foot.y,18/Math.max(0.6,top.d),6/Math.max(0.6,top.d),0,0,2*Math.PI); ctx.stroke(); ctx.globalAlpha=1;
-      // node marker (diamond) with confidence glow
+      ctx.strokeStyle=col.c; ctx.globalAlpha=ghost?0.26:0.4;
+      if(ghost) ctx.setLineDash([3,4]);
+      ctx.beginPath(); ctx.ellipse(foot.x,foot.y,18/Math.max(0.6,top.d),6/Math.max(0.6,top.d),0,0,2*Math.PI); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha=1;
+      // node marker (diamond): FILLED + glow when live, HOLLOW when remembered
       var r=Math.max(4, 11/Math.max(0.7,top.d));
-      ctx.shadowColor=col.glow; ctx.shadowBlur=10*(e.confidence||0.5);
-      ctx.fillStyle=col.c;
-      ctx.beginPath(); ctx.moveTo(top.x,top.y-r); ctx.lineTo(top.x+r,top.y); ctx.lineTo(top.x,top.y+r); ctx.lineTo(top.x-r,top.y); ctx.closePath(); ctx.fill();
-      ctx.shadowBlur=0;
+      ctx.beginPath(); ctx.moveTo(top.x,top.y-r); ctx.lineTo(top.x+r,top.y); ctx.lineTo(top.x,top.y+r); ctx.lineTo(top.x-r,top.y); ctx.closePath();
+      if(ghost){
+        ctx.globalAlpha=0.6; ctx.lineWidth=1.4; ctx.strokeStyle=col.c; ctx.stroke(); ctx.globalAlpha=1;
+      } else {
+        ctx.shadowColor=col.glow; ctx.shadowBlur=10*(e.confidence||0.5);
+        ctx.fillStyle=col.c; ctx.fill(); ctx.shadowBlur=0;
+      }
       // label
       if(layers.labels){
+        ctx.globalAlpha=ghost?0.82:1;
         ctx.fillStyle=col.c; ctx.font="bold 11px 'JetBrains Mono', ui-monospace, monospace"; ctx.textAlign='center';
         ctx.fillText((e.label||e.entity_id||'?').toUpperCase(), top.x, top.y-r-12);
         ctx.fillStyle='rgba(120,140,150,0.9)'; ctx.font="9px 'JetBrains Mono', ui-monospace, monospace";
-        ctx.fillText(Math.round((e.confidence||0)*100)+'%  '+(e.state||''), top.x, top.y-r-2);
+        var tag = ghost ? ('↺ '+age(e.last_seen_ts)+' · '+(e.state||'remembered'))
+                        : (Math.round((e.confidence||0)*100)+'% · '+(e.state||''));
+        ctx.fillText(tag, top.x, top.y-r-2);
+        ctx.globalAlpha=1;
       }
     });
   }
@@ -235,45 +293,79 @@
     drawGrid(); drawWalls(); drawTrails(); drawRelations(ents); drawObjects(ents);
   }
 
+  // bottom-left readout: entities ON THE FLOOR (live + remembered). Unplaced ones live in the dock.
   function updateReadout(){
-    var ents=(scene && scene.entities)?scene.entities.slice():[];
-    ents.sort(function(a,b){return (b.confidence||0)-(a.confidence||0);});
-    var html=ents.slice(0,8).map(function(e){
-      var col=epi(e), p=posOf(e);
-      var pos=p?('x '+p.x.toFixed(1)+'  z '+p.z.toFixed(1)+'m'):'pos —';
-      return '<div class="obj" style="border-left-color:'+col.c+'">'+
+    var ents=(scene && scene.entities)?scene.entities:[];
+    var rows=[];
+    ents.forEach(function(e){ var c=classify(e); if(c.kind!=='dock') rows.push({e:e,c:c}); });
+    rows.sort(function(a,b){return (b.e.confidence||0)-(a.e.confidence||0);});
+    var html=rows.slice(0,8).map(function(o){
+      var e=o.e, col=epi(e), p=o.c.pos, ghost=(o.c.kind==='ghost');
+      var pos='x '+p.x.toFixed(1)+'  z '+p.z.toFixed(1)+'m';
+      return '<div class="obj'+(ghost?' ghost':'')+'" style="border-left-color:'+col.c+'">'+
         '<span class="l" style="color:'+col.c+'">'+(e.label||e.entity_id||'?').toUpperCase()+'</span> '+
-        '<span class="m">'+Math.round((e.confidence||0)*100)+'%</span><br>'+
-        '<span class="m">'+pos+' · '+(e.state||'?')+' · '+(e.region||'')+(e.__remembered?' · remembered':'')+'</span></div>';
+        '<span class="m">'+Math.round((e.confidence||0)*100)+'%</span>'+
+        (ghost?' <span class="m">↺ '+age(e.last_seen_ts)+'</span>':'')+'<br>'+
+        '<span class="m">'+pos+' · '+(e.state||'?')+' · '+(e.region||'')+(ghost?' · last-known pos':'')+'</span></div>';
     }).join('');
-    document.getElementById('readout').innerHTML = html || '<div class="obj"><span class="m">no entities in view</span></div>';
+    document.getElementById('readout').innerHTML =
+      '<div class="hdr">ON THE FLOOR ('+rows.length+')</div>'+
+      (html || '<div class="obj"><span class="m">nothing placed</span></div>');
+  }
+
+  // top-right dock: entities JARVIS believes are present but has NEVER localized.
+  // Listed honestly OFF the floor — no position was computed, so none is shown.
+  function updateDock(){
+    var ents=(scene && scene.entities)?scene.entities:[];
+    var rows=ents.filter(function(e){return classify(e).kind==='dock';});
+    rows.sort(function(a,b){return (b.confidence||0)-(a.confidence||0);});
+    var el=document.getElementById('unplaced');
+    if(!rows.length){ el.innerHTML=''; return; }
+    var html=rows.map(function(e){
+      var col=epi(e);
+      return '<div class="uitem" style="border-left-color:'+col.c+'">'+
+        '<span class="dot" style="color:'+col.c+';background:'+col.c+'"></span>'+
+        '<span class="l" style="color:'+col.c+'">'+(e.label||'?').toUpperCase()+'</span>'+
+        '<span class="m"> '+Math.round((e.confidence||0)*100)+'% · '+(e.state||'?')+' · '+age(e.last_seen_ts)+'</span></div>';
+    }).join('');
+    el.innerHTML='<div class="hdr">BELIEVED PRESENT · UNPLACED ('+rows.length+')</div>'+
+      '<div class="note">recognized but never localized — no room position computed, so not drawn on the floor</div>'+html;
   }
 
   function fetchJSON(u){return fetch(u).then(function(r){if(!r.ok)throw new Error(u+' '+r.status);return r.json();});}
 
+  // ingest a scene (live or historical) for trails + last-known-position memory.
+  // Called oldest->newest so the freshest real position wins for each id.
   function pushTrails(s){
-    var t=(s&&s.tick)||Date.now();
+    var t=(s&&s.timestamp)||(s&&s.tick)||(Date.now()/1000);
     (s.entities||[]).forEach(function(e){
       var p=posOf(e); if(!p) return;
       (trails[e.entity_id]=trails[e.entity_id]||[]).push({x:p.x,z:p.z,t:t});
       if(trails[e.entity_id].length>40) trails[e.entity_id].shift();
+      lastKnownPos[e.entity_id]={x:p.x, y:p.y, z:p.z, ts:e.last_seen_ts||t, label:e.label};
     });
   }
 
   function refresh(){
     if(paused) return;
     fetchJSON('/api/hrr/scene').then(function(s){
-      scene=s; pushTrails(s); updateReadout();
+      scene=s; pushTrails(s); updateReadout(); updateDock();
+      var ents=s.entities||[], nDock=0, nGhost=0, nSolid=0;
+      ents.forEach(function(e){ var k=classify(e).kind; if(k==='dock')nDock++; else if(k==='ghost')nGhost++; else nSolid++; });
       var st=document.getElementById('stat');
-      st.innerHTML='entities '+((s.entities||[]).length)+' · relations '+((s.relations||[]).length)+
-        '<br>calib v'+(((s.source||{}).calibration_version)||0)+' · tick '+(s.tick||0)+
+      st.innerHTML='entities '+ents.length+' · live '+nSolid+' · remembered '+nGhost+' · unplaced '+nDock+
+        '<br>relations '+((s.relations||[]).length)+' · calib v'+(((s.source||{}).calibration_version)||0)+' · tick '+(s.tick||0)+
         '<br>'+new Date().toLocaleTimeString();
     }).catch(function(err){ document.getElementById('stat').textContent='offline: '+err.message; });
   }
 
-  // seed motion trails from recent history once
+  // seed trails + last-known positions from recent history once.
+  // NOTE: the endpoint returns {scenes:[...]}, not a bare array — the old
+  // `(hist||[]).forEach` silently threw into .catch, so seeding never ran.
   fetchJSON('/api/hrr/scene/history?limit=40').then(function(hist){
-    (hist||[]).forEach(pushTrails);
+    var frames=(hist && hist.scenes)||[];
+    frames.forEach(pushTrails);
+    if(scene){ updateReadout(); updateDock(); }   // re-render now that ghosts have positions
   }).catch(function(){});
 
   // layer toggles
