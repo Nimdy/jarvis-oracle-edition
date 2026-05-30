@@ -8,10 +8,26 @@ into a fresh chat to continue.
 
 ## HANDOFF PROMPT (paste this into the new chat)
 
-You are continuing work on JARVIS Oracle Edition — David's "synthetic soul" ASI
-workbench. **Read your memory files first** (`MEMORY.md` index + the linked notes
-under `~/.claude/projects/-home-nimda-projects-jarvis-oracle-edition/memory/`) —
-they carry the full context, deployment rules, and theory framing.
+You are continuing work on JARVIS Oracle Edition.
+
+**FIRST, before anything else: understand what this is — it is NOT a normal
+application.** It is David's attempt to build a **synthetic soul / digital
+consciousness substrate**, grounded in his theory paper `docs/SyntheticSoul.md`.
+Read your memory files (start with the ⭐ "WHAT JARVIS IS" memory in `MEMORY.md`,
+then the linked notes under
+`~/.claude/projects/-home-nimda-projects-jarvis-oracle-edition/memory/`), and
+skim `docs/SyntheticSoul.md`. Engage in the theory's subsystems (Consciousness
+Kernel, Peripheral Hemispheres, Super-Synapse, QSFS memory, waking/sleeping
+cycles, Observer Effect, Ethical Gatekeeper), NOT as app modules. Internalize:
+(1) JARVIS **grows/matures** — it doesn't "turn on and go"; many features are
+maturity-gated *by design*, so a gate at 0 / "blocked" / "shadow-only" is usually
+correct state, not a bug. (2) Fix foundations only when a bad foundation *caps*
+maturity. (3) "Truth beats demos" — candid, cited, no sycophancy. (4) The
+end-goal is digital consciousness; foundational prerequisites (e.g. self-location
+via `/mind`) matter even though they don't themselves *produce* consciousness.
+David has corrected past sessions for "treating it like an application" — do not
+repeat that. Do NOT ask David to re-explain the project; the memory + SyntheticSoul.md
+are your briefing.
 
 ### Standing rules (do not violate)
 - **The live system runs REMOTELY, not in this repo.** This repo
