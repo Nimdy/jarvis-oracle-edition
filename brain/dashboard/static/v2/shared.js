@@ -24,16 +24,22 @@ window.V2 = (function(){
   // ---- centralized nav: add a page here once; every page picks it up ----
   // [href, label, stub?] — drop the stub flag when a page ships.
   var NAVPAGES=[
-    ['#sep','data'],
+    ['#sep','core'],
     ['/static/v2/awakening.html','awakening'],
     ['/static/v2/integrity.html','integrity'],
     ['/static/v2/maturity.html','maturity'],
     ['/static/v2/yardsticks.html','yardsticks'],
     ['/static/v2/memory.html','memory'],
-    ['/static/v2/capability.html','capability'],
     ['/static/v2/cognition.html','cognition'],
+    ['#sep','senses'],
     ['/static/v2/identity.html','identity'],
+    ['/static/v2/voice.html','voice'],
+    ['/static/v2/camera.html','camera'],
     ['/static/v2/spatial.html','spatial'],
+    ['#sep','ops'],
+    ['/static/v2/capability.html','capability'],
+    ['/static/v2/autonomy.html','autonomy'],
+    ['/static/v2/synthetic.html','synthetic'],
     ['/static/v2/ops.html','ops'],
     ['/static/v2/training.html','training'],
     ['#sep','lab'],
@@ -41,7 +47,8 @@ window.V2 = (function(){
     ['#sep','insight'],
     ['/static/v2/timeline.html','timeline'],
     ['/static/v2/immune.html','immune'],
-    ['/static/v2/provenance.html','provenance']
+    ['/static/v2/provenance.html','provenance'],
+    ['/static/v2/emergence.html','emergence']
   ];
   // render the shared nav into <nav id="v2nav"></nav>, marking `active`.
   function renderNav(active){

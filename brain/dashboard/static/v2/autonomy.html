@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Autonomy &amp; Research (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .statline{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin:4px 0;}
+    .statline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .bigstat{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
+    .contrast b{color:var(--text);}
+    .gridkv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:10.5px;margin-top:6px;}
+    .gridkv .k{color:var(--muted);}
+    .gridkv b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .gaterow{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px;}
+    .idleblock{font-size:11px;color:var(--dim);font-style:italic;padding:14px 4px;text-align:center;border:1px dashed var(--line);border-radius:5px;}
+    /* L-level ladder */
+    .ladder{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:10px;margin-top:9px;border-top:1px dashed var(--line);padding-top:9px;}
+    .ladder .lv{font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.04em;}
+    .ladder .at{color:var(--text);}
+    .ladder .off{color:var(--dim);}
+    .ladder .at .lv{color:var(--green);}
+    /* research log items */
+    .ri{border:1px solid var(--line);border-left-width:3px;border-radius:5px;padding:9px 11px;margin:8px 0;background:rgba(3,8,14,.45);}
+    .ri .q{font-size:12px;color:var(--text);font-weight:600;line-height:1.35;}
+    .ri .meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:7px;align-items:center;}
+    .ri .why{font-size:9.5px;color:var(--dim);margin-top:7px;font-style:italic;line-height:1.4;}
+    .ri .delta{display:grid;grid-template-columns:repeat(3,1fr);gap:3px 12px;margin-top:8px;font-size:9.5px;border-top:1px dashed var(--line);padding-top:7px;}
+    .ri .delta .row{display:flex;justify-content:space-between;}
+    .ri .delta .row span{color:var(--muted);}
+    .ri .delta .row b{font-variant-numeric:tabular-nums;}
+    .deltahead{display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:8px 11px;margin-bottom:4px;}
+    .deltahead b{color:var(--text);font-variant-numeric:tabular-nums;}
+    /* drive rows */
+    .drive{display:flex;align-items:center;gap:10px;font-size:10.5px;padding:6px 0;border-bottom:1px dashed var(--line);}
+    .drive .nm{width:74px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-size:9.5px;}
+    .drive .track{flex:1;height:7px;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:rgba(3,8,14,.6);}
+    .drive .fill{height:100%;}
+    .drive .sup{font-size:9px;color:var(--dim);white-space:nowrap;}
+    .qchip{font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:4px 7px;margin:3px 0;line-height:1.35;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · AUTONOMY &amp; RESEARCH</h1><span class="v2">dashboardV2</span>
+    <span class="sub">What JARVIS has chosen to research on its own, and the drive-loop behind it. Self-directed inquiry is gated at L2 (safe-apply); zero counters on a freshly-rebooted brain mean armed &amp; accumulating, not broken.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col6">
+      <h2>Autonomy Status <span class="asof" id="status-asof">full-snapshot · —</span></h2>
+      <div class="note">The self-improvement loop: detect a deficit → research it → measure the delta → apply only if it helped. The <b>level</b> caps how far that loop may go without a human.</div>
+      <div id="status"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Curiosity &amp; Drives</h2>
+      <div class="note">The intrinsic-motivation engine: four drives (truth, curiosity, mastery, relevance) compete for the next action; the curiosity buffer holds questions it wants to ask <em>you</em>. Quiet right now = recovering, not idle-by-fault.</div>
+      <div id="curiosity"></div>
+    </section>
+
+    <section class="card col8">
+      <h2>Research Log — what it pursued <span class="asof" id="log-asof">autonomy.completed[] · —</span></h2>
+      <div class="note">Each entry is a question JARVIS generated and ran <b>itself</b>. The measured impact lives in <code>recent_deltas</code> (joined by id); where the measurement window hasn't closed it reads <b>delta pending</b>, and <code>completed_at=0</code> reads <b>ts pending</b> — honest, not hidden.</div>
+      <div class="deltahead" id="delta-head"></div>
+      <div id="log"></div>
+    </section>
+
+    <section class="card col4">
+      <h2>Experience Buffer</h2>
+      <div class="note">The replay store the learning loop samples from. <code>top_reward_magnitude</code> is the strongest signal it has banked; <code>unflushed</code> is what's waiting to persist.</div>
+      <div id="buffer"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, tag=V2.tag, cap=V2.cap, gateState=V2.gateState;
+  var FS=null, lastOkTs=0;
+  V2.renderNav('/static/v2/autonomy.html');
+
+  var LEVELS=[
+    [0,'observe','watch only — no self-changes ever applied'],
+    [1,'propose','queue research &amp; propose changes; nothing applied automatically'],
+    [2,'safe_apply','apply only changes that measurably improved metrics (must earn it)'],
+    [3,'expand','broaden scope of self-applied changes — requires human attestation']
+  ];
+
+  function renderStatus(){
+    var box=el('status'); if(!box) return;
+    var a=(FS&&FS.autonomy)||null;
+    if(!a){ box.innerHTML='<div class="idleblock">autonomy state UNKNOWN — full-snapshot offline</div>'; return; }
+    var lvl=num(a.autonomy_level), lname=a.autonomy_level_name||'—';
+    var enabled=gateState(a.enabled), started=gateState(a.started);
+    var gov=a.governor||{}, prom=a.promotion||{};
+    var enTag=tag(a.enabled===true?'grounded':'derived', a.enabled===true?'enabled':a.enabled===false?'disabled':'enabled?');
+    var stTag=tag(a.started===true?'grounded':'derived', a.started===true?'started':a.started===false?'not started':'started?');
+    box.innerHTML=
+      '<div class="statline">'+
+        '<span><div class="k">level</div><span class="bigstat" style="color:'+(lvl===null?'var(--dim)':'var(--green)')+'">L'+(lvl===null?'?':lvl)+'</span><div class="k" style="margin-top:2px">'+cap(lname)+'</div></span>'+
+        '<span><div class="k">queue depth</div><span class="bigstat">'+(num(a.queue_size)||0)+'</span></span>'+
+        '<span><div class="k">completed (total / session)</div><span class="bigstat">'+(num(a.completed_total)||0)+'<span style="font-size:14px;color:var(--dim)"> / '+(num(a.completed_total_session)||0)+'</span></span></span>'+
+      '</div>'+
+      '<div class="gaterow">'+enTag+stTag+
+        tag(gov.disabled===true?'derived':'grounded', gov.disabled===true?'governor: disabled':'governor: armed')+
+        (gov.gestation_mode===true?tag('self','gestation'):'')+
+      '</div>'+
+      '<div class="gridkv">'+
+        '<span class="k">hourly research budget</span><b>'+(num(gov.hourly_used)||0)+' / '+(num(gov.hourly_limit)===null?'—':num(gov.hourly_limit))+'</b>'+
+        '<span class="k">daily research budget</span><b>'+(num(gov.daily_used)||0)+' / '+(num(gov.daily_limit)===null?'—':num(gov.daily_limit))+'</b>'+
+        '<span class="k">academic (1h)</span><b>'+(num(gov.academic_hourly_used)||0)+' / '+(num(gov.academic_hourly_limit)===null?'—':num(gov.academic_hourly_limit))+'</b>'+
+        '<span class="k">web (1h)</span><b>'+(num(gov.web_hourly_used)||0)+' / '+(num(gov.web_hourly_limit)===null?'—':num(gov.web_hourly_limit))+'</b>'+
+        '<span class="k">running now</span><b>'+(num(gov.running_count)||0)+'</b>'+
+        '<span class="k">blocked (total)</span><b>'+(num(gov.total_blocked)||0)+'</b>'+
+        '<span class="k">L2 win-rate</span><b style="color:'+bandColor(num(prom.win_rate),0.6,0.4)+'">'+(num(prom.win_rate)===null?'—':(num(prom.win_rate)*100).toFixed(0)+'%')+' ('+(num(prom.wins)||0)+'/'+(num(prom.total_outcomes)||0)+')</b>'+
+        '<span class="k">L3 eligible</span><b class="s-'+gateState(prom.eligible_for_l3)+'">'+(prom.eligible_for_l3===true?'yes':prom.eligible_for_l3===false?'no':'unk')+'</b>'+
+      '</div>'+
+      '<div class="ladder">'+LEVELS.map(function(L){
+        var on=(L[0]===lvl);
+        return '<div class="'+(on?'at':'off')+'"><span class="lv">L'+L[0]+'</span></div>'+
+               '<div class="'+(on?'at':'off')+'">'+(on?'<b style="color:var(--green)">'+L[1]+'</b> — <span class="at">'+L[2]+'</span> &nbsp;'+tag('grounded','active'):'<b>'+L[1]+'</b> — '+L[2])+'</div>';
+      }).join('')+'</div>'+
+      '<div class="contrast">Live level <b>L'+(lvl===null?'?':lvl)+' '+cap(lname)+'</b>: changes are applied <em>only</em> after a measured improvement. L3 is human-gated &mdash; <span style="color:var(--dim)">'+(prom.l3_reason||'not eligible')+'</span>. This page is <b>read-only</b>; level changes &amp; runs are operator-only (POST-gated), shown here, never fired.</div>';
+    el('status-asof').textContent='full-snapshot · '+(lastOkTs?ago(lastOkTs/1000):'—');
+  }
+
+  // join completed[] -> recent_deltas[] by id/intent_id; render meaningful per-research deltas
+  var DELTA_KEYS=['tick_p95_ms','confidence_volatility','reasoning_coherence','memory_count','confidence_avg','error_count'];
+  function deltaFor(id, deltas){ for(var i=0;i<deltas.length;i++){ if(deltas[i].intent_id===id) return deltas[i]; } return null; }
+
+  function renderLog(){
+    var box=el('log'); if(!box) return;
+    var a=(FS&&FS.autonomy)||null;
+    if(!a){ box.innerHTML='<div class="idleblock">research log UNKNOWN — full-snapshot offline</div>'; return; }
+    var comp=a.completed||[], rds=a.recent_deltas||[], dt=a.delta_tracker||{};
+    // aggregate header
+    var rate=num(dt.improvement_rate);
+    el('delta-head').innerHTML=
+      '<span>measured deltas (all-time): <b>'+(num(dt.total_measured)||0)+'</b></span>'+
+      '<span style="color:var(--green)">improved <b style="color:var(--green)">'+(num(dt.total_improved)||0)+'</b></span>'+
+      '<span style="color:var(--red)">regressed <b style="color:var(--red)">'+(num(dt.total_regressed)||0)+'</b></span>'+
+      '<span>interrupted <b>'+(num(dt.total_interrupted)||0)+'</b></span>'+
+      '<span>improvement rate <b style="color:'+bandColor(rate,0.6,0.4)+'">'+(rate===null?'—':(rate*100).toFixed(0)+'%')+'</b></span>'+
+      '<span>pending <b>'+(num(dt.pending_count)||0)+'</b></span>';
+    if(!comp.length){ box.innerHTML='<div class="idleblock">No completed research this session yet — the loop is armed and accumulating since reboot.</div>'; return; }
+    box.innerHTML=comp.map(function(c){
+      var d=deltaFor(c.id, rds);
+      var net=d?num(d.net_improvement):null;
+      var border = net===null ? 'var(--line)' : (net>0.0001?'var(--green)':(net<-0.0001?'var(--red)':'var(--amber)'));
+      var verdict = net===null
+        ? tag('self','delta pending')
+        : tag(net>0.0001?'grounded':(net<-0.0001?'self':'earned'), 'net '+(net>=0?'+':'')+net.toFixed(3));
+      var tsTxt = (num(c.completed_at)) ? ago(c.completed_at) : (num(c.created_at)?('queued '+ago(c.created_at)+' · ts pending'):'ts pending');
+      var chips=(c.tag_cluster||[]).map(function(t){ return tag('earned', t); }).join('');
+      var scopeTag = c.scope ? tag('earned','scope: '+cap(c.scope)) : '';
+      var srcTag = c.source_hint ? tag('earned',c.source_hint) : '';
+      // per-research delta detail (only the human-meaningful axes)
+      var dd='';
+      if(d&&d.deltas){
+        dd='<div class="delta">'+DELTA_KEYS.map(function(k){
+          var v=num(d.deltas[k]); if(v===null) return '';
+          var good = (k==='tick_p95_ms'||k==='confidence_volatility'||k==='error_count') ? (v<0) : (v>0);
+          var col = Math.abs(v)<1e-6 ? 'var(--dim)' : (good?'var(--green)':'var(--red)');
+          return '<div class="row"><span>'+cap(k)+'</span><b style="color:'+col+'">'+(v>=0?'+':'')+(Math.abs(v)>=1?v.toFixed(2):v.toFixed(4))+'</b></div>';
+        }).join('')+'</div>';
+      }
+      return '<div class="ri" style="border-left-color:'+border+'">'+
+        '<div class="q">'+(c.question||'(no question text)')+'</div>'+
+        '<div class="meta">'+verdict+scopeTag+srcTag+chips+
+          '<span style="color:var(--dim);font-size:9.5px;margin-left:auto">'+tsTxt+'</span>'+
+        '</div>'+
+        (c.reason?'<div class="why">'+c.reason+'</div>':'')+
+        dd+
+      '</div>';
+    }).join('');
+    el('log-asof').textContent='autonomy.completed[] · '+(lastOkTs?ago(lastOkTs/1000):'—');
+  }
+
+  function renderCuriosity(){
+    var box=el('curiosity'); if(!box) return;
+    var cu=(FS&&FS.curiosity)||null, pr=(FS&&FS.proactive)||{}, a=(FS&&FS.autonomy)||{};
+    if(!cu){ box.innerHTML='<div class="idleblock">curiosity state UNKNOWN — full-snapshot offline</div>'; return; }
+    var quiet = (num(cu.total_generated)||0)===0 && (num(cu.buffer_size)||0)===0;
+    var html=
+      '<div class="statline">'+
+        '<span><div class="k">buffer</div><span class="bigstat">'+(num(cu.buffer_size)||0)+'</span></span>'+
+        '<span><div class="k">generated</div><span class="bigstat">'+(num(cu.total_generated)||0)+'</span></span>'+
+        '<span><div class="k">asked</div><span class="bigstat">'+(num(cu.total_asked)||0)+'</span></span>'+
+        '<span><div class="k">expired</div><span class="bigstat" style="color:var(--dim)">'+(num(cu.total_expired)||0)+'</span></span>'+
+        '<span><div class="k">suppressed</div><span class="bigstat" style="color:var(--dim)">'+(num(cu.total_suppressed)||0)+'</span></span>'+
+      '</div>'+
+      '<div class="gridkv">'+
+        '<span class="k">proactive pending</span><b>'+(pr.pending_question?cap(String(pr.pending_question).slice(0,60)):'none')+'</b>'+
+        '<span class="k">proactive asked</span><b>'+(num(pr.asked_count)||0)+' (cap '+(num(pr.max_per_hour)||0)+'/h)</b>'+
+        '<span class="k">interjections</span><b>'+(num(pr.recent_interjections)||0)+'</b>'+
+      '</div>';
+    // drives
+    var drv=((a.drives||{}).drives)||{};
+    var order=['truth','curiosity','mastery','relevance'];
+    var maxU=0.001; order.forEach(function(n){ var d=drv[n]; if(d){ maxU=Math.max(maxU,num(d.urgency)||0); } });
+    var drows=order.map(function(n){
+      var d=drv[n]; if(!d) return '';
+      var u=num(d.urgency)||0, sr=num(d.success_rate);
+      var col = (d.last_outcome==='negative') ? 'var(--amber)' : bandColor(sr,0.5,0.2);
+      return '<div class="drive">'+
+        '<span class="nm">'+n+'</span>'+
+        '<div class="track"><div class="fill" style="width:'+(u/maxU*100).toFixed(0)+'%;background:'+col+'"></div></div>'+
+        '<span class="sup" title="'+(d.suppression||'')+'">u '+u.toFixed(3)+' · sr '+(sr===null?'—':(sr*100).toFixed(0)+'%')+(d.suppression&&/damp/.test(d.suppression)?' · damp':'')+'</span>'+
+      '</div>';
+    }).join('');
+    html+='<div class="contrast" style="margin-bottom:4px">Drive urgencies (strategy in parens): truth=<i>audit</i>, curiosity=<i>research</i>, mastery=<i>experiment</i>, relevance=<i>recall</i>. Recent runs returned non-actionable, so most are <b>dampened</b> — a safety brake, not a fault.</div>'+drows;
+    // detector: what it is about to chase
+    var det=a.detector||{}, qs=det.recent_questions||[];
+    if(qs.length){
+      html+='<div class="contrast">Next candidate questions ('+(num(det.active_clusters)||0)+' active clusters, '+(num(det.total_detected)||0)+' detected):</div>'+
+        qs.slice(0,3).map(function(q){ return '<div class="qchip">'+q+'</div>'; }).join('');
+    }
+    html+='<div class="contrast">'+
+      (quiet
+        ? 'Curiosity counters all <b>0</b> this session — the buffer is <b style="color:var(--text)">quiet / recovering</b> after reboot, arming as context re-accumulates. Not broken: detector still found <b>'+(num(det.total_detected)||0)+'</b> threads to pursue.'
+        : 'Curiosity engine active: <b>'+(num(cu.total_generated)||0)+'</b> generated, <b>'+(num(cu.total_asked)||0)+'</b> surfaced to you.')+
+      '</div>';
+    box.innerHTML=html;
+  }
+
+  function renderBuffer(){
+    var box=el('buffer'); if(!box) return;
+    var eb=(FS&&FS.experience_buffer)||null;
+    if(!eb){ box.innerHTML='<div class="idleblock">buffer UNKNOWN — full-snapshot offline</div>'; return; }
+    var size=num(eb.size)||0, mx=num(eb.max_size)||0, pct = mx?size/mx*100:null;
+    box.innerHTML=
+      '<div class="statline">'+
+        '<span><div class="k">stored</div><span class="bigstat">'+size+'<span style="font-size:14px;color:var(--dim)"> / '+mx+'</span></span></span>'+
+        '<span><div class="k">unflushed</div><span class="bigstat" style="color:'+((num(eb.unflushed)||0)>0?'var(--amber)':'var(--green)')+'">'+(num(eb.unflushed)||0)+'</span></span>'+
+        '<span><div class="k">top reward |mag|</div><span class="bigstat">'+(num(eb.top_reward_magnitude)===null?'—':f2(eb.top_reward_magnitude))+'</span></span>'+
+      '</div>'+
+      V2.barRow('capacity', pct, (pct===null?'—':pct.toFixed(0)+'%'), bandColor(pct===null?null:(pct/100),0.0,0.0)==='var(--dim)'?'var(--cyan)':'var(--cyan)')+
+      '<div class="gridkv">'+
+        '<span class="k">recent-bias default</span><b>'+f2(eb.recent_bias_default)+'</b>'+
+        '<span class="k">priority temperature</span><b>'+f2(eb.priority_temperature_default)+'</b>'+
+      '</div>'+
+      '<div class="contrast">'+
+        ((num(eb.unflushed)||0)===0 ? 'All experiences flushed to disk (0 unflushed) — durable.' : '<b style="color:var(--amber)">'+eb.unflushed+'</b> experiences not yet persisted.')+
+        ' Buffer is <b>'+(pct===null?'—':pct.toFixed(0)+'%')+'</b> full ('+size+'/'+mx+'); it grows as the brain soaks and is sampled by the learning loop, prioritised by reward magnitude.'+
+      '</div>';
+  }
+
+  function renderRecovery(){
+    var box=el('recovery');
+    var cu=(FS&&FS.curiosity)||{};
+    var quiet=(num(cu.total_generated)||0)===0 && (num(cu.buffer_size)||0)===0;
+    if(FS && quiet){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — curiosity counters reset to 0 and most drives are dampened. The autonomy loop is armed and re-accumulating context; zero here is recovery debt, not failure.';
+    } else { box.style.display='none'; }
+  }
+
+  function renderBanner(){
+    var b=(FS&&FS.banner)||{};
+    el('mode').textContent='mode '+(b.mode||'—')+' · uptime '+V2.fmtUptime(b.uptime_s)+(num(b.data_freshness_s)!==null?' · fresh '+b.data_freshness_s.toFixed(1)+'s':'');
+  }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderStatus(); renderLog(); renderCuriosity(); renderBuffer(); }
+
+  function refresh(){
+    fetchJSON('/api/full-snapshot').then(function(s){ FS=s; lastOkTs=Date.now(); renderAll(); })
+      .catch(function(){ if(!FS){ el('status').innerHTML='<div class="offline">full-snapshot offline</div>'; el('log').innerHTML='<div class="offline">full-snapshot offline</div>'; } });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 8000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

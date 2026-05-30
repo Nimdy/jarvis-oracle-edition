@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Synthetic Training (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .bigstat{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .statline{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin:4px 0;}
+    .statline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
+    .contrast b{color:var(--text);}
+    .idleblock{font-size:11px;color:var(--dim);font-style:italic;padding:14px 4px;text-align:center;border:1px dashed var(--line);border-radius:5px;}
+    .gridkv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:10.5px;margin-top:6px;}
+    .gridkv .k{color:var(--muted);}
+    .gridkv b{color:var(--text);font-variant-numeric:tabular-nums;}
+    /* leak / safety banner */
+    .leakbox{margin-top:11px;border:1px solid var(--line);border-left-width:3px;border-radius:4px;padding:9px 12px;font-size:10.5px;color:var(--muted);}
+    .leakbox.safe{border-color:var(--green);background:rgba(0,255,153,.04);}
+    .leakbox.breach{border-color:var(--red);background:rgba(255,59,92,.06);}
+    .leakbox .big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .leakgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 14px;margin-top:8px;font-size:10px;}
+    .leakgrid .row{display:flex;justify-content:space-between;color:var(--muted);}
+    .leakgrid .row b{font-variant-numeric:tabular-nums;}
+    /* run list (exercises) */
+    .runlist{display:flex;flex-direction:column;gap:8px;margin-top:4px;}
+    .runrow{border:1px solid var(--line);border-radius:6px;padding:9px 12px;background:rgba(3,8,14,.45);
+      display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;}
+    .runrow .nm{font-size:12px;color:var(--text);font-weight:700;letter-spacing:.04em;}
+    .runrow .meta{font-size:9.5px;color:var(--muted);letter-spacing:.04em;margin-top:2px;}
+    .runrow .meta b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .runrow .right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;}
+    .runrow .asoflbl{font-size:9px;color:var(--dim);}
+    /* weight-room profiles */
+    .profcard{border:1px solid var(--line);border-radius:6px;padding:9px 12px;background:rgba(3,8,14,.45);margin-bottom:8px;}
+    .profcard .phead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+    .profcard .pnm{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--text);font-weight:700;}
+    .profcard .pdesc{font-size:9.5px;color:var(--muted);line-height:1.5;margin-top:5px;}
+    .profcard .pmeta{font-size:9px;color:var(--dim);letter-spacing:.04em;margin-top:4px;}
+    .profcard .pmeta b{color:var(--muted);font-variant-numeric:tabular-nums;}
+    .opnote{margin-top:10px;border:1px dashed var(--line);border-radius:4px;padding:8px 11px;font-size:10px;color:var(--dim);}
+    .opnote code{color:var(--amber);background:rgba(255,176,0,.07);padding:0 4px;border-radius:3px;}
+    .opnote b{color:var(--muted);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · SYNTHETIC TRAINING</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Text-only training lanes: synthetic episodes exercise the route/distillation pipeline inside a quarantine. The leak counters are the safety story — 0 = nothing escaped to live LLM/TTS/memory.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col5">
+      <h2>Active Exercise <span class="asof" id="ex-asof">full-snapshot · —</span></h2>
+      <div class="note">A live synthetic exercise pumps text utterances through the STT→route→distillation path. The pipeline is <b>synthetic-only</b>: any LLM/TTS/memory/identity side-effect is a <em>quarantine breach</em>. Counters at 0 on a fresh boot = armed/idle, never broken.</div>
+      <div id="active"></div>
+      <div class="leakbox" id="leak"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Exercise Runs</h2>
+      <div class="note">Recorded exercise runs from the synthetic harness. Each carries its profile, episode count, the pass/fail gate, and when it last ran (as-of). Empty on a freshly-rebooted brain = no runs yet, not failure.</div>
+      <div id="runs"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Skill-Acquisition Weight Room</h2>
+      <div class="note">The synthetic training rig for skill acquisition. Profiles trade fidelity for volume; heavier profiles (strict/stress) are operator-flag-gated. Everything here is <b>telemetry-only</b> — <span style="color:var(--magenta)">synthetic-only, no live influence, no promotion, cannot unlock capabilities</span>. The signals it records are training data, not authority.</div>
+      <div id="wr-head"></div>
+      <div class="bars" id="wr-profiles" style="margin-top:10px"></div>
+      <div class="opnote" id="wr-op"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, ago=V2.ago, bandColor=V2.bandColor, el=V2.el;
+  var FS=null, lastOkTs=0;
+  V2.renderNav('/static/v2/synthetic.html');
+
+  // ---- Panel 1: Active Exercise ----
+  function renderActive(){
+    var box=el('active'), leak=el('leak');
+    var se=(FS&&FS.synthetic_exercise)||null;
+    if(!se){
+      box.innerHTML='<div class="idleblock">exercise state UNKNOWN — full-snapshot offline</div>';
+      leak.className='leakbox'; leak.innerHTML='';
+      return;
+    }
+    var active=se.active===true;
+    var stt=num(se.utterances_stt)||0, routes=num(se.routes_produced)||0, dist=num(se.distillation_records)||0;
+    var cool=num(se.cooldown_s);
+    var stateTag = active ? V2.tag('grounded','exercise ACTIVE') : V2.tag('derived','idle / armed');
+    box.innerHTML=
+      '<div class="gaterow" style="margin-bottom:8px">'+stateTag+
+        V2.tag('self','synthetic-only')+
+        V2.tag('earned','cooldown '+(cool===null?'—':cool.toFixed(0)+'s')+'')+
+      '</div>'+
+      '<div class="statline">'+
+        '<span><div class="k">utterances (stt)</div><span class="bigstat">'+stt+'</span></span>'+
+        '<span><div class="k">routes produced</div><span class="bigstat">'+routes+'</span></span>'+
+        '<span><div class="k">distillation records</div><span class="bigstat">'+dist+'</span></span>'+
+      '</div>'+
+      renderHistogram(se.route_histogram)+
+      '<div class="contrast">'+(active
+        ? 'Exercise running — synthetic text is flowing through the route+distillation path right now.'
+        : 'No active exercise. Zero counters on a freshly-rebooted brain mean the lane is <b>armed and accumulating</b>, not broken.')+
+        ' <b>'+(num(se.total_runs)||0)+'</b> total runs since boot; last run '+ago(se.last_run_time)+'.</div>';
+
+    // leak / safety story
+    var blocked=num(se.blocked_side_effects); // headline
+    var llm=num(se.llm_leaks)||0, tts=num(se.tts_leaks)||0, emit=num(se.transcription_emit_leaks)||0,
+        mem=num(se.memory_side_effects)||0, ident=num(se.identity_side_effects)||0;
+    if(blocked===null){
+      leak.className='leakbox';
+      leak.innerHTML='<span class="big" style="color:var(--dim)">—</span> leak counters UNKNOWN — full-snapshot offline.';
+    } else if(blocked>0){
+      leak.className='leakbox breach';
+      leak.innerHTML='<span class="big" style="color:var(--red)">'+blocked+'</span> <b style="color:var(--red)">blocked side-effects</b> — the quarantine intercepted '+blocked+' attempt(s) to escape the synthetic sandbox. Each one is a caught breach: the synthetic-only invariant held, but the path tried to leak.'+leakGrid(llm,tts,emit,mem,ident);
+    } else {
+      leak.className='leakbox safe';
+      leak.innerHTML='<span class="big" style="color:var(--green)">0</span> <b style="color:var(--green)">no leaks</b> — quarantine working. Nothing escaped to the live LLM, TTS, transcription emit, memory or identity. This counter is the safety story: 0 means synthetic stayed synthetic.'+leakGrid(llm,tts,emit,mem,ident);
+    }
+  }
+  function leakGrid(llm,tts,emit,mem,ident){
+    function r(lbl,v){ var c=v>0?'var(--red)':'var(--dim)'; return '<div class="row"><span>'+lbl+'</span><b style="color:'+c+'">'+v+'</b></div>'; }
+    return '<div class="leakgrid">'+r('llm leaks',llm)+r('tts leaks',tts)+r('emit leaks',emit)+r('memory side-fx',mem)+r('identity side-fx',ident)+'</div>';
+  }
+  function renderHistogram(hist){
+    hist=hist||{};
+    var keys=Object.keys(hist);
+    if(!keys.length){
+      return '<div class="note" style="margin:8px 0 0">route histogram — <b style="color:var(--dim)">empty</b> (no routes produced this lane yet).</div>';
+    }
+    var max=1; keys.forEach(function(k){ max=Math.max(max, num(hist[k])||0); });
+    return '<div class="note" style="margin:10px 0 2px">route histogram</div>'+
+      keys.map(function(k){ var v=num(hist[k])||0; return V2.barRow(V2.cap(k), v/max*100, String(v), 'var(--cyan)'); }).join('');
+  }
+
+  // ---- Panel 2: Exercise Runs ----
+  function renderRuns(){
+    var box=el('runs');
+    var sx=(FS&&FS.synthetic_exercises)||null;
+    if(!sx){ box.innerHTML='<div class="idleblock">exercise-run state UNKNOWN — full-snapshot offline</div>'; return; }
+    var exs=sx.exercises||{};
+    var names=Object.keys(exs);
+    if(!names.length){
+      box.innerHTML='<div class="idleblock">No exercise runs recorded yet — freshly-rebooted brain, the harness is armed and waiting. (count: '+(num(sx.count)||0)+')</div>';
+      return;
+    }
+    box.innerHTML='<div class="runlist">'+names.map(function(nm){
+      var e=exs[nm]||{};
+      var passed=e.passed; // true/false/undefined
+      var gTag = passed===true ? V2.tag('grounded','gate PASSED')
+               : passed===false ? V2.tag('self','gate FAILED')
+               : V2.tag('derived','gate UNKNOWN');
+      return '<div class="runrow">'+
+        '<div>'+
+          '<span class="nm">'+nm+'</span>'+
+          '<div class="meta">profile <b>'+(e.profile||'—')+'</b> · episodes <b>'+(num(e.episodes)===null?'—':num(e.episodes))+'</b>'+
+            (e.report_file?' · report <b>'+e.report_file+'</b>':'')+'</div>'+
+        '</div>'+
+        '<div class="right">'+gTag+'<span class="asoflbl">last run '+ago(e.last_run)+'</span></div>'+
+      '</div>';
+    }).join('')+'</div>'+
+    '<div class="contrast"><b>'+names.length+'</b> exercise(s) on record. The pass/fail gate is the harness’s own verdict on the synthetic run — it is <b style="color:var(--magenta)">self-scored telemetry</b>, not a live capability unlock.</div>';
+  }
+
+  // ---- Panel 3: Skill-Acquisition Weight Room ----
+  function renderWeightRoom(){
+    var head=el('wr-head'), pbox=el('wr-profiles'), op=el('wr-op');
+    var wr=(FS&&FS.skill_acquisition_weight_room)||null;
+    if(!wr){
+      head.innerHTML='<div class="idleblock">weight-room state UNKNOWN — full-snapshot offline</div>';
+      pbox.innerHTML=''; op.innerHTML='';
+      return;
+    }
+    var enabled=V2.gateState(wr.enabled);
+    var runStatus=((wr.run||{}).status)||null;
+    var enTag = wr.enabled===true ? V2.tag('grounded','enabled')
+              : wr.enabled===false ? V2.tag('self','disabled')
+              : V2.tag('derived','enabled UNKNOWN');
+    var runTag = runStatus===null ? V2.tag('derived','run UNKNOWN')
+               : runStatus==='idle' ? V2.tag('earned','run idle')
+               : V2.tag('grounded','run '+runStatus);
+    var dist=wr.distillation||{};
+    head.innerHTML=
+      '<div class="gaterow">'+enTag+runTag+
+        V2.tag('self','telemetry-only')+V2.tag('self','synthetic-only')+
+        V2.tag('derived','no live influence')+
+      '</div>'+
+      '<div class="gridkv" style="margin-top:9px">'+
+        '<span class="k">distillation features</span><b>'+(num(dist.features)===null?'—':num(dist.features))+'</b>'+
+        '<span class="k">distillation labels</span><b>'+(num(dist.labels)===null?'—':num(dist.labels))+'</b>'+
+        '<span class="k">quarantined</span><b style="color:'+((num(dist.quarantined)||0)>0?'var(--amber)':'var(--green)')+'">'+(num(dist.quarantined)||0)+'</b>'+
+        '<span class="k">synthetic episodes total</span><b>'+(num(wr.synthetic_episodes_total)||0)+'</b>'+
+        '<span class="k">last profile</span><b>'+(wr.last_profile?wr.last_profile:'— (none run)')+'</b>'+
+        '<span class="k">promotion eligible</span><b class="s-'+V2.gateState(wr.promotion_eligible)+'">'+(wr.promotion_eligible===true?'yes':wr.promotion_eligible===false?'no':'unk')+'</b>'+
+      '</div>';
+
+    // profiles list (smoke / coverage / strict / stress)
+    var ORDER=['smoke','coverage','strict','stress'];
+    var profs=wr.profiles||{}, gates=wr.gates||{};
+    var keys=ORDER.filter(function(k){ return profs[k]; }).concat(Object.keys(profs).filter(function(k){ return ORDER.indexOf(k)<0; }));
+    if(!keys.length){
+      pbox.innerHTML='<div class="idleblock">no profiles reported</div>';
+    } else {
+      pbox.innerHTML=keys.map(function(k){
+        var p=profs[k]||{}, g=gates[k]||{};
+        var allowed=g.allowed; // true/false/undefined
+        var reasons=(g.blocked_reasons||[]);
+        var aTag = allowed===true ? V2.tag('grounded','gate ALLOWED')
+                 : allowed===false ? V2.tag('derived','gate BLOCKED')
+                 : V2.tag('derived','gate UNKNOWN');
+        var recTag = p.record_signals===true ? V2.tag('earned','records signals')
+                   : p.record_signals===false ? V2.tag('self','no recording')
+                   : '';
+        var lvlTag = g.gate_level ? V2.tag('self', g.gate_level.replace(/_/g,' ')) : '';
+        var blockNote = (allowed===false && reasons.length)
+          ? '<div class="pmeta" style="color:var(--amber)">blocked: '+reasons.map(function(r){return r.replace(/_/g,' ');}).join(', ')+'</div>'
+          : '';
+        return '<div class="profcard">'+
+          '<div class="phead"><span class="pnm">'+k+'</span><span>'+aTag+' '+recTag+' '+lvlTag+'</span></div>'+
+          '<div class="pdesc">'+(p.description||'—')+'</div>'+
+          '<div class="pmeta">episodes <b>'+(num(p.episode_count)===null?'—':num(p.episode_count))+'</b></div>'+
+          blockNote+
+        '</div>';
+      }).join('');
+    }
+
+    // operator-gated run note (read-only — NO firing button)
+    op.innerHTML='Running an exercise or weight-room profile is <b>operator-gated</b>: it is a <code>POST /api/synthetic/.../run</code> request, deliberately not exposed here. This dashboard is read-only — the run actions are operator-only. Heavier profiles (strict/stress) additionally require an operator flag (<code>heavy_profile_operator_flag_disabled</code> blocks them until set).';
+  }
+
+  // ---- recovery banner + mode/clock chrome ----
+  function renderRecovery(){
+    var vp=(FS&&FS.validation_pack)||{}, reg=num(vp.checks_regressed)||0, box=el('recovery');
+    if(vp.status==='blocked' && reg>0){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — '+reg+' check(s) rebuilding. Synthetic run history and distillation totals re-accumulate as the brain soaks; zero is recovery debt, not loss.';
+    } else { box.style.display='none'; }
+  }
+  function renderBanner(){
+    var b=(FS&&FS.banner)||{};
+    el('mode').textContent='mode '+(b.mode||'—')+' · uptime '+V2.fmtUptime(b.uptime_s)+' · fresh '+(num(b.data_freshness_s)!==null?b.data_freshness_s.toFixed(1)+'s':'—');
+  }
+
+  function renderAll(){
+    renderBanner(); renderRecovery();
+    renderActive(); renderRuns(); renderWeightRoom();
+    el('ex-asof').textContent='full-snapshot · '+(lastOkTs?ago(lastOkTs/1000):'—');
+  }
+
+  function refresh(){
+    fetchJSON('/api/full-snapshot').then(function(s){ FS=s; lastOkTs=Date.now(); renderAll(); })
+      .catch(function(){ if(!FS) el('active').innerHTML='<div class="offline">full-snapshot offline</div>'; });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 8000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

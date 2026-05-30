@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Emergence Evidence (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .stance{border:1px solid var(--line);border-left-width:3px;border-radius:6px;padding:14px 16px;background:rgba(3,8,14,.45);}
+    .stance.evidence{border-left-color:var(--cyan);}
+    .stance .head{font-size:17px;font-weight:700;color:var(--text);line-height:1.4;margin-bottom:8px;}
+    .stance .head .accent{color:var(--cyan);}
+    .stance .plain{font-size:12px;color:var(--muted);line-height:1.55;border-top:1px dashed var(--line);padding-top:9px;margin-top:4px;}
+    .stance .plain b{color:var(--text);}
+    .stancegrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:13px 0 6px;}
+    .stancegrid .cell{border:1px solid var(--line);border-radius:5px;padding:9px 11px;}
+    .stancegrid .cell .k{font-size:8.5px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .stancegrid .cell .bigstat{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.05;margin-top:3px;}
+    .stancegrid .cell .sub{font-size:9px;color:var(--dim);margin-top:2px;}
+    .notclaim{margin-top:10px;border:1px solid var(--magenta);border-left-width:3px;border-radius:4px;padding:10px 13px;background:rgba(255,0,221,.04);font-size:11px;color:var(--muted);line-height:1.55;}
+    .notclaim b{color:#ff9ae8;}
+    /* evidence ladder */
+    .ladder{display:flex;flex-direction:column-reverse;gap:9px;}
+    .rung{border:1px solid var(--line);border-left-width:3px;border-radius:6px;padding:11px 13px;background:rgba(3,8,14,.4);}
+    .rung.sup{border-left-color:var(--green);}
+    .rung.par{border-left-color:var(--amber);}
+    .rung.unk{border-left-color:var(--magenta);}
+    .rung .rhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+    .rung .lvnum{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-variant-numeric:tabular-nums;}
+    .rung .lvname{font-size:13px;font-weight:700;color:var(--text);}
+    .rung .ec{margin-left:auto;font-size:9px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;}
+    .rung .ec b{color:var(--text);font-variant-numeric:tabular-nums;font-size:13px;}
+    .rung .exs{margin-top:8px;display:flex;flex-direction:column;gap:4px;}
+    .rung .ex{font-size:10.5px;color:var(--muted);font-family:var(--mono,monospace);background:rgba(255,255,255,.025);border-radius:3px;padding:3px 7px;line-height:1.4;}
+    .rung .meta{margin-top:8px;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:10px;}
+    .rung .meta .k{color:var(--dim);letter-spacing:.04em;text-transform:uppercase;font-size:8.5px;padding-top:1px;}
+    .rung .meta .v{color:var(--muted);line-height:1.5;}
+    .rung .srcs{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;}
+    .rung .src{font-size:9px;color:var(--dim);font-family:var(--mono,monospace);border:1px solid var(--line);border-radius:3px;padding:1px 5px;}
+    .gridkv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:10.5px;margin-top:6px;}
+    .gridkv .k{color:var(--muted);}
+    .gridkv b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .excl{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;line-height:1.55;}
+    .contrast b{color:var(--text);}
+    .idleblock{font-size:11px;color:var(--dim);font-style:italic;padding:14px 4px;text-align:center;border:1px dashed var(--line);border-radius:5px;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · EMERGENCE EVIDENCE</h1><span class="v2">dashboardV2</span>
+    <span class="sub">The most epistemically-careful surface: an evidence ladder of <em>operational</em> emergence. This is evidence of substrate behavior — explicitly <b>not</b> a claim of consciousness or sentience.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col12">
+      <h2>Emergence Stance <span class="asof" id="stance-asof">full-snapshot · —</span></h2>
+      <div class="note">The headline disclaimer is rendered <b>verbatim from the brain's own stance field</b> — not editorialized here. What follows is operational emergence evidence; the substrate makes no sentience claim and this page never advances one.</div>
+      <div id="stance"></div>
+    </section>
+
+    <section class="card col8">
+      <h2>Evidence Ladder · Levels 0–7</h2>
+      <div class="note">Eight rungs, ascending. Each carries a support marker (<b style="color:var(--green)">supported</b> / <b style="color:var(--amber)">partial</b> / <b style="color:var(--magenta)">not claimed</b>), an evidence count, representative examples, and — critically — the brain's own <em>limitations</em> and <em>falsification notes</em>. Level&nbsp;7 (strong anomaly) is <b style="color:var(--magenta)">deliberately not claimed</b>: nothing has survived known-mechanism elimination. Counts are evidence tallies, not scores; zero at the top is honest restraint, not a gap.</div>
+      <div class="ladder" id="ladder"></div>
+    </section>
+
+    <section class="card col4">
+      <h2>Known-Mechanism Exclusions</h2>
+      <div class="note">Before any rung counts, ordinary explanations must be ruled out. These are the mundane mechanisms the detector treats as <b>disqualifying</b> — an event explained by any of them is <em>not</em> emergence. Level&nbsp;7 requires an event that survives <b>all</b> of them, reproducibly.</div>
+      <div class="excl" id="excl"></div>
+      <div id="anomaly"></div>
+      <div class="contrast" id="excl-note"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, ago=V2.ago, el=V2.el, cap=V2.cap, tag=V2.tag;
+  var FS=null, lastOkTs=0;
+  V2.renderNav('/static/v2/emergence.html');
+
+  // status -> {rung-class, support tag}. fail-CLOSED: anything unrecognized => unknown, never green.
+  function statusClass(st){
+    if(st==='supported') return 'sup';
+    if(st==='partial')   return 'par';
+    return 'unk'; // not_claimed OR anything missing/unexpected
+  }
+  function statusTag(st){
+    if(st==='supported') return tag('grounded','supported');
+    if(st==='partial')   return tag('derived','partial');
+    if(st==='not_claimed') return tag('self','not claimed');
+    return tag('self','UNKNOWN'); // null/missing => UNKNOWN, never green
+  }
+
+  function renderStance(){
+    var box=el('stance'); if(!box) return;
+    var ee=(FS&&FS.emergence_evidence)||null;
+    if(!ee){ box.innerHTML='<div class="idleblock">stance UNKNOWN — full-snapshot offline</div>'; return; }
+    var s=ee.summary||{};
+    var stance = (s.stance!==undefined&&s.stance!==null) ? String(s.stance) : null;
+    var plain  = (s.plain_language!==undefined&&s.plain_language!==null) ? String(s.plain_language) : null;
+    var sup=num(s.supported_levels), maxL=num(s.max_supported_level);
+    var l7=s.level7_claimed; // expect explicit false
+    var emCount=num(s.emergent_behavior_count);
+    var recent=(s.recent_emergent_records&&s.recent_emergent_records.length)||0;
+
+    // verbatim stance string (machine token) + verbatim plain-language sentence
+    var head = '<div class="head"><span class="accent">stance:</span> '+
+      (stance===null ? '<span style="color:var(--dim)">UNKNOWN — stance not exposed</span>'
+                     : '<code style="color:var(--cyan)">'+stance+'</code>')+'</div>';
+    var plainHtml = '<div class="plain">'+
+      (plain===null ? '<b>plain language not exposed</b>'
+                    : '<b>Plain language (verbatim):</b> &ldquo;'+plain+'&rdquo;')+'</div>';
+
+    // honest stat cells — l7 must read false as honest restraint, NEVER as a green sentience claim
+    var l7txt, l7color, l7sub;
+    if(l7===false){ l7txt='false'; l7color='var(--magenta)'; l7sub='not a sentience claim — by design'; }
+    else if(l7===true){ l7txt='TRUE'; l7color='var(--red)'; l7sub='claimed — verify against exclusions'; }
+    else { l7txt='—'; l7color='var(--dim)'; l7sub='UNKNOWN'; }
+
+    var grid='<div class="stancegrid">'+
+      '<div class="cell"><div class="k">supported levels</div><div class="bigstat" style="color:var(--text)">'+(sup===null?'—':sup)+'</div><div class="sub">rungs with evidence</div></div>'+
+      '<div class="cell"><div class="k">max supported level</div><div class="bigstat" style="color:var(--cyan)">'+(maxL===null?'—':maxL)+'</div><div class="sub">highest fully-backed rung</div></div>'+
+      '<div class="cell"><div class="k">level 7 claimed</div><div class="bigstat" style="color:'+l7color+'">'+l7txt+'</div><div class="sub">'+l7sub+'</div></div>'+
+      '<div class="cell"><div class="k">emergent records</div><div class="bigstat" style="color:var(--text)">'+(emCount===null?'—':emCount)+'</div><div class="sub">detector-flagged · explainable by rules</div></div>'+
+    '</div>';
+
+    var disclaimer='<div class="notclaim"><b>This is NOT a sentience claim.</b> '+
+      (l7===false
+        ? 'The brain reports <b>level7_claimed = false</b>: '+(maxL===null?'its':('its level-'+maxL))+' operational evidence does not amount to phenomenology. '
+        : '')+
+      'Counts and rungs measure <em>operational</em> emergence — behaviors grounded in substrate artifacts that survive the known-mechanism exclusions. They are not, and are not presented as, evidence of subjective experience. '+
+      (recent===0 ? 'No recent emergent records are surfaced right now ('+(recent)+') — on a freshly-rebooted brain that is accumulating, not absence of the capability.' : recent+' recent emergent record(s) surfaced.')+
+      '</div>';
+
+    box.innerHTML='<div class="stance evidence">'+head+grid+plainHtml+'</div>'+disclaimer;
+  }
+
+  function renderLadder(){
+    var box=el('ladder'); if(!box) return;
+    var ee=(FS&&FS.emergence_evidence)||null;
+    if(!ee){ box.innerHTML='<div class="idleblock">evidence ladder UNKNOWN — full-snapshot offline</div>'; return; }
+    var levels=ee.levels;
+    if(!Array.isArray(levels)||!levels.length){
+      // only the summary exists — label the rest explicitly, never invent rungs
+      box.innerHTML='<div class="idleblock">Per-level detail not exposed — only the summary is instrumented. Supported levels and max-supported level are shown in the stance panel above.</div>';
+      return;
+    }
+    box.innerHTML=levels.map(function(L){
+      var lvl=num(L.level), st=L.status, cls=statusClass(st);
+      var ec=num(L.evidence_count);
+      var exs=(L.representative_examples||[]);
+      var srcs=(L.source_paths||[]);
+      var exHtml = exs.length
+        ? '<div class="exs">'+exs.map(function(e){ return '<div class="ex">'+String(e)+'</div>'; }).join('')+'</div>'
+        : (st==='not_claimed'
+            ? '<div class="exs"><div class="ex" style="color:var(--dim);font-style:italic">no examples — deliberately none claimed</div></div>'
+            : '<div class="exs"><div class="ex" style="color:var(--dim);font-style:italic">no representative examples surfaced (accumulating)</div></div>');
+      var srcHtml = srcs.length
+        ? '<div class="srcs">'+srcs.map(function(p){ return '<span class="src">'+String(p)+'</span>'; }).join('')+'</div>'
+        : '';
+      var meta='<div class="meta">'+
+        '<span class="k">limitations</span><span class="v">'+(L.limitations?String(L.limitations):'<span style="color:var(--dim)">not exposed</span>')+'</span>'+
+        '<span class="k">falsification</span><span class="v" style="color:var(--dim)">'+(L.falsification_notes?String(L.falsification_notes):'not exposed')+'</span>'+
+      '</div>';
+      return '<div class="rung '+cls+'">'+
+        '<div class="rhead">'+
+          '<span class="lvnum">level '+(lvl===null?'?':lvl)+'</span>'+
+          '<span class="lvname">'+(L.name?String(L.name):'—')+'</span>'+
+          statusTag(st)+
+          '<span class="ec">evidence <b>'+(ec===null?'—':ec)+'</b></span>'+
+        '</div>'+
+        exHtml+
+        srcHtml+
+        meta+
+      '</div>';
+    }).join('');
+  }
+
+  function renderExclusions(){
+    var box=el('excl'); if(!box) return;
+    var ee=(FS&&FS.emergence_evidence)||null;
+    if(!ee){ box.innerHTML=''; el('anomaly').innerHTML='<div class="idleblock">UNKNOWN — full-snapshot offline</div>'; el('excl-note').innerHTML=''; return; }
+    var ex=ee.known_mechanism_exclusions;
+    box.innerHTML = (Array.isArray(ex)&&ex.length)
+      ? ex.map(function(m){ return tag('derived', cap(String(m))); }).join('')
+      : '<div class="idleblock">exclusion list not exposed</div>';
+
+    // level-7 anomaly status pulled from the top rung, fail-closed
+    var l7=null;
+    if(Array.isArray(ee.levels)) ee.levels.forEach(function(L){ if(num(L.level)===7) l7=L; });
+    var aBox=el('anomaly');
+    if(l7){
+      var ec=num(l7.evidence_count);
+      aBox.innerHTML='<div class="gridkv" style="margin-top:11px">'+
+        '<span class="k">L7 status</span>'+statusTag(l7.status)+
+        '<span class="k">surviving events</span><b style="color:'+(ec===0?'var(--magenta)':'var(--text)')+'">'+(ec===null?'—':ec)+'</b>'+
+      '</div>';
+    } else {
+      aBox.innerHTML='<div class="gridkv" style="margin-top:11px"><span class="k">L7 status</span>'+tag('self','UNKNOWN')+'</div>';
+    }
+    el('excl-note').innerHTML='Level 7 surviving events = <b>'+( l7&&num(l7.evidence_count)===0 ? '0' : (l7?num(l7.evidence_count):'—') )+'</b>. '+
+      'Zero here is the <b>honest answer</b>: every flagged behavior so far is explainable by templates, LLM articulation, hardcoded rules, metric thresholds, or user prompting. Until an event survives all of them reproducibly, the strong-anomaly claim stays withheld.';
+  }
+
+  function renderBanner(){
+    var b=(FS&&FS.banner)||{};
+    el('mode').textContent='mode '+(b.mode||'—')+' · uptime '+V2.fmtUptime(b.uptime_s)+' · fresh '+(num(b.data_freshness_s)!==null?b.data_freshness_s.toFixed(1)+'s':'—');
+  }
+
+  function renderRecovery(){
+    var vp=(FS&&FS.validation_pack)||{}, reg=num(vp.checks_regressed)||0, box=el('recovery');
+    if(!box) return;
+    if(vp.status==='blocked' && reg>0){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — '+reg+' check(s) rebuilding. Evidence counts and emergent records re-accumulate as the brain soaks; low counts are recovery debt, not loss of capability.';
+    } else { box.style.display='none'; }
+  }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderStance(); renderLadder(); renderExclusions(); el('stance-asof').textContent='full-snapshot · '+(lastOkTs?ago(lastOkTs/1000):'—'); }
+
+  function refresh(){
+    fetchJSON('/api/full-snapshot').then(function(s){ FS=s; lastOkTs=Date.now(); renderAll(); })
+      .catch(function(){ if(!FS) el('stance').innerHTML='<div class="offline">full-snapshot offline</div>'; });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 10000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
