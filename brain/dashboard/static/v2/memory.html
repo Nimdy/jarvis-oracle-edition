@@ -21,6 +21,21 @@
     .statline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
     .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
     .contrast b{color:var(--text);}
+    /* --- parity panels (memory_cortex NNs, fractal_recall+gate, density+route) --- */
+    .nncard{border:1px solid var(--line);border-radius:6px;padding:11px 13px;background:rgba(3,8,14,.45);}
+    .nncard .nnhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:7px;}
+    .nncard .nnhead .nm{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text);font-weight:700;}
+    .nncard .accbig{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;}
+    .nncard .nnsub{font-size:9px;color:var(--dim);letter-spacing:.05em;margin-top:1px;}
+    .nnstats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 14px;margin-top:9px;font-size:10px;}
+    .nnstats .row{display:flex;flex-direction:column;}
+    .nnstats .row .k{font-size:8.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;}
+    .nnstats .row b{color:var(--text);font-variant-numeric:tabular-nums;font-size:12px;}
+    .gaterow{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px;}
+    .gridkv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:10.5px;margin-top:6px;}
+    .gridkv .k{color:var(--muted);}
+    .gridkv b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .idleblock{font-size:11px;color:var(--dim);font-style:italic;padding:14px 4px;text-align:center;border:1px dashed var(--line);border-radius:5px;}
   </style>
 </head>
 <body>
@@ -60,6 +75,43 @@
       <h2>Dream Consolidation Cycle</h2>
       <div class="note">Sleep-cycle clusters → quality gate → canonical memory. Promotion rate is rendered at its honest band.</div>
       <div id="dream"></div>
+    </section>
+
+    <!-- ===================== v1-PARITY PANELS (full-snapshot) ===================== -->
+    <section class="card col6">
+      <h2>Memory Cortex · Retrieval Ranker NN <span class="asof" id="parity-asof">full-snapshot · —</span></h2>
+      <div class="note">The learned network that <b>re-ranks retrieval candidates</b> before injection. Accuracy is banded at its honest threshold; null/missing renders UNKNOWN, never green.</div>
+      <div id="nn-ranker"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Memory Cortex · Salience NN</h2>
+      <div class="note">The learned network that <b>scores memory salience</b> (worth-keeping weight). <code>model_blend</code> is how much of its score blends with the heuristic.</div>
+      <div id="nn-salience"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Fractal Recall + CueGate</h2>
+      <div class="note">Cue-triggered resonance recall. When disabled it renders <em>idle/off</em>; otherwise resonance + chain-length stats and why-skipped counts.</div>
+      <div id="fractal"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Memory Gate · Write / Read Policy</h2>
+      <div class="note">The gate governing when observations &amp; consolidations may <b>write</b>, and the read-session depth. State is fail-closed: only explicit <code>true</code> reads as open.</div>
+      <div id="gate"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Memory Density</h2>
+      <div class="note">Associative richness, temporal coherence, semantic clustering — the substrate-quality sub-scores behind the headline density figure.</div>
+      <div id="density"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Memory Route</h2>
+      <div class="note">The retrieval route chosen for the active turn, plus the injection-privacy gates that decide what context may surface.</div>
+      <div id="route"></div>
     </section>
   </main>
 
@@ -139,6 +191,124 @@
       'Per-artifact rejection reasons (confidence / coherence / contradiction) are <b style="color:var(--dim)">not instrumented</b> in the API — promotion <em>rate</em> shown, not the <em>why</em>.</div>';
   }
 
+  // ===================== PARITY PANELS (full-snapshot) =====================
+  // Isolated state + render path. Reads /api/full-snapshot; never touches SNAP / refresh().
+  var FS=null, lastParityTs=0;
+
+  // a single NN card (ranker | salience). nn=the subobject; isRanker toggles ranker-only fields.
+  function renderNN(elId, title, nn, isRanker){
+    var box=el(elId); if(!box) return;
+    if(!nn){ box.innerHTML='<div class="idleblock">network state UNKNOWN — full-snapshot offline</div>'; return; }
+    var avail=V2.gateState(nn.available), trained=V2.gateState(nn.trained), enabled=V2.gateState(nn.enabled);
+    var permDisabled = nn.permanently_disabled===true;
+    var acc=num(nn.last_accuracy), loss=num(nn.last_loss), tc=num(nn.train_count);
+    var accColor = permDisabled ? 'var(--red)' : bandColor(acc, 0.8, 0.6);
+    var accTxt = acc===null ? 'UNKNOWN' : (acc*100).toFixed(1)+'%';
+    var statusTag = permDisabled
+      ? V2.tag('self','perm-disabled')
+      : (enabled==='ok'&&trained==='ok' ? V2.tag('grounded','live') : (trained==='ok'?V2.tag('derived','trained·off'):V2.tag('derived','untrained')));
+    var rows=
+      '<div class="row"><span class="k">train count</span><b>'+(tc===null?'—':tc)+'</b></div>'+
+      '<div class="row"><span class="k">last loss</span><b style="color:'+(loss===null?'var(--dim)':'var(--text)')+'">'+f3(nn.last_loss)+'</b></div>'+
+      '<div class="row"><span class="k">available</span><b class="s-'+avail+'">'+(nn.available===true?'yes':nn.available===false?'no':'unk')+'</b></div>'+
+      '<div class="row"><span class="k">trained</span><b class="s-'+trained+'">'+(nn.trained===true?'yes':nn.trained===false?'no':'unk')+'</b></div>'+
+      '<div class="row"><span class="k">enabled</span><b class="s-'+enabled+'">'+(nn.enabled===true?'yes':nn.enabled===false?'no':'unk')+'</b></div>';
+    rows += isRanker
+      ? '<div class="row"><span class="k">eval success</span><b style="color:'+bandColor(num(nn.eval_success_rate),0.8,0.6)+'">'+(num(nn.eval_success_rate)===null?'—':(num(nn.eval_success_rate)*100).toFixed(0)+'%')+'</b></div>'
+      : '<div class="row"><span class="k">model blend</span><b>'+(num(nn.model_blend)===null?'—':num(nn.model_blend).toFixed(2))+'</b></div>';
+    box.innerHTML=
+      '<div class="nncard">'+
+        '<div class="nnhead"><div><div class="nm">'+title+'</div><div class="nnsub">'+(isRanker?'retrieval ranker NN':'salience NN')+'</div></div>'+
+          '<div style="text-align:right"><div class="accbig" style="color:'+accColor+'">'+accTxt+'</div><div class="nnsub">last accuracy</div></div></div>'+
+        '<div class="gaterow">'+statusTag+'</div>'+
+        '<div class="nnstats">'+rows+'</div>'+
+        (permDisabled?'<div class="contrast" style="color:var(--red)">Permanently disabled'+(nn.disable_reason?': '+nn.disable_reason:'')+' — predictions are NOT used.</div>':'')+
+      '</div>';
+  }
+
+  function renderCortex(){
+    var mc=(FS&&FS.memory_cortex)||null;
+    renderNN('nn-ranker','Ranker', mc?mc.ranker:null, true);
+    renderNN('nn-salience','Salience', mc?mc.salience:null, false);
+  }
+
+  function renderFractal(){
+    var box=el('fractal'); if(!box) return;
+    var fr=(FS&&FS.fractal_recall);
+    if(fr===undefined||fr===null){ box.innerHTML='<div class="idleblock">UNKNOWN — full-snapshot offline</div>'; return; }
+    if(fr.enabled!==true){ box.innerHTML='<div class="idleblock">CueGate recall idle / off — no resonance chains forming right now.</div>'; return; }
+    var res=num(fr.avg_resonance), chain=num(fr.avg_chain_length);
+    box.innerHTML=
+      '<div class="statline">'+
+        '<span><div class="k">avg resonance</div><span class="bigstat" style="color:'+bandColor(res,0.6,0.35)+'">'+(res===null?'—':res.toFixed(3))+'</span></span>'+
+        '<span><div class="k">avg chain len</div><span class="bigstat">'+(chain===null?'—':chain.toFixed(1))+'</span></span>'+
+        '<span><div class="k">recalls (1h)</div><span class="bigstat">'+(num(fr.count_1h)||0)+'</span></span>'+
+        '<span><div class="k">recalls total</div><span class="bigstat">'+(num(fr.total_count)||0)+'</span></span>'+
+      '</div>'+
+      '<div class="gridkv">'+
+        '<span class="k">total ticks</span><b>'+(num(fr.total_ticks)||0)+'</b>'+
+        '<span class="k">no-seed skips</span><b>'+(num(fr.no_seed_skips)||0)+'</b>'+
+        '<span class="k">cooldown skips</span><b>'+(num(fr.cooldown_skips)||0)+'</b>'+
+        '<span class="k">low-signal skips</span><b>'+(num(fr.low_signal_skips)||0)+'</b>'+
+        '<span class="k">last recall</span><b>'+ago(fr.last_recall_ts)+'</b>'+
+      '</div>'+
+      '<div class="contrast">Most ticks find <b>no seed</b> ('+(num(fr.no_seed_skips)||0)+') — expected on a freshly-rebooted brain with thin recent context; recovery debt, not failure. Chains forming at depth <b>'+(chain===null?'—':chain.toFixed(1))+'</b>'+(chain!==null&&chain<=1.0?' (depth-1 only — associative bridging still shallow post-reboot)':'')+'.</div>';
+  }
+
+  function renderGate(){
+    var box=el('gate'); if(!box) return;
+    var g=(FS&&FS.memory_gate);
+    if(g===undefined||g===null){ box.innerHTML='<div class="idleblock">gate state UNKNOWN — full-snapshot offline</div>'; return; }
+    var obsTag=V2.tag(g.observation_writes_allowed===true?'grounded':'derived', g.observation_writes_allowed===true?'obs-writes OPEN':'obs-writes blocked');
+    var conTag=V2.tag(g.consolidation_active===true?'grounded':'derived', g.consolidation_active===true?'consolidating':'consolidation idle');
+    var modeTag=V2.tag('earned', 'mode: '+(g.current_mode||'unk'));
+    var readTag=V2.tag(g.is_open===true?'grounded':'derived', g.is_open===true?'read-session OPEN':'read-session closed');
+    box.innerHTML=
+      '<div class="gaterow">'+modeTag+readTag+obsTag+conTag+'</div>'+
+      '<div class="gridkv">'+
+        '<span class="k">read depth</span><b>'+(num(g.depth)===null?'—':num(g.depth))+'</b>'+
+        '<span class="k">total opens</span><b>'+(num(g.total_opens)===null?'—':num(g.total_opens))+'</b>'+
+        '<span class="k">last opened</span><b>'+ago(g.last_opened_at)+'</b>'+
+        '<span class="k">last closed</span><b>'+ago(g.last_closed_at)+'</b>'+
+        '<span class="k">synthetic active</span><b class="s-'+V2.gateState(g.synthetic_active)+'">'+(g.synthetic_active===true?'yes':g.synthetic_active===false?'no':'unk')+'</b>'+
+      '</div>'+
+      '<div class="contrast">Write policy is mode-gated: observations only persist while the gate opens for <b>conversational</b> mode; consolidation writes belong to dream cycles. <b>'+(num(g.total_opens)||0)+'</b> read-session opens since boot.</div>';
+  }
+
+  function renderDensity(){
+    var box=el('density'); if(!box) return;
+    var d=(FS&&FS.memory_density)||null;
+    if(!d){ box.innerHTML='<div class="idleblock">density UNKNOWN — full-snapshot offline</div>'; return; }
+    var ar=num(d.associative_richness), tc=num(d.temporal_coherence), sc=num(d.semantic_clustering);
+    el('density').innerHTML=
+      V2.barRow('associative richness', ar===null?null:ar*100, f3(d.associative_richness), bandColor(ar,0.7,0.45))+
+      V2.barRow('temporal coherence', tc===null?null:tc*100, f3(d.temporal_coherence), bandColor(tc,0.7,0.45))+
+      V2.barRow('semantic clustering', sc===null?null:sc*100, f3(d.semantic_clustering), bandColor(sc,0.7,0.45))+
+      '<div class="contrast">Overall density <b>'+f3(d.overall)+'</b> across <b>'+(num(d.memory_count)||0)+'</b> memories. Low coherence/clustering on a fresh boot is recovery debt — it re-accumulates as the brain soaks.</div>';
+  }
+
+  function renderRoute(){
+    var box=el('route'); if(!box) return;
+    var r=(FS&&FS.memory_route)||null;
+    if(!r){ box.innerHTML='<div class="idleblock">route UNKNOWN — full-snapshot offline</div>'; return; }
+    var ents=(r.referenced_entities||[]);
+    box.innerHTML=
+      '<div class="gaterow">'+V2.tag('earned','route: '+(r.route_type||'unk'))+V2.tag('earned','scope: '+(r.search_scope||'unk'))+'</div>'+
+      '<div class="gridkv">'+
+        '<span class="k">preference inject</span><b class="s-'+V2.gateState(r.allow_preference_injection)+'">'+(r.allow_preference_injection===true?'allowed':r.allow_preference_injection===false?'blocked':'unk')+'</b>'+
+        '<span class="k">third-party inject</span><b class="s-'+V2.gateState(r.allow_thirdparty_injection)+'">'+(r.allow_thirdparty_injection===true?'allowed':r.allow_thirdparty_injection===false?'blocked':'unk')+'</b>'+
+        '<span class="k">autonomy recall</span><b class="s-'+V2.gateState(r.allow_autonomy_recall)+'">'+(r.allow_autonomy_recall===true?'allowed':r.allow_autonomy_recall===false?'blocked':'unk')+'</b>'+
+        '<span class="k">referenced entities</span><b>'+(ents.length?ents.join(', '):'none')+'</b>'+
+      '</div>'+
+      '<div class="contrast">Current retrieval route for the active turn. <b>general</b> + full scope = no narrowing; the injection toggles are the privacy gates on what context can be surfaced.</div>';
+  }
+
+  function renderParity(){ renderCortex(); renderFractal(); renderGate(); renderDensity(); renderRoute(); el('parity-asof').textContent='full-snapshot · '+(lastParityTs?ago(lastParityTs/1000):'—'); }
+
+  function refreshParity(){
+    V2.fetchJSON('/api/full-snapshot').then(function(s){ FS=s; lastParityTs=Date.now(); renderParity(); }).catch(function(){});
+  }
+
   function renderRecovery(){
     var vp=(SNAP&&SNAP.validation_pack)||{}, reg=num(vp.checks_regressed)||0, box=el('recovery');
     if(vp.status==='blocked' && reg>0){
@@ -160,6 +330,8 @@
   }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
   refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+  // isolated parity fetch — own state (FS), own interval; does not touch refresh()/SNAP
+  refreshParity(); setInterval(refreshParity, 8000);
 })();
 </script>
 </body>

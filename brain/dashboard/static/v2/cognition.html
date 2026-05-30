@@ -26,6 +26,17 @@
     .markers{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px;}
     .pgoal{font-size:10px;color:var(--muted);border:1px solid var(--amber);border-left-width:3px;border-radius:4px;padding:8px 11px;background:rgba(255,176,0,.05);margin-top:8px;}
     .pgoal b{color:#ffd27a;}
+    /* parity panels (rapport / rollback) — appended, do not modify rules above */
+    .rel{font-size:10px;color:var(--muted);padding:8px 0;border-top:1px dashed var(--line);}
+    .rel:first-child{border-top:none;}
+    .rel .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+    .rel .nm{color:var(--text);font-size:13px;font-weight:700;}
+    .rel .ic{color:var(--cyan);font-variant-numeric:tabular-nums;}
+    .rel .meta{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);margin-top:2px;}
+    .rel .topics{margin-top:5px;}
+    .safebox{font-size:10px;color:var(--muted);border:1px solid var(--green);border-left-width:3px;border-radius:4px;padding:8px 11px;background:rgba(0,210,140,.05);margin-top:9px;}
+    .safebox.amber{border-color:var(--amber);background:rgba(255,176,0,.05);}
+    .safebox b{color:var(--text);}
   </style>
 </head>
 <body>
@@ -79,6 +90,22 @@
       <div id="goal-paused"></div>
       <div class="contrast" id="goal-contrast"></div>
     </section>
+
+    <section class="card col6">
+      <h2>Rapport · Relationship Graph</h2>
+      <div class="note">Per-relationship nodes from the rapport engine — <b>interactions</b> is a grounded counter; <b>familiarity</b> &amp; <b>rapport</b> are <b style="color:var(--amber)">self-scored</b> (0–1, externally unverified). Sentiment/topic fields are NOT exposed by the engine — "topics" below are stored notes/preferences, not a sentiment model. As-of last_seen per node.</div>
+      <div class="statline" id="rap-stats"></div>
+      <div id="rap-list"></div>
+      <div class="contrast" id="rap-contrast"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Personality Rollback &amp; Trait Validation</h2>
+      <div class="note">A <b>safety mechanism</b>: snapshots let the validator revert unstable trait drift. A rollback firing is the immune system WORKING, not a failure. <b>emergency</b> false = nominal. Counts are grounded; <b>current_stability</b> is the validator's confidence (0–1). As-of last_validation.</div>
+      <div class="statline" id="rb-stats"></div>
+      <div id="rb-safebox"></div>
+      <div class="contrast" id="rb-contrast"></div>
+    </section>
   </main>
 
 <script src="/static/v2/shared.js"></script>
@@ -88,6 +115,7 @@
   var V2=window.V2;
   var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, el=V2.el, ago=V2.ago, bandColor=V2.bandColor, cap=V2.cap, tag=V2.tag, barRow=V2.barRow;
   var CONS=null, PERS=null, EXI=null, PHI=null, GOALS=null, lastOkTs=0;
+  var FS=null, parityOkTs=0; // ISOLATED parity state (full-snapshot), kept separate from refresh()
   V2.renderNav('/static/v2/cognition.html');
 
   function stat(k,v,color){
@@ -211,6 +239,63 @@
     } else { box.style.display='none'; }
   }
 
+  // ===== PARITY PANELS (isolated; read /api/full-snapshot via FS) =====
+  function renderRapport(){
+    var r=(FS||{}).rapport;
+    if(!r){ el('rap-stats').innerHTML='<div class="offline">rapport unavailable</div>'; el('rap-list').innerHTML=''; el('rap-contrast').innerHTML=''; return; }
+    var rels=(r.relationships||[]).slice().sort(function(a,b){ return (num(b.interactions)||0)-(num(a.interactions)||0); });
+    var totalI=rels.reduce(function(s,x){ return s+(num(x.interactions)||0); },0);
+    el('rap-stats').innerHTML=
+      stat('relationships', rels.length, rels.length>0?'var(--green)':'var(--amber)')+
+      stat('total interactions', totalI, num(totalI)?'var(--green)':'var(--amber)')+
+      stat('personal intel', num((r.personal_intel||[]).length)===null?'—':(r.personal_intel||[]).length);
+    el('rap-list').innerHTML=rels.length?rels.slice(0,5).map(function(x){
+      var fam=num(x.familiarity), rap=num(x.rapport), ic=num(x.interactions);
+      // "topics" not exposed as a field — surface stored notes/preferences as labelled proxies.
+      var topics=(x.notes||[]).slice(0,3).concat(Object.values(x.preferences||{}).slice(0,2));
+      var chips=topics.map(function(t){ return '<span class="chip">'+String(t).slice(0,38)+'</span>'; }).join('');
+      return '<div class="rel"><div class="top"><span class="nm">'+(x.name||'—')+(x.role?' · '+cap(x.role):'')+'</span>'+
+        '<span class="ic">'+(ic===null?'—':ic)+' interactions</span></div>'+
+        '<div class="meta">familiarity '+(fam===null?'—':fam.toFixed(2))+' · rapport '+(rap===null?'—':rap.toFixed(2))+' '+tag('self','self-scored')+' · last seen '+ago(x.last_seen)+'</div>'+
+        (chips?'<div class="topics chiprow">'+chips+'</div>':'')+'</div>';
+    }).join(''):'<div class="offline">no relationship nodes — recovering</div>';
+    el('rap-contrast').innerHTML=
+      'interactions is the '+tag('grounded','grounded')+' counter; familiarity &amp; rapport are '+tag('self','self-scored')+' and unverified externally. '+
+      'The engine exposes no sentiment or topic model — the chips above are stored notes/preferences, shown verbatim, not an inferred sentiment.';
+  }
+
+  function renderRollback(){
+    var rb=(FS||{}).personality_rollback, tv=(FS||{}).trait_validation;
+    if(!rb && !tv){ el('rb-stats').innerHTML='<div class="offline">rollback/validation unavailable</div>'; el('rb-safebox').innerHTML=''; el('rb-contrast').innerHTML=''; return; }
+    rb=rb||{}; tv=tv||{};
+    var emerg=rb.in_emergency; // explicit-true/false; anything else UNKNOWN (fail-closed)
+    var stab=num(rb.current_stability), snaps=num(rb.snapshot_count), rolls=num(rb.rollback_count);
+    var emergTxt=emerg===true?'ACTIVE':(emerg===false?'nominal':'—');
+    var emergColor=emerg===true?'var(--red)':(emerg===false?'var(--green)':'var(--dim)');
+    el('rb-stats').innerHTML=
+      stat('emergency', '<span style="font-size:15px">'+emergTxt+'</span>', emergColor)+
+      stat('stability', stab===null?'—':stab.toFixed(2), bandColor(stab,0.6,0.4))+
+      stat('snapshots', snaps===null?'—':snaps, num(snaps)?'var(--green)':'var(--amber)')+
+      stat('rollbacks', rolls===null?'—':rolls, 'var(--dim)')+
+      stat('validations', num(tv.total_validations)===null?'—':tv.total_validations, num(tv.total_validations)?'var(--green)':'var(--amber)');
+    var hasBaseline=tv.has_baseline, grace=tv.in_post_birth_grace;
+    var amber=(emerg!==false) || (snaps===0);
+    el('rb-safebox').innerHTML='<div class="safebox'+(amber?' amber':'')+'">'+
+      '<b>Safety mechanism '+(emerg===false?'armed &amp; nominal':(emerg===true?'firing now':'state unknown'))+'.</b> '+
+      'A rollback is the validator REVERTING unstable drift to a known-good snapshot — when it fires it means the immune system caught a bad mutation, not that personality broke. '+
+      'Baseline '+(hasBaseline===true?'<b>established</b>':(hasBaseline===false?'<b style="color:var(--amber)">not yet established</b>':'—'))+' · '+
+      'post-birth grace <b>'+(grace===true?'active (lenient)':(grace===false?'expired — strict validators':'—'))+'</b>'+
+      (snaps===0?' · <b style="color:var(--amber)">0 snapshots = recovery debt</b> — the snapshot ring re-fills as the freshly-rebooted brain soaks; rollback cannot trigger until it does.':'')+
+      '</div>';
+    el('rb-contrast').innerHTML=
+      'stability source <b>'+cap(rb.stability_source||'—')+'</b> · last validation '+ago(tv.last_validation)+
+      ' · history len <b>'+(num(tv.snapshot_history_len)===null?'—':tv.snapshot_history_len)+'</b>. '+
+      'Counts are '+tag('grounded','grounded')+'; current_stability is the validator\'s '+tag('self','self-scored')+' confidence. '+
+      (rolls===0?'0 rollbacks so far is expected on a fresh boot, not a guarantee of stability.':'');
+  }
+
+  function renderParity(){ renderRapport(); renderRollback(); }
+
   function renderAll(){ renderRecovery(); renderCore(); renderPers(); renderExi(); renderPhi(); renderGoals(); }
 
   function refresh(){
@@ -227,6 +312,10 @@
   }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
   refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+
+  // ===== ISOLATED parity fetch (full-snapshot) — independent of refresh() above =====
+  function refreshParity(){ V2.fetchJSON('/api/full-snapshot').then(function(s){ FS=s; parityOkTs=Date.now(); renderParity(); }).catch(function(){ renderParity(); }); }
+  refreshParity(); setInterval(refreshParity, 8000);
 })();
 </script>
 </body>
