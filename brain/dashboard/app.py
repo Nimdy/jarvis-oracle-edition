@@ -1200,6 +1200,130 @@ def _create_app() -> FastAPI:
                 status_code=500,
             )
 
+    # ---- P5 spatial-episodic "album" — read-only observability (Stone 2) ----
+    # Lets the dashboard page the durable worlds Jarvis has stored and re-walk a
+    # stored world in its mind's-eye. All three are READ-ONLY, vector-stripped,
+    # and authority-pinned: they read the album store + run the pure
+    # mental_navigation ops, never writing canonical state.
+
+    @app.get("/api/hrr/scene/sessions")
+    async def api_hrr_album_sessions():
+        """List stored spatial-episodic album sessions (record counts + mtimes)."""
+        try:
+            from memory.spatial_episodic_store import SpatialEpisodicStore, AUTHORITY_FLAGS
+            store = SpatialEpisodicStore()
+            return {
+                "sessions": store.list_sessions(),
+                "status": "PRE-MATURE",
+                "lane": "spatial_hrr_mental_world",
+                **AUTHORITY_FLAGS,
+            }
+        except Exception as exc:
+            logger.exception("hrr album sessions failed")
+            return JSONResponse({"error": type(exc).__name__, "detail": str(exc)}, status_code=500)
+
+    @app.get("/api/hrr/scene/episode")
+    async def api_hrr_album_episode(session: str, limit: int = 200):
+        """Stored worlds for one album session (newest last), vector-free."""
+        try:
+            from memory.spatial_episodic_store import (
+                SpatialEpisodicStore, AUTHORITY_FLAGS, _strip_vectors,
+            )
+            store = SpatialEpisodicStore()
+            limit = max(1, min(2000, int(limit)))
+            worlds = [_strip_vectors(r) for r in store.load_session(session)[-limit:]]
+            return {
+                "session_id": session,
+                "count": len(worlds),
+                "worlds": worlds,
+                "status": "PRE-MATURE",
+                "lane": "spatial_hrr_mental_world",
+                **AUTHORITY_FLAGS,
+            }
+        except Exception as exc:
+            logger.exception("hrr album episode failed")
+            return JSONResponse({"error": type(exc).__name__, "detail": str(exc)}, status_code=500)
+
+    @app.get("/api/hrr/scene/explore")
+    async def api_hrr_album_explore(world_id: str):
+        """Re-walk a STORED world in the mind's-eye.
+
+        Loads the stored world and runs the read-only mental-navigation ops over
+        it (turn-left -> move-forward -> turn-right), returning the imagined-step
+        traces — "what JARVIS would see as it looks around this remembered place."
+        Pure simulation: zero authority, no canonical writes, no HRR vectors.
+        """
+        try:
+            from memory.spatial_episodic_store import (
+                SpatialEpisodicStore, AUTHORITY_FLAGS, _strip_vectors,
+            )
+            from cognition.mental_navigation import (
+                simulate_turn_left, simulate_move_forward, simulate_turn_right,
+            )
+            from cognition.spatial_scene_graph import (
+                MentalWorldEntity, MentalWorldRelation, MentalWorldSceneGraph,
+            )
+
+            store = SpatialEpisodicStore()
+            rec = store.load_world(world_id)
+            if rec is None:
+                return JSONResponse({"error": "not_found", "world_id": world_id}, status_code=404)
+
+            w = rec.get("world") or {}
+            entities = tuple(
+                MentalWorldEntity(
+                    entity_id=str(e.get("entity_id", "")),
+                    label=str(e.get("label", "")),
+                    state=str(e.get("state", "")),
+                    region=str(e.get("region", "")),
+                    position_room_m=tuple(e["position_room_m"]) if e.get("position_room_m") else None,
+                    confidence=float(e.get("confidence", 0.0) or 0.0),
+                    last_seen_ts=float(e.get("last_seen_ts", 0.0) or 0.0),
+                    is_display_surface=bool(e.get("is_display_surface", False)),
+                )
+                for e in (w.get("entities") or [])
+            )
+            relations = tuple(
+                MentalWorldRelation(
+                    source_entity_id=str(r.get("source_entity_id", "")),
+                    target_entity_id=str(r.get("target_entity_id", "")),
+                    relation_type=str(r.get("relation_type", "")),
+                    value_m=r.get("value_m"),
+                    confidence=float(r.get("confidence", 0.0) or 0.0),
+                )
+                for r in (w.get("relations") or [])
+            )
+            src = w.get("source") or {}
+            graph = MentalWorldSceneGraph(
+                timestamp=float(w.get("timestamp", 0.0) or 0.0),
+                entities=entities,
+                relations=relations,
+                source_scene_update_count=int(src.get("scene_update_count", 0) or 0),
+                source_track_count=int(src.get("track_count", 0) or 0),
+                source_anchor_count=int(src.get("anchor_count", 0) or 0),
+                source_calibration_version=int(src.get("calibration_version", 0) or 0),
+                reason=w.get("reason"),
+            )
+
+            traces = []
+            g = graph
+            for op in (simulate_turn_left, simulate_move_forward, simulate_turn_right):
+                g, t = op(g)
+                traces.append(t.to_dict())
+
+            return {
+                "world_id": world_id,
+                "world": _strip_vectors(rec),
+                "explore_traces": traces,
+                "loaded_from_store": True,
+                "status": "PRE-MATURE",
+                "lane": "spatial_hrr_mental_world",
+                **AUTHORITY_FLAGS,
+            }
+        except Exception as exc:
+            logger.exception("hrr album explore failed")
+            return JSONResponse({"error": type(exc).__name__, "detail": str(exc)}, status_code=500)
+
     @app.get("/api/intent-shadow")
     async def api_intent_shadow():
         """Read-only state of the voice-intent shadow runner (P1.4).
