@@ -70,5 +70,58 @@ window.V2 = (function(){
     var w=Math.max(0,Math.min(100,pct));
     return '<div class="barrow"><span class="bl">'+label+'</span><div class="track"><div class="fill" style="width:'+w.toFixed(0)+'%;background:'+(color||'var(--cyan)')+'"></div></div><span class="bv">'+(valText||'')+'</span></div>';
   }
-  return { fetchJSON, num, pct1, f2, f3, el, gateState, ago, bandColor, tag, fmtUptime, cap, renderNav, markNav, barRow };
+  // ================= CRUD / ACTION LAYER =================
+  // Operator-initiated writes. The OPERATOR's browser POSTs with the api_key
+  // (read from /api/config, exactly like v1's window._apiKey). Claude never
+  // fires these — they run only when a human clicks. Destructive actions go
+  // through confirm() (typed gate).
+  var _apiKey='';
+  function loadKey(){ return fetchJSON('/api/config').then(function(c){ _apiKey=(c&&c.api_key)||''; return _apiKey; }).catch(function(){ return ''; }); }
+  function _authHeaders(json){ var h={}; if(json) h['Content-Type']='application/json'; if(_apiKey) h['Authorization']='Bearer '+_apiKey; return h; }
+  function _handle(r){ return r.json().catch(function(){return {};}).then(function(d){ if(!r.ok) throw new Error((d&&d.detail)||('HTTP '+r.status)); return d; }); }
+  function post(url, body){ return fetch(url,{method:'POST',headers:_authHeaders(!!body),body:body?JSON.stringify(body):undefined}).then(_handle); }
+  function del(url){ return fetch(url,{method:'DELETE',headers:_authHeaders(false)}).then(_handle); }
+
+  // ---- modal ----
+  function _ensureModalRoot(){
+    var r=document.getElementById('v2-overlay');
+    if(!r){ r=document.createElement('div'); r.id='v2-overlay'; r.className='v2-overlay'; r.style.display='none';
+      r.innerHTML='<div class="v2-modal"><div class="v2-modal-hd"><h3 id="v2-modal-title"></h3><button class="v2-modal-x" id="v2-modal-x">×</button></div><div class="v2-modal-bd" id="v2-modal-bd"></div></div>';
+      document.body.appendChild(r);
+      r.addEventListener('click',function(e){ if(e.target===r) closeModal(); });
+      r.querySelector('#v2-modal-x').addEventListener('click', closeModal);
+    }
+    return r;
+  }
+  function modal(title, bodyHtml){ var r=_ensureModalRoot(); r.querySelector('#v2-modal-title').textContent=title; r.querySelector('#v2-modal-bd').innerHTML=bodyHtml; r.style.display='flex'; return r.querySelector('#v2-modal-bd'); }
+  function closeModal(){ var r=document.getElementById('v2-overlay'); if(r) r.style.display='none'; }
+
+  // ---- confirm (danger gate; opts.typed = word the operator must type) ----
+  function confirm(title, msg, onYes, opts){
+    opts=opts||{}; var typed=opts.typed;
+    var bd=modal(title,
+      '<div class="cfm-msg">'+msg+'</div>'+
+      (typed?'<input id="cfm-in" class="v2-field" autocomplete="off" placeholder="type '+typed+' to confirm">':'')+
+      '<div class="cfm-btns"><button class="btn-act" id="cfm-no">Cancel</button>'+
+      '<button class="btn-danger" id="cfm-yes"'+(typed?' disabled':'')+'>'+(opts.yesLabel||'Confirm')+'</button></div>');
+    if(typed){ bd.querySelector('#cfm-in').addEventListener('input', function(){ bd.querySelector('#cfm-yes').disabled = this.value.trim()!==typed; }); }
+    bd.querySelector('#cfm-no').addEventListener('click', closeModal);
+    bd.querySelector('#cfm-yes').addEventListener('click', function(){ closeModal(); try{ onYes(); }catch(e){ toast('action failed: '+e.message, false); } });
+  }
+
+  // ---- toast ----
+  function toast(msg, ok){
+    var t=document.createElement('div'); t.className='v2-toast '+(ok===false?'bad':'good'); t.textContent=msg;
+    document.body.appendChild(t);
+    setTimeout(function(){ t.classList.add('show'); }, 10);
+    setTimeout(function(){ t.classList.remove('show'); setTimeout(function(){ t.remove(); }, 300); }, 3200);
+  }
+  // convenience: run an action with toast feedback (NOT auto-fired — call from a click handler)
+  function act(promise, okMsg){ return promise.then(function(d){ toast(okMsg||'done', true); return d; }).catch(function(e){ toast('failed: '+e.message, false); throw e; }); }
+
+  loadKey();  // warm the api_key so operator clicks are ready
+  // =======================================================
+
+  return { fetchJSON, num, pct1, f2, f3, el, gateState, ago, bandColor, tag, fmtUptime, cap, renderNav, markNav, barRow,
+           loadKey, post, del, modal, closeModal, confirm, toast, act };
 })();
