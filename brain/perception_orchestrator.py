@@ -2583,6 +2583,19 @@ class PerceptionOrchestrator:
             return {}
         return est.get_anchors()
 
+    def get_calibration_version(self) -> int:
+        """Public read-only accessor: spatial calibration version (0 = uncalibrated).
+
+        Used by the P5 mental-world derive path so stored/observed worlds are
+        tagged with the camera calibration they were actually observed under,
+        instead of a hardcoded 0.
+        """
+        cal = getattr(self, "_calibration_manager", None)
+        try:
+            return int(getattr(cal, "version", 0)) if cal is not None else 0
+        except Exception:
+            return 0
+
     def get_scene_context(self) -> str:
         parts: list[str] = []
 

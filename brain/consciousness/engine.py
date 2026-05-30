@@ -840,7 +840,13 @@ class ConsciousnessEngine:
                     snap = perc_orch.get_scene_snapshot()
                     tracks = perc_orch.get_spatial_tracks()
                     anchors = perc_orch.get_spatial_anchors()
-                    graph = derive_scene_graph(snap, tracks=tracks, anchors=anchors)
+                    cal_v = (
+                        perc_orch.get_calibration_version()
+                        if hasattr(perc_orch, "get_calibration_version") else 0
+                    )
+                    graph = derive_scene_graph(
+                        snap, tracks=tracks, anchors=anchors, calibration_version=cal_v
+                    )
                     self._hrr_spatial_shadow.maybe_sample(graph)
             except Exception as exc:
                 logger.debug("HRR spatial-shadow sample skipped: %s", exc)
