@@ -36,8 +36,8 @@
     <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
   </header>
   <nav>
-    <a href="/v2/integrity">integrity</a><a href="/v2/maturity">maturity</a>
-    <a class="stub" href="#">yardsticks</a><a class="stub" href="#">memory</a>
+    <a href="/static/v2/integrity.html">integrity</a><a href="/static/v2/maturity.html">maturity</a>
+    <a href="/static/v2/yardsticks.html">yardsticks</a><a class="stub" href="#">memory</a>
     <a class="stub" href="#">capability</a><a class="stub" href="#">cognition</a>
     <a class="stub" href="#">identity</a><a class="stub" href="#">spatial</a><a class="stub" href="#">ops</a>
     <a href="/mind">/mind ↗</a><a href="/">← v1 dashboard</a>
@@ -72,7 +72,7 @@
   var V2=window.V2;
   var fetchJSON=V2.fetchJSON, num=V2.num, ago=V2.ago, el=V2.el;
   var SNAP=null, lastOkTs=0;
-  V2.markNav('/v2/maturity');
+  V2.markNav('/static/v2/maturity.html');
 
   function commas(v){ v=num(v); return v===null?'—':Math.round(v).toLocaleString(); }
 
