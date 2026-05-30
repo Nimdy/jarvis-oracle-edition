@@ -29,6 +29,7 @@ mistaken for a live observation.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -75,6 +76,44 @@ def _strip_vectors(obj: Any) -> Any:
     return obj
 
 
+# Position quantization for the dedup fingerprint (metres). Coarse enough to
+# ignore detector jitter, fine enough that real movement registers as a change.
+_POS_QUANTUM_M = 0.5
+
+
+def _fingerprint(world: Dict[str, Any]) -> str:
+    """Content hash of a world's MEANINGFUL structure — entity states + coarse
+    positions + relations — ignoring jitter and timestamps.
+
+    Used to skip storing near-duplicate worlds: a static scene must not waste
+    the album. Two worlds with the same entities in the same states, the same
+    coarse positions, and the same relations collapse to one fingerprint, so a
+    motionless office room is stored once, not every sample. Any real change
+    (entity appears/vanishes/changes state, moves >~0.5 m, or a relation flips)
+    yields a new fingerprint and a fresh stored world.
+    """
+    ents = []
+    for e in (world.get("entities") or []):
+        pos = e.get("position_room_m")
+        if isinstance(pos, (list, tuple)) and pos:
+            try:
+                cpos = tuple(round(float(c) / _POS_QUANTUM_M) * _POS_QUANTUM_M for c in pos)
+            except (TypeError, ValueError):
+                cpos = None
+        else:
+            cpos = None
+        ents.append((e.get("entity_id"), e.get("state"), cpos))
+    rels = sorted(
+        (r.get("source"), r.get("relation_type"), r.get("target"))
+        for r in (world.get("relations") or [])
+    )
+    key = json.dumps(
+        [sorted(ents, key=lambda x: str(x[0])), rels],
+        default=str, separators=(",", ":"),
+    )
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+
+
 class SpatialEpisodicStore:
     """Append-only, zero-authority durable store for spatial mental-world graphs."""
 
@@ -88,6 +127,8 @@ class SpatialEpisodicStore:
         self._session_id = session_id or self._new_session_id()
         self._retention_days = max(1, int(retention_days))
         self._capture_count = 0
+        self._deduped = 0              # near-duplicate worlds skipped (waste avoided)
+        self._last_fingerprint = None  # content hash of the last STORED world
         self._ensured = False  # lazy: gate-OFF means zero disk touch
 
     @staticmethod
@@ -122,6 +163,12 @@ class SpatialEpisodicStore:
         """
         try:
             payload = _strip_vectors(dict(scene_payload))
+            # Dedup: skip a world that is structurally identical to the last one
+            # we STORED (static scene → one record, not a pile of duplicates).
+            fp = _fingerprint(payload)
+            if fp == self._last_fingerprint:
+                self._deduped += 1
+                return False
             tick = payload.get("tick")
             src = payload.get("source") if isinstance(payload.get("source"), dict) else {}
             record = {
@@ -132,6 +179,7 @@ class SpatialEpisodicStore:
                 "status": STATUS_MARKER,
                 "authority": dict(AUTHORITY_FLAGS),   # self-describes as zero-authority
                 "loaded_from_store": False,           # this is a fresh capture, not a replay
+                "fingerprint": fp,                    # content hash (dedup + distinct-world id)
                 "calibration_version": src.get("calibration_version"),
                 "hrr_config": dict(hrr_config) if hrr_config else None,
                 "world": payload,                     # the canonical, vector-free graph
@@ -142,6 +190,7 @@ class SpatialEpisodicStore:
                 f.write(line + "\n")
                 f.flush()
                 os.fsync(f.fileno())
+            self._last_fingerprint = fp
             self._capture_count += 1
             if self._capture_count % _PRUNE_EVERY == 0:
                 self._prune_old()
