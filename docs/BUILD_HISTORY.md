@@ -5,6 +5,57 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
+## Evidence-Integrity Triad + Spatial Mind's-Eye Stones 1/1.5/2 (2026-05-30, SHIPPED)
+
+Branch `aliceinwonderland`.  Two threads, both verified live on the running
+brain.  (A) Made three internal self-scoring metrics honest — the symbolic /
+perception / epistemic substrate is genuinely real, but the two LEARNED
+"intelligence" claims (policy-NN superiority and world-model foresight) were
+largely self-scoring artifacts and are now measured honestly.  (B) Laid raw
+baseline foundations for a persistent, revisitable spatial world-memory (P5):
+PRE-MATURE, shadow-only, ZERO-AUTHORITY, default-OFF.
+
+### A) Evidence-integrity triad (commit `9f1503c`, SHIPPED)
+
+| Area | Change | Evidence |
+| --- | --- | --- |
+| Calibration diet rebalance | Truth-calibration window was ~98% world-model self-predictions — a ~50:1 firehose that evicted real signal (corrections/attributions) within hours.  Added per-provenance retention + a balanced working set capping any single provenance to 50% of the headline Brier/ECE/over-/under-confidence | `epistemic/calibration/confidence_calibrator.py` |
+| Policy win-rate de-circularization | Removed the stable-state "diversity bonus" that handed the NN a "win" just for deviating while the system was healthy (inflated win-rate to ~99.2%).  A win now requires the NN's divergence to coincide with a MEASURED reward change; stable operation = tie.  Does NOT affect NN training, does NOT demote already-promoted live features | `policy/evaluator.py` |
+| World-model persistence-vs-predictive split | Headline ~99.8% accuracy was dominated by near-tautological "X persists / stable stays stable" rules.  `get_accuracy()` now reports `predictive_accuracy` (genuine event-triggered foresight) SEPARATELY from `persistence_accuracy`; the Oracle benchmark scores the honest predictive number | `cognition/causal_engine.py`, `jarvis_eval/oracle_benchmark.py`, `cognition/world_model.py` |
+
+Verified live:
+- Calibration — world-model share of the calibration window 98.8% -> ~50%, attribution retention 6 -> 250, headline Brier 0.0328 (masked) -> 0.0546 (real signal now registers).
+- Policy — win-rate 99.2% -> 0.0 over 3000+ shadow decisions: evaluated honestly, the policy NN shows NO demonstrable advantage over the kernel (honest "unproven").
+- World-model — pooled 0.92 -> persistence 0.97 vs PREDICTIVE 0.20; Oracle composite 92.0 Gold -> 86.6 Silver (honest re-score).
+
+### B) Spatial mind's-eye — persistent mental world (P5, PRE-MATURE / shadow-only / ZERO-AUTHORITY / default-OFF)
+
+Raw baseline foundations toward a mobile, HRR-encoded, revisitable spatial
+world-memory.  Safety-audited: forbidden-import scans green, dashboard
+truth-probe clean (0 fail/warn/info), no canonical-memory pollution, no raw
+HRR vectors ever written to disk.
+
+| Stone | Change | Evidence |
+| --- | --- | --- |
+| Stone 1 — the Album (commit `8c46153`) | NEW `memory/spatial_episodic_store.py` — a durable, append-only, zero-authority spatial-episodic store.  The HRR mind's-eye previously computed a world each sampled tick and discarded it; it now persists the vector-free scene graph + a provenance envelope (`world_id`, `authority`=all-false, `status`=PRE-MATURE, `calibration_version`, `hrr_config{dim,seed,vocab_version}`, `loaded_from_store`) to `~/.jarvis/spatial/episodic/<session>.jsonl`.  New `VOCAB_VERSION` constant; new default-OFF `ENABLE_HRR_SPATIAL_ALBUM` sub-gate (`album_active`).  HRR encode is deterministic from the scene graph, so the world re-encodes losslessly and NO vector is stored.  NO promotion path in this stone = structurally cannot create/pollute canonical memory | `memory/spatial_episodic_store.py` |
+| Stone 1.5 — dedup (commit `bd9a30d`) | Content-fingerprint dedup (entity ids+states + coarse 0.5 m positions + relations) skips storing a world identical to the last STORED one.  A static scene is kept once; jitter ignored; only real change stored.  Verified live: 11 samples -> 6 distinct worlds | `memory/spatial_episodic_store.py` |
+| Stone 2 — observability (commit `f8008a6`) | 3 read-only, vector-free, authority-pinned endpoints + a "Mental-World Album" panel on the `/hrr-scene` page (session picker + timeline scrubber rendering a stored world on the existing canvas, pausing live polling; Explore overlay; provenance strip) | see API endpoints below |
+
+#### New API endpoints (all GET, read-only, authority-pinned — all authority flags false, `no_raw_vectors_in_api` true, vector-free)
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/hrr/scene/sessions` | `{sessions:[{session_id,records,mtime}], status:"PRE-MATURE", authority...}` — list stored sessions |
+| `GET /api/hrr/scene/episode?session=<id>&limit=<n>` | `{session_id,count,worlds:[<stored world records>], ...}` — page stored worlds |
+| `GET /api/hrr/scene/explore?world_id=<id>` | `{world_id, world, explore_traces:[<nav trace>], loaded_from_store:true, ...}` — re-walk a stored world via the pure `mental_navigation` ops (turn-left -> move-forward -> turn-right), returning imagined-step traces |
+
+### Future (not yet built)
+
+- Stone 3 = room-stitcher (room extent / coverage / "what's still unseen"; needs camera calibration — currently `calibration_version=0`).
+- Stone 4 = human-reviewed `SpatialMemoryGate` promotion of rare, high-confidence, human-relevant changes to compact STRING memories only ("you left X at Y"), never coordinates.
+
+---
+
 ## Research Quality and Codebase Study Fix (2026-05-09, SHIPPED)
 
 Tightened intake quality for the autonomy research pipeline and codebase

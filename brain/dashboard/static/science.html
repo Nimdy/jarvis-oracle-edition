@@ -1446,6 +1446,78 @@ ENABLE_HRR_SPATIAL_SCENE  (P5 derivation)</pre>
       <p style="font-size:0.85em; color:var(--text-muted); margin-top:0.8em;">Plan: <code>docs/plans/p5_internal_mental_world_spatial_hrr.plan.md</code>. Governance: <code>AGENTS.md</code> → "P5 Mental World / Spatial HRR Scene addendum" (rules 1–12). Live evidence: <code>docs/validation_reports/p5_spatial_hrr_mental_world-2026-04-24.md</code>, <code>p5_spatial_hrr_populated_scene-2026-04-25.md</code>, <code>p5_hrr_runtime_flags-2026-04-25.md</code>.</p>
     </section>
 
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- 2026-05-30 EVIDENCE-INTEGRITY TRIAD + SPATIAL-EPISODIC ALBUM -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <section id="evidence-integrity-2026-05-30" class="d-section">
+      <h2>Evidence-Integrity Pass — Honest Metrics (2026-05-30)</h2>
+      <p>Session work on branch <code>aliceinwonderland</code>. Two parts: (1) an evidence-integrity triad that makes three internal self-scoring metrics honest (<strong>SHIPPED</strong>, verified live), and (2) the first stones of a persistent spatial mind's-eye album (<strong>PRE-MATURE / shadow-only / zero-authority / default-OFF</strong>).</p>
+
+      <h3>Evidence-Integrity Triad <span style="font-size:0.7em; color:var(--text-muted);">(commit 9f1503c · SHIPPED)</span></h3>
+      <p>Three internal metrics were scoring themselves. Each was made honest; the headline numbers moved against us on purpose, because the previous numbers were artifacts. <strong>Honest framing:</strong> the symbolic / perception / epistemic substrate is genuinely real, but the two <em>learned</em> "intelligence" claims — policy-NN superiority and world-model foresight — were largely <em>self-scoring artifacts</em> and are now measured honestly.</p>
+
+      <table class="s-params">
+        <thead><tr><th>Fix</th><th>What was wrong</th><th>Honest result (before → after)</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="s-const">Calibration diet rebalance<br><code>epistemic/calibration/confidence_calibrator.py</code></td>
+            <td>The truth-calibration window was ~98% world-model self-predictions — a ~50:1 firehose that evicted real signal (corrections / attributions) within hours. Added per-provenance retention + a balanced working set capping any single provenance to 50% of the headline Brier/ECE/over-/under-confidence.</td>
+            <td>World-model share of window <span class="s-val">98.8% → ~50%</span>; attribution retention <span class="s-val">6 → 250</span>; headline Brier <span class="s-val">0.0328 (masked) → 0.0546</span> (real signal now registers).</td>
+          </tr>
+          <tr>
+            <td class="s-const">Policy win-rate de-circularization<br><code>policy/evaluator.py</code></td>
+            <td>Removed the stable-state "diversity bonus" that handed the NN a "win" just for deviating while the system was healthy (inflated win-rate to ~99.2%). A win now requires the NN's divergence to coincide with a <em>measured</em> reward change; stable operation = tie.</td>
+            <td>Win-rate <span class="s-val">99.2% → 0.0</span> over 3000+ shadow decisions — evaluated honestly the policy NN shows <strong>no demonstrable advantage</strong> over the kernel (honest "unproven"). Does not affect NN training; does not demote already-promoted live features.</td>
+          </tr>
+          <tr>
+            <td class="s-const">World-model persistence-vs-predictive split<br><code>cognition/causal_engine.py</code>, <code>jarvis_eval/oracle_benchmark.py</code>, <code>cognition/world_model.py</code></td>
+            <td>The headline ~99.8% accuracy was dominated by near-tautological "X persists / stable stays stable" rules. <code>get_accuracy()</code> now reports <code>predictive_accuracy</code> (genuine event-triggered foresight) separately from <code>persistence_accuracy</code>; the Oracle benchmark scores the honest predictive number.</td>
+            <td>Pooled <span class="s-val">0.92</span> → persistence <span class="s-val">0.97</span> vs <strong>predictive <span class="s-val">0.20</span></strong>; Oracle composite <span class="s-val">92.0 Gold → 86.6 Silver</span> (honest re-score).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Spatial Mind's-Eye — Persistent Mental World (P5) <span style="font-size:0.7em; color:var(--text-muted);">(PRE-MATURE)</span></h3>
+      <p style="background:rgba(255,165,0,0.08); border-left:3px solid var(--amber,#f90); padding:0.6em 0.9em; margin-bottom:0.8em;"><strong>Status: PRE-MATURE / shadow-only / ZERO-AUTHORITY / default-OFF.</strong> Raw baseline foundations toward a mobile, HRR-encoded, revisitable spatial world-memory. Safety-audited: forbidden-import scans green, dashboard truth-probe clean (0 fail/warn/info), no canonical-memory pollution, <strong>no raw HRR vectors ever written to disk</strong>.</p>
+
+      <table class="s-params">
+        <thead><tr><th>Stone</th><th>Commit</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="s-const">Stone 1 — the Album</td>
+            <td class="s-val"><code>8c46153</code></td>
+            <td>New <code>memory/spatial_episodic_store.py</code> — a durable, append-only, zero-authority spatial-episodic store. The HRR mind's-eye previously computed a world each sampled tick and discarded it; it now persists the vector-free scene graph + a provenance envelope (<code>world_id</code>, <code>authority</code>=all-false, <code>status=PRE-MATURE</code>, <code>calibration_version</code>, <code>hrr_config{dim,seed,vocab_version}</code>, <code>loaded_from_store</code>) to <code>~/.jarvis/spatial/episodic/&lt;session&gt;.jsonl</code>. New <code>VOCAB_VERSION</code> constant; new default-OFF <code>ENABLE_HRR_SPATIAL_ALBUM</code> sub-gate (<code>album_active</code>). HRR encode is deterministic from the scene graph, so the world re-encodes losslessly and <strong>no vector is stored</strong>. No promotion path in this stone — structurally cannot create or pollute canonical memory.</td>
+          </tr>
+          <tr>
+            <td class="s-const">Stone 1.5 — dedup</td>
+            <td class="s-val"><code>bd9a30d</code></td>
+            <td>Content-fingerprint dedup (entity ids+states + coarse 0.5 m positions + relations) skips storing a world identical to the last <em>stored</em> one. A static scene is kept once; jitter ignored; only real change stored. Verified live: <span class="s-val">11 samples → 6 distinct worlds</span>.</td>
+          </tr>
+          <tr>
+            <td class="s-const">Stone 2 — observability</td>
+            <td class="s-val"><code>f8008a6</code></td>
+            <td>Three read-only, vector-free, authority-pinned endpoints (see below) plus a "Mental-World Album" panel on the <a href="/hrr-scene" style="color:var(--cyan);"><code>/hrr-scene</code></a> page: session picker + timeline scrubber (renders a stored world on the existing canvas, pauses live polling), an Explore overlay, and a provenance strip.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>New API Endpoints <span style="font-size:0.7em; color:var(--text-muted);">(all GET · read-only · authority-pinned · vector-free)</span></h3>
+      <p>All return authority flags <code>false</code> and <code>no_raw_vectors_in_api=true</code>.</p>
+      <ul>
+        <li><code>GET /api/hrr/scene/sessions</code> → <code>{sessions:[{session_id,records,mtime}], status:"PRE-MATURE", authority...}</code> — list stored sessions.</li>
+        <li><code>GET /api/hrr/scene/episode?session=&lt;id&gt;&amp;limit=&lt;n&gt;</code> → <code>{session_id,count,worlds:[&lt;stored world records&gt;], ...}</code> — page stored worlds.</li>
+        <li><code>GET /api/hrr/scene/explore?world_id=&lt;id&gt;</code> → <code>{world_id, world, explore_traces:[&lt;nav trace&gt;], loaded_from_store:true, ...}</code> — re-walk a stored world via the pure <code>mental_navigation</code> ops (turn-left → move-forward → turn-right), returning imagined-step traces.</li>
+      </ul>
+
+      <h3>Future Stones <span style="font-size:0.7em; color:var(--text-muted);">(not yet built)</span></h3>
+      <ul>
+        <li><strong>Stone 3 — room-stitcher</strong>: room extent / coverage / "what's still unseen"; needs camera calibration (currently <code>calibration_version=0</code>).</li>
+        <li><strong>Stone 4 — SpatialMemoryGate</strong>: human-reviewed promotion of rare, high-confidence, human-relevant changes to compact <em>string</em> memories only ("you left X at Y") — never coordinates.</li>
+      </ul>
+
+      <p style="font-size:0.85em; color:var(--text-muted); margin-top:0.8em;">Commits: evidence-integrity triad <code>9f1503c</code>; Album <code>8c46153</code>; dedup <code>bd9a30d</code>; observability <code>f8008a6</code>. Branch: <code>aliceinwonderland</code>.</p>
+    </section>
+
     <!-- Footer -->
     <footer class="d-footer">
       <span>JARVIS Oracle Edition — Scientific Reference</span>

@@ -56,6 +56,7 @@
       <a class="d-nav-link" href="#eval-sidecar">Eval Sidecar / PVL</a>
       <a class="d-nav-link" href="#restart-resilience">Restart Resilience</a>
       <a class="d-nav-link" href="#synthetic-training">Synthetic Training</a>
+      <a class="d-nav-link" href="#spatial-episodic-album">Mental-World Album (P5)</a>
       <a class="d-nav-link" href="/hrr">HRR Shadow Substrate (P4)</a>
       <a class="d-nav-link" href="/hrr-scene">Mental World / Spatial HRR (P5)</a>
     </div>
@@ -1462,6 +1463,91 @@
       <p>Individual: <code>python -m scripts.run_synthetic_exercises --exercise diagnostic,plan_evaluator --profile stress --record</code></p>
       <p>Profiles: <strong>smoke</strong> (quick check), <strong>coverage</strong> (all categories/rules), <strong>stress</strong> (high-volume).</p>
       <p>Reports written to <code>~/.jarvis/synthetic_exercise/reports/</code>.</p>
+    </section>
+
+    <!-- ═══════════ SPATIAL-EPISODIC ALBUM (P5) ═══════════ -->
+    <section id="spatial-episodic-album" class="d-section">
+      <h2>Spatial-Episodic "Album" — Persistent Mental World (P5)</h2>
+      <p>The HRR mind's-eye (P4 shadow substrate) previously computed a spatial world on each sampled tick and threw it away. The Album gives that world-memory a place to live: a durable, append-only, <strong>zero-authority</strong> spatial-episodic store that persists the vector-free scene graph so a stored world can be re-walked later. It is the first raw foundation toward a mobile, HRR-encoded, revisitable spatial world-memory — and it is deliberately the smallest thing that could possibly persist anything.</p>
+
+      <div class="d-note d-note-warn"><strong>Status: PRE-MATURE — shadow-only, ZERO-AUTHORITY, default-OFF.</strong> Built on branch <code>aliceinwonderland</code>, 2026-05-30. Safety-audited live: forbidden-import scans green, dashboard truth-probe clean (0 fail / 0 warn / 0 info), no canonical-memory pollution, and <strong>no raw HRR vectors ever written to disk</strong>. There is no promotion path in any shipped stone, so the Album structurally <em>cannot</em> create or pollute canonical memory.</div>
+
+      <h3>Stones Shipped (2026-05-30)</h3>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead><tr><th>Stone</th><th>Commit</th><th>What it adds</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Stone 1 — the Album</strong></td>
+              <td><code>8c46153</code></td>
+              <td>New <code>memory/spatial_episodic_store.py</code>: durable, append-only, zero-authority spatial-episodic store. Persists the vector-free scene graph + a provenance envelope to <code>~/.jarvis/spatial/episodic/&lt;session&gt;.jsonl</code>. Adds a new <code>VOCAB_VERSION</code> constant and a default-OFF <code>ENABLE_HRR_SPATIAL_ALBUM</code> sub-gate (<code>album_active</code>).</td>
+              <td>SHIPPED · PRE-MATURE</td>
+            </tr>
+            <tr>
+              <td><strong>Stone 1.5 — dedup</strong></td>
+              <td><code>bd9a30d</code></td>
+              <td>Content-fingerprint dedup (entity ids + states + coarse 0.5&nbsp;m positions + relations) skips storing a world identical to the last <em>stored</em> one. A static scene is kept once; positional jitter is ignored; only real change is stored. Verified live: 11 samples &rarr; 6 distinct worlds.</td>
+              <td>SHIPPED · PRE-MATURE</td>
+            </tr>
+            <tr>
+              <td><strong>Stone 2 — observability</strong></td>
+              <td><code>f8008a6</code></td>
+              <td>3 read-only, vector-free, authority-pinned endpoints (see below) + a "Mental-World Album" panel on the <code>/hrr-scene</code> page: session picker + timeline scrubber (renders a stored world on the existing canvas, pauses live polling), an Explore overlay, and a provenance strip.</td>
+              <td>SHIPPED · PRE-MATURE</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Provenance Envelope</h3>
+      <p>Every stored world carries an envelope so a record can never be mistaken for authoritative memory. The HRR encode is deterministic from the scene graph, so the world re-encodes losslessly on read — which is exactly why <strong>no vector is ever stored</strong>; the graph <em>is</em> the record.</p>
+      <div class="d-tag-cloud">
+        <span class="d-tag">world_id</span><span class="d-tag">authority = all-false</span>
+        <span class="d-tag">status = PRE-MATURE</span><span class="d-tag">calibration_version</span>
+        <span class="d-tag">hrr_config{dim, seed, vocab_version}</span><span class="d-tag">loaded_from_store</span>
+      </div>
+
+      <h3>How It Stays Safe</h3>
+      <div class="d-details-grid">
+        <div class="d-detail">
+          <div class="d-detail-title">No canonical path</div>
+          <p>Nothing in any shipped stone can promote a stored world into canonical memory. The store is its own append-only JSONL lane under <code>~/.jarvis/spatial/episodic/</code>; there is no <code>remember()</code> call, no promotion counter, no EventBus write.</p>
+        </div>
+        <div class="d-detail">
+          <div class="d-detail-title">No vectors to disk</div>
+          <p>Only the vector-free scene graph is persisted. Because HRR encode is deterministic from that graph, the world re-encodes losslessly on read — so a raw HRR vector is never written and never returned by the API (<code>no_raw_vectors_in_api = true</code>).</p>
+        </div>
+        <div class="d-detail">
+          <div class="d-detail-title">Default-OFF sub-gate</div>
+          <p>Persistence is gated by <code>ENABLE_HRR_SPATIAL_ALBUM</code> (surfaced as <code>album_active</code>), default OFF. The P4 mind's-eye keeps running unchanged when the Album is disabled; turning the gate off stops all writes.</p>
+        </div>
+        <div class="d-detail">
+          <div class="d-detail-title">Authority-pinned reads</div>
+          <p>All three endpoints are GET-only and return every authority flag <code>false</code> with <code>status:"PRE-MATURE"</code>. Re-walking a stored world uses the pure <code>mental_navigation</code> ops only — it imagines steps, it never moves anything real.</p>
+        </div>
+      </div>
+
+      <h3>Observability Endpoints</h3>
+      <p>All GET, read-only, authority-pinned (every authority flag <code>false</code>, <code>no_raw_vectors_in_api = true</code>), vector-free.</p>
+      <div class="d-table-wrap">
+        <table class="d-table">
+          <thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /api/hrr/scene/sessions</code></td><td>List stored sessions &rarr; <code>{sessions:[{session_id,records,mtime}], status:"PRE-MATURE", authority…}</code></td></tr>
+            <tr><td><code>GET /api/hrr/scene/episode?session=&amp;limit=</code></td><td>Page stored worlds &rarr; <code>{session_id,count,worlds:[…records], …}</code></td></tr>
+            <tr><td><code>GET /api/hrr/scene/explore?world_id=</code></td><td>Re-walk a stored world via pure <code>mental_navigation</code> (turn-left &rarr; move-forward &rarr; turn-right) &rarr; <code>{world_id, world, explore_traces:[…], loaded_from_store:true, …}</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Place in the HRR / P5 Mental-World Stack</h3>
+      <p>The Album sits on top of the P4 HRR shadow substrate and below any future human-relevant memory. It is purely a <em>recall</em> layer for the mind's-eye: P4 imagines the world each tick; the Album lets a past world be revisited and re-walked, without ever claiming the world is true or feeding it back into the live brain.</p>
+
+      <h3>Future Stones (not yet built)</h3>
+      <ul>
+        <li><strong>Stone 3 — room-stitcher:</strong> room extent / coverage / "what's still unseen". Needs camera calibration — currently <code>calibration_version=0</code>.</li>
+        <li><strong>Stone 4 — human-reviewed promotion:</strong> a <code>SpatialMemoryGate</code> that promotes only rare, high-confidence, human-relevant changes to compact <em>string</em> memories ("you left X at Y") — never coordinates, never raw worlds, always human-reviewed.</li>
+      </ul>
     </section>
 
     <!-- ═══════════ MATURITY GATES ═══════════ -->
