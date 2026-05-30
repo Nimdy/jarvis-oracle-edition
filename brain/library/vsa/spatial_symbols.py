@@ -48,6 +48,13 @@ NAMESPACE_STATE = "spatial_state"
 NAMESPACE_NAV = "mental_nav"
 NAMESPACE_ENTITY = "scene_entity"
 
+# Vocabulary version. BUMP whenever the symbol vocabulary below changes
+# (relation/axis/state/nav names or any NAMESPACE_* seed string). Stored
+# alongside each persisted spatial-episodic world so a later replay can verify
+# the stored world is still bitwise-comparable: re-encoding a stored scene graph
+# is deterministic ONLY when dim + seed + vocab_version all match the runtime.
+VOCAB_VERSION = 1
+
 
 # ---------------------------------------------------------------------------
 # Relation vocabulary
@@ -216,6 +223,7 @@ __all__ = [
     "NAMESPACE_STATE",
     "NAMESPACE_NAV",
     "NAMESPACE_ENTITY",
+    "VOCAB_VERSION",
     "LEFT_OF",
     "RIGHT_OF",
     "IN_FRONT_OF",

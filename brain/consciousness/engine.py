@@ -121,7 +121,22 @@ class ConsciousnessEngine:
                 from cognition.hrr_spatial_encoder import HRRSpatialShadow
                 from cognition import mental_world as _mental_world
 
-                self._hrr_spatial_shadow = HRRSpatialShadow(self._hrr_cfg)
+                # P5 spatial-episodic "album": durable, zero-authority capture of
+                # seen worlds. Constructed on the memory side and INJECTED so the
+                # HRR module imports no canonical writer (forbidden-import scan
+                # stays green). It writes ONLY when the album sub-gate is on
+                # (runtime album_active); default OFF — no behavior change unless
+                # the operator opts in.
+                _album_sink = None
+                try:
+                    from memory.spatial_episodic_store import SpatialEpisodicStore
+                    _album_sink = SpatialEpisodicStore()
+                except Exception:
+                    _album_sink = None
+
+                self._hrr_spatial_shadow = HRRSpatialShadow(
+                    self._hrr_cfg, album_sink=_album_sink
+                )
                 register_spatial_scene_reader(self._hrr_spatial_shadow.status)
                 register_spatial_scene_recent(self._hrr_spatial_shadow.recent)
                 _mental_world.register_shadow(self._hrr_spatial_shadow)
