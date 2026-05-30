@@ -35,7 +35,7 @@ window.V2 = (function(){
     ['/static/v2/spatial.html','spatial'],
     ['/static/v2/ops.html','ops'],
     ['/static/v2/training.html','training'],
-    ['/static/v2/lab.html','lab',1]
+    ['/static/v2/lab.html','lab']
   ];
   // render the shared nav into <nav id="v2nav"></nav>, marking `active`.
   function renderNav(active){
