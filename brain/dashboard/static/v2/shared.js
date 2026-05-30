@@ -24,30 +24,34 @@ window.V2 = (function(){
   // ---- centralized nav: add a page here once; every page picks it up ----
   // [href, label, stub?] — drop the stub flag when a page ships.
   var NAVPAGES=[
+    ['#sep','data'],
     ['/static/v2/awakening.html','awakening'],
     ['/static/v2/integrity.html','integrity'],
     ['/static/v2/maturity.html','maturity'],
     ['/static/v2/yardsticks.html','yardsticks'],
     ['/static/v2/memory.html','memory'],
-    ['/static/v2/provenance.html','provenance'],
     ['/static/v2/capability.html','capability'],
-    ['/static/v2/immune.html','immune'],
     ['/static/v2/cognition.html','cognition'],
     ['/static/v2/identity.html','identity'],
     ['/static/v2/spatial.html','spatial'],
-    ['/static/v2/timeline.html','timeline'],
     ['/static/v2/ops.html','ops'],
     ['/static/v2/training.html','training'],
-    ['/static/v2/lab.html','lab']
+    ['#sep','lab'],
+    ['/static/v2/lab.html','lab'],
+    ['#sep','insight'],
+    ['/static/v2/timeline.html','timeline'],
+    ['/static/v2/immune.html','immune'],
+    ['/static/v2/provenance.html','provenance']
   ];
   // render the shared nav into <nav id="v2nav"></nav>, marking `active`.
   function renderNav(active){
     var nav=document.getElementById('v2nav'); if(!nav) return;
     var html=NAVPAGES.map(function(p){
+      if(p[0]==='#sep') return '<span class="navsep">'+p[1]+'</span>';
       var on=(p[0]===active), stub=p[2];
       return '<a class="'+(on?'on':(stub?'stub':''))+'" href="'+(stub?'#':p[0])+'">'+p[1]+'</a>';
     }).join('');
-    html+='<a href="/mind">/mind ↗</a><a href="/">← v1 dashboard</a>';
+    html+='<span class="navsep">ext</span><a href="/mind">/mind ↗</a><a href="/">← v1</a>';
     nav.innerHTML=html;
   }
   // legacy: highlight an already-rendered nav by href match.

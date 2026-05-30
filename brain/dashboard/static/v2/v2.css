@@ -24,6 +24,9 @@ nav a{font-size:10px;letter-spacing:.05em;color:var(--dim);border:1px solid tran
 nav a:hover{color:var(--cyan);border-color:var(--line);}
 nav a.on{color:var(--green);border-color:var(--green);}
 nav a.stub{color:var(--dim);} nav a.stub::after{content:' ·soon';color:var(--dim);font-size:8px;}
+.navsep{font-size:8px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase;align-self:center;
+  padding:0 4px 0 9px;margin-left:3px;border-left:1px solid var(--line);opacity:.8;}
+.navsep:first-child{border-left:none;padding-left:0;margin-left:0;}
 
 /* recovery banner */
 .banner-recovery{margin:12px 18px 0;padding:8px 12px;border:1px solid var(--amber);border-left-width:3px;
