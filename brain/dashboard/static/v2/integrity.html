@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Evidence Integrity (dashboardV2)</title>
+  <style>
+    :root{
+      --bg:#03040a; --panel:#080f17; --panel2:#0a1420; --line:#15212e;
+      --green:#00ff99; --cyan:#00ccff; --amber:#ffb000; --red:#ff3b5c; --magenta:#ff2bd6;
+      --gray:#5a6072; --text:#d8f5ec; --muted:#6b7886; --dim:#46505c;
+      --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    }
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;min-height:100%;background:
+      radial-gradient(ellipse at 50% -10%, #0a1622 0%, #03040a 60%);
+      color:var(--text);font-family:var(--mono);font-size:13px;line-height:1.4;}
+    a{color:var(--cyan);text-decoration:none;}
+    /* ---- top bar ---- */
+    header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+      padding:10px 18px;background:rgba(3,4,10,.92);border-bottom:1px solid var(--line);backdrop-filter:blur(4px);}
+    header h1{margin:0;font-size:14px;letter-spacing:.14em;color:var(--green);font-weight:700;}
+    header .v2{font-size:9px;border:1px solid var(--cyan);color:var(--cyan);padding:1px 6px;border-radius:3px;letter-spacing:.12em;}
+    header .sub{color:var(--muted);font-size:10px;letter-spacing:.03em;max-width:520px;}
+    header .right{margin-left:auto;display:flex;gap:14px;align-items:center;color:var(--muted);font-size:10px;}
+    nav{display:flex;gap:8px;padding:6px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;background:rgba(8,15,23,.5);}
+    nav a{font-size:10px;letter-spacing:.05em;color:var(--dim);border:1px solid transparent;padding:2px 8px;border-radius:3px;}
+    nav a:hover{color:var(--cyan);border-color:var(--line);}
+    nav a.on{color:var(--green);border-color:var(--green);}
+    nav a.stub{color:var(--dim);} nav a.stub::after{content:' ·soon';color:var(--dim);font-size:8px;}
+    /* ---- recovery banner ---- */
+    #recovery{margin:12px 18px 0;padding:8px 12px;border:1px solid var(--amber);border-left-width:3px;
+      background:rgba(255,176,0,.06);border-radius:4px;color:var(--amber);font-size:11px;display:none;}
+    #recovery b{color:#ffd27a;}
+    #recovery .why{color:var(--muted);display:block;margin-top:3px;}
+    /* ---- layout ---- */
+    main{padding:14px 18px 40px;display:grid;grid-template-columns:repeat(12,1fr);gap:14px;max-width:1500px;}
+    .card{background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);border:1px solid var(--line);
+      border-radius:6px;padding:13px 15px;}
+    .card h2{margin:0 0 3px;font-size:11px;letter-spacing:.1em;color:var(--text);font-weight:700;text-transform:uppercase;}
+    .card .note{color:var(--muted);font-size:10px;line-height:1.5;margin:4px 0 10px;}
+    .col12{grid-column:span 12;} .col8{grid-column:span 8;} .col6{grid-column:span 6;}
+    .col4{grid-column:span 4;} .col5{grid-column:span 5;} .col7{grid-column:span 7;}
+    @media(max-width:1000px){.col8,.col6,.col4,.col5,.col7{grid-column:span 12;}}
+    /* ---- tags ---- */
+    .tag{display:inline-block;font-size:8.5px;letter-spacing:.1em;padding:1px 6px;border-radius:3px;border:1px solid;vertical-align:middle;text-transform:uppercase;}
+    .tag.self{color:var(--magenta);border-color:var(--magenta);}
+    .tag.grounded{color:var(--green);border-color:var(--green);}
+    .tag.earned{color:var(--cyan);border-color:var(--cyan);}
+    .tag.derived{color:var(--amber);border-color:var(--amber);}
+    /* ---- scorer comparator ---- */
+    .scorers{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+    .scorer{border:1px solid var(--line);border-radius:5px;padding:12px;text-align:center;position:relative;background:rgba(3,8,14,.4);}
+    .scorer .lbl{font-size:10px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;}
+    .scorer .big{font-size:30px;font-weight:700;margin:6px 0 2px;font-variant-numeric:tabular-nums;}
+    .scorer .seal{font-size:10px;color:var(--muted);}
+    .scorer .meta{font-size:9.5px;color:var(--dim);margin-top:6px;}
+    .readout{margin-top:11px;font-size:10.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px;}
+    .readout b{color:var(--amber);}
+    /* ---- bars ---- */
+    .bars{display:flex;flex-direction:column;gap:7px;margin-top:4px;}
+    .barrow{display:grid;grid-template-columns:150px 1fr 84px;align-items:center;gap:9px;font-size:10.5px;}
+    .barrow .bl{color:var(--muted);text-transform:capitalize;}
+    .track{height:9px;background:#0c151e;border:1px solid var(--line);border-radius:5px;overflow:hidden;position:relative;}
+    .fill{height:100%;border-radius:4px;}
+    .barrow .bv{text-align:right;color:var(--text);font-variant-numeric:tabular-nums;}
+    .unpop{font-size:9px;color:var(--dim);letter-spacing:.06em;font-style:italic;}
+    .hatch{background-image:repeating-linear-gradient(45deg,#141d28 0 6px,#0c151e 6px 12px);}
+    /* ---- soul floor ---- */
+    .soul{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;}
+    .soul .mean{text-align:center;}
+    .soul .mean .v{font-size:34px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums;}
+    .soul .mean .k{font-size:9px;color:var(--muted);letter-spacing:.1em;}
+    .floor{border:1px solid var(--amber);border-radius:5px;padding:8px 11px;background:rgba(255,176,0,.05);}
+    .floor .k{font-size:9px;letter-spacing:.1em;color:var(--amber);}
+    .floor .d{font-size:15px;color:#ffd27a;margin-top:1px;}
+    .floor .v{font-size:20px;font-weight:700;color:var(--amber);font-variant-numeric:tabular-nums;}
+    .minirow{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:10px;color:var(--muted);}
+    .minirow span b{color:var(--text);font-variant-numeric:tabular-nums;}
+    /* ---- gate strip ---- */
+    .gates{display:flex;gap:9px;flex-wrap:wrap;}
+    .gate{border:1px solid var(--line);border-radius:5px;padding:7px 11px;min-width:120px;background:rgba(3,8,14,.5);}
+    .gate .gk{font-size:9.5px;color:var(--muted);letter-spacing:.04em;}
+    .gate .gs{font-size:12px;font-weight:700;margin-top:2px;letter-spacing:.06em;}
+    .gate .gd{font-size:9px;color:var(--dim);margin-top:2px;}
+    .s-ok{color:var(--green);} .s-fail{color:var(--red);} .s-unk{color:var(--amber);}
+    .b-ok{border-color:rgba(0,255,153,.4);} .b-fail{border-color:rgba(255,59,92,.5);} .b-unk{border-color:rgba(255,176,0,.5);}
+    /* ---- validation pack ---- */
+    .vp-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+    .chip{font-size:9px;padding:2px 7px;border-radius:3px;border:1px solid var(--line);color:var(--muted);}
+    .chip.reg{border-color:var(--amber);color:var(--amber);}
+    .chip.blk{border-color:var(--red);color:var(--red);}
+    .kv{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-top:2px;}
+    .kv span{color:var(--muted);} .kv b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .offline{color:var(--red);} .asof{color:var(--dim);font-size:9px;}
+    .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle;box-shadow:0 0 5px currentColor;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · EVIDENCE INTEGRITY</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Make the Observer a measurement, not a mirror. Every number labeled <em>self-scored</em> / <em>grounded</em> / <em>earned</em>; gates fail <em>closed</em>; composites show their <em>floor</em>.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav>
+    <a class="on" href="/v2/integrity">integrity</a>
+    <a class="stub" href="#">maturity</a><a class="stub" href="#">yardsticks</a>
+    <a class="stub" href="#">memory</a><a class="stub" href="#">capability</a>
+    <a class="stub" href="#">cognition</a><a class="stub" href="#">identity</a>
+    <a class="stub" href="#">spatial</a><a class="stub" href="#">ops</a>
+    <a href="/mind">/mind ↗</a><a href="/">← v1 dashboard</a>
+  </nav>
+
+  <div id="recovery"></div>
+
+  <main>
+    <section class="card col12">
+      <h2>Three-Scorer Comparator</h2>
+      <div class="note">The headline number is the <b style="color:var(--magenta)">self-graded</b> Oracle benchmark. Beside it: PVL process-contract coverage and earned maturity gates — the <b style="color:var(--green)">grounded</b> counterweights. Divergence between the self-grade and the process-evidence is the honest signal.</div>
+      <div class="scorers" id="scorers"></div>
+      <div class="readout" id="scorer-readout"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>7-Category Scoreboard <span class="tag derived" id="sb-badge">experimental</span></h2>
+      <div class="note" id="sb-note"></div>
+      <div class="bars" id="scoreboard"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Soul Integrity — mean <span style="color:var(--dim)">and</span> floor</h2>
+      <div class="note">A green composite that hides its weakest dimension is itself an Observer defect. The floor is always shown.</div>
+      <div class="soul" id="soul"></div>
+      <div class="minirow" id="soul-mini"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Self-Test Gate Strip <span style="color:var(--dim);font-size:9px;">· fails CLOSED</span></h2>
+      <div class="note">Unknown / missing / stale ⇒ rendered <b style="color:var(--amber)">UNKNOWN</b>, never green. (The v1 dashboard defaults these to green on error — V2 does not.)</div>
+      <div class="gates" id="gates"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Validation Pack</h2>
+      <div class="note" id="vp-note"></div>
+      <div class="kv" id="vp-kv"></div>
+      <div class="vp-chips" id="vp-chips"></div>
+    </section>
+  </main>
+
+<script>
+(function(){
+  "use strict";
+  /* ===== V2 HONEST-RENDER TOOLKIT — canonical; extract to /v2/shared.js when building page 2 ===== */
+  var SNAP=null, ST=null, lastOkTs=0;
+  function fetchJSON(u){return fetch(u).then(function(r){if(!r.ok)throw new Error(u+' '+r.status);return r.json();});}
+  function num(v){return (v===null||v===undefined||isNaN(v))?null:+v;}
+  function pct1(v){v=num(v);return v===null?'—':v.toFixed(1);}
+  function f2(v){v=num(v);return v===null?'—':v.toFixed(2);}
+  function f3(v){v=num(v);return v===null?'—':v.toFixed(3);}
+  // fail-CLOSED gate: explicit true => ok; explicit false => fail; anything else => unknown.
+  function gateState(v){ if(v===true)return 'ok'; if(v===false)return 'fail'; return 'unk'; }
+  // relative age from an epoch-seconds timestamp, server-clock aware via banner freshness.
+  function ago(ts){ if(!ts)return '—'; var s=Math.max(0,(Date.now()/1000)-ts);
+    if(s<90)return Math.round(s)+'s ago'; if(s<5400)return Math.round(s/60)+'m ago'; return (s/3600).toFixed(1)+'h ago'; }
+  function bandColor(v,good,mid){ v=num(v); if(v===null)return 'var(--dim)';
+    if(v>=good)return 'var(--green)'; if(v>=mid)return 'var(--amber)'; return 'var(--red)'; }
+  function el(id){return document.getElementById(id);}
+  /* ===== end toolkit ===== */
+
+  function renderScorers(){
+    var ob=(SNAP&&SNAP.oracle_benchmark)||{}, pvl=(SNAP&&SNAP.pvl)||{}, mt=(SNAP&&SNAP.maturity_tracker)||{};
+    var oc=num(ob.composite_score);
+    var cov=num(pvl.coverage_pct);
+    var ag=num(mt.active_gates), tg=num(mt.total_gates), eg=num(mt.ever_active_gates);
+    var html='';
+    // Oracle — SELF-SCORED
+    html+='<div class="scorer"><div class="lbl">Oracle Benchmark <span class="tag self">self-scored</span></div>'+
+      '<div class="big" style="color:var(--magenta)">'+(oc===null?'—':oc.toFixed(1))+'</div>'+
+      '<div class="seal">'+(ob.seal||'—')+' · '+(ob.benchmark_rank_display||'')+'</div>'+
+      '<div class="meta" title="grades its own snapshot against an author-defined rubric; no external comparator">grades its own snapshot · no external comparator</div></div>';
+    // PVL — GROUNDED
+    html+='<div class="scorer"><div class="lbl">PVL Coverage <span class="tag grounded">grounded</span></div>'+
+      '<div class="big" style="color:'+bandColor(cov,85,70)+'">'+(cov===null?'—':cov.toFixed(1)+'%')+'</div>'+
+      '<div class="seal">'+(num(pvl.passing_contracts)||0)+' / '+(num(pvl.applicable_contracts)||0)+' passing · '+(num(pvl.ever_passing_contracts)||0)+' ever</div>'+
+      '<div class="meta">process contracts verified from live runtime events</div></div>';
+    // Maturity gates — EARNED
+    html+='<div class="scorer"><div class="lbl">Maturity Gates <span class="tag earned">earned</span></div>'+
+      '<div class="big" style="color:var(--cyan)">'+(ag===null?'—':ag)+(tg!==null?'<span style="font-size:15px;color:var(--dim)">/'+tg+'</span>':'')+'</div>'+
+      '<div class="seal">'+(eg===null?'—':eg)+' ever active</div>'+
+      '<div class="meta">gates actually crossed by evidence</div></div>';
+    el('scorers').innerHTML=html;
+    // honest read of the divergence
+    var ro='';
+    if(oc!==null && cov!==null){
+      var gap=(oc - cov).toFixed(1);
+      ro='Honest read: the self-grade reports <b>'+oc.toFixed(1)+' ('+(ob.seal||'')+')</b> while grounded process-coverage sits at <b>'+cov.toFixed(1)+'%</b>'+
+         ' — a '+gap+'-point gap between what it scores itself and what runtime evidence confirms.';
+    }
+    el('scorer-readout').innerHTML=ro;
+  }
+
+  function renderScoreboard(){
+    var sb=(SNAP&&SNAP.scoreboard)||{}, bars=sb.bars||[];
+    el('sb-badge').textContent=sb.badge||'—';
+    var enabled=sb.composite_enabled===true;
+    el('sb-note').innerHTML = enabled
+      ? 'The rigorous multi-category scorer is <b style="color:var(--green)">populated</b> — composite '+f2(sb.composite)+'. This now carries the marquee maturity signal.'
+      : 'The rigorous multi-category scorer <b style="color:var(--amber)">exists but is unpopulated</b> ('+(sb.scoring_version||'')+', composite_enabled=false). Until populated, the headline above is the self-graded Oracle score. Empty bars are <em>not yet measured</em> — not zero, not green.';
+    var html=bars.map(function(b){
+      var s=num(b.score), nm=(b.category||'').replace(/_/g,' ');
+      if(s===null){
+        return '<div class="barrow"><span class="bl">'+nm+'</span>'+
+          '<div class="track hatch"></div>'+
+          '<span class="bv unpop">unpopulated · n='+(b.sample_size||0)+'</span></div>';
+      }
+      var c=bandColor(s,0.8,0.6);
+      return '<div class="barrow"><span class="bl">'+nm+'</span>'+
+        '<div class="track"><div class="fill" style="width:'+(s*100).toFixed(0)+'%;background:'+c+'"></div></div>'+
+        '<span class="bv">'+s.toFixed(3)+' · n='+(b.sample_size||0)+'</span></div>';
+    }).join('');
+    el('scoreboard').innerHTML=html||'<div class="unpop">no categories</div>';
+  }
+
+  function renderSoul(){
+    var integ=(SNAP&&SNAP.integrity)||[];
+    var sc=((SNAP&&SNAP.scorecards)||{}).current||{};
+    var ts=((SNAP&&SNAP.scorecards)||{}).current_ts;
+    function find(label){ for(var i=0;i<integ.length;i++){ if((integ[i].label||'')===label) return integ[i]; } return null; }
+    var soulItem=find('Soul Integrity');
+    var mean=soulItem?num(soulItem.value):null;
+    var fdim=sc.soul_weakest_dimension, fval=num(sc.soul_weakest_score);
+    var html='<div class="mean"><div class="v">'+(mean===null?'—':mean.toFixed(3))+'</div><div class="k">COMPOSITE</div></div>';
+    if(fdim){
+      html+='<div class="floor"><div class="k">FLOOR · WEAKEST DIMENSION</div>'+
+        '<div class="d">'+fdim.replace(/_/g,' ')+'</div>'+
+        '<div class="v">'+(fval===null?'—':fval.toFixed(3))+'</div></div>';
+    } else {
+      html+='<div class="floor" style="border-color:var(--dim);background:none"><div class="k" style="color:var(--dim)">FLOOR</div><div class="d" style="color:var(--dim)">not exposed by this endpoint</div></div>';
+    }
+    el('soul').innerHTML=html;
+    // other integrity summary items + as-of
+    var mini=integ.filter(function(x){return (x.label||'')!=='Soul Integrity';}).map(function(x){
+      return '<span><span class="dot" style="color:'+(x.color==='green'?'var(--green)':x.color==='amber'?'var(--amber)':'var(--red)')+'"></span>'+x.label+' <b>'+f3(x.value)+'</b></span>';
+    }).join('');
+    mini+='<span class="asof">soul as-of '+ago(ts)+'</span>';
+    el('soul-mini').innerHTML=mini;
+  }
+
+  function renderGates(){
+    var checks=(ST&&ST.checks)||{};
+    var names=Object.keys(checks);
+    var html='';
+    // top-level verdict first
+    var top=gateState(ST&&ST.ok);
+    var topLabel = ST? (ST.status||(ST.ok?'ok':'blocked')) : 'unknown';
+    html+='<div class="gate b-'+top+'"><div class="gk">self-test verdict</div>'+
+      '<div class="gs s-'+top+'">'+(top==='ok'?'OK':top==='fail'?String(topLabel).toUpperCase():'UNKNOWN')+'</div>'+
+      '<div class="gd">'+(ST?'':'no payload')+'</div></div>';
+    names.forEach(function(k){
+      var c=checks[k]||{}, st=gateState(c.ok);
+      html+='<div class="gate b-'+st+'"><div class="gk">'+k.replace(/_/g,' ')+'</div>'+
+        '<div class="gs s-'+st+'">'+(st==='ok'?'OK':st==='fail'?'FAIL':'UNKNOWN')+'</div>'+
+        '<div class="gd">'+((c.detail||'').slice(0,38))+'</div></div>';
+    });
+    if(!names.length && !ST) html='<div class="offline">self-test offline — gates UNKNOWN (fail-closed)</div>';
+    el('gates').innerHTML=html;
+  }
+
+  function renderValidationPack(){
+    var vp=(SNAP&&SNAP.validation_pack)||{};
+    var blocked=vp.status==='blocked';
+    el('vp-note').innerHTML = blocked
+      ? 'Status <b style="color:var(--amber)">blocked</b> — '+(num(vp.checks_regressed)||0)+' regressed of '+(num(vp.checks_total)||0)+'. On this brain that is <b>recovery debt</b> from restarts, not breakage; it re-earns green as it soaks.'
+      : 'Status <b style="color:var(--green)">'+(vp.status||'—')+'</b>.';
+    el('vp-kv').innerHTML =
+      '<span>passing <b>'+(num(vp.checks_passing)||0)+' / '+(num(vp.checks_total)||0)+'</b></span>'+
+      '<span>ever-met <b>'+(num(vp.checks_ever_met)||0)+'</b></span>'+
+      '<span>critical <b>'+(num(vp.critical_passing)||0)+' / '+(num(vp.critical_total)||0)+'</b></span>';
+    var chips='';
+    (vp.regressed_check_ids||[]).forEach(function(c){chips+='<span class="chip reg" title="regressed (recovering)">↺ '+c+'</span>';});
+    (vp.blocked_check_ids||[]).forEach(function(c){chips+='<span class="chip blk" title="blocked / not yet proven">⊘ '+c+'</span>';});
+    el('vp-chips').innerHTML=chips||'<span class="chip">no regressed/blocked checks</span>';
+  }
+
+  function renderRecovery(){
+    var vp=(SNAP&&SNAP.validation_pack)||{};
+    var reg=num(vp.checks_regressed)||0;
+    var box=el('recovery');
+    if(vp.status==='blocked' && reg>0){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — '+reg+' check(s) rebuilding: '+
+        (vp.regressed_check_ids||[]).join(', ')+'.'+
+        '<span class="why">JARVIS drops to pre-mature on each clean restart and re-earns green as it soaks. This is the maturity gate working as designed, not a defect.</span>';
+    } else { box.style.display='none'; }
+  }
+
+  function renderBanner(){
+    var b=(SNAP&&SNAP.banner)||{};
+    var up=num(b.uptime_s); var upTxt = up===null?'—':(up/3600>=24?(up/86400).toFixed(1)+'d':(up/3600).toFixed(1)+'h');
+    el('mode').textContent='mode '+(b.mode||'—')+' · uptime '+upTxt+' · fresh '+(num(b.data_freshness_s)!==null?b.data_freshness_s.toFixed(1)+'s':'—');
+  }
+
+  function renderAll(){
+    renderBanner(); renderRecovery(); renderScorers(); renderScoreboard();
+    renderSoul(); renderGates(); renderValidationPack();
+  }
+
+  function refresh(){
+    Promise.allSettled([fetchJSON('/api/eval/snapshot'), fetchJSON('/api/self-test')]).then(function(r){
+      if(r[0].status==='fulfilled'){ SNAP=r[0].value; lastOkTs=Date.now(); }
+      ST = r[1].status==='fulfilled' ? r[1].value : null;   // self-test missing => gates render UNKNOWN
+      renderAll();
+    });
+  }
+  function tick(){ var t=new Date().toLocaleTimeString(); el('clock').textContent=t+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 4000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

@@ -360,6 +360,22 @@ def _create_app() -> FastAPI:
         with open(mind_path) as f:
             return HTMLResponse(f.read())
 
+    @app.get("/v2/integrity", response_class=HTMLResponse)
+    async def v2_integrity_page():
+        """dashboardV2 — Evidence Integrity Cockpit (tracer-bullet page).
+
+        A new PARALLEL dashboard surface (own ``/v2`` namespace); the v1
+        dashboard is untouched. Purely observational — polls the existing
+        read-only ``/api/eval/snapshot`` + ``/api/self-test`` and renders an
+        honest instrument: self-scored vs grounded vs earned scorers, the
+        unpopulated 7-category scoreboard (shown as 'not measured', not zero),
+        soul-integrity mean AND floor, and a fail-CLOSED gate strip. No new
+        endpoints, zero authority — cannot write any state.
+        """
+        v2_integrity_path = os.path.join(_STATIC_DIR, "v2", "integrity.html")
+        with open(v2_integrity_path) as f:
+            return HTMLResponse(f.read())
+
     @app.get("/eval")
     async def eval_page():
         from fastapi.responses import RedirectResponse
