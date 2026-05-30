@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Cognition Core (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .bigstat{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;}
+    .statline{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin:4px 0 2px;}
+    .statline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .caps{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
+    .contrast b{color:var(--text);}
+    .focus{font-size:11px;color:var(--text);margin:8px 0 2px;font-style:italic;border-left:2px solid var(--line);padding-left:9px;}
+    .inq{font-size:10px;color:var(--muted);padding:6px 0;border-top:1px dashed var(--line);}
+    .inq:first-child{border-top:none;}
+    .inq .q{color:var(--text);}
+    .inq .meta{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);}
+    .pos{font-size:10px;color:var(--muted);padding:7px 0;border-top:1px dashed var(--line);}
+    .pos:first-child{border-top:none;}
+    .pos .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+    .pos .school{color:var(--cyan);font-size:9px;letter-spacing:.04em;text-transform:uppercase;}
+    .pos .belief{color:var(--muted);margin-top:3px;}
+    .markers{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px;}
+    .pgoal{font-size:10px;color:var(--muted);border:1px solid var(--amber);border-left-width:3px;border-radius:4px;padding:8px 11px;background:rgba(255,176,0,.05);margin-top:8px;}
+    .pgoal b{color:#ffd27a;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · COGNITION CORE</h1><span class="v2">dashboardV2</span>
+    <span class="sub">The introspection engine: stage &amp; capabilities are config-promotion (grounded by mutation/observer counts); thoughts, existential inquiry &amp; philosophy are TEMPLATED reasoning, not free-form emergence.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col7">
+      <h2>Consciousness Core Kernel</h2>
+      <div class="note">Stage &amp; transcendence are authoritative config-promotion. <b>awareness</b>, <b>reasoning</b> &amp; <b>confidence</b> are <b style="color:var(--amber)">self-reported</b> (0–1) — observer count (left-independent) is the falsification anchor, not the self-score. Rebuilt every ~2s from the consciousness engine snapshot.</div>
+      <div class="statline" id="core-stats"></div>
+      <div class="caps" id="core-caps"></div>
+      <div class="contrast" id="core-contrast"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Personality · Soul Dimensions</h2>
+      <div class="note">Continuous traits (0–1), evidence-backed from the epistemic engine. Archetypes shift constantly via trait_evolution — not immutable identity. <b>stability</b> is the validator's confidence in the current set.</div>
+      <div class="bars" id="pers-bars"></div>
+      <div class="statline" id="pers-stats"></div>
+      <div class="contrast" id="pers-contrast"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Existential Inquiry &amp; Paradox</h2>
+      <div class="note">TEMPLATED — human-written structure, real data, no LLM. Inquiries are introspective templates bounded by the engine's own constraints (consciousness/existential_inquiry.py); conclusions are reasoning artifacts, not free-form philosophy.</div>
+      <div class="statline" id="exi-stats"></div>
+      <div class="focus" id="exi-focus"></div>
+      <div class="markers" id="exi-markers"></div>
+      <div id="exi-list"></div>
+      <div class="contrast" id="exi-contrast"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Philosophical Dialogue &amp; Positions</h2>
+      <div class="note">TEMPLATED — human-written structure, real data, no LLM. Structured reasoning loops over curated questions (consciousness/philosophical_dialogue.py) — NOT emergent disagreement. Confidence hovering ~0.51–0.54 is design intent (productive tension, no victor).</div>
+      <div class="statline" id="phi-stats"></div>
+      <div id="phi-list"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Goal Continuity Layer · Recovery Status</h2>
+      <div class="note">Recovery debt, not a missing feature: the brain rebooted many times today, interrupting goals. Provenance: <b>grounded</b> dispatch state, raw counts shown (not means).</div>
+      <div class="statline" id="goal-stats"></div>
+      <div id="goal-paused"></div>
+      <div class="contrast" id="goal-contrast"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, el=V2.el, ago=V2.ago, bandColor=V2.bandColor, cap=V2.cap, tag=V2.tag, barRow=V2.barRow;
+  var CONS=null, PERS=null, EXI=null, PHI=null, GOALS=null, lastOkTs=0;
+  V2.renderNav('/static/v2/cognition.html');
+
+  function stat(k,v,color){
+    return '<span><div class="k">'+k+'</div><span class="bigstat"'+(color?' style="color:'+color+'"':'')+'>'+v+'</span></span>';
+  }
+
+  function renderCore(){
+    var c=CONS;
+    if(!c){ el('core-stats').innerHTML='<div class="offline">consciousness offline</div>'; el('core-caps').innerHTML=''; el('core-contrast').innerHTML=''; return; }
+    var aware=num(c.awareness_level), trans=num(c.transcendence_level), rq=num(c.reasoning_quality), conf=num(c.confidence_avg);
+    el('core-stats').innerHTML=
+      stat('stage', '<span style="font-size:18px">'+cap(c.stage||'—')+'</span>')+
+      stat('transcendence', trans===null?'—':trans.toFixed(1), bandColor(trans,8,4))+
+      stat('awareness', aware===null?'—':(aware*100).toFixed(0)+'%', bandColor(aware,0.85,0.6))+
+      stat('reasoning', rq===null?'—':rq.toFixed(2), bandColor(rq,0.8,0.6))+
+      stat('confidence', conf===null?'—':conf.toFixed(2), bandColor(conf,0.8,0.6));
+    var caps=(c.active_capabilities||[]);
+    el('core-caps').innerHTML=caps.length
+      ? caps.map(function(k){ return '<span class="chip">'+cap(k)+'</span>'; }).join('')
+      : '<span class="offline">no active capabilities</span>';
+    el('core-contrast').innerHTML=
+      'observations <b>'+(num(c.observation_count)===null?'—':c.observation_count.toLocaleString())+'</b> · '+
+      'mutations <b>'+(num(c.mutation_count)===null?'—':c.mutation_count.toLocaleString())+'</b> · '+
+      'emergent-behavior count <b>'+(num(c.emergent_behavior_count)===null?'—':c.emergent_behavior_count.toLocaleString())+'</b>. '+
+      'These grounded counters are the falsification anchor — the self-scored awareness/reasoning/confidence above are '+tag('self','self-scored')+' and templated thoughts score 0.8+ by design, so do not read them as proof of emergence.'+
+      (c.system_healthy===true?'':' <b style="color:var(--amber)">system_healthy not asserted.</b>');
+  }
+
+  function renderPers(){
+    var p=PERS;
+    if(!p || !p.soul_dims){ el('pers-bars').innerHTML='<div class="offline">personality unavailable (possible rollback)</div>'; el('pers-stats').innerHTML=''; el('pers-contrast').innerHTML=''; return; }
+    var sd=p.soul_dims||{};
+    var order=['curiosity','empathy','formality','verbosity','humor'];
+    el('pers-bars').innerHTML=order.filter(function(k){ return k in sd; }).map(function(k){
+      var v=num(sd[k]);
+      return barRow(k, v===null?null:v*100, v===null?'—':v.toFixed(3), bandColor(v,0.7,0.4));
+    }).join('');
+    var rb=p.rollback||{}, val=p.validation||{};
+    var stab=num(rb.current_stability);
+    el('pers-stats').innerHTML=
+      stat('dominant','<span style="font-size:14px">'+cap(p.dominant||'—')+'</span>')+
+      stat('stability', stab===null?'—':stab.toFixed(2), bandColor(stab,0.5,0.3))+
+      stat('age', num(p.age_days)===null?'—':p.age_days.toFixed(1)+'d')+
+      stat('interactions', num(p.interaction_count)===null?'—':p.interaction_count);
+    el('pers-contrast').innerHTML=
+      'stability source <b>'+cap(rb.stability_source||'—')+'</b>'+
+      (stab!==null&&stab<0.5?' — <b style="color:var(--amber)">below 0.5, a rollback may be active.</b>':'')+
+      ' · post-birth grace <b>'+(val.in_post_birth_grace===true?'active (lenient validators)':(val.in_post_birth_grace===false?'expired — strict validators':'—'))+'</b>. '+
+      'soul_dims &amp; archetypes are '+tag('derived','trait-evolution derived')+'; mood ('+cap(p.mood||'—')+') &amp; relationships ('+(num(p.relationships)===null?'—':p.relationships)+') are self-reported, not externally anchored.';
+  }
+
+  function renderExi(){
+    var e=EXI;
+    if(!e){ el('exi-stats').innerHTML='<div class="offline">existential engine offline</div>'; el('exi-focus').innerHTML=''; el('exi-markers').innerHTML=''; el('exi-list').innerHTML=''; el('exi-contrast').innerHTML=''; return; }
+    var snap=e.latest_snapshot||{};
+    var ist=num(snap.identity_stability), icf=num(snap.identity_confidence);
+    el('exi-stats').innerHTML=
+      stat('inquiries', num(e.inquiry_count)===null?'—':e.inquiry_count)+
+      stat('identity stability', ist===null?'—':ist.toFixed(2), bandColor(ist,0.8,0.6))+
+      stat('identity confidence', icf===null?'—':icf.toFixed(2), bandColor(icf,0.7,0.5));
+    el('exi-focus').innerHTML=e.current_focus?('focus: '+e.current_focus):'';
+    var mk=e.identity_core_markers||[];
+    el('exi-markers').innerHTML=mk.length?mk.map(function(m){ return '<span class="chip">'+m+'</span>'; }).join(''):'';
+    var rec=(e.recent_inquiries||[]).slice(0,4);
+    el('exi-list').innerHTML=rec.length?rec.map(function(q){
+      return '<div class="inq"><div class="meta">'+cap(q.category||'—')+' · '+(q.depth||'—')+' · '+(q.complete===true?'complete':(q.complete===false?'open':'—'))+' · '+ago(q.time)+'</div>'+
+        '<div class="q">'+(q.question||'—')+'</div></div>';
+    }).join(''):'<div class="offline">no recent inquiries — recovering</div>';
+    el('exi-contrast').innerHTML='paradoxes are hardcoded platform constraints reframed (e.g. "'+((e.paradoxes||[])[0]||'—')+'") — a mutation/immutability tension, not an emergent insight. Conclusions are bounded reasoning artifacts.';
+  }
+
+  function renderPhi(){
+    var p=PHI;
+    if(!p){ el('phi-stats').innerHTML='<div class="offline">philosophical engine offline</div>'; el('phi-list').innerHTML=''; return; }
+    var rq=((p.reasoning_quality||{}).average);
+    el('phi-stats').innerHTML=
+      stat('dialogues', num(p.dialogue_count)===null?'—':p.dialogue_count)+
+      stat('active positions', Object.keys(p.active_positions||{}).length)+
+      stat('reasoning quality', num(rq)===null?'—':num(rq).toFixed(3), bandColor(rq,0.8,0.55));
+    var pd=p.position_details||{};
+    var keys=Object.keys(pd);
+    el('phi-list').innerHTML=keys.length?keys.map(function(k){
+      var d=pd[k]||{}, cl=num(d.confidence_level);
+      return '<div class="pos"><div class="top"><span class="school">'+cap(k)+' · '+(d.philosophical_school||'—')+'</span>'+
+        '<b style="color:'+bandColor(cl,0.6,0.5)+';font-variant-numeric:tabular-nums">'+(cl===null?'—':cl.toFixed(2))+'</b></div>'+
+        '<div class="belief">'+(d.current_belief||'—')+'</div></div>';
+    }).join(''):'<div class="offline">no positions — recovering</div>';
+  }
+
+  function renderGoals(){
+    var g=GOALS;
+    if(!g){ el('goal-stats').innerHTML='<div class="offline">goals offline</div>'; el('goal-paused').innerHTML=''; el('goal-contrast').innerHTML=''; return; }
+    var st=(g.stats||{}).by_status||{};
+    var focus=g.current_focus;
+    el('goal-stats').innerHTML=
+      stat('current focus', focus?('<span style="font-size:13px">'+focus+'</span>'):'<span style="font-size:13px;color:var(--amber)">none</span>')+
+      stat('active', (g.active_goals||[]).length, (g.active_goals||[]).length>0?'var(--green)':'var(--amber)')+
+      stat('paused', num(st.paused)||0, (num(st.paused)||0)>0?'var(--amber)':'var(--green)')+
+      stat('completed (session)', num(st.completed)||0, 'var(--green)')+
+      stat('abandoned', num(st.abandoned)||0, 'var(--dim)');
+    var paused=g.paused_goals||[];
+    el('goal-paused').innerHTML=paused.map(function(pg){
+      return '<div class="pgoal"><b>'+(pg.title||pg.goal_id||'paused goal')+'</b> — '+(pg.paused_reason||'—')+
+        (pg.requires_reboot_review===true?' · <b>requires reboot review</b>':'')+
+        ' · paused '+ago(pg.paused_at)+'</div>';
+    }).join('');
+    var ph=g.producer_health||{};
+    el('goal-contrast').innerHTML=
+      'dispatch blocked: <b>'+cap(g.dispatch_block_reason||g.why_not_executing||'—')+'</b>. '+
+      'producer health (raw): metric_created <b>'+(num(ph.metric_created)||0)+'</b> · autonomy_created <b>'+(num(ph.autonomy_created)||0)+'</b> · conversation_created <b>'+(num(ph.conversation_created)||0)+'</b>. '+
+      'All-zero producers + a paused goal awaiting reboot review = '+tag('grounded','recovery debt')+', not architectural failure. Goals were interrupted by today\'s reboots and re-accumulate as the brain soaks.';
+  }
+
+  function renderRecovery(){
+    var box=el('recovery');
+    var paused=((GOALS||{}).stats||{}).by_status||{};
+    var pausedN=num(paused.paused)||0, active=((GOALS||{}).active_goals||[]).length, focus=(GOALS||{}).current_focus;
+    if(GOALS && !focus && active===0 && pausedN>0){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — goal dispatch idle with '+pausedN+' goal(s) paused for reboot review. The brain rebooted many times today; cognition counters and goal execution re-accumulate as it soaks. Low/idle here is recovery debt, not loss.';
+    } else { box.style.display='none'; }
+  }
+
+  function renderAll(){ renderRecovery(); renderCore(); renderPers(); renderExi(); renderPhi(); renderGoals(); }
+
+  function refresh(){
+    Promise.allSettled([
+      fetchJSON('/api/consciousness').then(function(d){ CONS=d; }),
+      fetchJSON('/api/personality').then(function(d){ PERS=d; }),
+      fetchJSON('/api/consciousness/existential').then(function(d){ EXI=d; }),
+      fetchJSON('/api/consciousness/philosophical').then(function(d){ PHI=d; }),
+      fetchJSON('/api/goals').then(function(d){ GOALS=d; })
+    ]).then(function(rs){
+      if(rs.some(function(r){ return r.status==='fulfilled'; })) lastOkTs=Date.now();
+      renderAll();
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

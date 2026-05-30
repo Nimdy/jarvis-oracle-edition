@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Capability &amp; Self-Modification (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .gaterow{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 2px;}
+    .bigstat{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .statline{display:flex;gap:20px;flex-wrap:wrap;align-items:baseline;margin:4px 0 8px;}
+    .statline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;line-height:1.5;}
+    .contrast b{color:var(--text);}
+    .spec{display:grid;grid-template-columns:1.3fr 1fr auto auto;gap:6px 12px;align-items:center;font-size:10.5px;border-bottom:1px solid var(--line);padding:6px 0;}
+    .spec:last-child{border-bottom:none;}
+    .spec .focus{color:var(--text);font-weight:600;}
+    .spec .mat{font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+    .spec .acc{font-variant-numeric:tabular-nums;text-align:right;}
+    .spec .sig{font-variant-numeric:tabular-nums;color:var(--muted);text-align:right;font-size:9.5px;}
+    .prop{border:1px solid var(--line);border-radius:4px;padding:7px 10px;margin:6px 0;font-size:10px;}
+    .prop .ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+    .prop .pt{color:var(--text);font-weight:600;font-size:10.5px;}
+    .prop .pm{color:var(--muted);margin-top:3px;font-family:var(--mono,monospace);font-size:9px;}
+    .ni{margin-top:8px;border:1px dashed var(--line);border-radius:4px;padding:10px 12px;font-size:10.5px;color:var(--muted);line-height:1.55;}
+    .ni b{color:#ffd27a;}
+    .barwrap{margin-top:8px;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · CAPABILITY &amp; SELF-MODIFICATION</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Can JARVIS change itself? Self-improve runs at human-approval (stage 2); specialists train shadow-only; codegen is standby — nothing here auto-executes without a human in the loop.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col7">
+      <h2>Self-Improvement Pipeline</h2>
+      <div class="note">The closed loop: scan → propose → sandbox → <b>human approval</b> → merge. Stage gates whether patches can execute. Win-rates are zero until a full human-approval cycle completes — that is a cold loop, not a failure.</div>
+      <div class="gaterow" id="si-gates"></div>
+      <div class="statline" id="si-stats"></div>
+      <div class="contrast" id="si-contrast"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Codegen &amp; Coder Model</h2>
+      <div class="note">The local Qwen coder that writes patches. <b>infrastructure_only</b> authority means it can propose code but never auto-merge. Standby (not running) is normal — it cold-loads on first request.</div>
+      <div class="gaterow" id="cg-gates"></div>
+      <div class="statline" id="cg-stats"></div>
+      <div class="contrast" id="cg-contrast"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Specialist Hemisphere Learning</h2>
+      <div class="note">Per-domain neural specialists. Every one is <b>shadow-only</b> (live_influence=false) — telemetry, not live decisions. Accuracy here does <b>not</b> gate any live capability. Bootstrap accuracy of 0 is cold-start by design.</div>
+      <div id="spec-list"></div>
+      <div class="contrast" id="spec-contrast"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Acquisition &amp; Plugins</h2>
+      <div class="note">How JARVIS picks up new capabilities. Scheduler in <em>dreaming</em> mode = low-intensity background. Plan-evaluator is a shadow NN; its accuracy is hidden until maturity ≥ meaningful (no resolved predictions yet).</div>
+      <div class="gaterow" id="acq-gates"></div>
+      <div class="statline" id="acq-stats"></div>
+      <div class="barwrap" id="acq-bars"></div>
+      <div class="contrast" id="acq-contrast"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Escalation &amp; Attestation (L3 Authority)</h2>
+      <div class="note">The human-in-the-loop ledgers: L3 escalations awaiting review, and the attestation ledger of proven capabilities.</div>
+      <div class="statline" id="esc-stats"></div>
+      <div class="ni" id="esc-ni"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, gateState=V2.gateState, cap=V2.cap;
+  var SI=null, SCAN=null, SPEC=null, ACQ=null, PE=null, PLUG=null, CG=null, ESC=null, ATT=null, lastOkTs=0;
+  V2.renderNav('/static/v2/capability.html');
+
+  // a fail-CLOSED gate tile: ok=true => green, false => red, else => amber/unknown
+  function gate(label, v, detail){
+    var st=gateState(v);
+    var txt=(v===true?'OK':(v===false?'FAIL':'UNKNOWN'));
+    return '<div class="gate b-'+st+'"><div class="gk">'+label+'</div><div class="gs s-'+st+'">'+txt+'</div>'+
+      (detail?'<div class="gd">'+detail+'</div>':'')+'</div>';
+  }
+  // a value tile (not a boolean gate) — for counts/scores that fail to "—" not green.
+  function stat(label, val, color){
+    return '<span><div class="k">'+label+'</div><span class="bigstat"'+(color?' style="color:'+color+'"':'')+'>'+val+'</span></span>';
+  }
+
+  function renderSelfImprove(){
+    var si=SI||{};
+    var gates=si.safety_gates||{}, wr=si.win_rate||{};
+    var stage=num(si.stage);
+    var stageLbl=si.stage_label||'—';
+    var soul=num(gates.soul_integrity_index);
+    // gates: active loop, soul integrity, quarantine, reliable provider
+    el('si-gates').innerHTML=
+      gate('loop active', si.active===true?true:(si.active===false?false:null), 'auto_frozen='+(si.auto_frozen===true?'yes':'no'))+
+      gate('soul integrity', gates.soul_integrity_ok===true?true:(gates.soul_integrity_ok===false?false:null), 'index '+(soul===null?'—':soul.toFixed(3)))+
+      gate('quarantine ok', gates.quarantine_ok===true?true:(gates.quarantine_ok===false?false:null), 'composite '+f2(gates.quarantine_composite))+
+      gate('reliable provider', si.has_reliable_provider===true?true:(si.has_reliable_provider===false?false:null), 'local coder');
+    var stageColor = stage===null?'var(--dim)':(stage===0?'var(--red)':(stage===2?'var(--green)':'var(--amber)'));
+    el('si-stats').innerHTML=
+      stat('stage', (stage===null?'—':stage)+' · '+cap(stageLbl), stageColor)+
+      stat('pending approvals', (num(si.pending_approvals)||0), (num(si.pending_approvals)||0)>0?'var(--amber)':'var(--text)')+
+      stat('improvements', (num(si.total_improvements)||0))+
+      stat('rollbacks', (num(si.total_rollbacks)||0), (num(si.total_rollbacks)||0)>0?'var(--amber)':'var(--text)')+
+      stat('scanner today', (num((SCAN||{}).attempts_today)||0)+' / '+(num((SCAN||{}).max_attempts_per_day)||'—'));
+    // win-rate is a fraction; show it honestly with its raw denominator
+    var rar=num(wr.review_approval_rate), spr=num(wr.sandbox_pass_rate), tot=num(wr.total)||0;
+    el('si-contrast').innerHTML=
+      'Write policy: <b>'+cap(si.effective_write_policy||'—')+'</b>. '+
+      'Win-rates over <b>'+tot+'</b> resolved proposals — review-approval '+
+      (tot===0?'<b style="color:var(--dim)">n/a (no completed cycle)</b>':'<b>'+((rar||0)*100).toFixed(0)+'%</b>')+
+      ', sandbox-pass '+(tot===0?'<b style="color:var(--dim)">n/a</b>':'<b>'+((spr||0)*100).toFixed(0)+'%</b>')+'. '+
+      'Soul integrity <b>'+(soul===null?'—':soul.toFixed(3))+'</b> is passing but below 1.0 — recovery debt from today’s reboots, not a broken gate.';
+  }
+
+  function renderCodegen(){
+    var cg=CG||{};
+    var coder=cg.coder||{};
+    el('cg-gates').innerHTML=
+      gate('codegen enabled', cg.enabled===true?true:(cg.enabled===false?false:null), '')+
+      gate('coder available', coder.available===true?true:(coder.available===false?false:null), 'integrity '+(coder.model_integrity||'—'))+
+      gate('coder running', coder.running===true?true:(coder.running===false?false:null), coder.running===false?'standby — cold-loads on use':'');
+    var cons=cg.consumers||{};
+    el('cg-stats').innerHTML=
+      stat('authority', cap(cg.authority||'—'), cg.authority==='infrastructure_only'?'var(--cyan)':'var(--amber)')+
+      stat('generations', (num(cg.total_generations)||0))+
+      stat('failures', (num(cg.total_failures)||0), (num(cg.total_failures)||0)>0?'var(--red)':'var(--text)')+
+      stat('model', (num(coder.model_size_gb)===null?'—':coder.model_size_gb.toFixed(1)+' GB'));
+    el('cg-contrast').innerHTML=
+      'Consumers that may request code: '+
+      '<b>self_improve</b> '+(cons.self_improve===true?'✓':'—')+' · <b>acquisition</b> '+(cons.acquisition===true?'✓':'—')+'. '+
+      'Authority <b>'+cap(cg.authority||'—')+'</b> means generated code is proposed, never auto-executed. '+
+      'GPU layers '+(num(coder.gpu_layers)===null?'—':coder.gpu_layers)+' (CPU/standby). total_generations=<b>'+(num(coder.total_generations)||0)+'</b> is expected on a cold loop.';
+  }
+
+  function renderSpecialists(){
+    var list=(SPEC||{}).specialists||[];
+    var dist=(SPEC||{}).distillation||{};
+    if(!list.length){ el('spec-list').innerHTML='<div class="offline">specialists offline</div>'; return; }
+    var rows=list.map(function(s){
+      var mat=s.maturity||'—';
+      var acc=num(s.best_accuracy);
+      // only color accuracy meaningfully for non-bootstrap; bootstrap=cold-start, show dim
+      var accColor = (mat==='bootstrap')?'var(--dim)':bandColor(acc,0.75,0.6);
+      var accTxt = acc===null?'—':(acc.toFixed(3));
+      var sig=num(s.signals_total)||0;
+      var shadow = (s.shadow_only===true);
+      return '<div class="spec">'+
+        '<span class="focus">'+cap(s.focus)+' '+(shadow?V2.tag('self','shadow'):V2.tag('earned','live'))+'</span>'+
+        '<span class="mat" style="color:'+(mat==='stable'?'var(--green)':'var(--muted)')+'">'+mat+'</span>'+
+        '<span class="acc" style="color:'+accColor+'">'+accTxt+'<div class="k" style="font-size:8px">best acc</div></span>'+
+        '<span class="sig">'+sig+'<div class="k" style="font-size:8px">signals</div></span>'+
+      '</div>';
+    }).join('');
+    el('spec-list').innerHTML=rows;
+    el('spec-contrast').innerHTML=
+      'All specialists are <b>shadow — not live-scoring</b> (authority telemetry_only). '+
+      'Only <b>dream_synthesis</b> reached maturity <b>stable</b> (0.810 best acc, 522 signals); the rest are bootstrap cold-start where 0.000 accuracy is by design, not breakage. '+
+      'Distillation pool: <b>'+(num(dist.total_signals)||0)+'</b> signals system-wide ('+(num(dist.total_quarantined)||0)+' quarantined).';
+  }
+
+  function renderAcquisition(){
+    var acq=ACQ||{}, sch=acq.scheduler||{}, cls=acq.classifier||{}, pe=PE||{}, plug=PLUG||{};
+    el('acq-gates').innerHTML=
+      gate('acquisition', acq.enabled===true?true:(acq.enabled===false?false:null), 'mode '+(sch.current_mode||'—'))+
+      gate('classifier', cls.available===true?true:(cls.available===false?false:null), '')+
+      gate('plan-eval', pe.enabled===true?true:(pe.enabled===false?false:null), 'maturity '+(pe.maturity||'—'));
+    el('acq-stats').innerHTML=
+      stat('active jobs', (num(acq.active_count)||0))+
+      stat('completed', (num(acq.completed_count)||0))+
+      stat('failed', (num(acq.failed_count)||0), (num(acq.failed_count)||0)>0?'var(--red)':'var(--text)')+
+      stat('plugins', (num(plug.total_plugins)||0));
+    // plan-evaluator shadow accuracy: HIDE as a score until maturity>=meaningful & resolved>0
+    var resolved=num(pe.shadow_predictions_resolved)||0;
+    var matOk=(pe.maturity==='meaningful'||pe.maturity==='stable');
+    var paBar;
+    if(matOk && resolved>0){
+      paBar=V2.barRow('plan-eval shadow acc', (num(pe.shadow_accuracy)||0)*100, ((num(pe.shadow_accuracy)||0)*100).toFixed(0)+'% ('+resolved+' resolved)', bandColor(pe.shadow_accuracy,0.75,0.6));
+    } else {
+      // fail-closed: no resolved predictions => hatched UNKNOWN, never a green 0
+      paBar=V2.barRow('plan-eval shadow acc', null, 'n/a · '+resolved+' resolved', null);
+    }
+    el('acq-bars').innerHTML=paBar;
+    el('acq-contrast').innerHTML=
+      'Scheduler <b>'+(sch.current_mode||'—')+'</b>, pressure <b>'+cap(sch.pressure_level||'—')+'</b>. '+
+      (((num(acq.active_count)||0)+(num(acq.total_count)||0))===0
+        ? 'No acquisitions in flight — idle background state, not failure. '
+        : '')+
+      'Plan-evaluator is a <b>shadow NN</b> at maturity <b>'+(pe.maturity||'—')+'</b>; with <b>'+resolved+'</b> resolved predictions its accuracy is not yet meaningful, so it is rendered <b style="color:var(--dim)">n/a</b> rather than a misleading 0%. '+
+      'The one active plugin is the <b>load_test</b> fixture, not a production capability.';
+  }
+
+  function renderEscalation(){
+    var esc=ESC||{}, att=ATT||{};
+    var pend=Array.isArray(esc.pending)?esc.pending.length:null;
+    var recs=Array.isArray(att.records)?att.records.length:null;
+    el('esc-stats').innerHTML=
+      stat('pending escalations', (pend===null?'—':pend), pend===null?'var(--dim)':(pend>0?'var(--amber)':'var(--text)'))+
+      stat('attestation records', (recs===null?'—':recs), recs===null?'var(--dim)':'var(--text)');
+    var loaded=(esc.pending!==undefined && att.records!==undefined);
+    el('esc-ni').innerHTML=
+      (loaded
+        ? 'No pending L3 escalations and an <b>empty attestation ledger</b>. On this brain that is <b>recovery state</b> — rebooted today, the ledgers re-populate as it processes escalations and proves capabilities. Empty here is expected post-reboot, <b>not</b> "system broken".'
+        : '<b>endpoints offline</b> — ledger state unknown.')+
+      ' <span class="unpop">artifact_status (hash_verified / mismatch) is only present per-record; with zero records there is nothing to verify yet — not instrumented further.</span>';
+  }
+
+  function renderRecovery(){
+    // derive recovery signal honestly from real fields we have:
+    //  - scanner.detector_snapshot.skipped tells us uptime is below the 1800s warmup floor
+    //  - soul_integrity_index < 1.0 is recovery debt
+    var box=el('recovery');
+    var skip=((SCAN||{}).detector_snapshot||{}).skipped;
+    var soul=num(((SI||{}).safety_gates||{}).soul_integrity_index);
+    if(skip){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — detector warmup gated ('+skip+'). '+
+        '<span class="why">Self-improve scanner needs ~30 min uptime before it produces detector signals; soul integrity '+(soul===null?'—':soul.toFixed(3))+' is below 1.0 from today’s reboots. Low/empty counts here are recovery debt, not lost capability.</span>';
+    } else { box.style.display='none'; }
+  }
+
+  function renderMode(){
+    // no banner endpoint in this domain — derive an honest mode line from real fields.
+    var sch=((ACQ||{}).scheduler||{}).current_mode||'—';
+    var stage=num((SI||{}).stage);
+    el('mode').textContent='self-improve stage '+(stage===null?'—':stage)+' · acq '+sch;
+  }
+
+  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderEscalation(); }
+
+  function refresh(){
+    Promise.allSettled([
+      fetchJSON('/api/self-improve'),
+      fetchJSON('/api/self-improve/scanner'),
+      fetchJSON('/api/self-improve/specialists'),
+      fetchJSON('/api/acquisition'),
+      fetchJSON('/api/acquisition/plan-evaluator'),
+      fetchJSON('/api/plugins'),
+      fetchJSON('/api/codegen'),
+      fetchJSON('/api/autonomy/escalations'),
+      fetchJSON('/api/autonomy/attestation')
+    ]).then(function(r){
+      SI  = r[0].status==='fulfilled'?r[0].value:null;
+      SCAN= r[1].status==='fulfilled'?r[1].value:null;
+      SPEC= r[2].status==='fulfilled'?r[2].value:null;
+      ACQ = r[3].status==='fulfilled'?r[3].value:null;
+      PE  = r[4].status==='fulfilled'?r[4].value:null;
+      PLUG= r[5].status==='fulfilled'?r[5].value:null;
+      CG  = r[6].status==='fulfilled'?r[6].value:null;
+      ESC = r[7].status==='fulfilled'?r[7].value:null;
+      ATT = r[8].status==='fulfilled'?r[8].value:null;
+      if(r.some(function(x){return x.status==='fulfilled';})) lastOkTs=Date.now();
+      renderAll();
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

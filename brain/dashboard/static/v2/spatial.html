@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Spatial / HRR Shadow (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .gates{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+    .ent{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:5px 0;border-bottom:1px dashed var(--line);font-size:10.5px;}
+    .ent:last-child{border-bottom:0;}
+    .ent .lbl{color:var(--text);font-weight:600;}
+    .ent .meta{color:var(--muted);font-size:9.5px;font-variant-numeric:tabular-nums;}
+    .ent .src{font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);}
+    .st{font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:3px;border:1px solid var(--line);}
+    .st-visible{color:var(--green);border-color:var(--green);}
+    .st-candidate{color:var(--amber);border-color:var(--amber);}
+    .st-occluded{color:var(--cyan);border-color:var(--cyan);}
+    .st-removed,.st-missing{color:var(--dim);border-color:var(--line);}
+    .pos{font-variant-numeric:tabular-nums;color:var(--cyan);font-size:9.5px;}
+    .pos.nil{color:var(--dim);}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
+    .contrast b{color:var(--text);}
+    .disp{font-size:10px;color:var(--muted);padding:4px 0;border-bottom:1px dashed var(--line);}
+    .disp:last-child{border-bottom:0;} .disp b{color:var(--text);}
+    .reg{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px;}
+    .reg .r{text-align:center;border:1px solid var(--line);border-radius:4px;padding:5px 2px;}
+    .reg .r .rn{font-size:8px;color:var(--muted);letter-spacing:.04em;}
+    .reg .r .rv{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px;}
+    .sess{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;border-bottom:1px dashed var(--line);font-size:10.5px;}
+    .sess:last-child{border-bottom:0;}
+    .sess .sid{font-family:ui-monospace,monospace;font-size:9.5px;color:var(--muted);}
+    .sess .rec{font-variant-numeric:tabular-nums;color:var(--text);font-weight:600;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · SPATIAL / HRR SHADOW</h1><span class="v2">dashboardV2</span>
+    <span class="sub">The P5 mental-world HRR substrate and the perception fusion that feeds it. Every spatial signal here is <b>shadow-only</b> — hard-pinned with zero authority over memory, beliefs, policy or autonomy.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col5">
+      <h2>HRR Substrate Status</h2>
+      <div class="note">Public status is pinned <b>PRE-MATURE</b> and never auto-escalates. The authority gates below are <b>hard-FALSE by design</b>: the spatial model influences nothing. Cleanliness numbers come from <b style="color:var(--magenta)">synthetic Stage-0 exercises</b>, not the live stream — sanity checks, not grounded trust.</div>
+      <div class="gates" id="hrr-gates"></div>
+      <div id="hrr-rings"></div>
+      <div class="contrast" id="hrr-contrast"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Live Mental World Scene Graph</h2>
+      <div class="note">The current canonical scene from the HRR mental-world shadow (lane <code>spatial_hrr_mental_world</code>). Positions are 3D room-meters and are only valid for <b style="color:var(--green)">visible</b> entities — candidate/occluded/removed positions are stale or null. Relations recover only when encoded.</div>
+      <div class="kv" id="hrr-scene-kv"></div>
+      <div id="hrr-entities"></div>
+      <div class="contrast" id="hrr-scene-contrast"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Perception Fusion Layer</h2>
+      <div class="note">What JARVIS currently <em>perceives</em> — RealSense (<b>pi</b>) depth fused with VLM inference. A <em>different</em> data model from the HRR scene above: per-detection confidence + permanence belief + 2D bbox (pi only). VLM-only entities carry low permanence and no bbox.</div>
+      <div class="kv" id="scene-kv"></div>
+      <div id="scene-entities"></div>
+      <div id="scene-displays"></div>
+      <div class="reg" id="scene-regions"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Spatial Calibration &amp; Estimator</h2>
+      <div class="note">The metric backbone: camera calibration profile + 3D position estimator + the validation gate. <b style="color:var(--green)">grounded</b> in sensor geometry. <code>uncertainty_m</code> and rejection counts are the honest floor on position trust.</div>
+      <div class="gates" id="diag-gates"></div>
+      <div id="diag-tracks"></div>
+      <div class="contrast" id="diag-contrast"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Spatial-Episodic Album · Stored Sessions</h2>
+      <div class="note">The durable P5 episodic store — past mental-world scenes indexed by time-window session. <b>READ-ONLY</b>, vector-stripped, authority-free. Exploration of these worlds is pure simulation with zero canonical effect; not shown here to avoid implying a live write path.</div>
+      <div class="kv" id="sess-kv"></div>
+      <div id="sess-list"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, gateState=V2.gateState;
+  var HRR=null, HRR_SCENE=null, SCENE=null, DIAG=null, SESS=null, lastOkTs=0;
+  V2.renderNav('/static/v2/spatial.html');
+
+  // a hard-pinned authority flag: false is GOOD here (shadow guarantee). Render as a "pinned off" gate.
+  function authGate(label, v){
+    // v should be false. true would be an authority leak; null is unknown.
+    var leak = (v===true), unk=(v!==true && v!==false);
+    var cls = leak?'fail':(unk?'unk':'ok');
+    var st = leak?'AUTHORITY LEAK':(unk?'UNKNOWN':'OFF · pinned');
+    return '<div class="gate b-'+cls+'"><div class="gk">'+label+'</div>'+
+      '<div class="gs s-'+cls+'">'+st+'</div>'+
+      '<div class="gd">'+(leak?'should be false':(unk?'no payload':'shadow guarantee held'))+'</div></div>';
+  }
+
+  function renderHRR(){
+    if(!HRR){ el('hrr-gates').innerHTML='<div class="offline">HRR status offline — substrate UNKNOWN (fail-closed)</div>'; el('hrr-rings').innerHTML=''; el('hrr-contrast').innerHTML=''; return; }
+    var statusStr=HRR.status||'—', stage=HRR.stage||'—';
+    // public-status gate (always PRE-MATURE), then the five hard-pinned authority flags.
+    var html='<div class="gate"><div class="gk">public status</div>'+
+      '<div class="gs" style="color:var(--amber)">'+String(statusStr).toUpperCase()+'</div>'+
+      '<div class="gd">'+V2.cap(stage)+'</div></div>';
+    html+=authGate('policy influence', HRR.policy_influence);
+    html+=authGate('belief writes', HRR.belief_write_enabled);
+    html+=authGate('canonical memory', HRR.canonical_memory);
+    html+=authGate('autonomy influence', HRR.autonomy_influence);
+    html+=authGate('raw vector exposure', HRR.llm_raw_vector_exposure);
+    el('hrr-gates').innerHTML=html;
+
+    function ring(title, r, cleanGood, cleanMid){
+      r=r||{};
+      var tot=num(r.samples_total), ret=num(r.samples_retained), cap=num(r.ring_capacity), clean=num(r.binding_cleanliness);
+      return V2.barRow(title+' samples', (cap?(num(ret)||0)/cap*100:null), (ret===null?'—':ret)+' / '+(cap===null?'—':cap)+(tot!==null?' (Σ'+tot+')':''), 'var(--cyan)')+
+        V2.barRow(title+' cleanliness', (clean===null?null:clean*100), (clean===null?'—':clean.toFixed(3))+' synthetic', bandColor(clean,cleanGood,cleanMid));
+    }
+    var s=HRR.spatial_scene||{}, w=HRR.world_shadow||{}, ra=HRR.recall_advisory||{};
+    var rings=ring('spatial-scene', s, 0.7, 0.4)+ring('world-shadow', w, 0.7, 0.4);
+    // recall-advisory is documented as never-instrumented in live data.
+    var raTot=num(ra.samples_total);
+    rings+=V2.barRow('recall-advisory', null, (raTot===0||raTot===null?'not instrumented (always empty)':raTot+' samples'), null);
+    el('hrr-rings').innerHTML=rings;
+
+    var enc=num((HRR.spatial_scene||{}).entities_encoded), rel=num((HRR.spatial_scene||{}).relations_encoded);
+    el('hrr-contrast').innerHTML='Latest exercise <b>'+( (HRR.latest_exercise||{}).all_pass===true?'passed':((HRR.latest_exercise||{}).all_pass===false?'FAILED':'—'))+'</b> '+
+      '('+(HRR.latest_exercise?ago(HRR.latest_exercise.generated_at):'—')+'). Encoding <b>'+(enc===null?'—':enc)+'</b> entities, <b>'+(rel===null?'—':rel)+'</b> relations. '+
+      'Cleanliness is from a stored Stage-0 cleanup pass — it does <b>not</b> predict live drift. Low sample counts ('+(num(s.samples_total)===null?'—':s.samples_total)+') are recovery debt from today’s reboots, not a missing feature.';
+  }
+
+  var ST_ORDER={visible:0,candidate:1,occluded:2,missing:3,removed:4};
+  function stChip(state){ var s=String(state||'unk'); return '<span class="st st-'+s+'">'+s+'</span>'; }
+  function posStr(p, state){
+    if(!Array.isArray(p)||p.length<3) return '<span class="pos nil">no fix</span>';
+    if(state!=='visible') return '<span class="pos nil" title="stale: position only valid while visible">['+(+p[0]).toFixed(2)+','+(+p[1]).toFixed(2)+','+(+p[2]).toFixed(2)+'] stale</span>';
+    return '<span class="pos">['+(+p[0]).toFixed(2)+','+(+p[1]).toFixed(2)+','+(+p[2]).toFixed(2)+']m</span>';
+  }
+
+  function renderHrrScene(){
+    if(!HRR_SCENE){ el('hrr-scene-kv').innerHTML='<span class="offline">HRR scene offline (fail-closed)</span>'; el('hrr-entities').innerHTML=''; el('hrr-scene-contrast').innerHTML=''; return; }
+    var d=HRR_SCENE, m=d.metrics||{}, src=d.source||{};
+    el('hrr-scene-kv').innerHTML=
+      '<span>entities <b>'+(num(d.entity_count)||0)+'</b></span>'+
+      '<span>active <b>'+(num(d.active_entity_count)||0)+'</b></span>'+
+      '<span>relations <b>'+(num(d.relation_count)||0)+'</b></span>'+
+      '<span>binding clean <b style="color:'+bandColor(num(m.binding_cleanliness),0.7,0.4)+'">'+f3(m.binding_cleanliness)+'</b></span>'+
+      '<span>calib v<b>'+(num(src.calibration_version)===null?'—':src.calibration_version)+'</b></span>'+
+      '<span class="asof">scene '+ago(d.timestamp)+'</span>';
+    var ents=(d.entities||[]).slice().sort(function(a,b){ return (ST_ORDER[a.state]||9)-(ST_ORDER[b.state]||9); });
+    el('hrr-entities').innerHTML = ents.length ? ents.map(function(e){
+      return '<div class="ent">'+stChip(e.state)+
+        '<span><span class="lbl">'+(e.label||'?')+'</span> <span class="meta">'+V2.cap(e.region||'—')+(e.is_display_surface?' · display':'')+'</span></span>'+
+        posStr(e.position_room_m, e.state)+
+        '<span class="meta">'+ago(e.last_seen_ts)+'</span></div>';
+    }).join('') : '<div class="note">no entities in current frame</div>';
+    var rr=num(m.relation_recovery);
+    el('hrr-scene-contrast').innerHTML='Relation recovery: <b>'+(rr===null?'n/a — no relations encoded this frame':rr.toFixed(2))+'</b>. '+
+      'Positions are encoded from calibration v<b>'+(num(src.calibration_version)===null?'—':src.calibration_version)+'</b>; non-visible entities show their last fix marked <b>stale</b>. This scene writes nothing — <b>'+(d.writes_memory===false?'writes_memory pinned off':'authority unknown')+'</b>.';
+  }
+
+  function renderScene(){
+    if(!SCENE){ el('scene-kv').innerHTML='<span class="offline">perception scene offline (fail-closed)</span>'; el('scene-entities').innerHTML=''; el('scene-displays').innerHTML=''; el('scene-regions').innerHTML=''; return; }
+    var d=SCENE;
+    el('scene-kv').innerHTML=
+      '<span>tracked <b>'+(num(d.entity_count)||0)+'</b></span>'+
+      '<span>visible <b style="color:'+((num(d.visible_count)||0)>0?'var(--green)':'var(--amber)')+'">'+(num(d.visible_count)||0)+'</b></span>'+
+      '<span>stable <b>'+(num(d.stable_count)||0)+'</b></span>'+
+      '<span>updates <b>'+(num(d.update_count)||0)+'</b></span>'+
+      '<span class="asof">scene '+ago(d.timestamp)+'</span>';
+    var ents=(d.entities||[]).slice().sort(function(a,b){ return (ST_ORDER[a.state]||9)-(ST_ORDER[b.state]||9); });
+    el('scene-entities').innerHTML = ents.length ? ents.map(function(e){
+      var unseen=num(e.unseen_cycles)||0, stale=unseen>0&&e.state!=='visible';
+      var perm=num(e.permanence_confidence);
+      return '<div class="ent">'+stChip(e.state)+
+        '<span><span class="lbl">'+(e.label||'?')+'</span> <span class="meta">conf '+f2(e.confidence)+' · perm <b style="color:'+bandColor(perm,0.9,0.5)+'">'+f2(perm)+'</b>'+(stale?' · '+unseen+' cyc unseen (stale)':'')+'</span></span>'+
+        '<span class="meta">'+(Array.isArray(e.bbox)?'bbox':'no bbox')+'</span>'+
+        '<span class="src">'+(e.source||'?')+'</span></div>';
+    }).join('') : '<div class="note">no tracked entities</div>';
+    var disps=(d.display_surfaces||[]), conts={}; (d.display_content||[]).forEach(function(c){ conts[c.surface_id]=c; });
+    el('scene-displays').innerHTML = disps.length ? '<div class="contrast" style="margin-bottom:2px"><b>display surfaces</b></div>'+disps.map(function(s){
+      var c=conts[s.surface_id]||{};
+      return '<div class="disp"><b>'+(s.kind||'?')+'</b> · '+(s.physical_state||'?')+' · stable '+(num(s.stable_for_s)===null?'—':Math.round(s.stable_for_s)+'s')+' · conf '+f2(s.confidence)+
+        (c.content_type?' — <b>'+V2.cap(c.content_type)+'</b> ('+V2.cap(c.activity_label||'?')+' '+f2(c.activity_confidence)+')':'')+'</div>';
+    }).join('') : '';
+    var rv=d.region_visibility||{};
+    el('scene-regions').innerHTML=Object.keys(rv).map(function(k){
+      var v=num(rv[k]);
+      return '<div class="r"><div class="rn">'+V2.cap(k)+'</div><div class="rv" style="color:'+bandColor(v,0.99,0.5)+'">'+(v===null?'—':(v*100).toFixed(0)+'%')+'</div></div>';
+    }).join('');
+  }
+
+  function renderDiag(){
+    if(!DIAG){ el('diag-gates').innerHTML='<div class="offline">spatial diagnostics offline (fail-closed)</div>'; el('diag-tracks').innerHTML=''; el('diag-contrast').innerHTML=''; return; }
+    var d=DIAG, cal=d.calibration||{}, est=d.estimator||{}, val=d.validation||{};
+    var calState=cal.state||'unk', calStale=(calState!=='fresh'&&calState!=='ok'&&calState!=='valid');
+    var html='<div class="gate b-'+(d.status==='active'?'ok':'unk')+'"><div class="gk">estimator</div>'+
+      '<div class="gs s-'+(d.status==='active'?'ok':'unk')+'">'+String(d.status||'unknown').toUpperCase()+'</div>'+
+      '<div class="gd">'+(num(est.track_count)||0)+' tracks · '+(num(est.observation_count)||0)+' obs</div></div>';
+    html+='<div class="gate b-'+(calStale?'unk':'ok')+'"><div class="gk">calibration v'+(num(cal.version)===null?'—':cal.version)+'</div>'+
+      '<div class="gs s-'+(calStale?'unk':'ok')+'">'+String(calState).toUpperCase()+'</div>'+
+      '<div class="gd">'+(calStale?V2.cap(cal.reason||'aged'):(num(cal.profile_count)||0)+' profiles')+'</div></div>';
+    var rej=num(val.total_rejections)||0, prom=num(val.total_promoted)||0;
+    html+='<div class="gate"><div class="gk">validation gate</div>'+
+      '<div class="gs" style="color:'+(rej>0?'var(--amber)':'var(--text)')+'">'+prom+' ✓ / '+rej+' ✗</div>'+
+      '<div class="gd">anchors '+(num(est.anchor_count)||0)+'</div></div>';
+    el('diag-gates').innerHTML=html;
+
+    var tracks=est.tracks||{}, ids=Object.keys(tracks);
+    el('diag-tracks').innerHTML = ids.length ? ids.map(function(k){
+      var t=tracks[k]||{}, p=t.position_room_m, unc=num(t.uncertainty_m), staleTrk=(t.track_status==='stale');
+      return '<div class="ent"><span class="st '+(staleTrk?'st-occluded':'st-visible')+'">'+(t.track_status||'?')+'</span>'+
+        '<span><span class="lbl">'+(t.label||'?')+'</span> <span class="meta">'+(Array.isArray(p)?'['+(+p[0]).toFixed(2)+','+(+p[1]).toFixed(2)+','+(+p[2]).toFixed(2)+']m':'no fix')+'</span></span>'+
+        '<span class="meta">±'+(unc===null?'—':unc.toFixed(2))+'m</span>'+
+        '<span class="meta">'+(num(t.samples)||0)+' smp</span></div>';
+    }).join('') : '<div class="note">no active tracks</div>';
+
+    var rc=val.rejection_counts||{}, rcStr=Object.keys(rc).map(function(k){return V2.cap(k)+' '+rc[k];}).join(', ')||'none';
+    el('diag-contrast').innerHTML='Calibration is <b style="color:var(--amber)">'+String(calState)+'</b> ('+V2.cap(cal.reason||'—')+') — position estimates carry the per-track <b>±uncertainty</b> above, not a false certainty. '+
+      'Validation rejections: <b>'+rcStr+'</b>. Fused: <b>'+(num(d.fused_entity_count)||0)+'</b> entities, <b>'+(num(d.fused_relation_count)||0)+'</b> relations.';
+  }
+
+  function renderSess(){
+    if(!SESS){ el('sess-kv').innerHTML='<span class="offline">episodic store offline (fail-closed)</span>'; el('sess-list').innerHTML=''; return; }
+    var sessions=SESS.sessions||[];
+    var totalRecords=sessions.reduce(function(a,s){return a+(num(s.records)||0);},0);
+    el('sess-kv').innerHTML=
+      '<span>sessions <b>'+sessions.length+'</b></span>'+
+      '<span>stored worlds <b>'+totalRecords+'</b></span>'+
+      '<span>lane <b>'+V2.cap(SESS.lane||'—')+'</b></span>'+
+      '<span>status <b style="color:var(--amber)">'+(SESS.status||'—')+'</b></span>'+
+      '<span>'+(SESS.writes_memory===false?'<b style="color:var(--green)">read-only · writes pinned off</b>':'<b style="color:var(--amber)">authority unknown</b>')+'</span>';
+    var rows=sessions.slice().sort(function(a,b){return (num(b.mtime)||0)-(num(a.mtime)||0);});
+    el('sess-list').innerHTML = rows.length ? rows.map(function(s){
+      return '<div class="sess"><span class="sid">'+(s.session_id||'?')+'</span>'+
+        '<span><span class="rec">'+(num(s.records)||0)+'</span> <span class="meta">worlds · '+ago(s.mtime)+'</span></span></div>';
+    }).join('') : '<div class="note">no stored sessions</div>';
+  }
+
+  function renderRecovery(){
+    var box=el('recovery');
+    // recovery debt is visible as low HRR sample totals + stale calibration.
+    var sTot = HRR ? num((HRR.spatial_scene||{}).samples_total) : null;
+    var calStale = DIAG ? (((DIAG.calibration||{}).state)!=='fresh') : false;
+    var low = (sTot!==null && sTot<10);
+    if(low || calStale){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — '+
+        (low?'HRR ring buffers re-accumulating ('+sTot+' spatial samples so far); ':'')+
+        (calStale?'calibration verification is aged. ':'')+
+        'Sample counts and binding metrics re-soak after each reboot; low/stale is recovery debt, not a missing capability.';
+    } else { box.style.display='none'; }
+  }
+
+  function renderMode(){
+    // no banner endpoint on spatial; derive a one-line substrate mode from HRR status.
+    if(!HRR){ el('mode').textContent='substrate —'; return; }
+    el('mode').textContent='substrate '+(HRR.status||'—')+' · dim '+(num(HRR.dim)===null?'—':HRR.dim)+' · '+(HRR.backend||'—');
+  }
+
+  function refresh(){
+    var any=false;
+    Promise.allSettled([
+      fetchJSON('/api/hrr/status').then(function(d){HRR=d;any=true;}).catch(function(){HRR=null;}),
+      fetchJSON('/api/hrr/scene').then(function(d){HRR_SCENE=d;any=true;}).catch(function(){HRR_SCENE=null;}),
+      fetchJSON('/api/scene').then(function(d){SCENE=d;any=true;}).catch(function(){SCENE=null;}),
+      fetchJSON('/api/spatial/diagnostics').then(function(d){DIAG=d;any=true;}).catch(function(){DIAG=null;}),
+      fetchJSON('/api/hrr/scene/sessions').then(function(d){SESS=d;any=true;}).catch(function(){SESS=null;})
+    ]).then(function(){
+      if(any) lastOkTs=Date.now();
+      renderMode(); renderRecovery(); renderHRR(); renderHrrScene(); renderScene(); renderDiag(); renderSess();
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

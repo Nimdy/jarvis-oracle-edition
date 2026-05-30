@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Identity &amp; Perception (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .verdict{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:2px 0 8px;}
+    .verdict .name{font-size:30px;font-weight:700;letter-spacing:.02em;}
+    .verdict .why{font-size:10px;color:var(--muted);}
+    .signals{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px;}
+    .sig{border:1px solid var(--line);border-radius:5px;padding:9px 11px;background:rgba(3,8,14,.5);}
+    .sig .sh{font-size:9.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;}
+    .sig .sv{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:4px;}
+    .sig .sm{font-size:9.5px;color:var(--dim);margin-top:3px;}
+    .cand{border:1px solid var(--line);border-radius:5px;padding:10px 12px;background:rgba(3,8,14,.5);margin-top:4px;}
+    .cand .ct{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+    .cand .cn{font-size:18px;font-weight:700;}
+    .weight{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--cyan);}
+    .evid{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+    .bio{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px;}
+    .bigstat{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .sensors{display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;margin:2px 0 8px;}
+    .sensors .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .scenefoot{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
+    .scenefoot b{color:var(--text);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · IDENTITY &amp; PERCEPTION</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Who JARVIS thinks it is talking to right now (live voice+face fusion, fail-CLOSED) versus who it durably knows (persistent biometric registry) — kept strictly apart.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col7">
+      <h2>Fused Identity — Live</h2>
+      <div class="note">The fusion verdict <em>right now</em>. With no active voice or face signal it must read <b>no active signals</b>, never "0% confidence" — absence is not a low score. The last-known name is a fading snapshot, not the current resolution.</div>
+      <div class="verdict" id="fuse-verdict"></div>
+      <div class="kv" id="fuse-kv"></div>
+      <div class="scenefoot" id="fuse-lastknown"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Voice &amp; Face Signals</h2>
+      <div class="note">The two raw biometric streams feeding fusion. A signal older than its staleness floor (voice 30s, face 90s) is marked <b>stale</b> and must not count as live evidence.</div>
+      <div class="signals" id="signals"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Persistent Candidate Registry</h2>
+      <div class="note">Durable identity, disk-backed, independent of live recognition. The score is a cumulative <b>evidence weight</b> (promotion threshold 1.5) — <b>not</b> a 0–1 confidence, so it is never drawn as a percent.</div>
+      <div id="candidates"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Biometric Enrollment</h2>
+      <div class="note">Enrolled samples and lifetime match counts. Counts are production recognition events, <b>not</b> a model-accuracy score — biometric quality is unverified without a live test.</div>
+      <div class="bio" id="bio"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Sensor Health &amp; Scene Perception</h2>
+      <div class="note">The Pi5 senses node and the scene tracker. STANDBY is expected while no user is present. Scene perception describes <b>surfaces and objects</b> — it is never used to infer who the user is; that is fusion's job alone.</div>
+      <div class="sensors" id="sensors"></div>
+      <div class="bars" id="scene-bars"></div>
+      <div class="scenefoot" id="scene-foot"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, cap=V2.cap, tag=V2.tag, barRow=V2.barRow;
+  var ID=null, CAND=null, SPK=null, FACE=null, SENS=null, SCENE=null, lastOkTs=0;
+  var STALE_VOICE_S=30, STALE_FACE_S=90;
+  V2.renderNav('/static/v2/identity.html');
+
+  function offline(id,msg){ el(id).innerHTML='<div class="offline">'+msg+'</div>'; }
+
+  function renderFusion(){
+    if(!ID){ offline('fuse-verdict','/api/identity offline'); el('fuse-kv').innerHTML=''; el('fuse-lastknown').innerHTML=''; return; }
+    var fz=ID.fusion||{};
+    var present=fz.user_present===true;
+    var conf=num(fz.confidence);
+    // fail-CLOSED: absence/no_signal is NOT a low score.
+    var noSignal = (!present) || fz.method==='no_signal' || fz.recognition_state==='absent';
+    var nm, nmColor, why;
+    if(noSignal){ nm='no active signals'; nmColor='var(--amber)'; why='user_present=false · method='+(fz.method||'—')+' · recognition_state='+(fz.recognition_state||'—'); }
+    else if(fz.conflict===true){ nm='conflict'; nmColor='var(--red)'; why='signals disagree · basis='+(fz.resolution_basis||'—'); }
+    else { nm=(fz.identity&&fz.identity!=='unknown')?fz.identity:'unknown'; nmColor=fz.is_known===true?'var(--green)':'var(--amber)';
+           why='method='+(fz.method||'—')+' · confidence '+(conf===null?'—':(conf*100).toFixed(0)+'%')+' · basis='+(fz.resolution_basis||'—'); }
+    el('fuse-verdict').innerHTML='<span class="name" style="color:'+nmColor+'">'+nm+'</span>'+
+      tag('grounded','live fusion')+'<span class="why">'+why+'</span>';
+    // voice-trust gate (fail-CLOSED: only 'stable' is ok)
+    var vts=fz.voice_trust_state||'unknown';
+    var vtsCls=vts==='stable'?'s-ok':((vts==='degraded'||vts==='conflicted')?'s-fail':'s-unk');
+    el('fuse-kv').innerHTML=
+      '<span>voice-trust <b class="'+vtsCls+'">'+vts+'</b></span>'+
+      '<span>reason <b>'+(fz.trust_reason||'—')+'</b></span>'+
+      '<span>visible persons <b>'+(num(fz.visible_person_count)===null?'—':fz.visible_person_count)+'</b></span>'+
+      '<span>flips <b>'+(num(fz.flip_count)===null?'—':fz.flip_count)+'</b></span>'+
+      '<span>fusion <b class="'+(fz.enabled===true?'s-ok':'s-unk')+'">'+(fz.enabled===true?'enabled':'—')+'</b></span>';
+    // last-known snapshot — explicitly aged, not current
+    var lk=fz.last_known_identity, lkc=num(fz.last_known_confidence), snapAge=num(fz.snapshot_age_s);
+    el('fuse-lastknown').innerHTML= lk
+      ? 'Last known: <b>'+lk+'</b> @ '+(lkc===null?'—':(lkc*100).toFixed(0)+'%')+' confidence, snapshot '+
+        (snapAge===null?'—':(snapAge>=90?(snapAge/60).toFixed(0)+'m':snapAge.toFixed(0)+'s')+' old')+
+        ' <span class="unpop">persisted snapshot — not a current recognition</span>'
+      : 'No persisted last-known identity.';
+  }
+
+  function renderSignals(){
+    if(!ID){ offline('signals','/api/identity offline'); return; }
+    var fz=ID.fusion||{}, v=fz.voice_signal||{}, f=fz.face_signal||{};
+    function card(title, sig, staleFloor){
+      var nm=sig.name, conf=num(sig.confidence), age=num(sig.age_s);
+      var hasName = nm && nm!=='unknown';
+      var stale = age!==null && age>staleFloor;
+      var note, color, tagHtml='';
+      if(!hasName){ note='detector ran, no '+title.toLowerCase()+' matched'; color='var(--amber)'; }
+      else if(stale){ note='STALE — '+ (age>=90?(age/60).toFixed(0)+'m':age.toFixed(0)+'s')+' old (>'+staleFloor+'s floor), not live evidence'; color='var(--amber)'; tagHtml='<span class="chip blk">stale</span>'; }
+      else { note='fresh '+(age===null?'—':age.toFixed(0)+'s')+' (≤'+staleFloor+'s)'; color='var(--green)'; }
+      var shown = hasName ? nm : 'unknown';
+      return '<div class="sig"><div class="sh"><span>'+title+'</span>'+tagHtml+'</div>'+
+        '<div class="sv" style="color:'+color+'">'+shown+'</div>'+
+        '<div class="sm">conf '+(conf===null?'—':(conf*100).toFixed(0)+'%')+' · age '+(age===null?'—':age.toFixed(0)+'s')+'</div>'+
+        '<div class="sm">'+note+'</div></div>';
+    }
+    el('signals').innerHTML = card('Voice', v, STALE_VOICE_S) + card('Face', f, STALE_FACE_S);
+  }
+
+  function renderCandidates(){
+    if(!CAND){ offline('candidates','/api/identity/candidates offline'); return; }
+    var list=CAND.candidates||[], tc=CAND.tier_counts||{}, names=CAND.persistent_names||[];
+    var head='<div class="kv" style="margin-bottom:8px">'+
+      '<span>persistent <b class="'+(num(tc.persistent)>0?'s-ok':'s-unk')+'">'+(num(tc.persistent)||0)+'</b></span>'+
+      '<span>provisional <b>'+(num(tc.provisional)||0)+'</b></span>'+
+      '<span>candidate <b>'+(num(tc.candidate)||0)+'</b></span>'+
+      '<span>total <b>'+(num(CAND.total_candidates)||0)+'</b></span>'+
+      '<span>trusted names <b>'+(names.length?names.join(', '):'—')+'</b></span></div>';
+    if(!list.length){ el('candidates').innerHTML=head+'<div class="unpop">no candidates registered — recovery debt if recently rebooted</div>'; return; }
+    var rows=list.map(function(c){
+      var score=num(c.score), contra=num(c.contradiction_score), promoted=c.promoted===true;
+      var tierCls=c.tier==='persistent'?'s-ok':(c.tier==='provisional'?'s-unk':'');
+      var ev=(c.evidence_types||[]).map(function(e){ return '<span class="chip">'+cap(e)+'</span>'; }).join('');
+      return '<div class="cand"><div class="ct">'+
+        '<span class="cn">'+c.name+'</span>'+
+        '<span class="chip '+(c.tier==='persistent'?'reg':'')+'">tier '+(c.tier||'—')+'</span>'+
+        (promoted?'<span class="chip reg">promoted</span>':'')+
+        '<span style="margin-left:auto" class="unpop">evidence weight (not %)</span>'+
+        '<span class="weight">'+(score===null?'—':f2(score))+'</span></div>'+
+        '<div class="kv" style="margin-top:6px">'+
+          '<span>observations <b>'+(num(c.observation_count)||0)+'</b></span>'+
+          '<span>contradiction <b class="'+(contra!==null&&contra<0.5?'s-ok':'s-unk')+'">'+(contra===null?'—':f2(contra))+'</b><span class="unpop"> (&lt;0.5 gate)</span></span>'+
+          '<span>last seen <b>'+ago(c.last_seen)+'</b></span>'+
+        '</div>'+
+        '<div class="evid">'+ev+'</div></div>';
+    }).join('');
+    el('candidates').innerHTML=head+rows;
+  }
+
+  function bioCard(title, obj, sampleKey, sampleLabel, available){
+    if(!obj){ return '<div class="sig"><div class="sh"><span>'+title+'</span></div><div class="sv" style="color:var(--amber)">—</div><div class="sm">not enrolled / offline</div></div>'; }
+    var samples=num(obj[sampleKey]);
+    var sampleColor = samples===null?'var(--dim)':(samples>=5?'var(--green)':'var(--amber)');
+    return '<div class="sig"><div class="sh"><span>'+title+'</span>'+(available===true?'<span class="chip reg">enrolled</span>':'')+'</div>'+
+      '<div class="sv">'+obj.name+'</div>'+
+      '<div class="kv" style="margin-top:6px;font-size:10px">'+
+        '<span>'+sampleLabel+' <b style="color:'+sampleColor+'">'+(samples===null?'—':samples)+'</b></span>'+
+        '<span>matches <b>'+(num(obj.interaction_count)||0)+'</b></span>'+
+      '</div>'+
+      '<div class="sm">enrolled '+ago(obj.registered)+' · last match '+ago(obj.last_seen)+'</div></div>';
+  }
+
+  function renderBio(){
+    var v = SPK ? (SPK.speakers||[])[0] : undefined;
+    var f = FACE ? (FACE.faces||[])[0] : undefined;
+    var voiceCard = SPK ? bioCard('Voice (speaker)', v, 'enrollment_clips', 'clips', SPK.available)
+                        : '<div class="sig"><div class="sh"><span>Voice (speaker)</span></div><div class="sv offline">offline</div></div>';
+    var faceCard = FACE ? bioCard('Face', f, 'enrollment_crops', 'crops', FACE.available)
+                        : '<div class="sig"><div class="sh"><span>Face</span></div><div class="sv offline">offline</div></div>';
+    el('bio').innerHTML = voiceCard + faceCard;
+  }
+
+  function renderSensors(){
+    if(!SENS || !SENS['pi5-senses']){ offline('sensors','/api/sensor-health offline'); }
+    else {
+      var p=SENS['pi5-senses'];
+      var temp=num(p.cpu_temp_c), thr=p.throttled, fps=num(p.camera_fps);
+      var tempColor = temp===null?'var(--dim)':(temp<70?'var(--green)':(temp<80?'var(--amber)':'var(--red)'));
+      var thrOk = thr==='0x0';
+      var fpsColor = fps===null?'var(--dim)':(fps>=12?'var(--green)':(fps>=5?'var(--amber)':'var(--red)'));
+      var lastAge = ago(p.last_update);
+      el('sensors').innerHTML=
+        '<span><div class="k">phase</div><span class="bigstat" style="color:var(--cyan)">'+(p.phase||'—')+'</span></span>'+
+        '<span><div class="k">cpu temp</div><span class="bigstat" style="color:'+tempColor+'">'+(temp===null?'—':f2(temp)+'°C')+'</span></span>'+
+        '<span><div class="k">throttled</div><span class="bigstat" style="color:'+(thrOk?'var(--green)':'var(--red)')+'">'+(thr||'—')+'</span></span>'+
+        '<span><div class="k">camera fps</div><span class="bigstat" style="color:'+fpsColor+'">'+(fps===null?'—':fps)+'</span></span>'+
+        '<span><div class="k">cpu %</div><span class="bigstat">'+(num(p.cpu_percent)===null?'—':f2(p.cpu_percent))+'</span></span>'+
+        '<span><div class="k">mem</div><span class="bigstat">'+(num(p.mem_used_mb)===null?'—':(p.mem_used_mb/1024).toFixed(1)+'G')+'</span></span>'+
+        '<span><div class="k">as of</div><span class="asof">'+lastAge+'</span></span>';
+    }
+    // scene region visibility (occlusion map) as bars
+    if(!SCENE){ el('scene-bars').innerHTML=''; el('scene-foot').innerHTML='<span class="offline">/api/scene offline</span>'; return; }
+    var rv=SCENE.region_visibility||{};
+    var keys=Object.keys(rv);
+    el('scene-bars').innerHTML = keys.length
+      ? '<div class="note" style="margin:4px 0 2px">region visibility (1.0 = fully visible, lower = occluded)</div>'+
+        keys.map(function(k){ var val=num(rv[k]); return barRow(cap(k), val===null?null:val*100, val===null?'—':(val*100).toFixed(0)+'%', bandColor(val,0.8,0.4)); }).join('')
+      : '<div class="unpop">no region visibility reported</div>';
+    // scene summary + display-content activity (NOT identity)
+    var vis=num(SCENE.visible_count), ent=num(SCENE.entity_count), stable=num(SCENE.stable_count);
+    var dc=(SCENE.display_content||[]);
+    var act = dc.length ? dc.map(function(d){ return cap(d.activity_label)+' ('+(num(d.activity_confidence)===null?'—':(d.activity_confidence*100).toFixed(0)+'%')+')'; }).join(', ') : '—';
+    el('scene-foot').innerHTML=
+      '<b>'+(vis===null?'—':vis)+'</b> visible / <b>'+(ent===null?'—':ent)+'</b> tracked entities, <b>'+(stable===null?'—':stable)+'</b> stable. '+
+      'Display activity: <b>'+act+'</b> '+tag('derived','scene infers activity')+' '+
+      '<span class="unpop">activity is observed on a surface — it is NOT used to infer who the user is.</span>';
+  }
+
+  function renderBanner(){
+    var present = ID && ID.fusion && ID.fusion.user_present===true;
+    var phase = SENS && SENS['pi5-senses'] ? SENS['pi5-senses'].phase : null;
+    el('mode').textContent = 'present ' + (ID?(present?'yes':'no'):'—') + (phase?(' · '+phase):'');
+  }
+
+  function renderRecovery(){
+    var box=el('recovery');
+    // recovery framing: persistent registry exists but no live signal => standby/recovery, not broken
+    var hasRegistry = CAND && (num((CAND.tier_counts||{}).persistent)>0 || (CAND.persistent_names||[]).length>0);
+    var present = ID && ID.fusion && ID.fusion.user_present===true;
+    if(ID && hasRegistry && !present){
+      box.style.display='block';
+      box.innerHTML='<b>No active user — standby</b>, not a failure. The persistent registry is intact ('+
+        ((CAND.persistent_names||[]).join(', ')||'—')+'); live voice/face fusion simply has no signal right now. '+
+        '<span class="why">Brain rebooted several times today — empty live signals and low fps are recovery debt, not lost identity.</span>';
+    } else { box.style.display='none'; }
+  }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderFusion(); renderSignals(); renderCandidates(); renderBio(); renderSensors(); }
+
+  function refresh(){
+    Promise.allSettled([
+      fetchJSON('/api/identity'),
+      fetchJSON('/api/identity/candidates'),
+      fetchJSON('/api/speakers'),
+      fetchJSON('/api/faces'),
+      fetchJSON('/api/sensor-health'),
+      fetchJSON('/api/scene')
+    ]).then(function(r){
+      ID    = r[0].status==='fulfilled' ? r[0].value : null;
+      CAND  = r[1].status==='fulfilled' ? r[1].value : null;
+      SPK   = r[2].status==='fulfilled' ? r[2].value : null;
+      FACE  = r[3].status==='fulfilled' ? r[3].value : null;
+      SENS  = r[4].status==='fulfilled' ? r[4].value : null;
+      SCENE = r[5].status==='fulfilled' ? r[5].value : null;
+      if(r.some(function(x){ return x.status==='fulfilled'; })) lastOkTs=Date.now();
+      renderAll();
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

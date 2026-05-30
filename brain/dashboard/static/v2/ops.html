@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Ops &amp; Runtime (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .bigstat{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .statline{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin:4px 0;}
+    .statline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .statline .u{font-size:10px;color:var(--dim);}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
+    .contrast b{color:var(--text);}
+    .ni{margin-top:11px;border:1px solid var(--line);border-left:3px solid var(--dim);border-radius:4px;padding:9px 12px;background:rgba(120,130,150,.05);font-size:10.5px;color:var(--muted);}
+    .ni b{color:var(--text);}
+    .trace{font-size:10.5px;color:var(--muted);border-top:1px dashed var(--line);padding:6px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;}
+    .trace .ts{color:var(--dim);font-variant-numeric:tabular-nums;}
+    .trace .et{color:var(--text);}
+    .mono{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--cyan);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · OPS &amp; RUNTIME</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Is the brain actually alive and keeping its real-time budget — and is what's running the code on disk? Live observed runtime, no self-scores; null/stale fails CLOSED to UNKNOWN.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col5">
+      <h2>Brain Responsive</h2>
+      <div class="note">The kernel heartbeat (<span class="mono">/api/status .tick</span>) must <b>increment</b> between polls — a frozen tick means the engine is hung even if the HTTP layer answers. Process flags fail <b>closed</b>: anything other than explicit <code>true</code> renders UNKNOWN, never green.</div>
+      <div class="gates" id="alive-gates"></div>
+      <div class="asof" id="alive-asof"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Kernel Cycle Performance</h2>
+      <div class="note">Live observed ticker metrics — these are <b>reports, not targets</b>. avg/p95 are under the &lt;10ms interactive budget when green. <code>budget_overruns</code> and <code>slow_ticks</code> are <b style="color:var(--red)">hard deadline misses</b>, not warnings: any value &gt;0 shows as a red count. <code>max_tick_ms</code> is a single spike — shown raw, never smoothed.</div>
+      <div class="statline" id="kperf"></div>
+      <div class="gates" id="kperf-gates"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Subsystem Health</h2>
+      <div class="note">Per-subsystem liveness from <span class="mono">/api/health/detailed</span>. Each is a fail-closed gate: <code>healthy:true</code> ⇒ ok, <code>false</code> ⇒ fail, missing ⇒ UNKNOWN. Detail strings are the subsystem's own report, shown verbatim.</div>
+      <div class="gates" id="subsys"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Host Sensor Health · pi5-senses</h2>
+      <div class="note">A window into the <b>host machine</b>, not the brain. CPU temp is a physical constraint (RPi5 throttles ~80°C); <code>throttled≠0x0</code> is a hard gate. <code>camera_fps=0</code> is normal when sleeping. Stale if last read &gt;30s ago.</div>
+      <div class="statline" id="sensor-top"></div>
+      <div class="bars" id="sensor-bars"></div>
+      <div class="gates" id="sensor-gates"></div>
+      <div class="asof" id="sensor-asof"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Build Freshness &amp; Attribution Ledger</h2>
+      <div class="note">Is the running process the code on disk? <code>is_stale</code> compares on-disk mtimes vs process start — a convenience signal (detects a sync ran), not a hard authority. <code>git_sha=null</code> is normal for a snapshot install (info only, never a gate). The ledger is the immutable causal record; <code>total_outcomes ≪ total_recorded</code> is normal (outcomes resolve async). <code>errors&gt;0</code> is the only red gate here.</div>
+      <div class="gates" id="build-gates"></div>
+      <div class="kv" id="ledger-kv"></div>
+      <div class="chiprow" id="ledger-chips"></div>
+      <div class="contrast" id="trace-contrast"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Explainability &amp; Logs</h2>
+      <div class="note">Conversation-level provenance traces and recent brain-log lines.</div>
+      <div class="kv" id="explain-kv"></div>
+      <div class="ni" id="explain-ni"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, gateState=V2.gateState, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, barRow=V2.barRow, cap=V2.cap;
+
+  // live endpoint snapshots (null until first OK fetch)
+  var STATUS=null, SYS=null, KPERF=null, HDET=null, SENSOR=null, FRESH=null, BUILD=null, LSTATS=null, TRACE=null, EXPLAIN=null, LOGS=null;
+  var lastOkTs=0;
+  // heartbeat tracking: remember last tick value + when we saw it move
+  var lastTick=null, lastTickMoveTs=0;
+
+  V2.renderNav('/static/v2/ops.html');
+
+  function gate(state,label,val,detail){
+    return '<div class="gate b-'+state+'"><div class="gk">'+label+'</div>'+
+      '<div class="gs s-'+state+'">'+val+'</div>'+
+      (detail?'<div class="gd">'+detail+'</div>':'')+'</div>';
+  }
+  function flagState(v){ return gateState(v===true?true:(v===false?false:undefined)); }
+
+  // ---- Brain Responsive: heartbeat must increment; process flags fail closed ----
+  function renderAlive(){
+    var tick=num(STATUS&&STATUS.tick);
+    var now=Date.now();
+    // detect heartbeat movement
+    if(tick!==null){
+      if(lastTick===null || tick!==lastTick){ lastTick=tick; lastTickMoveTs=now; }
+    }
+    // beating = we've seen a tick value AND it moved within the last 5 min
+    var beatState='unk', beatVal='UNKNOWN', beatDet='no tick reading';
+    if(tick!==null){
+      var since=(now-lastTickMoveTs)/1000;
+      if(lastTickMoveTs===0){ beatState='unk'; beatVal='WATCHING'; beatDet='tick '+tick+' · need 2nd poll'; }
+      else if(since<300){ beatState='ok'; beatVal='BEATING'; beatDet='tick '+tick+' · moved '+Math.round(since)+'s ago'; }
+      else { beatState='fail'; beatVal='FROZEN'; beatDet='tick stuck at '+tick+' for '+Math.round(since/60)+'m'; }
+    }
+    var html=gate(beatState,'heartbeat',beatVal,beatDet);
+    var s=SYS||{};
+    html+=gate(flagState(s.alive),'alive',s.alive===true?'YES':(s.alive===false?'NO':'UNKNOWN'),'responding to requests');
+    html+=gate(flagState(s.running),'running',s.running===true?'YES':(s.running===false?'NO':'UNKNOWN'),'engine executing');
+    // shutting_down: TRUE is the bad state, so invert for the gate color
+    var sd=s.shutting_down;
+    var sdState = sd===false?'ok':(sd===true?'fail':'unk');
+    html+=gate(sdState,'shutting down',sd===true?'YES':(sd===false?'NO':'UNKNOWN'),sd===true?'graceful stop in progress':'no shutdown');
+    el('alive-gates').innerHTML=html;
+    el('alive-asof').textContent = STATUS||SYS ? 'phase '+((STATUS&&STATUS.phase)||'—')+' · as of '+(lastOkTs?ago(lastOkTs/1000):'—') : 'status offline — fail-closed UNKNOWN';
+  }
+
+  // ---- Kernel cycle performance: raw counts; overruns/slow as red ----
+  function renderKperf(){
+    var k=KPERF;
+    if(!k){ el('kperf').innerHTML='<div class="offline">kernel performance offline — UNKNOWN</div>'; el('kperf-gates').innerHTML=''; return; }
+    function stat(lbl,v,unit,color){
+      return '<span><div class="k">'+lbl+'</div><span class="bigstat"'+(color?' style="color:'+color+'"':'')+'>'+(v===null?'—':v)+'</span> <span class="u">'+(unit||'')+'</span></span>';
+    }
+    var avg=num(k.avg_tick_ms), p95=num(k.p95_tick_ms), mx=num(k.max_tick_ms), tc=num(k.tick_count), db=num(k.deferred_backlog);
+    el('kperf').innerHTML=
+      stat('ticks', tc===null?null:tc, 'since boot')+
+      stat('avg', avg===null?null:avg.toFixed(2), 'ms', avg===null?null:bandColor(10-avg,5,0))+
+      stat('p95', p95===null?null:p95.toFixed(2), 'ms', p95===null?null:bandColor(10-p95,5,0))+
+      stat('max', mx===null?null:mx.toFixed(2), 'ms · spike', mx===null?'var(--dim)':(mx>50?'var(--amber)':'var(--text)'))+
+      stat('deferred backlog', db===null?null:db, 'pending', db===null?null:(db>0?'var(--amber)':'var(--green)'));
+    // hard-failure gates (fail-closed: null=>unk, >0 => fail/red count)
+    var ov=num(k.budget_overruns), st=num(k.slow_ticks);
+    var ovState = ov===null?'unk':(ov>0?'fail':'ok');
+    var stState = st===null?'unk':(st>0?'fail':'ok');
+    el('kperf-gates').innerHTML=
+      gate(ovState,'budget overruns', ov===null?'UNKNOWN':String(ov), 'real-time deadline misses')+
+      gate(stState,'slow ticks', st===null?'UNKNOWN':String(st), 'sustained over-budget cycles')+
+      gate(db===null?'unk':(db>0?'fail':'ok'),'deferred backlog', db===null?'UNKNOWN':String(db), 'work not yet scheduled');
+  }
+
+  // ---- Subsystem health: each a fail-closed gate ----
+  function renderSubsys(){
+    var h=HDET;
+    if(!h){ el('subsys').innerHTML='<div class="offline">health/detailed offline — all subsystems UNKNOWN (fail-closed)</div>'; return; }
+    var order=['event_bus','memory','observer','analytics','evolution','governor','meta_thoughts','existential','philosophical'];
+    var keys=order.filter(function(k){return h[k];});
+    for(var k in h){ if(keys.indexOf(k)<0) keys.push(k); }
+    var html='';
+    keys.forEach(function(k){
+      var s=h[k]||{}, st=gateState(s.healthy);
+      var val = s.healthy===true?'OK':(s.healthy===false?'FAIL':'UNKNOWN');
+      html+=gate(st, cap(k), val, s.detail||'');
+    });
+    el('subsys').innerHTML=html||'<div class="offline">no subsystems reported</div>';
+  }
+
+  // ---- Host sensor health (pi5-senses) ----
+  function renderSensor(){
+    var root=SENSOR||{}, s=root['pi5-senses'];
+    if(!s){ el('sensor-top').innerHTML='<div class="offline">sensor host offline — UNKNOWN</div>'; el('sensor-bars').innerHTML=''; el('sensor-gates').innerHTML=''; el('sensor-asof').textContent=''; return; }
+    var lu=num(s.last_update);
+    var stale = lu!==null && ((Date.now()/1000)-lu)>30;
+    var dim = stale?'var(--dim)':null;
+    var temp=num(s.cpu_temp_c), cpu=num(s.cpu_percent);
+    var used=num(s.mem_used_mb), tot=num(s.mem_total_mb);
+    var fps=num(s.camera_fps);
+    function stat(lbl,v,unit,color){
+      return '<span><div class="k">'+lbl+'</div><span class="bigstat"'+(color?' style="color:'+color+'"':'')+'>'+(v===null?'—':v)+'</span> <span class="u">'+(unit||'')+'</span></span>';
+    }
+    var tempColor = temp===null?'var(--dim)':(stale?'var(--dim)':(temp>75?'var(--red)':(temp>65?'var(--amber)':'var(--green)')));
+    el('sensor-top').innerHTML=
+      stat('cpu temp', temp===null?null:temp.toFixed(1), '°C', tempColor)+
+      stat('cpu load', cpu===null?null:cpu.toFixed(0), '%', dim)+
+      stat('camera', fps===null?null:fps, 'fps', fps===null?'var(--dim)':(stale?'var(--dim)':(fps>0?'var(--green)':'var(--muted)')))+
+      stat('host uptime', V2.fmtUptime(s.uptime_s), '', dim);
+    // memory bar
+    var memPct = (used!==null&&tot!==null&&tot>0)? used/tot*100 : null;
+    el('sensor-bars').innerHTML = barRow('RAM '+(used===null?'—':Math.round(used))+' / '+(tot===null?'—':Math.round(tot))+' MB',
+      memPct, memPct===null?'—':memPct.toFixed(0)+'%', stale?'var(--dim)':bandColor(100-(memPct||100),50,15));
+    // throttle gate: throttled is a STRING like "0x0"; non-zero => hard fail
+    var thr=s.throttled;
+    var thrOk = (thr==='0x0' || thr===0 || thr==='0');
+    var thrState = (thr===null||thr===undefined)?'unk':(thrOk?'ok':'fail');
+    el('sensor-gates').innerHTML=
+      gate(thrState,'throttled', (thr===null||thr===undefined)?'UNKNOWN':String(thr), thrOk?'no thermal/freq limiting':'kernel applied limiting')+
+      gate(temp===null?'unk':(temp>75?'fail':'ok'),'thermal', temp===null?'UNKNOWN':(temp>75?'HOT':'NOMINAL'), 'throttle threshold ~80°C')+
+      gate(s.phase?'ok':'unk','hw phase', s.phase||'UNKNOWN', 'reported by hardware layer');
+    el('sensor-asof').textContent = lu===null? 'no last_update timestamp'
+      : (stale? 'STALE — last read '+ago(lu)+' (>30s); data dimmed' : 'last read '+ago(lu));
+  }
+
+  // ---- Build freshness + attribution ledger + trace ----
+  function renderBuild(){
+    var html='';
+    if(!FRESH){ html+=gate('unk','code freshness','UNKNOWN','freshness scan offline'); }
+    else {
+      var stale=FRESH.is_stale, scanOk=FRESH.scan_ok;
+      // is_stale TRUE => amber (newer code on disk); FALSE => green
+      var fState = scanOk===false?'unk':(stale===true?'fail':(stale===false?'ok':'unk'));
+      html+=gate(stale===true?'fail':(stale===false?'ok':'unk'),'code freshness',
+        stale===true?'STALE':(stale===false?'IN SYNC':'UNKNOWN'),
+        (num(FRESH.file_count)!==null?FRESH.file_count+' files · ':'')+'newest: '+(FRESH.newest_file||'—'));
+    }
+    if(BUILD){
+      html+=gate(BUILD.static_pages_restart_required===true?'fail':(BUILD.static_pages_restart_required===false?'ok':'unk'),
+        'static pages',
+        BUILD.static_pages_served_live===true?'LIVE':'UNKNOWN',
+        BUILD.static_pages_restart_required===true?'restart required':'served fresh from disk');
+      // git_sha is INFO ONLY — never a pass/fail gate (null is normal for snapshots)
+      html+=gate('unk','git sha', BUILD.git_sha?String(BUILD.git_sha):'n/a', 'info only · null=snapshot install');
+    } else {
+      html+=gate('unk','build status','UNKNOWN','build-status offline');
+    }
+    el('build-gates').innerHTML=html;
+
+    // ledger stats
+    var l=LSTATS;
+    if(!l){ el('ledger-kv').innerHTML='<span class="offline">ledger stats offline — UNKNOWN</span>'; el('ledger-chips').innerHTML=''; }
+    else {
+      var errs=num(l.errors)||0;
+      el('ledger-kv').innerHTML=
+        '<span>recorded <b>'+(num(l.total_recorded)||0)+'</b></span>'+
+        '<span>outcomes <b>'+(num(l.total_outcomes)||0)+'</b></span>'+
+        '<span>buffer <b>'+(num(l.buffer_size)||0)+'</b></span>'+
+        '<span>errors <b style="color:'+(errs>0?'var(--red)':'var(--green)')+'">'+errs+'</b></span>'+
+        '<span>pending <b>'+(num((l.outcome_scheduler||{}).pending)||0)+'</b></span>';
+      var chips='';
+      var sc=l.subsystem_counts||{};
+      for(var k in sc){ chips+='<span class="chip">'+cap(k)+' '+sc[k]+'</span>'; }
+      var oc=l.outcome_counts||{};
+      for(var o in oc){ chips+='<span class="chip'+(o==='regressed'?' reg':'')+'">'+o+' '+oc[o]+'</span>'; }
+      if(l.rehydrated===false){ chips+='<span class="chip reg" title="ledger not yet rehydrated from disk this boot">↺ not rehydrated</span>'; }
+      el('ledger-chips').innerHTML=chips||'<span class="chip">ledger empty</span>';
+    }
+
+    // trace explorer reconstructability
+    var t=TRACE;
+    if(!t){ el('trace-contrast').innerHTML='<b style="color:var(--dim)">Trace explorer offline</b> — reconstructability UNKNOWN.'; }
+    else {
+      var r=(t.reconstructability||{}).reconstructability;
+      var rColor = r==='reconstructable'?'var(--green)':(r==='cached'||r==='partial'?'var(--amber)':'var(--dim)');
+      var ec=num(t.entry_count)||0;
+      var nchains=(t.root_chains||[]).length;
+      var tools={}; (t.tool_lineage||[]).forEach(function(x){ if(x&&x.tool) tools[x.tool]=1; });
+      var toolList=Object.keys(tools);
+      el('trace-contrast').innerHTML=
+        '<b>'+ec+'</b> immutable ledger entr'+(ec===1?'y':'ies')+' · <b>'+nchains+'</b> root chain'+(nchains===1?'':'s')+'. '+
+        'Reconstructability: <b style="color:'+rColor+'">'+(r||'unknown')+'</b> '+
+        (r==='reconstructable'?'(traces recoverable from the immutable ledger, not just cache).':'(derived/cached — do not index for alerts).')+
+        (toolList.length?' Tools seen: <span class="mono">'+toolList.join(', ')+'</span>.':' No tool lineage yet.')+
+        ' Young ledger is <b>recovery debt</b> from today\'s reboots, not data loss.';
+    }
+  }
+
+  // ---- Explainability & logs: honestly NOT INSTRUMENTED when empty ----
+  function renderExplain(){
+    var traces = EXPLAIN ? (EXPLAIN.traces||[]) : null;
+    var lines = LOGS ? (LOGS.lines||[]) : null;
+    var nTr = traces===null?null:traces.length;
+    var nLog = lines===null?null:lines.length;
+    el('explain-kv').innerHTML=
+      '<span>conversation traces <b>'+(nTr===null?'—':nTr)+'</b></span>'+
+      '<span>log lines <b>'+(nLog===null?'—':nLog)+'</b></span>';
+    var msg='';
+    if(nTr===0){
+      msg+='<b>Explainability traces: not instrumented yet.</b> <code>/api/explainability/recent</code> emits a trace only when the conversation system completes a response and writes <code>response_complete</code> to the ledger. Empty in STANDBY with no conversations — this is <b>recovery debt, not a failure</b>; traces appear after the first conversation.';
+    } else if(nTr===null){
+      msg+='<b>Explainability offline</b> — endpoint did not respond; UNKNOWN.';
+    } else {
+      msg+='<b>'+nTr+'</b> recent conversation trace'+(nTr===1?'':'s')+' available.';
+    }
+    msg+='<br><br>';
+    if(nLog===0){
+      msg+='<b>Logs: not a contract.</b> <code>/api/logs</code> tails <span class="mono">/tmp/jarvis-brain.log</span>, created lazily — empty here means the file does not exist yet, NOT a system failure. Logs are convenience only.';
+    } else if(nLog===null){
+      msg+='<b>Logs offline</b> — endpoint did not respond; UNKNOWN.';
+    } else {
+      msg+='<b>'+nLog+'</b> recent log line'+(nLog===1?'':'s')+' (best-effort; logs not guaranteed).';
+    }
+    el('explain-ni').innerHTML=msg;
+  }
+
+  // ---- recovery banner: ledger not yet rehydrated this boot ----
+  function renderRecovery(){
+    var box=el('recovery');
+    var notReh = LSTATS && LSTATS.rehydrated===false;
+    var youngLedger = LSTATS && (num(LSTATS.total_recorded)||0) < 10;
+    if(notReh || youngLedger){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — '+
+        (notReh?'attribution ledger not yet rehydrated from disk; ':'')+
+        'ledger / traces / logs re-accumulate as the brain soaks. '+
+        '<span class="why">The brain rebooted several times today. Low or empty ops counts are recovery debt, not missing features.</span>';
+    } else { box.style.display='none'; }
+  }
+
+  function renderMode(){
+    var phase=(STATUS&&STATUS.phase)||(SENSOR&&SENSOR['pi5-senses']&&SENSOR['pi5-senses'].phase)||'—';
+    el('mode').textContent='mode '+phase;
+  }
+
+  function renderAll(){ renderMode(); renderRecovery(); renderAlive(); renderKperf(); renderSubsys(); renderSensor(); renderBuild(); renderExplain(); }
+
+  function refresh(){
+    Promise.allSettled([
+      fetchJSON('/api/status').then(function(d){STATUS=d;}),
+      fetchJSON('/api/system/status').then(function(d){SYS=d;}),
+      fetchJSON('/api/kernel/performance').then(function(d){KPERF=d;}),
+      fetchJSON('/api/health/detailed').then(function(d){HDET=d;}),
+      fetchJSON('/api/sensor-health').then(function(d){SENSOR=d;}),
+      fetchJSON('/api/system/code-freshness').then(function(d){FRESH=d;}),
+      fetchJSON('/api/meta/build-status').then(function(d){BUILD=d;}),
+      fetchJSON('/api/ledger/stats').then(function(d){LSTATS=d;}),
+      fetchJSON('/api/trace/explorer').then(function(d){TRACE=d;}),
+      fetchJSON('/api/explainability/recent').then(function(d){EXPLAIN=d;}),
+      fetchJSON('/api/logs').then(function(d){LOGS=d;})
+    ]).then(function(){ lastOkTs=Date.now(); renderAll(); });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

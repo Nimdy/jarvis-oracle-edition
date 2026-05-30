@@ -28,11 +28,11 @@ window.V2 = (function(){
     ['/static/v2/maturity.html','maturity'],
     ['/static/v2/yardsticks.html','yardsticks'],
     ['/static/v2/memory.html','memory'],
-    ['/static/v2/capability.html','capability',1],
-    ['/static/v2/cognition.html','cognition',1],
-    ['/static/v2/identity.html','identity',1],
-    ['/static/v2/spatial.html','spatial',1],
-    ['/static/v2/ops.html','ops',1]
+    ['/static/v2/capability.html','capability'],
+    ['/static/v2/cognition.html','cognition'],
+    ['/static/v2/identity.html','identity'],
+    ['/static/v2/spatial.html','spatial'],
+    ['/static/v2/ops.html','ops']
   ];
   // render the shared nav into <nav id="v2nav"></nav>, marking `active`.
   function renderNav(active){
