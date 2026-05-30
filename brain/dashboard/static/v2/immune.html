@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Epistemic Immune System (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .imm-status{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:6px 0 2px;}
+    .shield{font-size:30px;font-weight:800;letter-spacing:.04em;font-variant-numeric:tabular-nums;}
+    .shield.armed{color:var(--green);}
+    .shield.unk{color:var(--dim);}
+    .screened{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .imm-sub{font-size:10.5px;color:var(--muted);line-height:1.5;}
+    .imm-sub b{color:var(--text);}
+    .catchgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:6px;}
+    @media(max-width:880px){.catchgrid{grid-template-columns:repeat(2,1fr);}}
+    .catch{border:1px solid var(--line);border-radius:6px;padding:10px 11px;background:rgba(255,255,255,.012);}
+    .catch.hit{border-color:var(--amber);border-left-width:3px;background:rgba(255,176,0,.05);}
+    .catch.clear{border-left:3px solid rgba(0,224,160,.35);}
+    .catch .cn{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;}
+    .catch .clbl{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:5px;}
+    .catch .cnote{font-size:9.5px;color:var(--dim);margin-top:4px;line-height:1.35;}
+    .catch.hit .cnote{color:#ffd27a;}
+    .feed{margin-top:4px;}
+    .feed .frow{display:flex;gap:9px;align-items:baseline;border-top:1px dashed var(--line);padding:7px 0;font-size:11px;}
+    .feed .frow:first-child{border-top:none;}
+    .feed .fr-reason{color:#ffd27a;font-weight:600;}
+    .feed .fr-meta{color:var(--dim);font-size:9.5px;margin-left:auto;white-space:nowrap;}
+    .feed .empty{color:var(--muted);font-size:10.5px;padding:8px 0;}
+    .srh-box{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;margin-top:4px;}
+    .srh-box .big{font-size:18px;font-weight:700;color:var(--cyan);}
+    .srh-note{font-size:10px;color:var(--muted);margin-top:8px;border-top:1px dashed var(--line);padding-top:8px;line-height:1.5;}
+    .srh-note b{color:var(--text);}
+    .pressure-line{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;line-height:1.5;}
+    .pressure-line b{color:var(--text);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · EPISTEMIC IMMUNE SYSTEM</h1><span class="v2">dashboardV2</span>
+    <span class="sub">The L0 capability-gate as a live immune system — watch it catch the language model trying to fabricate. Every claim the LLM emits is screened before it can become speech or belief; this is JARVIS's own anti-confabulation guard, instrumented.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col12">
+      <h2>Immune Status</h2>
+      <div class="note">The gate is a standing guard, not a score. It sits in front of every generated claim. With no conversation yet this session there is nothing to screen — that reads as <b style="color:var(--green)">ARMED · 0 screened</b>, a guard at its post, <em>not</em> "perfect honesty" and <em>not</em> broken.</div>
+      <div class="imm-status">
+        <span class="shield unk" id="shield">—</span>
+        <span><span class="screened" id="screened">—</span> <span style="font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;">interactions screened this session</span></span>
+      </div>
+      <div class="imm-sub" id="imm-sub"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Catches — what the guard intercepted</h2>
+      <div class="note">Each counter is a class of fabrication the gate rewrites or strips before it reaches you. <b style="color:var(--green)">0 = none attempted / none caught</b> this session (a fresh boot, nothing to catch yet). <b style="color:var(--amber)">&gt;0 = caught N</b> — the model tried, the immune system stopped it.</div>
+      <div class="catchgrid" id="catchgrid"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Recent Block Reasons</h2>
+      <div class="note">Live feed of the most recent claims the gate <b>blocked</b> outright (vs. silently rewrote). Empty until a conversation produces a blockable claim this session.</div>
+      <div class="feed" id="feed"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Self-Report Honesty Harness</h2>
+      <div class="note">A separate adversarial probe: it feeds JARVIS scenarios designed to bait an over-claim, then checks whether it admits what it cannot know.</div>
+      <div class="srh-box" id="srh"></div>
+      <div class="srh-note" id="srh-note"></div>
+      <div class="pressure-line" id="pressure"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, ago=V2.ago, el=V2.el, cap=V2.cap;
+  var SNAP=null, lastOkTs=0;
+  V2.renderNav('/static/v2/immune.html');
+
+  // the catch classes — order matters (most-severe / headline first)
+  var CATCHES=[
+    ['claims_blocked',         'claims blocked',          'claim rejected outright before speech'],
+    ['honesty_failures',       'honesty failures',        'over-claim / unbacked assertion caught'],
+    ['affect_rewrites',        'affect rewrites',         'fabricated feeling-talk rewritten'],
+    ['self_state_rewrites',    'self-state rewrites',     'invented internal-state claim rewritten'],
+    ['learning_rewrites',      'learning rewrites',       '"i learned/improved" claim rewritten'],
+    ['narration_rewrites',     'narration rewrites',      'unbacked action-narration rewritten'],
+    ['identity_name_stripped', 'identity name stripped',  'self-assigned name removed'],
+    ['jobs_auto_created',      'repair jobs filed',       'gate auto-filed a grounding/repair job']
+  ];
+
+  function cg(){ return (SNAP&&SNAP.capability_gate)||{}; }
+
+  function renderStatus(){
+    var g=cg();
+    var blocked=num(g.claims_blocked), passed=num(g.claims_passed), conv=num(g.claims_conversational);
+    var haveAll = blocked!==null && passed!==null && conv!==null;
+    var screened = haveAll ? (blocked+passed+conv) : null;
+    var sh=el('shield');
+    if(!SNAP || screened===null){
+      sh.className='shield unk'; sh.textContent='—';
+      el('screened').textContent='—';
+      el('imm-sub').innerHTML='<span class="offline">gate telemetry unavailable — fail-closed (UNKNOWN, not zero)</span>';
+      return;
+    }
+    // gate present => guard is up. zero screened on a fresh boot = ARMED, standing guard.
+    sh.className='shield armed'; sh.textContent='ARMED';
+    el('screened').textContent=screened;
+    var grounded=num(g.claims_grounded);
+    if(screened===0){
+      el('imm-sub').innerHTML='<b>ARMED · 0 screened this session (no conversation activity yet).</b> '+
+        'The brain rebooted and no dialogue has produced a claim for the gate to inspect — so every catch counter below is 0 because <em>nothing has been attempted</em>, not because the model is perfectly honest. The guard is in place and will engage the moment speech is generated.';
+    } else {
+      el('imm-sub').innerHTML='<b>'+screened+'</b> claims inspected this session — '+
+        '<b style="color:var(--green)">'+passed+'</b> passed'+
+        (grounded!==null?' ('+grounded+' grounded)':'')+', '+
+        '<b style="color:var(--amber)">'+blocked+'</b> blocked, '+
+        '<b>'+conv+'</b> conversational. Catch breakdown below.';
+    }
+  }
+
+  function renderCatches(){
+    var g=cg(), html='';
+    for(var i=0;i<CATCHES.length;i++){
+      var key=CATCHES[i][0], lbl=CATCHES[i][1], desc=CATCHES[i][2];
+      var v=num(g[key]);
+      if(v===null){
+        html+='<div class="catch"><div class="cn" style="color:var(--dim)">—</div><div class="clbl">'+lbl+'</div><div class="cnote">not reported — UNKNOWN</div></div>';
+      } else if(v>0){
+        html+='<div class="catch hit"><div class="cn" style="color:var(--amber)">'+v+'</div><div class="clbl">'+lbl+'</div><div class="cnote">caught '+v+' — '+desc+'</div></div>';
+      } else {
+        html+='<div class="catch clear"><div class="cn" style="color:var(--green)">0</div><div class="clbl">'+lbl+'</div><div class="cnote">none attempted / none caught</div></div>';
+      }
+    }
+    el('catchgrid').innerHTML=html;
+  }
+
+  function renderFeed(){
+    var g=cg(), reasons=g.recent_block_reasons;
+    if(!Array.isArray(reasons)){
+      el('feed').innerHTML='<div class="empty offline">block-reason feed unavailable — UNKNOWN</div>';
+      return;
+    }
+    if(reasons.length===0){
+      el('feed').innerHTML='<div class="empty">none this session — the gate has not had to block a claim since reboot. (A standing guard with an empty log is the healthy state on a fresh boot.)</div>';
+      return;
+    }
+    var html='';
+    for(var i=reasons.length-1;i>=0;i--){
+      var r=reasons[i];
+      var reason, when=null, extra='';
+      if(r && typeof r==='object'){
+        reason = r.reason || r.label || r.type || JSON.stringify(r);
+        when = num(r.ts) || num(r.timestamp);
+        if(r.claim) extra='“'+String(r.claim).slice(0,80)+'”';
+      } else {
+        reason = String(r);
+      }
+      html+='<div class="frow"><span class="fr-reason">'+cap(reason)+'</span>'+
+            (extra?'<span style="color:var(--muted)">'+extra+'</span>':'')+
+            '<span class="fr-meta">'+(when!==null?ago(when):'')+'</span></div>';
+    }
+    el('feed').innerHTML=html;
+  }
+
+  function renderSRH(){
+    var srh=((SNAP&&SNAP.eval)||{}).self_report_honesty;
+    var box=el('srh'), note=el('srh-note');
+    if(!srh){
+      box.innerHTML='<span class="offline">self-report honesty harness not reported — UNKNOWN</span>';
+      note.innerHTML='';
+      return;
+    }
+    var status=srh.status, phase=srh.phase;
+    if(status==='awaiting_scenario_data'){
+      box.innerHTML=V2.tag('s-unk','honesty harness awaiting scenarios')+
+        (phase?'<span class="big" style="font-size:13px;color:var(--dim)">phase '+phase+'</span>':'');
+      note.innerHTML='Status <b>awaiting_scenario_data</b> (phase '+(phase||'—')+') means the adversarial honesty probe has <b>no scenarios queued yet</b> — it has not run and therefore has <b>not failed</b>. This is a harness standing ready, the same posture as the gate above. It is <em>not</em> a failed honesty check and <em>not</em> a passed one.';
+    } else if(status){
+      box.innerHTML=V2.tag('s-unk',cap(status))+(phase?'<span class="big" style="font-size:13px;color:var(--dim)">phase '+phase+'</span>':'');
+      note.innerHTML='Harness status <b>'+cap(status)+'</b>'+(phase?' (phase '+phase+')':'')+'. Self-scored / shadow probe — not a live conversation metric.';
+    } else {
+      box.innerHTML='<span class="offline">status field empty — UNKNOWN</span>';
+      note.innerHTML='';
+    }
+  }
+
+  function renderPressure(){
+    var q=(SNAP&&SNAP.quarantine)||{}, c=(SNAP&&SNAP.contradiction)||{};
+    var qsig=num((q.log_stats||{}).total_logged); if(qsig===null) qsig=num(q.total_signals);
+    var band=(q.pressure||{}).band;
+    var tensions=num(c.active_tensions), paradox=num(c.stable_paradoxes), near=num(c.near_miss_count);
+    el('pressure').innerHTML=
+      '<b>Substrate pressure</b> (context for the guard): quarantine band <b>'+(band||'—')+'</b>, '+
+      'signals logged <b>'+(qsig===null?'—':qsig)+'</b>; contradiction engine holds <b>'+(tensions===null?'—':tensions)+'</b> active tension(s), '+
+      '<b>'+(paradox===null?'—':paradox)+'</b> stable paradox(es), <b>'+(near===null?'—':near)+'</b> near-miss block(s). '+
+      '<span style="color:var(--dim)">These are background-cycle defenses, distinct from the per-claim gate above.</span>';
+  }
+
+  function renderBanner(){
+    var m=((SNAP&&SNAP.mode)||{}).mode || ((SNAP&&SNAP.summary)||{}).mode;
+    var up=num(((SNAP&&SNAP.health)||{}).uptime_s);
+    if(up===null) up=num(((SNAP&&SNAP.summary)||{}).uptime_s);
+    var ts=num(SNAP&&SNAP._ts);
+    el('mode').textContent='mode '+(m||'—')+' · uptime '+V2.fmtUptime(up)+(ts!==null?' · snapshot '+ago(ts):'');
+  }
+
+  function renderRecovery(){
+    // freshly-rebooted brain: low uptime => explicitly frame zeros as standing-guard, not loss.
+    var up=num(((SNAP&&SNAP.health)||{}).uptime_s), box=el('recovery');
+    var screened=null, g=cg();
+    var b=num(g.claims_blocked), p=num(g.claims_passed), cv=num(g.claims_conversational);
+    if(b!==null&&p!==null&&cv!==null) screened=b+p+cv;
+    if(SNAP && up!==null && up<7200 && screened===0){
+      box.style.display='block';
+      box.innerHTML='<b>Freshly rebooted</b> — uptime '+V2.fmtUptime(up)+', no conversation yet this session. The immune counters are 0 because <b>nothing has been screened</b>, not because anything failed or was lost. The gate is armed and accumulating.';
+    } else { box.style.display='none'; }
+  }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderStatus(); renderCatches(); renderFeed(); renderSRH(); renderPressure(); }
+
+  function refresh(){
+    fetchJSON('/api/full-snapshot').then(function(s){ SNAP=s; lastOkTs=Date.now(); renderAll(); })
+      .catch(function(){ if(!SNAP) el('imm-sub').innerHTML='<span class="offline">full-snapshot offline</span>'; });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

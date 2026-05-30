@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Soul Flight Recorder (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .summary{display:flex;gap:22px;flex-wrap:wrap;align-items:baseline;}
+    .summary .s{display:flex;flex-direction:column;gap:1px;}
+    .summary .sv{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);line-height:1;}
+    .summary .sk{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    /* filter chips reuse .chip; add per-kind tint + active state */
+    .chip.fk{cursor:pointer;user-select:none;text-transform:lowercase;letter-spacing:.04em;}
+    .chip.fk.off{opacity:.32;}
+    .chip.fk .ct{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:5px;vertical-align:middle;}
+    /* the feed */
+    .feed{margin-top:4px;border-top:1px dashed var(--line);}
+    .ev{display:grid;grid-template-columns:88px 86px 1fr;gap:10px;align-items:baseline;
+        padding:7px 2px;border-bottom:1px solid var(--line);font-size:11px;}
+    .ev .et{color:var(--dim);font-size:9.5px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+    .ev .ek{justify-self:start;}
+    .ev .el{color:var(--text);line-height:1.45;}
+    .ev .el .who{color:var(--cyan);}
+    .ev .el .emo{color:var(--muted);font-size:9px;letter-spacing:.05em;text-transform:uppercase;margin-left:5px;}
+    .ev .el .sub{color:var(--muted);}
+    .ev .el em{color:var(--dim);font-style:normal;}
+    /* per-kind tag colors (extends .tag which requires a color) */
+    .tag.k-birth{color:var(--green);border-color:var(--green);}
+    .tag.k-stage{color:var(--cyan);border-color:var(--cyan);}
+    .tag.k-mutation{color:var(--amber);border-color:var(--amber);}
+    .tag.k-dream{color:var(--magenta);border-color:var(--magenta);}
+    .tag.k-goal{color:#9ad1ff;border-color:#9ad1ff;}
+    .tag.k-conversation{color:var(--muted);border-color:var(--gray);}
+    .empty{color:var(--dim);font-size:10.5px;font-style:italic;padding:14px 2px;}
+    .src-note{margin-top:11px;font-size:10px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px;line-height:1.5;}
+    .src-note b{color:var(--text);}
+    .src-note .accum{color:var(--amber);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · SOUL FLIGHT RECORDER</h1><span class="v2">dashboardV2</span>
+    <span class="sub">A chronological biography of the mind — every timestamped event (birth, stage shifts, self-mutations, dream promotions, completed goals, conversations) merged into one life-story feed, newest first.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col12">
+      <h2>Vital Statistics</h2>
+      <div class="note">The headline of a life. <b>Mutations</b> are the soul's self-edits to its own config; <b>rollbacks</b> are the ones it reverted — both are cumulative since first awakening, not just this boot.</div>
+      <div class="summary" id="summary"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Life Story <span class="asof" id="feed-asof"></span></h2>
+      <div class="note">One time-ordered feed. Filter by event kind below. <b>Honest scope:</b> stage history, the birth event and completed goals are durable; <b>mutations show only the latest 15</b> the API retains (the total/rollback count is in the strip above); <b>conversations</b> are the last 50 episodes; <b>dream promotions</b> are reported as a single running milestone because the API exposes the count, not per-promotion timestamps. Nothing here is invented — sparse sources show what exists plus an "accumulating" marker.</div>
+      <div class="chiprow" id="filters"></div>
+      <div class="feed" id="feed"></div>
+      <div class="src-note" id="src-note"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, ago=V2.ago, el=V2.el, cap=V2.cap, tag=V2.tag;
+  var SNAP=null, lastOkTs=0, EVENTS=[];
+  V2.renderNav('/static/v2/timeline.html');
+
+  // event kinds -> [label, swatch color]; drives both tags and filter chips.
+  var KINDS={
+    birth:        ['birth',        'var(--green)'],
+    stage:        ['stage',        'var(--cyan)'],
+    mutation:     ['mutation',     'var(--amber)'],
+    dream:        ['dream',        'var(--magenta)'],
+    goal:         ['goal',         '#9ad1ff'],
+    conversation: ['conversation', 'var(--gray)']
+  };
+  // active filter state (all on by default)
+  var ON={}; for(var k in KINDS) ON[k]=true;
+
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function trunc(s,n){ s=String(s==null?'':s); return s.length>n ? esc(s.slice(0,n-1))+'…' : esc(s); }
+
+  // ----- merge every timestamped source into one descending feed -----
+  function buildEvents(){
+    var ev=[];
+    var s=SNAP||{};
+
+    // 1) birth — gestation completion is the soul's birth certificate timestamp
+    var gest=s.gestation||{}, bs=gest.birth_snapshot||{};
+    var bornTs=num(bs.gestation_completed) || num(gest.graduated_at);
+    if(bornTs){
+      ev.push({t:bornTs, kind:'birth',
+        html:'Born — gestation graduated. <span class="sub">readiness at birth '+
+             (num(bs.readiness_at_birth)!=null? (num(bs.readiness_at_birth)*100).toFixed(0)+'%' : '—')+
+             (num(bs.duration_s)!=null? ', gestated '+V2.fmtUptime(bs.duration_s) : '')+'</span>'});
+    }
+
+    // 2) stage transitions — durable history of consciousness stage shifts
+    var hist=((s.evolution||{}).state||{}).stage_history||[];
+    hist.forEach(function(h){
+      var t=num(h.time); if(!t) return;
+      ev.push({t:t, kind:'stage',
+        html:'Stage shift <b>'+esc(cap(h.from))+'</b> → <b>'+esc(cap(h.to))+'</b>'});
+    });
+
+    // 3) mutations — parse the ISO ts prefix "YYYY-MM-DDThh:mm:ss: description"
+    var mh=(s.mutations||{}).history||[];
+    mh.forEach(function(line){
+      if(typeof line!=='string') return;
+      var m=line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\s*:\s*([\s\S]*)$/);
+      if(!m) return;
+      // ISO without zone -> treat as local; Date.parse gives ms epoch
+      var t=Date.parse(m[1])/1000;
+      if(isNaN(t)) return;
+      var desc=m[2];
+      var rolled=/rollback|revert/i.test(desc);
+      ev.push({t:t, kind:'mutation',
+        html:(rolled?'<em style="color:var(--red)">[rollback]</em> ':'')+esc(desc)});
+    });
+
+    // 4) dream promotions — API gives counts + last_validation only (no per-event ts),
+    //    so render ONE honest milestone, never fabricated per-dream rows.
+    var buf=(s.dream_artifacts||{}).buffer||{};
+    var lastVal=num(buf.last_validation), prom=num(buf.total_promoted), created=num(buf.total_created);
+    if(lastVal && prom!=null){
+      ev.push({t:lastVal, kind:'dream', milestone:true,
+        html:'Dream consolidation milestone — <b>'+prom+'</b> insights promoted to canonical memory'+
+             (created!=null? ' of '+created+' created' : '')+
+             '. <span class="sub">running total; <span style="color:var(--amber)">accumulating</span> — per-promotion timestamps not exposed by API</span>'});
+    }
+
+    // 5) completed goals — durable, completed_at present
+    var goals=(s.goals||{}).completed_recent||[];
+    goals.forEach(function(g){
+      var t=num(g.completed_at) || num(g.last_observed_at); if(!t) return;
+      ev.push({t:t, kind:'goal',
+        html:'Goal completed — '+trunc(g.title,90)+
+             (g.kind? ' <span class="sub">['+esc(cap(g.kind))+']</span>':'')});
+    });
+
+    // 6) conversations — last 50 episodes (speaker + emotion + truncated input)
+    var eps=s.episodes||[];
+    eps.forEach(function(e){
+      var t=num(e.timestamp); if(!t) return;
+      var who=esc(e.speaker||'someone'), emo=e.emotion?'<span class="emo">'+esc(e.emotion)+'</span>':'';
+      var inp=e.user_input ? '“'+trunc(e.user_input,110)+'”' : '<em>(no input captured)</em>';
+      ev.push({t:t, kind:'conversation',
+        html:'<span class="who">'+who+'</span>'+emo+' — '+inp});
+    });
+
+    // newest first
+    ev.sort(function(a,b){ return b.t-a.t; });
+    return ev;
+  }
+
+  // ----- summary strip -----
+  function renderSummary(){
+    var s=SNAP||{};
+    var mut=s.mutations||{}, evo=(s.evolution||{}).state||{};
+    var bornTs=num((s.gestation||{}).graduated_at) || num(((s.gestation||{}).birth_snapshot||{}).gestation_completed);
+    var count=num(mut.count), rb=num(mut.rollback_count), stage=evo.current_stage||(s.evolution||{}).stage;
+    var epN=(s.episodes||[]).length;
+    function stat(v,k,color){ return '<div class="s"><span class="sv"'+(color?' style="color:'+color+'"':'')+'>'+v+'</span><span class="sk">'+k+'</span></div>'; }
+    el('summary').innerHTML=
+      stat(count==null?'—':count, 'mutations (all-time)') +
+      stat(rb==null?'—':rb, 'rollbacks', rb!=null&&rb>0?'var(--amber)':'') +
+      stat(stage?esc(cap(stage)):'—', 'current stage', stage?'var(--cyan)':'') +
+      stat(epN||'—', 'episodes loaded') +
+      stat(bornTs?ago(bornTs):'—', 'born', bornTs?'var(--green)':'');
+  }
+
+  // ----- filter chips -----
+  function renderFilters(){
+    var counts={}; for(var k in KINDS) counts[k]=0;
+    EVENTS.forEach(function(e){ if(counts[e.kind]!=null) counts[e.kind]++; });
+    var html='';
+    for(var k in KINDS){
+      var meta=KINDS[k];
+      html+='<span class="chip fk'+(ON[k]?'':' off')+'" data-k="'+k+'">'+
+            '<span class="ct" style="background:'+meta[1]+'"></span>'+
+            meta[0]+' ('+counts[k]+')</span>';
+    }
+    var box=el('filters'); box.innerHTML=html;
+    var chips=box.querySelectorAll('.chip.fk');
+    for(var i=0;i<chips.length;i++){
+      chips[i].onclick=function(){ var key=this.getAttribute('data-k'); ON[key]=!ON[key]; renderFilters(); renderFeed(); };
+    }
+  }
+
+  // ----- the feed -----
+  function renderFeed(){
+    var rows=EVENTS.filter(function(e){ return ON[e.kind]; });
+    if(!EVENTS.length){
+      el('feed').innerHTML='<div class="empty">No timestamped events yet — feed is <span style="color:var(--amber)">accumulating</span> as the brain runs.</div>';
+      return;
+    }
+    if(!rows.length){
+      el('feed').innerHTML='<div class="empty">All event kinds filtered out — re-enable a chip above.</div>';
+      return;
+    }
+    el('feed').innerHTML=rows.map(function(e){
+      var meta=KINDS[e.kind]||['event','var(--muted)'];
+      return '<div class="ev">'+
+        '<span class="et">'+ago(e.t)+'</span>'+
+        '<span class="ek">'+tag('k-'+e.kind, meta[0])+'</span>'+
+        '<span class="el">'+e.html+'</span>'+
+      '</div>';
+    }).join('');
+  }
+
+  // ----- honesty / provenance footnote about source density -----
+  function renderSrcNote(){
+    var s=SNAP||{};
+    var mh=((s.mutations||{}).history||[]).length;
+    var total=num((s.mutations||{}).count);
+    var eps=(s.episodes||[]).length;
+    var hist=(((s.evolution||{}).state||{}).stage_history||[]).length;
+    el('src-note').innerHTML=
+      '<b>Feed provenance:</b> stage transitions <b>'+hist+'</b> (full history) · '+
+      'mutations showing latest <b>'+mh+'</b> of <b>'+(total==null?'—':total)+'</b> all-time'+
+      (total!=null&&mh<total?' <span class="accum">(older self-edits not retained in the API window)</span>':'')+' · '+
+      'conversations latest <b>'+eps+'</b> episodes · '+
+      'dream promotions as a running milestone (no per-event timestamps) · '+
+      'goals + birth durable. Empty sources after a reboot render as <span class="accum">accumulating</span>, never as fabricated events.';
+  }
+
+  function renderRecovery(){
+    // full-snapshot has no validation_pack-style recovery flag here; keep the slot,
+    // surface a soft recovering note only when the timeline is genuinely sparse.
+    var box=el('recovery');
+    var hasMut=((SNAP&&SNAP.mutations&&SNAP.mutations.history)||[]).length>0;
+    var hasEp=((SNAP&&SNAP.episodes)||[]).length>0;
+    if(SNAP && !hasMut && !hasEp){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering — life feed is thin</b><span class="why">No recent mutations or conversations have streamed in yet. The durable events (birth, stage history) remain; recent activity re-accumulates as the brain soaks.</span>';
+    } else { box.style.display='none'; }
+  }
+
+  function renderBanner(){
+    var sum=(SNAP&&SNAP.summary)||{};
+    var ts=num(SNAP&&SNAP._ts);
+    el('mode').textContent='mode '+(sum.mode||'—')+' · uptime '+(sum.uptime||V2.fmtUptime(sum.uptime_s)||'—');
+    el('feed-asof').textContent=ts? 'as of '+ago(ts) : '';
+  }
+
+  function renderAll(){
+    EVENTS=buildEvents();
+    renderBanner(); renderRecovery(); renderSummary(); renderFilters(); renderFeed(); renderSrcNote();
+  }
+
+  function refresh(){
+    Promise.allSettled([ fetchJSON('/api/full-snapshot') ]).then(function(res){
+      var r=res[0];
+      if(r.status==='fulfilled' && r.value){ SNAP=r.value; lastOkTs=Date.now(); renderAll(); }
+      else if(!SNAP){ el('feed').innerHTML='<div class="offline">full-snapshot offline — life story UNKNOWN</div>'; }
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 10000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

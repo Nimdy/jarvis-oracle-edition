@@ -29,10 +29,13 @@ window.V2 = (function(){
     ['/static/v2/maturity.html','maturity'],
     ['/static/v2/yardsticks.html','yardsticks'],
     ['/static/v2/memory.html','memory'],
+    ['/static/v2/provenance.html','provenance'],
     ['/static/v2/capability.html','capability'],
+    ['/static/v2/immune.html','immune'],
     ['/static/v2/cognition.html','cognition'],
     ['/static/v2/identity.html','identity'],
     ['/static/v2/spatial.html','spatial'],
+    ['/static/v2/timeline.html','timeline'],
     ['/static/v2/ops.html','ops'],
     ['/static/v2/training.html','training'],
     ['/static/v2/lab.html','lab']
