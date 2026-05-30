@@ -453,6 +453,7 @@ class SensesService:
                 if expr.expression != "neutral":
                     self._transport.send_event(face_expression(expr.expression, expr.confidence))
 
+        poses = None
         if self._pose and self._pose.available:
             poses = self._pose.estimate(frame)
             self._tracker.set_pose_gestures(poses)
@@ -467,7 +468,7 @@ class SensesService:
             import base64
             person_dets = [d for d in detections if d.label == "person"]
             track_ids = [t.id for t in tracks[:len(person_dets)]] if tracks else None
-            face_crops = self._face_crop.extract(frame, person_dets[:3], track_ids)
+            face_crops = self._face_crop.extract(frame, person_dets[:3], track_ids, poses=poses)
             for fc in face_crops:
                 crop_bytes = FaceCropExtractor.crop_to_bytes(fc.crop)
                 crop_b64 = base64.b64encode(crop_bytes).decode("ascii")
