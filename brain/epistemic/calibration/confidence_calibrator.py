@@ -3,6 +3,26 @@
 Tracks whether Jarvis's stated confidence matches reality. Overconfidence
 (hallucination tendency) and underconfidence (timid behavior) are tracked
 separately because they imply different pathologies.
+
+Provenance-balanced calibration (fidelity fix, 2026-05-29)
+----------------------------------------------------------
+The world model emits ~5,000 persistence-prediction outcomes per day, while
+genuine external signals (user corrections, attribution outcomes) arrive at
+~70/day. A single flat ``maxlen=500`` recency window therefore turns over
+roughly every ~2.4h and evicts the sparse real-signal outcomes almost as fast
+as they arrive -- so the headline Brier/ECE/over-/under-confidence collapse to
+"was the world model's 'stable stays stable' guess right" rather than "is
+Jarvis honest about its confidence on real claims".
+
+The fix keeps two views, additively and backward-compatibly:
+  * ``_outcomes``  -- the legacy flat recency window (unchanged semantics;
+    still backs the per-route metrics and ``outcome_count``).
+  * ``_by_prov``   -- per-provenance retention buffers so sparse real-signal
+    provenances survive the world-model firehose.
+The *headline* metrics are computed over a balanced working set in which no
+single provenance may exceed ``_MAX_PROV_SHARE`` of the sample. As real signal
+accumulates the balanced set naturally enriches -- this corrects the diet
+without forcing capability or discarding any recorded data.
 """
 from __future__ import annotations
 
@@ -26,6 +46,14 @@ _MAX_FILE_MB = 10
 
 _MIN_ROUTE_OUTCOMES = 10
 
+# --- Provenance-balanced calibration (fidelity fix) -------------------------
+# Per-provenance retention so the world-model firehose cannot evict real signal.
+_PER_PROV_MAXLEN = int(os.environ.get("JARVIS_CALIB_PER_PROV_MAXLEN", "250"))
+# Max share of the headline working set any single provenance may occupy.
+_MAX_PROV_SHARE = float(os.environ.get("JARVIS_CALIB_MAX_PROV_SHARE", "0.5"))
+# How deep to scan the persisted log at startup to refill sparse provenances.
+_REHYDRATE_SCAN = int(os.environ.get("JARVIS_CALIB_REHYDRATE_SCAN", "40000"))
+
 
 @dataclass
 class ConfidenceOutcome:
@@ -42,6 +70,7 @@ class ConfidenceCalibrator:
 
     def __init__(self) -> None:
         self._outcomes: deque[ConfidenceOutcome] = deque(maxlen=_MAX_OUTCOMES)
+        self._by_prov: dict[str, deque[ConfidenceOutcome]] = {}
         self._rehydrate()
 
     def record_outcome(self, belief_id: str, confidence: float,
@@ -56,30 +85,87 @@ class ConfidenceCalibrator:
             route_class=route_class,
         )
         self._outcomes.append(outcome)
+        self._track_provenance(outcome)
         self._persist(outcome)
+
+    def _track_provenance(self, outcome: ConfidenceOutcome) -> None:
+        """Append to the per-provenance retention buffer.
+
+        Defensive: some tests construct the calibrator via ``__new__`` without
+        running ``__init__``, so ``_by_prov`` may be absent.
+        """
+        by_prov = getattr(self, "_by_prov", None)
+        if by_prov is None:
+            by_prov = self._by_prov = {}
+        dq = by_prov.get(outcome.provenance)
+        if dq is None:
+            dq = by_prov[outcome.provenance] = deque(maxlen=_PER_PROV_MAXLEN)
+        dq.append(outcome)
+
+    def _balanced_outcomes(self) -> list[ConfidenceOutcome]:
+        """Working set for the headline metrics with no single provenance over
+        ``_MAX_PROV_SHARE``.
+
+        Sourced from the per-provenance retention buffers when present (so
+        real-signal outcomes survive the world-model firehose); falls back to
+        the flat recency window otherwise. Returns the flat window unchanged
+        when only one provenance is present, preserving legacy behaviour for
+        single-provenance callers and unit tests.
+        """
+        pools: dict[str, list[ConfidenceOutcome]] = {}
+        by_prov = getattr(self, "_by_prov", None)
+        if by_prov:
+            for prov, dq in by_prov.items():
+                if dq:
+                    pools[prov] = list(dq)
+        if not pools:
+            for o in self._outcomes:
+                pools.setdefault(o.provenance, []).append(o)
+
+        if len(pools) <= 1:
+            return list(self._outcomes)
+
+        total = sum(len(v) for v in pools.values())
+        dominant = max(pools, key=lambda p: len(pools[p]))
+        others_total = total - len(pools[dominant])
+        share = min(max(_MAX_PROV_SHARE, 0.05), 0.95)
+        # dominant_allowed / (dominant_allowed + others_total) == share
+        dominant_allowed = (
+            int(round(share / (1.0 - share) * others_total))
+            if others_total else len(pools[dominant])
+        )
+
+        working: list[ConfidenceOutcome] = []
+        for prov, lst in pools.items():
+            if prov == dominant and len(lst) > dominant_allowed:
+                lst = lst[-dominant_allowed:]  # keep most recent
+            working.extend(lst)
+        return working
 
     def get_brier_score(self) -> float | None:
         """Mean squared error between confidence and binary outcome. Lower = better."""
-        if len(self._outcomes) < _MIN_OUTCOMES:
+        outcomes = self._balanced_outcomes()
+        if len(outcomes) < _MIN_OUTCOMES:
             return None
         total = 0.0
-        for o in self._outcomes:
+        for o in outcomes:
             actual = 1.0 if o.actual_correct else 0.0
             total += (o.predicted_confidence - actual) ** 2
-        return round(total / len(self._outcomes), 4)
+        return round(total / len(outcomes), 4)
 
     def get_ece(self, n_bins: int = _ECE_BINS) -> float | None:
         """Expected Calibration Error: weighted average of |accuracy - confidence| per bin."""
-        if len(self._outcomes) < _MIN_OUTCOMES:
+        outcomes = self._balanced_outcomes()
+        if len(outcomes) < _MIN_OUTCOMES:
             return None
 
         bins: list[list[ConfidenceOutcome]] = [[] for _ in range(n_bins)]
-        for o in self._outcomes:
+        for o in outcomes:
             idx = min(int(o.predicted_confidence * n_bins), n_bins - 1)
             bins[idx].append(o)
 
         ece = 0.0
-        total = len(self._outcomes)
+        total = len(outcomes)
         for bucket in bins:
             if not bucket:
                 continue
@@ -98,11 +184,12 @@ class ConfidenceCalibrator:
         return self._directional_error(over=False)
 
     def _directional_error(self, over: bool) -> float | None:
-        if len(self._outcomes) < _MIN_OUTCOMES:
+        outcomes = self._balanced_outcomes()
+        if len(outcomes) < _MIN_OUTCOMES:
             return None
 
         bins: list[list[ConfidenceOutcome]] = [[] for _ in range(_ECE_BINS)]
-        for o in self._outcomes:
+        for o in outcomes:
             idx = min(int(o.predicted_confidence * _ECE_BINS), _ECE_BINS - 1)
             bins[idx].append(o)
 
@@ -124,8 +211,14 @@ class ConfidenceCalibrator:
     def get_per_provenance_accuracy(self) -> dict[str, float]:
         """Returns accuracy rate per provenance type."""
         by_prov: dict[str, list[bool]] = {}
-        for o in self._outcomes:
-            by_prov.setdefault(o.provenance, []).append(o.actual_correct)
+        src = getattr(self, "_by_prov", None)
+        if src:
+            for prov, dq in src.items():
+                if dq:
+                    by_prov[prov] = [o.actual_correct for o in dq]
+        if not by_prov:
+            for o in self._outcomes:
+                by_prov.setdefault(o.provenance, []).append(o.actual_correct)
 
         return {
             prov: round(sum(1 for c in vals if c) / len(vals), 4)
@@ -135,8 +228,9 @@ class ConfidenceCalibrator:
 
     def get_calibration_curve(self) -> dict[str, dict[str, float]]:
         """Returns per-bucket {avg_confidence, avg_accuracy, count}."""
+        outcomes = self._balanced_outcomes()
         bins: list[list[ConfidenceOutcome]] = [[] for _ in range(_ECE_BINS)]
-        for o in self._outcomes:
+        for o in outcomes:
             idx = min(int(o.predicted_confidence * _ECE_BINS), _ECE_BINS - 1)
             bins[idx].append(o)
 
@@ -224,8 +318,13 @@ class ConfidenceCalibrator:
         return counts
 
     def get_provenance_sample_counts(self) -> dict[str, int]:
-        """Number of outcomes per provenance type."""
-        counts: dict[str, int] = {}
+        """Number of retained outcomes per provenance type."""
+        src = getattr(self, "_by_prov", None)
+        if src:
+            counts = {prov: len(dq) for prov, dq in src.items() if dq}
+            if counts:
+                return counts
+        counts = {}
         for o in self._outcomes:
             if o.provenance:
                 counts[o.provenance] = counts.get(o.provenance, 0) + 1
@@ -272,10 +371,12 @@ class ConfidenceCalibrator:
             if not _OUTCOMES_LOG.exists():
                 return
             lines = _OUTCOMES_LOG.read_text().splitlines()
-            for line in lines[-_MAX_OUTCOMES:]:
+            scan = lines[-_REHYDRATE_SCAN:] if len(lines) > _REHYDRATE_SCAN else lines
+            parsed: list[ConfidenceOutcome] = []
+            for line in scan:
                 try:
                     d = json.loads(line)
-                    self._outcomes.append(ConfidenceOutcome(
+                    parsed.append(ConfidenceOutcome(
                         belief_id=d["bid"],
                         predicted_confidence=d["conf"],
                         actual_correct=d["ok"],
@@ -285,7 +386,18 @@ class ConfidenceCalibrator:
                     ))
                 except (json.JSONDecodeError, KeyError):
                     continue
+            # Per-provenance retention buffers: scan the deeper tail so sparse
+            # real-signal provenances are refilled and not flushed by volume.
+            for o in parsed:
+                self._track_provenance(o)
+            # Flat recency window (legacy semantics): most recent _MAX_OUTCOMES.
+            for o in parsed[-_MAX_OUTCOMES:]:
+                self._outcomes.append(o)
             if self._outcomes:
-                logger.info("Rehydrated %d confidence outcomes", len(self._outcomes))
+                logger.info(
+                    "Rehydrated %d confidence outcomes (per-provenance retained: %s)",
+                    len(self._outcomes),
+                    {p: len(dq) for p, dq in self._by_prov.items()},
+                )
         except Exception as exc:
             logger.debug("Confidence rehydration failed: %s", exc)

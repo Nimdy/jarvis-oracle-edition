@@ -484,7 +484,18 @@ def _score_world_model_coherence(snap: dict[str, Any]) -> DomainResult:
     total = 0.0
 
     wm_validated = int(_resolve(snap, "world_model.causal.total_validated", 0) or 0)
-    wm_accuracy = _num(_resolve(snap, "world_model.causal.overall_accuracy")) or 0.0
+    # Honesty fix (2026-05-29): credit genuine FORESIGHT (event-triggered
+    # transition rules), not near-tautological "stable stays stable" persistence
+    # rules. Use predictive_accuracy when enough predictive samples exist; fall
+    # back to overall_accuracy for older snapshots / sparse predictive data.
+    pred_total = int(_resolve(snap, "world_model.causal.predictive_total", 0) or 0)
+    pred_accuracy = _num(_resolve(snap, "world_model.causal.predictive_accuracy"))
+    if pred_total >= 5 and pred_accuracy is not None:
+        wm_accuracy = pred_accuracy
+        acc_basis = f"predictive_acc={wm_accuracy:.2f} (n={pred_total})"
+    else:
+        wm_accuracy = _num(_resolve(snap, "world_model.causal.overall_accuracy")) or 0.0
+        acc_basis = f"acc={wm_accuracy:.2f}"
     # Minimum sample floor: accuracy bonus requires >=5 validations to be meaningful
     accuracy_bonus = 1.0 if (wm_accuracy > 0.65 and wm_validated >= 5) else 0.0
     volume_pts = min(2.0, wm_validated / 50 * 2.0)
@@ -494,7 +505,7 @@ def _score_world_model_coherence(snap: dict[str, Any]) -> DomainResult:
     else:
         pts = min(3.0, volume_pts + accuracy_bonus)
     total += pts
-    subs.append(_sub("Prediction validation", f"validated={wm_validated} acc={wm_accuracy:.2f}", pts, 3.0))
+    subs.append(_sub("Prediction validation", f"validated={wm_validated} {acc_basis}", pts, 3.0))
 
     wm_level = int(_resolve(snap, "world_model.promotion.level", 0) or 0)
     pts = min(2.0, wm_level * 1.0 + 0.5)

@@ -22,6 +22,28 @@ logger = logging.getLogger(__name__)
 FLOAT_TOLERANCE = 0.1
 MAX_PREDICTION_LOG = 200
 
+# Rules that predict the CURRENT state simply persists (steady-state,
+# "stable stays stable"). Their hits are near-tautological and must NOT be
+# conflated with genuine causal foresight. get_accuracy() reports their
+# accuracy separately (persistence_accuracy) from event-triggered transition
+# rules (predictive_accuracy), so a high pooled number can't masquerade as
+# foresight. MAINTENANCE: when adding a steady-state rule (condition reads
+# current conditions; predicted_delta is the current state continuing), add
+# its rule_id here.
+_PERSISTENCE_RULE_IDS = frozenset({
+    "quiet_desk_stays_quiet",
+    "present_user_stays",
+    "healthy_system_stays_healthy",
+    "absent_room_stays_quiet",
+    "passive_mode_persists",
+    "idle_user_no_conversation",
+    "active_conversation_persists",
+    "stable_scene_persists",
+    "display_zone_mode_stable",
+    "workspace_person_stays",
+    "multi_entity_scene_stable",
+})
+
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -492,25 +514,49 @@ class CausalEngine:
         return validated
 
     def get_accuracy(self) -> dict[str, Any]:
-        """Overall and per-rule accuracy stats."""
+        """Overall and per-rule accuracy stats.
+
+        Reports persistence_accuracy and predictive_accuracy SEPARATELY:
+        steady-state rules (_PERSISTENCE_RULE_IDS) that predict the current
+        state simply continues are near-tautological, so pooling them into a
+        single number produces a false "foresight" metric. predictive_accuracy
+        reflects genuine event-triggered transition predictions and is the
+        honest foresight signal consumed by the Oracle benchmark. overall_accuracy
+        is retained for backward compatibility.
+        """
         total_hits = sum(self._rule_hits.values())
         total_misses = sum(self._rule_misses.values())
         total = total_hits + total_misses
         overall = total_hits / total if total > 0 else 0.0
 
+        p_hits = p_miss = d_hits = d_miss = 0
         per_rule: dict[str, dict[str, Any]] = {}
         all_ids = set(self._rule_hits) | set(self._rule_misses)
         for rid in all_ids:
             h = self._rule_hits.get(rid, 0)
             m = self._rule_misses.get(rid, 0)
             t = h + m
+            is_persistence = rid in _PERSISTENCE_RULE_IDS
+            if is_persistence:
+                p_hits += h
+                p_miss += m
+            else:
+                d_hits += h
+                d_miss += m
             per_rule[rid] = {
                 "hits": h, "misses": m, "total": t,
                 "accuracy": round(h / t, 3) if t > 0 else 0.0,
+                "kind": "persistence" if is_persistence else "predictive",
             }
 
+        p_total = p_hits + p_miss
+        d_total = d_hits + d_miss
         return {
             "overall_accuracy": round(overall, 3),
+            "predictive_accuracy": round(d_hits / d_total, 3) if d_total > 0 else 0.0,
+            "predictive_total": d_total,
+            "persistence_accuracy": round(p_hits / p_total, 3) if p_total > 0 else 0.0,
+            "persistence_total": p_total,
             "total_validated": self._total_validated,
             "total_hits": total_hits,
             "total_misses": total_misses,
