@@ -376,6 +376,21 @@ def _create_app() -> FastAPI:
         with open(v2_integrity_path) as f:
             return HTMLResponse(f.read())
 
+    @app.get("/v2/maturity", response_class=HTMLResponse)
+    async def v2_maturity_page():
+        """dashboardV2 — Maturity Ladder (page 2).
+
+        Per-subsystem gate lifecycle from ``/api/eval/snapshot`` maturity_tracker:
+        each gate's current value beside its ever-proven high-water (``ever_met``,
+        ``best_current``, ``ever_met_ts``), so a gate below threshold after a
+        restart reads as *recovering*, not broken, and high-water is never shown
+        as current. Plus a real gate-crossing timeline from ``ever_met_ts``.
+        Read-only, zero authority.
+        """
+        v2_maturity_path = os.path.join(_STATIC_DIR, "v2", "maturity.html")
+        with open(v2_maturity_path) as f:
+            return HTMLResponse(f.read())
+
     @app.get("/eval")
     async def eval_page():
         from fastapi.responses import RedirectResponse
