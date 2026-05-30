@@ -33,13 +33,7 @@
     <span class="sub">Make the Observer a measurement, not a mirror. Every number labeled <em>self-scored</em> / <em>grounded</em> / <em>earned</em>; gates fail <em>closed</em>; composites show their <em>floor</em>.</span>
     <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
   </header>
-  <nav>
-    <a href="/static/v2/integrity.html">integrity</a><a href="/static/v2/maturity.html">maturity</a>
-    <a href="/static/v2/yardsticks.html">yardsticks</a><a class="stub" href="#">memory</a>
-    <a class="stub" href="#">capability</a><a class="stub" href="#">cognition</a>
-    <a class="stub" href="#">identity</a><a class="stub" href="#">spatial</a><a class="stub" href="#">ops</a>
-    <a href="/mind">/mind ↗</a><a href="/">← v1 dashboard</a>
-  </nav>
+  <nav id="v2nav"></nav>
 
   <div id="recovery" class="banner-recovery"></div>
 
@@ -85,7 +79,7 @@
   var V2=window.V2;
   var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, gateState=V2.gateState, ago=V2.ago, bandColor=V2.bandColor, el=V2.el;
   var SNAP=null, ST=null, lastOkTs=0;
-  V2.markNav('/static/v2/integrity.html');
+  V2.renderNav('/static/v2/integrity.html');
 
   function renderScorers(){
     var ob=(SNAP&&SNAP.oracle_benchmark)||{}, pvl=(SNAP&&SNAP.pvl)||{}, mt=(SNAP&&SNAP.maturity_tracker)||{};
@@ -129,25 +123,24 @@
   }
 
   function renderSoul(){
-    var integ=(SNAP&&SNAP.integrity)||[];
-    var sc=((SNAP&&SNAP.scorecards)||{}).current||{};
+    // scorecards.current is nested by domain; the soul fields live under .integrity
+    var ci=(((SNAP&&SNAP.scorecards)||{}).current||{}).integrity||{};
     var ts=((SNAP&&SNAP.scorecards)||{}).current_ts;
-    function find(label){ for(var i=0;i<integ.length;i++){ if((integ[i].label||'')===label) return integ[i]; } return null; }
-    var soulItem=find('Soul Integrity');
-    var mean=soulItem?num(soulItem.value):null;
-    var fdim=sc.soul_weakest_dimension, fval=num(sc.soul_weakest_score);
+    var mean=num(ci.soul_integrity);
+    var fdim=ci.soul_weakest_dimension, fval=num(ci.soul_weakest_score);
     var html='<div class="mean"><div class="v">'+(mean===null?'—':mean.toFixed(3))+'</div><div class="k">COMPOSITE</div></div>';
     if(fdim){
       html+='<div class="floor"><div class="k">FLOOR · WEAKEST DIMENSION</div>'+
         '<div class="d">'+V2.cap(fdim)+'</div><div class="v">'+(fval===null?'—':fval.toFixed(3))+'</div></div>';
     } else {
-      html+='<div class="floor" style="border-color:var(--dim);background:none"><div class="k" style="color:var(--dim)">FLOOR</div><div class="d" style="color:var(--dim)">not exposed by this endpoint</div></div>';
+      html+='<div class="floor" style="border-color:var(--dim);background:none"><div class="k" style="color:var(--dim)">FLOOR</div><div class="d" style="color:var(--dim)">not yet computed</div></div>';
     }
     el('soul').innerHTML=html;
-    var mini=integ.filter(function(x){return (x.label||'')!=='Soul Integrity';}).map(function(x){
-      return '<span><span class="dot" style="color:'+(x.color==='green'?'var(--green)':x.color==='amber'?'var(--amber)':'var(--red)')+'"></span>'+x.label+' <b>'+f3(x.value)+'</b></span>';
-    }).join('');
-    mini+='<span class="asof">soul as-of '+ago(ts)+'</span>';
+    function mi(label,val,good,mid){ return '<span><span class="dot" style="color:'+bandColor(val,good,mid)+'"></span>'+label+' <b>'+f3(val)+'</b></span>'; }
+    var mini=mi('truth', ci.truth_score,0.8,0.65)+mi('belief health', ci.belief_health,0.8,0.6)+
+      '<span><span class="dot" style="color:var(--muted)"></span>contradiction debt <b>'+f3(ci.contradiction_debt)+'</b></span>'+
+      '<span><span class="dot" style="color:var(--muted)"></span>quarantine <b>'+f3(ci.quarantine_pressure)+'</b></span>'+
+      '<span class="asof">soul as-of '+ago(ts)+'</span>';
     el('soul-mini').innerHTML=mini;
   }
 

@@ -21,7 +21,30 @@ window.V2 = (function(){
   function tag(cls,txt){ return '<span class="tag '+cls+'">'+txt+'</span>'; }
   function fmtUptime(s){ s=num(s); if(s===null) return '—'; return s/3600>=24?(s/86400).toFixed(1)+'d':(s/3600).toFixed(1)+'h'; }
   function cap(str){ return String(str||'').replace(/_/g,' '); }
-  // highlight the current page in a shared <nav> by href match.
+  // ---- centralized nav: add a page here once; every page picks it up ----
+  // [href, label, stub?] — drop the stub flag when a page ships.
+  var NAVPAGES=[
+    ['/static/v2/integrity.html','integrity'],
+    ['/static/v2/maturity.html','maturity'],
+    ['/static/v2/yardsticks.html','yardsticks'],
+    ['/static/v2/memory.html','memory'],
+    ['/static/v2/capability.html','capability',1],
+    ['/static/v2/cognition.html','cognition',1],
+    ['/static/v2/identity.html','identity',1],
+    ['/static/v2/spatial.html','spatial',1],
+    ['/static/v2/ops.html','ops',1]
+  ];
+  // render the shared nav into <nav id="v2nav"></nav>, marking `active`.
+  function renderNav(active){
+    var nav=document.getElementById('v2nav'); if(!nav) return;
+    var html=NAVPAGES.map(function(p){
+      var on=(p[0]===active), stub=p[2];
+      return '<a class="'+(on?'on':(stub?'stub':''))+'" href="'+(stub?'#':p[0])+'">'+p[1]+'</a>';
+    }).join('');
+    html+='<a href="/mind">/mind ↗</a><a href="/">← v1 dashboard</a>';
+    nav.innerHTML=html;
+  }
+  // legacy: highlight an already-rendered nav by href match.
   function markNav(route){ var as=document.querySelectorAll('nav a'); for(var i=0;i<as.length;i++){ if(as[i].getAttribute('href')===route) as[i].className='on'; } }
   // generic progress bar row (label | track | value). pct 0..100; color optional.
   function barRow(label, pct, valText, color){
@@ -30,5 +53,5 @@ window.V2 = (function(){
     var w=Math.max(0,Math.min(100,pct));
     return '<div class="barrow"><span class="bl">'+label+'</span><div class="track"><div class="fill" style="width:'+w.toFixed(0)+'%;background:'+(color||'var(--cyan)')+'"></div></div><span class="bv">'+(valText||'')+'</span></div>';
   }
-  return { fetchJSON, num, pct1, f2, f3, el, gateState, ago, bandColor, tag, fmtUptime, cap, markNav, barRow };
+  return { fetchJSON, num, pct1, f2, f3, el, gateState, ago, bandColor, tag, fmtUptime, cap, renderNav, markNav, barRow };
 })();

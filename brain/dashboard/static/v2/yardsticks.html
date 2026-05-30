@@ -28,13 +28,7 @@
     <span class="sub">Both sides of every self-referential metric, side by side — the introspective proxy next to the honest counterweight — so an inflated number can't pass as measured truth.</span>
     <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
   </header>
-  <nav>
-    <a href="/static/v2/integrity.html">integrity</a><a href="/static/v2/maturity.html">maturity</a>
-    <a href="/static/v2/yardsticks.html">yardsticks</a><a class="stub" href="#">memory</a>
-    <a class="stub" href="#">capability</a><a class="stub" href="#">cognition</a>
-    <a class="stub" href="#">identity</a><a class="stub" href="#">spatial</a><a class="stub" href="#">ops</a>
-    <a href="/mind">/mind ↗</a><a href="/">← v1 dashboard</a>
-  </nav>
+  <nav id="v2nav"></nav>
 
   <div id="recovery" class="banner-recovery"></div>
 
@@ -70,7 +64,7 @@
   var V2=window.V2;
   var fetchJSON=V2.fetchJSON, num=V2.num, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el;
   var WM=null, POL=null, AB=null, lastOkTs=0;
-  V2.markNav('/static/v2/yardsticks.html');
+  V2.renderNav('/static/v2/yardsticks.html');
 
   function statBlock(k, v, sub, color){
     return '<div class="stat"><div class="k">'+k+'</div>'+

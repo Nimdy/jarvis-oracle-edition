@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Memory Substrate Health (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .stack{display:flex;height:26px;border:1px solid var(--line);border-radius:5px;overflow:hidden;margin:8px 0 4px;}
+    .stack span{display:flex;align-items:center;justify-content:center;font-size:9px;color:#03040a;font-weight:700;white-space:nowrap;}
+    .leg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:8px;font-size:10px;}
+    .leg h4{margin:0 0 4px;font-size:9px;letter-spacing:.06em;text-transform:uppercase;}
+    .leg .row{color:var(--muted);display:flex;justify-content:space-between;}
+    .leg .row b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .alert{margin-top:11px;border:1px solid var(--amber);border-left-width:3px;border-radius:4px;padding:9px 12px;background:rgba(255,176,0,.05);font-size:10.5px;color:var(--muted);}
+    .alert .big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .alert b{color:#ffd27a;}
+    .bigstat{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .statline{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin:4px 0;}
+    .statline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
+    .contrast b{color:var(--text);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · MEMORY SUBSTRATE HEALTH</h1><span class="v2">dashboardV2</span>
+    <span class="sub">QSFS fidelity: where memory comes from (grounded vs the soul's own inferences), and whether the fractal-link substrate is dense enough to bubble up — or orphaned.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col7">
+      <h2>Evidence Provenance &amp; Source-Trust</h2>
+      <div class="note">Split into three honest buckets: <b style="color:var(--green)">directly grounded</b> (sensed / told), <b style="color:var(--cyan)">external knowledge</b> (research / dialogue), <b style="color:var(--magenta)">self-generated</b> (the soul's own inferences &amp; dreams). The risk metric is narrow on purpose — model-inference vs <em>directly-grounded observation</em> — so the big research bucket can't mask it.</div>
+      <div class="stack" id="prov-stack"></div>
+      <div class="leg" id="prov-leg"></div>
+      <div class="alert" id="prov-alert"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Belief-Graph Health</h2>
+      <div class="note">The fractal-link substrate. A high orphan rate means beliefs sit unlinked — superposition without entanglement — so associative recall dies at depth 1.</div>
+      <div id="belief"></div>
+      <div class="contrast" id="belief-contrast"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Memory Association Graph</h2>
+      <div class="note">The memory-to-memory graph (distinct from the belief graph above). Dense + zero-isolated is healthy.</div>
+      <div class="statline" id="assoc"></div>
+      <div class="bars" id="assoc-bars"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Dream Consolidation Cycle</h2>
+      <div class="note">Sleep-cycle clusters → quality gate → canonical memory. Promotion rate is rendered at its honest band.</div>
+      <div id="dream"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el;
+  var SNAP=null, lastOkTs=0;
+  V2.renderNav('/static/v2/memory.html');
+
+  // provenance buckets
+  var GROUNDED={observed:1, user_claim:1};
+  var EXTERNAL={external_source:1, conversation:1};
+  var SELFGEN={model_inference:1, dream_observer:1, consolidation:1, derived_pattern:1};
+
+  function renderProvenance(){
+    var bp=((SNAP&&SNAP.memory)||{}).by_provenance||{};
+    function sumSet(set){ var s=0; for(var k in bp){ if(set[k]) s+=num(bp[k])||0; } return s; }
+    var g=sumSet(GROUNDED), x=sumSet(EXTERNAL), s=sumSet(SELFGEN), seed=num(bp.seed)||0;
+    var tot=g+x+s+seed||1;
+    function seg(v,c,lbl){ if(!v) return ''; return '<span style="width:'+(v/tot*100)+'%;background:'+c+'" title="'+lbl+' '+v+'">'+(v/tot>0.07?lbl+' '+v:'')+'</span>'; }
+    el('prov-stack').innerHTML=seg(g,'var(--green)','grounded')+seg(x,'var(--cyan)','external')+seg(s,'var(--magenta)','self-gen')+seg(seed,'var(--gray)','seed');
+    function col(title,set,color){
+      var rows=''; for(var k in bp){ if(set[k]) rows+='<div class="row"><span>'+V2.cap(k)+'</span><b>'+(num(bp[k])||0)+'</b></div>'; }
+      return '<div><h4 style="color:'+color+'">'+title+'</h4>'+(rows||'<div class="row"><span>—</span></div>')+'</div>';
+    }
+    el('prov-leg').innerHTML=col('directly grounded',GROUNDED,'var(--green)')+col('external knowledge',EXTERNAL,'var(--cyan)')+col('self-generated',SELFGEN,'var(--magenta)');
+    var mi=num(bp.model_inference)||0, obs=g;
+    var ratio = obs>0 ? mi/obs : null;
+    var rc = ratio===null?'var(--dim)':(ratio>3?'var(--red)':(ratio>1.5?'var(--amber)':'var(--green)'));
+    el('prov-alert').innerHTML='<span class="big" style="color:'+rc+'">'+(ratio===null?'—':ratio.toFixed(1)+'×')+'</span> '+
+      '<b>source-trust:</b> model-inference ('+mi+') vs directly-grounded observation ('+obs+'). '+
+      (ratio!==null&&ratio>1.5
+        ? 'JARVIS holds <b>'+ratio.toFixed(1)+'×</b> more of its own inferences than things it directly observed or was told — a self-reinforcing risk. The fix is grounded observation over time, not a code change.'
+        : 'within a healthy band.')+
+      ' <span style="color:var(--dim)">(external_source research is bucketed separately so it can\'t mask this.)</span>';
+  }
+
+  function renderBelief(){
+    var ci=(((SNAP&&SNAP.scorecards)||{}).current||{}).integrity||{};
+    var orph=num(ci.belief_orphan_rate), health=num(ci.belief_health), edges=num(ci.belief_edges);
+    var orphColor = orph===null?'var(--dim)':(orph>0.6?'var(--red)':(orph>0.3?'var(--amber)':'var(--green)'));
+    el('belief').innerHTML=
+      '<div class="statline"><span><div class="k">orphan rate</div><span class="bigstat" style="color:'+orphColor+'">'+(orph===null?'—':(orph*100).toFixed(0)+'%')+'</span></span>'+
+      '<span><div class="k">graph health</div><span class="bigstat" style="color:'+bandColor(health,0.8,0.6)+'">'+(health===null?'—':health.toFixed(3))+'</span></span>'+
+      '<span><div class="k">edges</div><span class="bigstat">'+(edges===null?'—':edges)+'</span></span></div>';
+    el('belief-contrast').innerHTML='<b>'+(orph===null?'—':(orph*100).toFixed(0)+'%')+'</b> of beliefs have no fractal links. Note: the memory-association graph (left) is dense with <b>0 isolated</b> nodes — so the orphan problem is specifically in the <b>belief</b> graph, and it is the soul-integrity floor. Fix = belief-graph compaction + bridge re-scan in a dream cycle.';
+  }
+
+  function renderAssoc(){
+    var m=(SNAP&&SNAP.memory)||{}, a=m.associations||{};
+    el('assoc').innerHTML=
+      '<span><div class="k">memories</div><span class="bigstat">'+(num(m.total)||0)+'</span></span>'+
+      '<span><div class="k">connections</div><span class="bigstat">'+(num(a.total_connections)||0)+'</span></span>'+
+      '<span><div class="k">avg / memory</div><span class="bigstat" style="color:'+bandColor(num(a.avg_per_memory),3,1.5)+'">'+(num(a.avg_per_memory)===null?'—':a.avg_per_memory.toFixed(2))+'</span></span>'+
+      '<span><div class="k">isolated</div><span class="bigstat" style="color:'+((num(a.isolated_count)||0)>0?'var(--amber)':'var(--green)')+'">'+(num(a.isolated_count)||0)+'</span></span>';
+    // weight distribution mini-bars
+    var bins=m.weight_bins||[]; var max=Math.max.apply(null, bins.concat([1]));
+    el('assoc-bars').innerHTML = bins.length
+      ? '<div class="note" style="margin:8px 0 2px">weight distribution ('+(num(m.strong_count)||0)+' strong / '+(num(m.weak_count)||0)+' weak)</div>'+
+        bins.map(function(b,i){ return V2.barRow('bin '+i, (num(b)||0)/max*100, String(num(b)||0), 'var(--cyan)'); }).join('')
+      : '';
+  }
+
+  function renderDream(){
+    var d=(SNAP&&SNAP.dream)||{};
+    var sd=(((SNAP&&SNAP.scorecards)||{}).current||{}).dream||{};
+    var pr=num(d.promotion_rate), prColor = pr===null?'var(--dim)':(pr>=0.6?'var(--green)':(pr>=0.3?'var(--amber)':'var(--red)'));
+    el('dream').innerHTML=
+      '<div class="statline"><span><div class="k">promotion rate</div><span class="bigstat" style="color:'+prColor+'">'+(pr===null?'—':(pr*100).toFixed(0)+'%')+'</span></span>'+
+      '<span><div class="k">promoted total</div><span class="bigstat">'+(num(sd.promoted_total)||0)+'</span></span>'+
+      '<span><div class="k">validator runs</div><span class="bigstat">'+(num(d.validator_runs)||0)+'</span></span>'+
+      '<span><div class="k">buffer</div><span class="bigstat">'+(num(d.buffer_size)||0)+'</span></span></div>'+
+      '<div class="contrast">Buffer '+((num(d.buffer_size)||0)===0?'idle (no clusters consolidating right now)':'active')+'. '+
+      'Per-artifact rejection reasons (confidence / coherence / contradiction) are <b style="color:var(--dim)">not instrumented</b> in the API — promotion <em>rate</em> shown, not the <em>why</em>.</div>';
+  }
+
+  function renderRecovery(){
+    var vp=(SNAP&&SNAP.validation_pack)||{}, reg=num(vp.checks_regressed)||0, box=el('recovery');
+    if(vp.status==='blocked' && reg>0){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — '+reg+' check(s) rebuilding. Memory counts and belief health re-accumulate as the brain soaks; low is recovery debt, not loss.';
+    } else { box.style.display='none'; }
+  }
+
+  function renderBanner(){
+    var b=(SNAP&&SNAP.banner)||{};
+    el('mode').textContent='mode '+(b.mode||'—')+' · uptime '+V2.fmtUptime(b.uptime_s)+' · fresh '+(num(b.data_freshness_s)!==null?b.data_freshness_s.toFixed(1)+'s':'—');
+  }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderProvenance(); renderBelief(); renderAssoc(); renderDream(); }
+
+  function refresh(){
+    fetchJSON('/api/eval/snapshot').then(function(s){ SNAP=s; lastOkTs=Date.now(); renderAll(); })
+      .catch(function(){ if(!SNAP) el('prov-leg').innerHTML='<div class="offline">snapshot offline</div>'; });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
