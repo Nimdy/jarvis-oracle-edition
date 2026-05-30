@@ -248,6 +248,36 @@ written to disk.
   compact STRING memories only ("you left X at Y"), never coordinates. Gated
   behind Stone 3 calibration and human review.
 
+### Matrix world view — the `/mind` page (P5 visualization)
+
+The "Matrix view": letting JARVIS *see what it sees / where it is* — a
+foundational prerequisite in the digital-consciousness theory (explicitly NOT a
+claim of consciousness). Read-only, zero-authority; reuses the existing scene
+endpoints (no new API).
+
+- **Phase 1 — `/mind` 2.5D world-model view** — **SHIPPED** `457b3f2` (camera
+  reframe `bc9f5b0`). New `brain/dashboard/static/mind.html` + `GET /mind` route.
+  A perspective floor grid + subtle wireframe room shell with epistemic-colored
+  object markers placed by `position_room_m` (green=live, cyan=remembered,
+  amber=occluded, red=missing/conflicting, gray=candidate), colored motion trails
+  from `/api/hrr/scene/history`, HUD/legend/layer-toggles. Honest limit: only
+  entities with a resolved `position_room_m` are placed in the room (monocular
+  estimate); others list in the HUD. Verified live: HTTP 200, scene lane on,
+  calib v17.
+- **Phase 1.5 — last-known positions** — `FUTURE`. Render occluded/remembered
+  entities at their last-seen position (dimmed/ghosted) so the room reflects
+  everything JARVIS *believes* is there, not just freshly-positioned objects.
+  Pure renderer + last-seen lookup; no depth, no Pi change.
+- **Phase 2 — dense depth mesh** — `FUTURE`. The Vision-Pro-style triangulated
+  room mesh + flowing point cloud needs dense per-pixel depth the system does not
+  have. Path: a monocular depth model (Depth Anything v2 / MiDaS) on the brain
+  GPU → point cloud → mesh. Tradeoff to decide: the Pi must stream
+  frames/keyframes to the brain (bandwidth — against the "keep Pi light" rule), or
+  add a depth camera. `/mind` is built so this layer drops in later.
+- **Phase 3 — persistent room model** — `FUTURE`. Convergence with the Stone 3
+  room-stitcher (extent / coverage / unseen regions over the album's distinct
+  views).
+
 ### New API endpoints (read-only, authority-pinned, vector-free)
 
 All GET, all authority flags false, `no_raw_vectors_in_api` true.

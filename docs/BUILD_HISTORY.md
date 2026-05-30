@@ -5,7 +5,7 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
-## Evidence-Integrity Triad + Spatial Mind's-Eye Stones 1/1.5/2 (2026-05-30, SHIPPED)
+## Evidence-Integrity Triad + Spatial Mind's-Eye Stones 1/1.5/2 + `/mind` Matrix View (2026-05-30, SHIPPED)
 
 Branch `aliceinwonderland`.  Two threads, both verified live on the running
 brain.  (A) Made three internal self-scoring metrics honest — the symbolic /
@@ -49,9 +49,32 @@ HRR vectors ever written to disk.
 | `GET /api/hrr/scene/episode?session=<id>&limit=<n>` | `{session_id,count,worlds:[<stored world records>], ...}` — page stored worlds |
 | `GET /api/hrr/scene/explore?world_id=<id>` | `{world_id, world, explore_traces:[<nav trace>], loaded_from_store:true, ...}` — re-walk a stored world via the pure `mental_navigation` ops (turn-left -> move-forward -> turn-right), returning imagined-step traces |
 
+### C) Matrix world view — the `/mind` page (P5 visualization, commits `457b3f2` + `bc9f5b0`, SHIPPED)
+
+The "Matrix view": letting JARVIS *see what it sees / where it is* — a
+foundational prerequisite in the digital-consciousness theory (explicitly NOT a
+claim of consciousness). New `brain/dashboard/static/mind.html` + a `GET /mind`
+route in `brain/dashboard/app.py` (next to `/hrr-scene`). Read-only,
+ZERO-AUTHORITY — reuses `/api/hrr/scene` + `/api/hrr/scene/history`, no new
+endpoints, cannot write beliefs or affect the belief graph.
+
+| Aspect | Detail |
+| --- | --- |
+| Renderer | Perspective floor grid (hero) + subtle wireframe room shell; near floor edge pinned on-screen (camera reframed in `bc9f5b0` so the grid is the focus, not a boxy shell) |
+| Objects | Placed by `position_room_m`, **epistemic-colored**: green=live/visible, cyan=remembered, amber=occluded/inferred, red=missing/conflicting, gray=candidate/unknown; confidence drives marker glow; pole + floor ring give depth cues |
+| Motion | Colored trails seeded from `/api/hrr/scene/history` (object paths over time) |
+| Controls | HUD readout (top entities + positions + states), legend, layer toggles (grid/walls/objects/labels/trails/relations), pause |
+| Linked from | `/capability-pipeline#hrrresearch` (HRR Research tab) |
+
+Verified live: `/mind` HTTP 200; scene lane `enabled=True`; live scene ~10 entities / 3 relations / calibration_version 17.
+
+**Honest Phase-1 limitation:** only entities with a resolved `position_room_m` are *placed* in the room (monocular estimate; resolves for some confirmed detections). Others appear in the HUD list but not on the floor. The dense triangulated room mesh + flowing point cloud aesthetic (the reference image) is **Phase 2** — it needs dense per-pixel depth the system does not have yet (path: a monocular depth model on the brain GPU → point cloud → mesh; tradeoff is the Pi must stream frames/keyframes). `/mind` is built so that layer drops in later.
+
 ### Future (not yet built)
 
-- Stone 3 = room-stitcher (room extent / coverage / "what's still unseen"; needs camera calibration — currently `calibration_version=0`).
+- `/mind` Phase 1.5 = render occluded/remembered entities at last-known position (dimmed/ghosted) so the room reflects everything JARVIS *believes* is there. Pure renderer; no depth, no Pi change.
+- `/mind` Phase 2 = monocular depth (Depth Anything v2 / MiDaS) → dense mesh (the reference-image aesthetic). Needs Pi frame/keyframe streaming or a depth camera.
+- Stone 3 = room-stitcher (room extent / coverage / "what's still unseen"; metric scale needs an extrinsic calibration step — intrinsics are at `calibration_version=17`).
 - Stone 4 = human-reviewed `SpatialMemoryGate` promotion of rare, high-confidence, human-relevant changes to compact STRING memories only ("you left X at Y"), never coordinates.
 
 ---
