@@ -19,6 +19,12 @@
     .trace .ts{color:var(--dim);font-variant-numeric:tabular-nums;}
     .trace .et{color:var(--text);}
     .mono{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--cyan);}
+    /* hardware + health-report panels */
+    .hwgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:11px;margin:2px 0 4px;}
+    .hwgrid .hk{color:var(--muted);font-size:9px;letter-spacing:.06em;text-transform:uppercase;}
+    .hwgrid .hv{color:var(--text);font-variant-numeric:tabular-nums;word-break:break-word;}
+    .hwgrid .hv.unk{color:var(--dim);}
+    .stackhdr{font-size:9px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;border-top:1px dashed var(--line);padding-top:8px;margin-top:9px;}
   </style>
 </head>
 <body>
@@ -76,6 +82,23 @@
       <div class="kv" id="explain-kv"></div>
       <div class="ni" id="explain-ni"></div>
     </section>
+
+    <section class="card col7">
+      <h2>Brain Hardware · desktop</h2>
+      <div class="note">The <b>desktop brain</b> compute (from <span class="mono">/api/full-snapshot .hardware</span>) — distinct from the Pi sensor host above. Tier strings (<code>premium</code>/<code>beast</code>) are the brain's own self-classification, shown as reported. Any missing field renders UNKNOWN, never assumed. The model stack is the wiring it booted with.</div>
+      <div class="hwgrid" id="hw-grid"></div>
+      <div class="stackhdr">model stack</div>
+      <div class="hwgrid" id="hw-stack"></div>
+      <div class="asof" id="hw-asof"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>System Health Report</h2>
+      <div class="note">Composite health from <span class="mono">/api/full-snapshot .health_report</span> — these are the brain's <b>self-scored</b> component aggregates, not externally grounded. Bars are banded (red&lt;0.5, amber&lt;0.8, green≥0.8). <code>personality_health</code> sits near <b>0.62</b> — the honest floor of this report — so a near-perfect <code>overall</code> is buoyed by the other components, not a clean sheet. Null/missing ⇒ UNKNOWN.</div>
+      <div class="bars" id="health-bars"></div>
+      <div class="gates" id="health-gates"></div>
+      <div class="asof" id="health-asof"></div>
+    </section>
   </main>
 
 <script src="/static/v2/shared.js"></script>
@@ -90,6 +113,8 @@
   var lastOkTs=0;
   // heartbeat tracking: remember last tick value + when we saw it move
   var lastTick=null, lastTickMoveTs=0;
+  // ISOLATED parity snapshot for hardware + health-report panels (own fetch, never touches refresh())
+  var HW=null;
 
   V2.renderNav('/static/v2/ops.html');
 
@@ -315,6 +340,70 @@
 
   function renderAll(){ renderMode(); renderRecovery(); renderAlive(); renderKperf(); renderSubsys(); renderSensor(); renderBuild(); renderExplain(); }
 
+  // ---- Brain Hardware (desktop) : full-snapshot .hardware ; missing => UNKNOWN ----
+  function hwRow(label, val, isUnk){
+    var unk = isUnk || val===null || val===undefined || val==='';
+    return '<div class="hk">'+label+'</div><div class="hv'+(unk?' unk':'')+'">'+(unk?'UNKNOWN':String(val))+'</div>';
+  }
+  function renderHardware(){
+    var h=HW&&HW.hardware;
+    if(!h){
+      el('hw-grid').innerHTML='<div class="hk">status</div><div class="hv unk">snapshot offline — UNKNOWN (fail-closed)</div>';
+      el('hw-stack').innerHTML=''; el('hw-asof').textContent=''; return;
+    }
+    var vram=num(h.vram_mb);
+    var gpu=
+      hwRow('gpu', h.gpu_name)+
+      hwRow('vram', vram===null?null:(vram/1024).toFixed(1)+' GB', vram===null)+
+      hwRow('gpu tier', h.tier)+
+      hwRow('cpu', h.cpu_model)+
+      hwRow('cpu cores / threads', (num(h.cpu_cores)===null&&num(h.cpu_threads)===null)?null:((h.cpu_cores!=null?h.cpu_cores:'?')+'c / '+(h.cpu_threads!=null?h.cpu_threads:'?')+'t'), num(h.cpu_cores)===null&&num(h.cpu_threads)===null)+
+      hwRow('system ram', num(h.cpu_ram_gb)===null?null:h.cpu_ram_gb+' GB', num(h.cpu_ram_gb)===null)+
+      hwRow('cpu tier', h.cpu_tier);
+    el('hw-grid').innerHTML=gpu;
+    el('hw-stack').innerHTML=
+      hwRow('llm', h.llm_model)+
+      hwRow('fast', h.fast_model)+
+      hwRow('vision', h.vision_model)+
+      hwRow('stt', h.stt_model)+
+      hwRow('stt device', h.stt_device)+
+      hwRow('stt compute', h.stt_compute)+
+      hwRow('tts engine', h.tts_engine)+
+      hwRow('tts voice', h.tts_voice);
+    var ts=num(HW._ts);
+    el('hw-asof').textContent = ts===null?'as-of unknown' : 'as of '+ago(ts)+' · tier strings self-classified';
+  }
+
+  // ---- System Health Report : full-snapshot .health_report ; self-scored ----
+  function renderHealth(){
+    var r=HW&&HW.health_report;
+    if(!r){
+      el('health-bars').innerHTML='<div class="offline">health report offline — UNKNOWN (fail-closed)</div>';
+      el('health-gates').innerHTML=''; el('health-asof').textContent=''; return;
+    }
+    var c=r.components||{};
+    var order=['memory_health','processing_health','personality_health','event_health','cognitive_load'];
+    var bars='';
+    order.forEach(function(k){
+      var v=num(c[k]);
+      // band: 0.8 good, 0.5 mid (matches note); recovery-debt framing handled in note
+      var color = v===null?'var(--dim)':bandColor(v,0.8,0.5);
+      var label=cap(k);
+      bars+=barRow(label, v===null?null:v*100, v===null?'UNKNOWN':f3(v), color);
+    });
+    el('health-bars').innerHTML=bars;
+    var overall=num(r.overall);
+    var ovColor=overall===null?'var(--dim)':bandColor(overall,0.8,0.5);
+    var st=r.status, tr=r.trend;
+    el('health-gates').innerHTML=
+      gate(overall===null?'unk':bandColor(overall,0.8,0.5)==='var(--green)'?'ok':'fail','overall',
+        overall===null?'UNKNOWN':f3(overall), 'self-scored composite')+
+      gate(st?'ok':'unk','status', st?String(st).toUpperCase():'UNKNOWN', 'brain’s own label')+
+      gate(tr==='improving'?'ok':(tr==='declining'?'fail':(tr?'unk':'unk')),'trend', tr?String(tr).toUpperCase():'UNKNOWN', 'direction of report');
+    var ts=num(HW._ts);
+    el('health-asof').textContent = (overall===null?'':'overall buoyed; personality_health is the floor · ')+(ts===null?'as-of unknown':'as of '+ago(ts));
+  }
+
   function refresh(){
     Promise.allSettled([
       fetchJSON('/api/status').then(function(d){STATUS=d;}),
@@ -330,8 +419,11 @@
       fetchJSON('/api/logs').then(function(d){LOGS=d;})
     ]).then(function(){ lastOkTs=Date.now(); renderAll(); });
   }
+  // ISOLATED parity fetch for the hardware + health-report panels — independent of refresh()
+  function refreshHW(){ V2.fetchJSON('/api/full-snapshot').then(function(s){ HW=s; renderHardware(); renderHealth(); }).catch(function(){}); }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
   refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+  refreshHW(); setInterval(refreshHW, 8000);
 })();
 </script>
 </body>

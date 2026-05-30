@@ -25,6 +25,16 @@
     .totrow .k{font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;}
     .totrow b{font-size:18px;font-variant-numeric:tabular-nums;}
     .placeholder{color:var(--dim);font-style:italic;font-size:10.5px;}
+    /* policy training curves — mini per-epoch loss sparklines */
+    .ptc{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
+    .ptc-run{border:1px solid var(--line);border-left-width:3px;border-radius:5px;padding:9px 11px;background:rgba(3,8,14,.45);}
+    .ptc-run .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:10.5px;}
+    .ptc-run .hd .fl{font-weight:700;font-variant-numeric:tabular-nums;}
+    .ptc-run .meta{font-size:9px;color:var(--muted);margin-top:1px;display:flex;justify-content:space-between;gap:6px;}
+    .spark{display:flex;align-items:flex-end;gap:2px;height:46px;margin:8px 0 2px;}
+    .spark .sb{flex:1 1 0;min-width:2px;background:var(--cyan);border-radius:1px 1px 0 0;opacity:.85;}
+    .spark .sb.last{background:var(--green);opacity:1;}
+    .ptc-cap{font-size:8.5px;color:var(--dim);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;}
   </style>
 </head>
 <body>
@@ -48,6 +58,12 @@
       <div class="note">The sleep-cycle consolidation buffer: clusters → quality gate → canonical memory. Totals are cumulative; the buffer is often idle (empty) between cycles. Click an artifact to see its verdict.</div>
       <div class="totrow" id="dream-tot"></div>
       <div class="md" style="grid-template-columns:200px 1fr;"><div class="list" id="dream-list"></div><div class="detail" id="dream-detail"><span class="placeholder">select an artifact…</span></div></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Policy Training Curves</h2>
+      <div class="note">Real per-epoch learning curves for the behavioral policy NN (the same net inspected above). Each mini sparkline is one training run's <b>epoch_losses</b> sequence — bars descend left→right as the net learns; the green bar is the final epoch. <b>final_loss</b> is banded (lower is better). Curves are this session's in-memory history — empty after a fresh reboot is recovery-debt, not a failure.</div>
+      <div class="ptc" id="ptc"></div>
     </section>
   </main>
 
@@ -144,12 +160,47 @@
     ) : '<span class="placeholder">select an artifact… (none buffered while the cycle is idle)</span>';
   }
 
+  function renderPTC(){
+    var pt=(SNAP&&SNAP.policy_training)||{};
+    var hist=pt.loss_history;
+    if(!Array.isArray(hist)||!hist.length){
+      el('ptc').innerHTML='<span class="placeholder">no training runs recorded this session (recovering) — in-memory loss history is empty on a freshly-rebooted brain.</span>';
+      return;
+    }
+    // most recent ~5 runs, newest first.
+    var runs=hist.slice(-5).reverse();
+    el('ptc').innerHTML=runs.map(function(r){
+      var fl=num(r.final_loss), ep=num(r.epochs);
+      // lower loss is better => band on (1-loss). null loss stays dim, never green.
+      var flCol=fl===null?'var(--dim)':bandColor(1-fl,0.9,0.8);
+      var losses=(Array.isArray(r.epoch_losses)?r.epoch_losses:[]).map(num).filter(function(v){return v!==null;});
+      var spark;
+      if(losses.length){
+        var mx=Math.max.apply(null,losses), mn=Math.min.apply(null,losses), span=(mx-mn)||1;
+        spark=losses.map(function(v,i){
+          var h=12+((v-mn)/span)*88; // 12..100% of track height; taller bar = higher loss
+          var last=(i===losses.length-1);
+          return '<div class="sb'+(last?' last':'')+'" style="height:'+h.toFixed(0)+'%" title="epoch '+(i+1)+': '+v.toFixed(4)+'"></div>';
+        }).join('');
+      } else {
+        spark='<span class="placeholder" style="align-self:center">no per-epoch losses</span>';
+      }
+      var first=losses.length?losses[0]:null, lastv=losses.length?losses[losses.length-1]:null;
+      return '<div class="ptc-run" style="border-left-color:'+flCol+'">'+
+        '<div class="hd"><span>final loss</span><span class="fl" style="color:'+flCol+'">'+f3(fl)+'</span></div>'+
+        '<div class="meta"><span>'+(ep===null?'—':ep+' epochs')+'</span><span>'+ago(r.timestamp)+'</span></div>'+
+        '<div class="spark">'+spark+'</div>'+
+        '<div class="ptc-cap"><span>start '+(first===null?'—':first.toFixed(3))+'</span><span>end '+(lastv===null?'—':lastv.toFixed(3))+'</span></div>'+
+      '</div>';
+    }).join('');
+  }
+
   el('nn-list').addEventListener('click', function(e){ var t=e.target.closest('[data-nn]'); if(t){ nnSel=+t.getAttribute('data-nn'); renderNN(); } });
   el('dream-list').addEventListener('click', function(e){ var t=e.target.closest('[data-art]'); if(t){ artSel=+t.getAttribute('data-art'); renderDream(); } });
 
   function renderBanner(){ el('mode').textContent = (NN.length+' networks · '+( ((SNAP&&SNAP.dream_artifacts&&SNAP.dream_artifacts.buffer)||{}).total_created || 0 )+' dream artifacts'); }
   function renderRecovery(){ el('recovery').style.display='none'; }
-  function renderAll(){ renderRecovery(); renderNN(); renderDream(); renderBanner(); }
+  function renderAll(){ renderRecovery(); renderNN(); renderDream(); renderPTC(); renderBanner(); }
 
   function refresh(){
     Promise.allSettled([fetchJSON('/api/full-snapshot'), fetchJSON('/api/self-improve/specialists')]).then(function(r){

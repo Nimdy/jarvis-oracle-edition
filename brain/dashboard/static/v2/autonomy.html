@@ -41,6 +41,16 @@
     .drive .fill{height:100%;}
     .drive .sup{font-size:9px;color:var(--dim);white-space:nowrap;}
     .qchip{font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:4px 7px;margin:3px 0;line-height:1.35;}
+    /* goal-provenance matrix */
+    .gpmx{display:grid;grid-template-columns:auto repeat(3,1fr) auto;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-top:6px;}
+    .gpmx>div{background:var(--bg,#03080e);padding:7px 10px;font-size:10.5px;}
+    .gpmx .hd{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;font-weight:700;}
+    .gpmx .rl{color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-size:9.5px;align-self:center;}
+    .gpmx .cell{font-variant-numeric:tabular-nums;font-size:15px;font-weight:700;text-align:center;}
+    .gpmx .cell small{display:block;font-size:8.5px;font-weight:400;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;}
+    .gpmx .tot{text-align:center;align-self:center;font-variant-numeric:tabular-nums;color:var(--muted);}
+    .gpmisc{display:flex;gap:16px;flex-wrap:wrap;margin-top:9px;font-size:10px;color:var(--muted);}
+    .gpmisc b{color:var(--text);font-variant-numeric:tabular-nums;}
   </style>
 </head>
 <body>
@@ -77,6 +87,12 @@
       <h2>Experience Buffer</h2>
       <div class="note">The replay store the learning loop samples from. <code>top_reward_magnitude</code> is the strongest signal it has banked; <code>unflushed</code> is what's waiting to persist.</div>
       <div id="buffer"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Goal Provenance — created vs ignored, by origin <span class="asof" id="gp-asof">goals.producer_health · —</span></h2>
+      <div class="note">Where goal candidates come from (<code>conversation</code> / <code>metric</code> / <code>autonomy</code>) and what the loop does with them. <code>created</code> = committed into the goal set; <code>ignored</code> = seen-then-declined. This is the producer side of the <b>lived-vs-internal-metric-churn</b> signal (FIDELITY_ROADMAP §6): high ignore + zero create means the loop is <b>proposing but not committing</b>.</div>
+      <div id="goalprov"></div>
     </section>
   </main>
 
@@ -255,6 +271,56 @@
       '</div>';
   }
 
+  function renderGoalProv(){
+    var box=el('goalprov'); if(!box) return;
+    var ph=(FS&&FS.goals&&FS.goals.producer_health)||null;
+    if(!ph){ box.innerHTML='<div class="idleblock">goal-producer health UNKNOWN — full-snapshot offline</div>'; return; }
+    // origins: created vs ignored. metric also carries a warmup-skipped state (counted toward ignored-class, shown separately).
+    var origins=[
+      ['conversation', num(ph.conversation_created), num(ph.conversation_ignored), null],
+      ['metric',       num(ph.metric_created),       num(ph.metric_ignored),       num(ph.metric_warmup_skipped)],
+      ['autonomy',     num(ph.autonomy_created),     num(ph.autonomy_ignored),     null]
+    ];
+    function cell(v, kind){
+      if(v===null) return '<div class="cell" style="color:var(--dim)">—<small>'+kind+'</small></div>';
+      var col = kind==='created' ? (v>0?'var(--green)':'var(--dim)') : (v>0?'var(--amber)':'var(--dim)');
+      return '<div class="cell" style="color:'+col+'">'+v+'<small>'+kind+'</small></div>';
+    }
+    var totCreated=0, totIgnored=0, anyNull=false;
+    origins.forEach(function(o){
+      if(o[1]===null||o[2]===null){ anyNull=true; } else { totCreated+=o[1]; totIgnored+=o[2]; }
+    });
+    var mx='<div class="gpmx">'+
+      '<div class="hd">origin</div><div class="hd cell">created</div><div class="hd cell">ignored</div><div class="hd cell">warmup-skip</div><div class="hd tot">row total</div>'+
+      origins.map(function(o){
+        var rt=(o[1]===null||o[2]===null)?null:(o[1]+o[2]+(o[3]||0));
+        return '<div class="rl">'+o[0]+'</div>'+
+          cell(o[1],'created')+
+          cell(o[2],'ignored')+
+          (o[3]===null?'<div class="cell" style="color:var(--dim)">·<small>n/a</small></div>':cell(o[3],'skipped'))+
+          '<div class="tot">'+(rt===null?'—':rt)+'</div>';
+      }).join('')+
+    '</div>';
+    // merges / rejections are loop-side post-processing outcomes (not per-origin)
+    mx+='<div class="gpmisc">'+
+      '<span>merges <b'+((num(ph.merges)||0)>0?' style="color:var(--green)"':'')+'>'+(num(ph.merges)===null?'—':num(ph.merges))+'</b></span>'+
+      '<span>rejections <b'+((num(ph.rejections)||0)>0?' style="color:var(--red)"':'')+'>'+(num(ph.rejections)===null?'—':num(ph.rejections))+'</b></span>'+
+      '<span>committed (all origins) <b'+(totCreated>0?' style="color:var(--green)"':' style="color:var(--dim)"')+'>'+totCreated+'</b></span>'+
+      '<span>ignored (all origins) <b style="color:var(--amber)">'+totIgnored+'</b></span>'+
+    '</div>';
+    // HONEST framing — conservative/quiet loop, not broken
+    var conservative = (totCreated===0 && totIgnored>0 && !anyNull);
+    mx+='<div class="contrast">'+
+      (conservative
+        ? 'Loop is <b style="color:var(--text)">conservative / quiet</b>: <b>0</b> goals committed across all origins while <b>'+totIgnored+'</b> were seen-and-declined (metric_ignored '+(num(ph.metric_ignored)||0)+', autonomy_ignored '+(num(ph.autonomy_ignored)||0)+'). The producer is <b>proposing but not committing</b> — recovery/quiet after reboot, <b>not</b> a broken goal loop. This is the producer side of the lived-vs-internal-metric-churn signal (FIDELITY_ROADMAP §6): internal metrics keep churning candidates but few earn a lived goal.'
+        : (anyNull
+          ? 'Some origin counters are <b style="color:var(--dim)">UNKNOWN</b> (null/missing) — not rendered as zero-success. Read created/ignored per available origin above.'
+          : '<b style="color:var(--green)">'+totCreated+'</b> goals committed vs <b style="color:var(--amber)">'+totIgnored+'</b> declined across origins — the loop is actively converting candidates into lived goals.'))+
+      ' Counts are this brain\'s self-reported producer tallies (shadow), read-only.</div>';
+    box.innerHTML=mx;
+    el('gp-asof').textContent='goals.producer_health · '+(lastOkTs?ago(lastOkTs/1000):'—');
+  }
+
   function renderRecovery(){
     var box=el('recovery');
     var cu=(FS&&FS.curiosity)||{};
@@ -270,7 +336,7 @@
     el('mode').textContent='mode '+(b.mode||'—')+' · uptime '+V2.fmtUptime(b.uptime_s)+(num(b.data_freshness_s)!==null?' · fresh '+b.data_freshness_s.toFixed(1)+'s':'');
   }
 
-  function renderAll(){ renderBanner(); renderRecovery(); renderStatus(); renderLog(); renderCuriosity(); renderBuffer(); }
+  function renderAll(){ renderBanner(); renderRecovery(); renderStatus(); renderLog(); renderCuriosity(); renderBuffer(); renderGoalProv(); }
 
   function refresh(){
     fetchJSON('/api/full-snapshot').then(function(s){ FS=s; lastOkTs=Date.now(); renderAll(); })
