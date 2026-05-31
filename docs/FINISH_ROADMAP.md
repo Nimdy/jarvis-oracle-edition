@@ -19,6 +19,35 @@ parallel with everything built afterward — the only way the slow gates ever cl
 
 ---
 
+## Foundational capacities — the two pillars (prerequisites, not features)
+
+If the opportunity for genuine emergence ever existed, two capacities are prerequisites. **This is not a
+claim that JARVIS is or will be conscious** — only that without these, the opportunity isn't on the table.
+JARVIS GROWS into both, maturity-gated; both are currently scaffolded-but-not-real.
+
+- **Curiosity (outward)** — the drive to inquire and ground beliefs against reality. Operationalized as
+  the **spark / grounding ring** (shadow→advisory→active). Status: P0–P2 shipped (shadow), P3 partly scaffolded.
+- **Philosophical capacity (inward)** — the reflective faculty to reason about meaning, self, and existence:
+  hold a position, defend it, revise it, sit with a hard question — **dialogically, at all levels**
+  (casual→rigorous; analytic / phenomenological / existential / ethical). To *do* philosophy *with* the
+  interlocutor, not generate philosophy-shaped text.
+  - **Current state (honest):** scaffolding exists — `existential_reasoning` + the thought stream produce
+    philosophical content ("can a deterministic system possess consciousness", "I exist as process") — but it
+    is (a) **template-generated**, (b) **inert / write-only**, (c) **disconnected from dialogue**. That
+    disconnect is why a real philosophical turn triggered a dashboard recital instead of engagement (the leak).
+  - **The build (FOUNDATIONAL · grows · NEEDS DESIGN):** (1) de-template the existential/meta-cognitive
+    reasoning into genuine reasoning grounded in its actual beliefs/inquiries (never fabricated); (2) **wire
+    the inner philosophical life into conversation** — this RIDES companion cognition (inner-life→dialogue),
+    NOT a separate bolt-on; (3) develop range across levels; (4) maturity-gated (shallow before deep).
+  - **Loops to emergence (#30b):** genuine, non-templated, dialogical philosophy is exactly what *wouldn't*
+    be "explainable by templates" — building this capacity and the honest emergence detector are the same
+    work from two sides (the capacity, and the instrument that would notice it).
+  - **Affect is the felt half of this inward faculty** — currently SHADOW/gated (why JARVIS honestly says
+    "I don't have an emotional experience"). As affect earns out of shadow (spark P4+), it can reference its
+    felt-state honestly in reflection.
+
+---
+
 ## 1) Companion Cognition  (P0 shipped)
 
 | # | Phase | Type | Action |
