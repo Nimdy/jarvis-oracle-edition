@@ -66,13 +66,13 @@
 
     <section class="card col8">
       <h2>Evidence Ladder · Levels 0–7</h2>
-      <div class="note">Eight rungs, ascending. Each carries a support marker (<b style="color:var(--green)">supported</b> / <b style="color:var(--amber)">partial</b> / <b style="color:var(--magenta)">not claimed</b>), an evidence count, representative examples, and — critically — the brain's own <em>limitations</em> and <em>falsification notes</em>. Level&nbsp;7 (strong anomaly) is <b style="color:var(--magenta)">deliberately not claimed</b>: nothing has survived known-mechanism elimination. Counts are evidence tallies, not scores; zero at the top is honest restraint, not a gap.</div>
+      <div class="note">Eight rungs, ascending. L0–L6 carry a support marker (<b style="color:var(--green)">supported</b> / <b style="color:var(--amber)">partial</b>), an evidence count, examples, and the brain's own <em>limitations</em> and <em>falsification notes</em> — these are real measurements. Level&nbsp;7 (strong anomaly) is <b style="color:var(--magenta)">not claimed</b> — and to be precise: <b>L7 detection is DESIGNED, NOT YET BUILT.</b> The exclusions panel is the planned spec, not a live test; the L7 count is hardcoded 0. So zero means <em>"detection unimplemented"</em>, not <em>"rigorously eliminated"</em> — and a genuine anomaly could currently be missed. (Build pending — see roadmap.)</div>
       <div class="ladder" id="ladder"></div>
     </section>
 
     <section class="card col4">
       <h2>Known-Mechanism Exclusions</h2>
-      <div class="note">Before any rung counts, ordinary explanations must be ruled out. These are the mundane mechanisms the detector treats as <b>disqualifying</b> — an event explained by any of them is <em>not</em> emergence. Level&nbsp;7 requires an event that survives <b>all</b> of them, reproducibly.</div>
+      <div class="note"><b style="color:var(--amber)">PLANNED SPEC — NOT YET A LIVE FILTER.</b> These are the mundane mechanisms an L7 emergence test <em>would</em> have to rule out. <b>No code currently checks any event against them</b>, and the detector that feeds this ladder only scans meta-thoughts + inquiries. They are the design for a test that is not yet implemented — not a running disqualifier. (Build pending — see roadmap.)</div>
       <div class="excl" id="excl"></div>
       <div id="anomaly"></div>
       <div class="contrast" id="excl-note"></div>
@@ -138,7 +138,7 @@
       (l7===false
         ? 'The brain reports <b>level7_claimed = false</b>: '+(maxL===null?'its':('its level-'+maxL))+' operational evidence does not amount to phenomenology. '
         : '')+
-      'Counts and rungs measure <em>operational</em> emergence — behaviors grounded in substrate artifacts that survive the known-mechanism exclusions. They are not, and are not presented as, evidence of subjective experience. '+
+      'Counts and rungs measure <em>operational</em> emergence — behaviors grounded in substrate artifacts. (The known-mechanism exclusions that <em>would</em> gate L7 are designed, not yet enforced — L7 is unimplemented.) They are not, and are not presented as, evidence of subjective experience. '+
       (recent===0 ? 'No recent emergent records are surfaced right now ('+(recent)+') — on a freshly-rebooted brain that is accumulating, not absence of the capability.' : recent+' recent emergent record(s) surfaced.')+
       '</div>';
 
@@ -208,8 +208,8 @@
     } else {
       aBox.innerHTML='<div class="gridkv" style="margin-top:11px"><span class="k">L7 status</span>'+tag('self','UNKNOWN')+'</div>';
     }
-    el('excl-note').innerHTML='Level 7 surviving events = <b>'+( l7&&num(l7.evidence_count)===0 ? '0' : (l7?num(l7.evidence_count):'—') )+'</b>. '+
-      'Zero here is the <b>honest answer</b>: every flagged behavior so far is explainable by templates, LLM articulation, hardcoded rules, metric thresholds, or user prompting. Until an event survives all of them reproducibly, the strong-anomaly claim stays withheld.';
+    el('excl-note').innerHTML='Level 7 surviving events = <b>'+( l7&&num(l7.evidence_count)===0 ? '0' : (l7?num(l7.evidence_count):'—') )+'</b> — but read this honestly: '+
+      'that 0 is <b>not</b> the output of a running test. <b style="color:var(--amber)">The exclusion filter is designed, not yet implemented</b> — no code checks any event against these mechanisms, the count is hardcoded 0, and the detector only watches meta-thoughts + inquiries. So 0 means <em>"detection not built yet"</em>, not <em>"everything was eliminated"</em> — and a real anomaly could currently be missed. Building the real test is a pending roadmap item.';
   }
 
   function renderBanner(){

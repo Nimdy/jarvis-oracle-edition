@@ -425,8 +425,8 @@ def _build_emergence_evidence_snapshot(snapshot: dict[str, Any]) -> dict[str, An
                 "future emergence evidence ledger",
             ],
             "representative_examples": [],
-            "limitations": "Current emergent count is explainable by detector rules over thoughts/inquiries. No durable event has survived known-mechanism elimination.",
-            "falsification_notes": "Requires an event unexplained by templates, LLM prompt context, hardcoded rules, or metric thresholds, with reproducible evidence.",
+            "limitations": "L7 anomaly detection is DESIGNED, NOT YET IMPLEMENTED. The known-mechanism exclusions are PLANNED criteria, not a live filter — no code tests any event against them, and this count is hardcoded 0. So 0 means 'detection not built', NOT 'rigorously eliminated'. The current detector also scans only meta-thoughts + inquiries (clusters of 3+, specific tags) and watches no other subsystem — a genuine anomaly could go undetected. See docs/FINISH_ROADMAP.md (emergence-detector build).",
+            "falsification_notes": "PLANNED criterion (NOT yet enforced): an event unexplained by templates, LLM prompt context, hardcoded rules, metric thresholds, or user prompting, with reproducible evidence. No such test runs today.",
         },
     ]
 
@@ -449,6 +449,12 @@ def _build_emergence_evidence_snapshot(snapshot: dict[str, Any]) -> dict[str, An
             "metric_threshold_triggers",
             "user_prompted_conversation",
         ],
+        # HONESTY: these exclusions are the planned SPEC, not a live filter. No code
+        # tests events against them; L7 evidence_count is hardcoded 0; the detector is
+        # narrow. So "0 surviving" = "detection not built yet", NOT "rigorously eliminated".
+        "exclusions_status": "designed_not_implemented",
+        "l7_detection_implemented": False,
+        "detector_scope_note": "Detector scans only meta-thoughts + existential inquiries (clusters of 3+, specific tags); other subsystems are unwatched. A genuine anomaly outside that window would currently be missed.",
     }
 
 
