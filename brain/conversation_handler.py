@@ -5724,7 +5724,7 @@ async def handle_transcription(
     try:
         from consciousness.situational_read import situational_read_engine as _sit_read
         from consciousness.affect_state import affect_state as _sit_affect
-        _sit_read.observe_turn(
+        _read = _sit_read.observe_turn(
             speaker=speaker,
             user_text=text,
             response_text=reply,
@@ -5735,5 +5735,10 @@ async def handle_transcription(
             route=(routing.tool.value if routing else ""),
             affect=_sit_affect.snapshot(),
         )
+        # Companion P1: fold the read into the per-person theory-of-mind (SHADOW —
+        # hypotheses only, gates nothing, never persisted to identity).
+        if _read is not None:
+            from consciousness.theory_of_mind import theory_of_mind_engine as _tom
+            _tom.observe(speaker, _read)
     except Exception:
-        logger.debug("Situational read (companion P0) failed", exc_info=True)
+        logger.debug("Situational read / theory-of-mind (companion P0/P1) failed", exc_info=True)

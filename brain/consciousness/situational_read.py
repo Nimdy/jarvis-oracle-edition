@@ -34,6 +34,11 @@ from typing import Any
 # before any later phase is allowed to act on it.
 _SALIENCE_THRESHOLD = 0.5
 
+# Companion P0->P1 gate (FINISH_ROADMAP #2): minimum reads before P1 has enough
+# data to model from. A STRUCTURAL proxy only — the true read-validity gate is
+# EARNED via transcript review, never coded.
+_P0P1_MIN_TURNS = 30
+
 # A long reply to a simple turn is the classic "am I overexplaining?" tell.
 _OVEREXPLAIN_WORDS = 90
 # A turn that took this long to answer is conversationally notable (the user waited).
@@ -247,6 +252,31 @@ class SituationalReadEngine:
         items = list(self._recent)[-n:]
         return [r.to_dict() for r in reversed(items)]
 
+    def _promotion_readiness(self) -> dict[str, Any]:
+        """Companion P0->P1 gate (FINISH_ROADMAP #2): a STRUCTURAL readiness proxy.
+        Signals only that enough reads accumulated and the salience trigger is not
+        pinned off/on. The TRUE read-validity gate (reads coherent vs transcript
+        reality) is EARNED via operator/transcript review — never coded."""
+        total = self._total
+        rate = (self._tripped / total) if total else 0.0
+        enough = total >= _P0P1_MIN_TURNS
+        sane_band = 0.02 <= rate <= 0.70
+        blocking = []
+        if not enough:
+            blocking.append("need %d reads (have %d)" % (_P0P1_MIN_TURNS, total))
+        if total and not sane_band:
+            blocking.append("trigger-rate %.2f outside 0.02-0.70 (pinned?)" % rate)
+        return {
+            "gate": "P0->P1",
+            "would_promote_to": "P1_theory_of_mind",
+            "structural_ready": bool(enough and sane_band),
+            "note": "structural proxy only; true read-validity is EARNED via transcript review",
+            "observed_turns": total,
+            "trigger_rate": round(rate, 3),
+            "min_turns": _P0P1_MIN_TURNS,
+            "blocking": blocking,
+        }
+
     def get_status(self) -> dict[str, Any]:
         last = self._recent[-1].to_dict() if self._recent else None
         return {
@@ -258,6 +288,7 @@ class SituationalReadEngine:
             "salience_threshold": _SALIENCE_THRESHOLD,
             "observed_turns": self._total,
             "salience_tripped_count": self._tripped,
+            "promotion_readiness": self._promotion_readiness(),
             "latest": last,
             "recent": self.get_recent(8),
         }

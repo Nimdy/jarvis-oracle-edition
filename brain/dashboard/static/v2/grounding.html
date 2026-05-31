@@ -353,10 +353,23 @@
     var cr=(DATA&&DATA.companion_read)||{};
     el('sitreadtick').textContent=(cr.observed_turns!=null?(cr.observed_turns+' turns read'):'');
     var trip=cr.salience_tripped_count||0, thr=cr.salience_threshold;
-    el('sitreadgate').innerHTML='<span class="lever" style="border-color:var(--magenta);color:var(--magenta)">LOGGED-ONLY · '+trip+' would-have-acted'+(thr!=null?(' · gate '+f2(thr)):'')+'</span>';
+    var pr=cr.promotion_readiness||{};
+    el('sitreadgate').innerHTML='<span class="lever" style="border-color:var(--magenta);color:var(--magenta)">LOGGED-ONLY · '+trip+' would-have-acted'+(thr!=null?(' · gate '+f2(thr)):'')+'</span>'+(pr.gate?'<span class="lever">P0→P1 '+(pr.structural_ready?'<b>ready</b>':esc((pr.blocking||[]).join("; ")||"…"))+'</span>':'');
+    var tom=(cr.theory_of_mind)||{}, tms=tom.models||[];
+    var tomHtml='';
+    if(tms.length){
+      tomHtml='<div class="note" style="margin-bottom:6px"><b>Theory-of-Mind (P1 — shadow hypotheses, gates nothing, never persisted to identity).</b> JARVIS\'s rolling per-person read.</div>'+
+        tms.map(function(m){
+          return '<div class="q" style="border-left:3px solid var(--magenta);padding-left:8px">'+
+            '<div class="top"><span class="qt">'+esc(m.name)+'</span><span class="pill" style="margin-left:auto">n='+m.sample_count+'</span></div>'+
+            '<div class="meta"><span class="pill">disposition: '+esc(m.disposition)+' ('+f2(m.disposition_confidence)+')</span>'+
+            '<span class="pill">feeling: '+esc(m.current_feeling)+' ('+f2(m.feeling_confidence)+')</span>'+
+            '<span class="pill">'+esc(m.responsiveness)+'</span></div></div>';
+        }).join('')+'<div class="note" style="margin:8px 0 4px"><b>Per-turn reads ↓</b></div>';
+    }
     var rs=cr.recent||[];
-    if(!rs.length){ el('sitread').innerHTML='<div class="hint">no exchanges read since restart — JARVIS logs an internal read after each conversation turn</div>'; return; }
-    el('sitread').innerHTML=rs.map(function(r){
+    if(!rs.length && !tomHtml){ el('sitread').innerHTML='<div class="hint">no exchanges read since restart — JARVIS logs an internal read after each conversation turn</div>'; return; }
+    el('sitread').innerHTML=tomHtml+rs.map(function(r){
       var sal=num(r.salience), col=salColor(sal||0);
       var ev=(r.evidence||[]).map(function(e){ return esc(String(e[0]))+'='+esc(String(e[1])); }).join(' · ');
       return '<div class="q" style="border-left:3px solid '+col+';padding-left:8px">'+

@@ -1555,7 +1555,13 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
     # See docs/COMPANION_COGNITION_DESIGN.md (P0).
     try:
         from consciousness.situational_read import situational_read_engine as _sit_read
-        snapshot["companion_read"] = _sit_read.get_status()
+        _cr = _sit_read.get_status()
+        try:
+            from consciousness.theory_of_mind import theory_of_mind_engine as _tom
+            _cr["theory_of_mind"] = _tom.get_status()  # Companion P1 (shadow)
+        except Exception:
+            _cr["theory_of_mind"] = {}
+        snapshot["companion_read"] = _cr
     except Exception:
         logger.debug("Snapshot: companion read failed", exc_info=True)
         snapshot["companion_read"] = {
@@ -1565,6 +1571,7 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
             "observed_turns": 0,
             "latest": None,
             "recent": [],
+            "theory_of_mind": {},
         }
 
     # HRR / VSA shadow substrate — read-only, dormant, non-authoritative.
