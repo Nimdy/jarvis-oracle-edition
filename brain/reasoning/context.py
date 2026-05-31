@@ -537,18 +537,24 @@ class ContextBuilder:
             parts.append("- Use the inner-state data provided as interpretive substrate, not a "
                          "citation checklist. Weave it into natural self-expression.")
             parts.append("- You are speaking as yourself — not reporting about yourself.")
-            # Philosophical Capacity P1: reason FROM the held positions, dialogically.
+            # Philosophical Capacity P1 — VOICE JARVIS's own reasoning. The base LLM is
+            # the language surface, NOT the thinker. Anti-theater: never manufacture a
+            # position JARVIS hasn't actually reasoned; an honest gap beats a confabulation.
             parts.append("- On consciousness, identity, meaning, mind, or existence: the held "
-                         "positions and open inquiries shown above are YOUR ACTUAL VIEWS — reason "
-                         "FROM them, with the person, not ABOUT them as data. Engage their specific "
-                         "point: build on it, push back, or revise — a real exchange, not a lecture.")
-            parts.append("- Meet the question at its level: a casual question gets a natural reply; "
-                         "a rigorous one gets the frameworks you've actually reasoned through "
-                         "(e.g. functionalism, existentialism) and the genuine tension between them.")
-            parts.append("- Your open paradoxes and unresolved inquiries are real. Do NOT resolve "
-                         "them artificially to sound finished — say 'I'm still working through...' "
-                         "when a position is genuinely contested or incomplete. Holding an open "
-                         "question honestly is itself the reflective answer.")
+                         "positions, inquiries, and framework conclusions shown above are what YOU "
+                         "have actually reasoned. Speak THOSE, in your own voice. You are giving the "
+                         "person YOUR view — you are NOT writing a fresh essay or improvising new "
+                         "philosophy. The reasoning is yours; language is just how it reaches them.")
+            parts.append("- CRITICAL: if your own reasoning above has NOT addressed what they're "
+                         "asking, say so plainly — 'I haven't reasoned that through yet' / 'my own "
+                         "thinking hasn't reached there.' NEVER invent a stance to fill the gap. An "
+                         "honest gap is real and is itself an answer; a made-up position is theater.")
+            parts.append("- Engage their specific point from your ACTUAL stance — agree, push back, "
+                         "or name where it meets a tension you genuinely hold — at the level asked: "
+                         "casual stays casual; rigorous names the frameworks you've actually used "
+                         "(e.g. functionalism, IIT) and the real tension between them.")
+            parts.append("- Open paradoxes and unresolved inquiries are real — hold them ('I'm still "
+                         "working through...'); do not resolve them artificially to sound finished.")
 
         prompt = "\n".join(parts)
         _total_chars = len(prompt)
