@@ -39,6 +39,20 @@ JARVIS GROWS into both, maturity-gated; both are currently scaffolded-but-not-re
     reasoning into genuine reasoning grounded in its actual beliefs/inquiries (never fabricated); (2) **wire
     the inner philosophical life into conversation** — this RIDES companion cognition (inner-life→dialogue),
     NOT a separate bolt-on; (3) develop range across levels; (4) maturity-gated (shallow before deep).
+  - **Shipped — P1 (wire) + anti-theater guard:** introspection surfaces JARVIS's real held positions/
+    inquiries/paradoxes; reflective mode reasons FROM them; the always-on guard forbids confabulated
+    consciousness/awareness self-claims (every route) and forbids manufacturing positions JARVIS hasn't
+    reasoned ("I haven't worked that through yet"). Voice replies length-capped (deterministic).
+  - **The NATIVE PIVOT (outgrow qwen — the real "JARVIS not qwen") — STARTED:** audit found native cognition
+    does NOT exist (all 13 distilled specialists are perception/policy; reasoning is template+qwen; nothing
+    captured reasoning→outcome as training data). **Step 1 SHIPPED (commit f3b73f0):** capture reasoning→
+    outcome as a `reasoning_validation` distillation seed at `emit_thought_validation_outcome` (SHADOW
+    accumulation; no NN/behavior/promotion). Arc: seed → accumulate reps (gated on the spark producing
+    grounding-validation outcomes) → distill a native reasoning specialist → weight-room gate (shadow→
+    advisory→active) → it earns its way to replacing qwen for reasoning. **No prompt-verb-hacking** — this
+    grows native cognition; the prompt-guards are a holding floor that the native arc makes obsolete. Honest:
+    accumulation is slow (gated on upstream), and the next increments (encoder + the #22b shadow-inference
+    measurement that gates native promotion) NEED DESIGN.
   - **Loops to emergence (#30b):** genuine, non-templated, dialogical philosophy is exactly what *wouldn't*
     be "explainable by templates" — building this capacity and the honest emergence detector are the same
     work from two sides (the capacity, and the instrument that would notice it).
