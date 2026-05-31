@@ -258,7 +258,8 @@
     el('distill-spec').innerHTML = (sp&&Object.keys(sp).length) ? (
       kv('maturity', sp.maturity||'—')+
       kv('synthetic acc', num(sp.synthetic_accuracy)!=null?(sp.synthetic_accuracy*100).toFixed(0)+'%':'—')+
-      kv('live-shadow acc', num(sp.live_shadow_accuracy)!=null?(sp.live_shadow_accuracy*100).toFixed(0)+'%':'—')+
+      kv('live-shadow acc', num(sp.live_shadow_accuracy)!=null?(sp.live_shadow_accuracy*100).toFixed(0)+'%':'unmeasured', num(sp.live_shadow_accuracy)==null?'var(--amber)':null)+
+      kv('reps lived/synth', (num(sp.signals_lived)||0)+' / '+(num(sp.signals_synthetic)||0))+
       kv('networks', num(sp.network_count)||0)+
       kv('promotion', sp.promotion_eligible?'eligible':'not yet', sp.promotion_eligible?'var(--green)':'var(--dim)')+
       kv('status', sp.status||'—')

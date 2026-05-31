@@ -2635,8 +2635,18 @@ def _build_skill_acquisition_specialist_cache(engine: Any) -> dict[str, Any]:
             "live_influence": False,
             "promotion_eligible": False,
             "maturity": maturity,
+            # best_accuracy is TRAINING/validation accuracy across saved versions, not a
+            # live-inference score (the specialist trains predominantly on synthetic signals).
             "synthetic_accuracy": row.get("best_accuracy", 0),
-            "live_shadow_accuracy": 0.0,
+            # HONEST (weight-room #22): this specialist runs NO scored live-shadow inference
+            # yet, so there is no live accuracy to report. None -> dashboard renders "—"
+            # (unmeasured), NOT a fake 0%. A real number needs shadow-inference scoring (#22b).
+            "live_shadow_accuracy": None,
+            "live_accuracy_status": "unmeasured_no_live_inference_scoring",
+            # Honest origin breakdown of the training signals (the weight-room's whole point:
+            # are the reps real?). Lived = real interactions; synthetic = weight-room workouts.
+            "signals_synthetic": feature_stats.get("synthetic", 0) + label_stats.get("synthetic", 0),
+            "signals_lived": feature_stats.get("lived", 0) + label_stats.get("lived", 0),
             "calibration_error": 0.0,
             "false_green_rate": 0.0,
             "false_red_rate": 0.0,
