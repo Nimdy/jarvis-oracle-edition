@@ -41,7 +41,7 @@ parallel with everything built afterward — the only way the slow gates ever cl
 | # | Phase | Type | Action |
 |---|-------|------|--------|
 | 13 | P1 | **EARNED** | Confirm affect readouts clear the gate (backing ≥0.65/50 obs, MIN_SHADOW_HOURS, no scalar pinned, provenance 100%). |
-| 14 | P2 | build_shadow | **Grounding drive (shadow)** on the existing view-only ProvenanceScorer — compute grounding_tension, select DriveActions, do NOT enqueue; log counterfactuals. |
+| 14 | P2 | ✅ ALREADY SHIPPED | **Grounding drive (shadow) is already live** (confirmed 2026-05-31): ProvenanceScorer view-only tension; `DriveType.grounding` @ level 0 (`drives.py`) selects + facet-routes + logs "would have asked" counterfactuals **without enqueuing** (`orchestrator._handle_grounding_action_shadow`); external-only `GroundingDrivePromotion` gate (≥20 outcomes, ≥0.40 validation-rate, never self-scored); OpportunityScorer impact-0.7; PolicyOutcome external_validation/grounded. The live log line proves it. **No rebuild needed** — spark is at P2-shadow; #16 (P3 tension-thoughts) is partly scaffolded already. |
 | 15 | P2 | **EARNED** | would-have actions net-attribution-positive ≥0.65/50, targeting high-leverage beliefs. |
 | 16 | P3 | build_shadow | **Tension-thoughts (shadow)** — `belief_validation_curiosity` fires from tension (logged); emit `THOUGHT_VALIDATION_OUTCOME`; register `thought_trigger_selector`. |
 | 17 | P3→P4 gate | wire_gate | Advisory gate: ≤1 external-validation intent/window + one gated question once selector beats baseline @ min_samples=30. |
