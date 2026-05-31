@@ -49,7 +49,8 @@ window.V2 = (function(){
     ['/static/v2/timeline.html','timeline'],
     ['/static/v2/immune.html','immune'],
     ['/static/v2/provenance.html','provenance'],
-    ['/static/v2/emergence.html','emergence']
+    ['/static/v2/emergence.html','emergence'],
+    ['/static/v2/prove.html','prove']
   ];
   // render the shared nav into <nav id="v2nav"></nav>, marking `active`.
   function renderNav(active){
@@ -59,7 +60,7 @@ window.V2 = (function(){
       var on=(p[0]===active), stub=p[2];
       return '<a class="'+(on?'on':(stub?'stub':''))+'" href="'+(stub?'#':p[0])+'">'+p[1]+'</a>';
     }).join('');
-    html+='<span class="navsep">act</span><a href="#" onclick="window.V2&&V2.chat();return false;">💬 chat</a><span class="navsep">ext</span><a href="/mind">/mind ↗</a><a href="/">← v1</a>';
+    html+='<span class="navsep">act</span><a href="#" onclick="window.V2&&V2.palette();return false;" title="⌘K / Ctrl-K">⌘K jump</a><a href="#" onclick="window.V2&&V2.chat();return false;">💬 chat</a><a href="#" onclick="window.V2&&V2.legend();return false;">honesty</a><span class="navsep">ext</span><a href="/mind">/mind ↗</a><a href="/">← v1</a>';
     nav.innerHTML=html;
   }
   // legacy: highlight an already-rendered nav by href match.
@@ -143,9 +144,84 @@ window.V2 = (function(){
     inp.focus();
   }
 
+  // ================= COMMAND PALETTE (⌘K) + HONESTY LEGEND =================
+  // Every surface jumpable: V2 pages + reference docs + HRR worlds + v1 + actions.
+  function _surfaces(){
+    var s=[];
+    NAVPAGES.forEach(function(p){ if(p[0]!=='#sep') s.push({href:p[0], label:p[1], group:'v2'}); });
+    [['/docs','system reference'],['/science','scientific spec'],['/showcase','tech showcase'],
+     ['/history','build history'],['/api-reference','API reference'],['/learning','companion training']]
+      .forEach(function(d){ s.push({href:d[0], label:d[1], group:'docs'}); });
+    [['/mind','mind’s-eye · spatial world'],['/hrr-scene','HRR scene graph']]
+      .forEach(function(d){ s.push({href:d[0], label:d[1], group:'worlds'}); });
+    s.push({href:'/', label:'v1 dashboard', group:'legacy'});
+    s.push({act:'chat', label:'chat with JARVIS', group:'action'});
+    s.push({act:'legend', label:'honesty legend', group:'action'});
+    return s;
+  }
+  var _pal={open:false, sel:0, items:[]};
+  function _palRoot(){
+    var r=document.getElementById('v2-pal');
+    if(!r){
+      r=document.createElement('div'); r.id='v2-pal'; r.className='v2-pal'; r.style.display='none';
+      r.innerHTML='<div class="v2-pal-box"><input id="v2-pal-in" class="v2-pal-in" placeholder="jump to… (page, doc, world, action)" autocomplete="off"><div class="v2-pal-list" id="v2-pal-list"></div><div class="v2-pal-hint">↑↓ move · ↵ open · esc close</div></div>';
+      document.body.appendChild(r);
+      r.addEventListener('click', function(e){ if(e.target===r) closePalette(); });
+      var inp=r.querySelector('#v2-pal-in');
+      inp.addEventListener('input', function(){ _palRender(this.value); });
+      inp.addEventListener('keydown', _palKey);
+    }
+    return r;
+  }
+  function _palRender(q){
+    q=(q||'').toLowerCase().trim();
+    var items=_surfaces().filter(function(s){ return !q || (s.label+' '+s.group).toLowerCase().indexOf(q)>=0; });
+    _pal.items=items; if(_pal.sel>=items.length) _pal.sel=0;
+    var list=document.getElementById('v2-pal-list');
+    list.innerHTML=items.map(function(s,i){
+      return '<div class="v2-pal-item'+(i===_pal.sel?' sel':'')+'" data-i="'+i+'"><span class="v2-pal-g">'+s.group+'</span><span>'+s.label+'</span></div>';
+    }).join('')||'<div class="v2-pal-empty">no match</div>';
+    Array.prototype.forEach.call(list.querySelectorAll('[data-i]'), function(node){
+      node.addEventListener('click', function(){ _palGo(items[+this.getAttribute('data-i')]); });
+      node.addEventListener('mousemove', function(){ _pal.sel=+this.getAttribute('data-i'); _palHi(); });
+    });
+  }
+  function _palHi(){ var list=document.getElementById('v2-pal-list'); if(!list) return;
+    Array.prototype.forEach.call(list.children, function(c,i){ if(c.classList) c.classList.toggle('sel', i===_pal.sel); }); }
+  function _palGo(s){ if(!s) return; closePalette(); if(s.href) location.href=s.href; else if(s.act==='chat') chat(); else if(s.act==='legend') legend(); }
+  function _palKey(e){
+    var n=_pal.items.length||1;
+    if(e.key==='ArrowDown'){ e.preventDefault(); _pal.sel=(_pal.sel+1)%n; _palHi(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); _pal.sel=(_pal.sel-1+n)%n; _palHi(); }
+    else if(e.key==='Enter'){ e.preventDefault(); _palGo(_pal.items[_pal.sel]); }
+    else if(e.key==='Escape'){ closePalette(); }
+  }
+  function palette(){ var r=_palRoot(); _pal.open=true; _pal.sel=0; r.style.display='flex'; var inp=r.querySelector('#v2-pal-in'); inp.value=''; _palRender(''); inp.focus(); }
+  function closePalette(){ var r=document.getElementById('v2-pal'); if(r) r.style.display='none'; _pal.open=false; }
+
+  function legend(){
+    modal('Honesty legend — how to read this dashboard',
+      '<div class="lg-note">Every number here is labelled by <b>provenance</b>, and anything not measurable is shown <b>UNAVAILABLE</b>, never faked. That discipline is the point.</div>'+
+      '<div class="lg-key">'+
+      '<div>'+tag('self','self-scored')+' graded by JARVIS against its own rubric — no external comparator (e.g. the Oracle benchmark).</div>'+
+      '<div>'+tag('grounded','grounded')+' verified from lived runtime evidence (process contracts, observed events).</div>'+
+      '<div>'+tag('earned','earned')+' a maturity gate actually crossed by accumulated evidence.</div>'+
+      '<div>'+tag('derived','derived/templated')+' computed/assembled from real data with a human-written structure — no free-form LLM.</div>'+
+      '<div><span class="pillbig" style="color:var(--magenta);border-color:var(--magenta)">shadow</span> a learned model running telemetry-only — NOT driving live decisions yet.</div>'+
+      '<div><span class="s-unk">UNKNOWN</span> / hatched / "—" = not measurable / not yet instrumented. Gates fail <b>closed</b> — never green on missing data.</div>'+
+      '</div>'+
+      '<div class="lg-note" style="margin-top:11px">Evaluating the system? Open <a href="/static/v2/prove.html">Prove It</a> (falsifiable claims + live evidence) and <a href="/static/v2/yardsticks.html">Yardsticks</a> (where the system’s own metrics are self-referential).</div>');
+  }
+
+  // global hotkeys: ⌘K / Ctrl-K palette; Esc closes overlays.
+  document.addEventListener('keydown', function(e){
+    if((e.metaKey||e.ctrlKey) && (e.key==='k'||e.key==='K')){ e.preventDefault(); _pal.open?closePalette():palette(); }
+    else if(e.key==='Escape'){ closePalette(); closeModal(); }
+  });
+
   loadKey();  // warm the api_key so operator clicks are ready
   // =======================================================
 
   return { fetchJSON, num, pct1, f2, f3, el, gateState, ago, bandColor, tag, fmtUptime, cap, renderNav, markNav, barRow,
-           loadKey, post, del, modal, closeModal, confirm, toast, act, chat };
+           loadKey, post, del, modal, closeModal, confirm, toast, act, chat, palette, closePalette, legend };
 })();
