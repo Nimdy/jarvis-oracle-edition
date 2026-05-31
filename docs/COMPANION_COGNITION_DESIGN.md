@@ -77,12 +77,25 @@ relationships and reads for the others around them.**
 
 ## 4. The five components
 
-**(1) Live situational read.** A read fires **per conversation turn** from **live context** (what was
-said, user emotion, presence/scene, rapport, pace, silence/latency, addressee) — not the current static
-idle-tick context (memory count, uptime). Extend `meta_cognitive_thoughts` with a conversation-driven
-trigger and a live context object; keep the 3s cooldown spirit but gate on conversational events, not the
-8s idle timer. Output: a short-lived `SituationalRead { engagement, sentiment_shift, wants, self_check,
-suggested_adjustment, confidence }`.
+**(1) Live situational read — salience/affect-TRIGGERED, not per-turn.** This is the anti-chatterbox
+spine (operator decision 4): the read does **not** fire every turn. It fires **only when salience or
+affect crosses a threshold** — a notable shift (emotional change, novelty, an unresolved gap, a
+contribution-worthy moment), read from **live context** (what was said, user emotion, presence/scene,
+rapport, pace, silence/latency, addressee) rather than the static idle-tick context. Output: a
+short-lived `SituationalRead { engagement, sentiment_shift, wants, self_check, suggested_action,
+confidence }`.
+
+The **participation decision** ("do I chime in / inform them of something they may have missed?") is
+gated by the existing `ProactiveGovernor` plus a **LEARNED threshold** — the campfire model: mostly
+listen, contribute when salience is high *and experience says it's welcome*. JARVIS already does a crude
+version of this (chiming into the operator's conversations); the outcome-learning (engaged / dismissed /
+**annoyed** → cooldown) is exactly what tunes "when to participate vs stay quiet" over time.
+
+**Start small, grow into an NN (operator decision 2):** the initial read is a bounded heuristic — enough
+to read the room and surface what the user might not have observed, no more. Its **growth path is a
+distilled specialist NN** (the weight-room / distillation arc, under the live-validation discipline of
+`WEIGHT_ROOM_DESIGN.md`): a "participation / social-read" student trained on the companion's actual
+feedback about when chiming in was good vs not. Heuristic now; learned model as it matures.
 
 **(2) Theory-of-mind (user-state model).** Extend the per-person `Relationship` with an **inferred current
 state** — what this person seems to feel / want / how they're responding — built from emotion + rapport +
@@ -103,11 +116,12 @@ corrections.
   resolve, couldn't, still want to know" gate is already the design: novelty is detected and *not
   auto-answered* — the gap becomes the question.
 - **(3b) Adjust the conversation** — tone / depth / pace / pivot / give-space / disengage. *This* is the
-  genuinely-new, riskiest capability (agency over the exchange). Gated exactly like
-  `cognition/promotion.py`: **shadow** (narrate the would-be adjustment, change nothing) → **advisory**
-  (surface/suggest; affect-cadence coupling proposes, unapplied) → **active** (actually adjust, earned by
-  being right vs companion feedback, kill-switch, fastest auto-demote). Disengage/back-away is last and
-  most conservative.
+  genuinely-new, riskiest capability (agency over the exchange). **Crawl → walk → run (operator decision
+  1): like a human baby but at puppy/teen/adult *speed*** — gated like `cognition/promotion.py`
+  (**shadow** narrate-only → **advisory** surface/suggest, affect-cadence proposes unapplied → **active**
+  actually adjust), but each rung is **earned by demonstrated correctness** against companion feedback, on
+  an **accelerated maturation curve** (faster than human, not instant). Kill-switch + fast auto-demote.
+  Disengage/back-away is the last and most conservative thing it ever earns.
 
 **(4) Crystallization — ride the existing gates, no new threshold.** Transient reads mostly **evaporate**
 (they are not beliefs — events ≠ beliefs, the `interaction_review` lesson). A read that matters becomes a
@@ -172,20 +186,23 @@ is **success**, not failure (same ethic as grounding).
   *primary companion's* companion, never leaks the main user's private world, and never mistakes a visitor
   for the bond.
 
-## 8. Open questions (decide before P3/P4)
+## 8. Decisions (resolved 2026-05-31)
 
-1. How much **pivot-authority**, and how fast is it earned? (Tone/depth first; disengage much later?)
-2. *(grounded)* Asking rides the existing `CuriosityQuestionBuffer` + `ProactiveGovernor` — "ask when it
-   wants" is the existing curiosity gate (detect gap → don't auto-answer → ask), tolerance is the governor
-   rate that already learns from dismissal/annoyance. Open sub-point: the shared hourly budget once the
-   read is another question source.
-3. *(grounded)* Crystallization rides existing eligibility + `TensionRecord` maturation + calibration
-   gates — no invented number. Open: build the optional observation→settled-knowledge transition now, or
-   let version-collapse + calibration suffice?
-4. How different is the read for the **primary companion vs the others around them** — depth of
-   theory-of-mind, and what (if anything) crystallizes into beliefs for non-primary people?
-5. **Learning signal** — explicit corrections only, or also implicit (the companion's next reaction)?
-6. Does the live read run **every turn** or only when a salience/affect threshold trips (cost vs coverage)?
+1. **Pivot-authority** → **crawl → walk → run at puppy/teen/adult *speed***: gated shadow→advisory→active,
+   each rung earned by demonstrated correctness, accelerated maturation, disengage last. (component 3b)
+2. **Read depth / primary vs others** → keep it **small** initially — enough to read the room and inform
+   the user of things they may not have observed; **grows into a distilled specialist NN** over time. The
+   primary companion is the deep bond; others get lighter reads. (component 1)
+3. **Learning signal** → **both** explicit corrections *and* implicit (the companion's next reaction /
+   engagement). (component 5)
+4. **Cadence** → **only when salience/affect trips** — the anti-chatterbox valve; participation gated by
+   `ProactiveGovernor` + a learned threshold (the campfire model). (component 1)
+5. **Observation→settled-knowledge transition** → **deferred**: let version-collapse + calibration suffice
+   for now; revisit only if a real need shows. (component 4)
+
+Asking and crystallization are grounded (ride existing pipeline/gates — components 3a, 4). One remaining
+implementation detail (not a blocker): the shared question-budget when the read becomes another
+`CuriosityQuestionBuffer` source.
 
 ## 9. What this is NOT
 
