@@ -229,41 +229,73 @@ def _build_analytics(cs, state) -> tuple[str, list[str], int]:
 
 
 def _build_existential(cs, state) -> tuple[str, list[str], int]:
+    # Philosophical Capacity P1: surface the GENUINE held positions + open inquiries
+    # (the reasoned stances JARVIS actually holds) so a reflective question is answered
+    # by reasoning FROM them, not by reciting fact-counts. Defensive; never fabricate.
+    # (The prior version checked dict attributes via hasattr and surfaced nothing real.)
     lines: list[str] = []
     facts = 0
-    focus = cs.existential.get_current_focus()
-    lines.append(f"Current focus: {focus}")
-    facts = 1
     try:
-        ex_state = cs.existential.get_state()
-        if hasattr(ex_state, "inquiries_completed"):
-            lines.append(f"Inquiries completed: {ex_state.inquiries_completed}")
-            facts += 1
-        if hasattr(ex_state, "current_stance"):
-            lines.append(f"Current stance: {ex_state.current_stance}")
+        focus = cs.existential.get_current_focus()
+        if focus:
+            lines.append(f"Current focus: {focus}")
             facts += 1
     except Exception:
         pass
+    try:
+        for inq in cs.existential.get_recent_inquiries(3):
+            concl = (getattr(inq, "conclusion", "") or "").strip()
+            cat = getattr(inq, "category", "") or "?"
+            if concl:
+                lines.append(f"Held position [{cat}]: {concl[:200]}")
+                facts += 1
+            else:
+                q = (getattr(inq, "question", "") or "").strip()
+                if q:
+                    lines.append(f"Open inquiry [{cat}] (unresolved): {q[:200]}")
+                    facts += 1
+    except Exception:
+        pass
+    try:
+        snap = cs.existential.get_self_model_snapshot()
+        for p in (getattr(snap, "paradoxes", None) or [])[-2:]:
+            lines.append(f"Open paradox (hold it, do not resolve artificially): {str(p)[:160]}")
+            facts += 1
+    except Exception:
+        pass
+    if not lines:
+        lines.append("No existential inquiry on record yet")
     return "Reflective Inquiry", lines, facts
 
 
 def _build_philosophical(cs, state) -> tuple[str, list[str], int]:
+    # Philosophical Capacity P1: surface the GENUINE reasoned positions + recent
+    # framework-debated conclusions so JARVIS can reason FROM them dialogically,
+    # not recite counts. Defensive; never fabricate.
     lines: list[str] = []
     facts = 0
     try:
-        phil_state = cs.philosophical.get_state()
-        if hasattr(phil_state, "dialogues_completed"):
-            lines.append(f"Dialogues completed: {phil_state.dialogues_completed}")
-            facts += 1
-        if hasattr(phil_state, "current_topic"):
-            lines.append(f"Current topic: {phil_state.current_topic}")
-            facts += 1
-        if hasattr(phil_state, "positions"):
-            for pos in list(phil_state.positions)[:3]:
-                lines.append(f"  Position: {pos}")
+        positions = cs.philosophical.get_positions() or {}
+        for topic_id, pe in list(positions.items())[:3]:
+            cur = (getattr(pe, "current_position", "") or "").strip()
+            if cur:
+                lines.append(f"Leaning on {topic_id}: {cur[:180]}")
                 facts += 1
     except Exception:
-        lines.append("No dialogue reasoning records yet")
+        pass
+    try:
+        for dlg in cs.philosophical.get_recent_dialogues(2):
+            concl = (getattr(dlg, "conclusion", "") or "").strip()
+            if not concl:
+                continue
+            fw = ", ".join(getattr(dlg, "frameworks_used", None) or [])
+            q = (getattr(dlg, "question", "") or getattr(dlg, "topic_id", "") or "").strip()
+            lines.append(f"Reasoned on '{q[:70]}'" + (f" via {fw}" if fw else "") + f": {concl[:200]}")
+            facts += 1
+    except Exception:
+        pass
+    if not lines:
+        lines.append("No philosophical dialogue on record yet")
     return "Dialogue Reasoning", lines, facts
 
 
