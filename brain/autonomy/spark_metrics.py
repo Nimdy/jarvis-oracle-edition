@@ -235,9 +235,12 @@ def compute_spark_metrics(engine: Any | None) -> SparkMetrics:
     # alongside per operator decision so the belief-graph re-baseline doesn't lose
     # the previously-tracked figure.
     try:
-        ms = getattr(engine, "memory_storage", None) if engine is not None else None
-        if ms is not None and hasattr(ms, "get_stats"):
-            bp = (ms.get_stats() or {}).get("by_provenance", {}) or {}
+        # memory_storage is a module-level singleton (NOT an engine attribute) —
+        # same access path the orchestrator (orchestrator.py) and engine
+        # (engine.py:547) use. get_stats() is read-only.
+        from memory.storage import memory_storage as _mem
+        bp = (_mem.get_stats() or {}).get("by_provenance", {}) or {}
+        if bp:
             ms_obs = int(bp.get("observed", 0) or 0) + int(bp.get("user_claim", 0) or 0)
             ms_inf = int(bp.get("model_inference", 0) or 0)
             metrics.memory_store_grounded_count = ms_obs
