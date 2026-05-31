@@ -2395,6 +2395,24 @@ class AutonomyOrchestrator:
         )
         return True
 
+    def _pi_signal_available(self) -> bool:
+        """Best-effort read: is the Pi actually streaming sensory signal?
+
+        True when the perception orchestrator reports any connected sensor (the
+        same source the dashboard uses). Replaces an earlier bogus proxy
+        (``action.tool_hint == 'memory' and operator_present``) that never read
+        the real Pi state, so the starvation banner falsely reported "no Pi
+        signal" even with the Pi connected and streaming.
+        """
+        try:
+            engine = getattr(self, "_engine_ref", None)
+            perc = getattr(engine, "_perception_orchestrator", None) if engine else None
+            if perc is not None and hasattr(perc, "get_connected_sensors"):
+                return len(perc.get_connected_sensors() or []) > 0
+        except Exception:
+            logger.debug("pi_signal_available read failed", exc_info=True)
+        return False
+
     def _operator_present(self) -> bool:
         """Best-effort operator-presence read for input-starvation assessment."""
         try:
@@ -2484,7 +2502,7 @@ class AutonomyOrchestrator:
             return
 
         operator_present = self._operator_present()
-        pi_signal = bool(getattr(action, "tool_hint", "") == "memory") and operator_present
+        pi_signal = self._pi_signal_available()
         # Web is "exhausted" only when the facet cannot route to web at all; we do
         # not track per-query web exhaustion here (advisory), so treat web as open
         # for factual facets and closed for operator/scene facets.
