@@ -5,14 +5,16 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
-## The Spark Branch — Grounding Ring + Weight-Room Discipline + Companion-Cognition Design (2026-05-31, branch `thespark`)
+## The Spark Branch — Grounding Ring + Weight-Room Discipline + Companion-Cognition P0 (2026-05-31, branch `thespark`)
 
-The arc of this branch is the transition from **background cognition** (thoughts that
-log but change nothing) toward **live companion cognition** (a read that shapes behavior,
-learned over time). Everything that touches *behavior* is shadow-first / zero-authority /
-gate-earned; the companion-cognition loop itself is **DESIGNED, not built** (the operator
-explicitly paused the build). Scope is reaffirmed **one JARVIS, one primary companion,
-household-aware — not multi-tenant**.
+This branch is an **observability-and-honesty landing, not a behavior-authority landing**.
+The arc is the transition from **background cognition** (thoughts that log but change nothing)
+toward **live companion cognition** (a read that shapes behavior, learned over time) — but
+*nothing here grants behavior authority yet*. Everything that touches *behavior* is
+shadow-first / zero-authority / gate-earned; even the first companion-cognition code
+(**P0, the situational read**) is strictly logged-only — it changes no behavior, writes no
+beliefs, and asks nothing. The read→behavior loop (P1+) remains **designed, not built**.
+Scope is reaffirmed **one JARVIS, one primary companion, household-aware — not multi-tenant**.
 
 ### A) Grounding Ring (the "spark") — SHIPPED, shadow-only
 
@@ -62,7 +64,7 @@ true`. `autonomy/orchestrator.py`, `dashboard/snapshot.py` (commits `0edce24` �
 | Language Evidence & Native Voice | `v2/training.html` | 7 evidence gates vs thresholds, `native_usage_rate` (the "outgrow-the-LLM" metric), + a live "What to Say Next" guide keyed off red gates | (commit `a1ed762`) |
 | Manual Gate Work Needed | `v2/training.html` | per-class lived-example progress (e.g. 6/30) + exact prompt decks — what the operator must say to unlock maturity | (commit `e9662e8`) |
 
-### F) Companion Cognition — DESIGN ONLY, not built (`docs/COMPANION_COGNITION_DESIGN.md`)
+### F) Companion Cognition — P0 SHIPPED (shadow / logged-only); P1+ designed (`docs/COMPANION_COGNITION_DESIGN.md`)
 
 The next chapter (Iron Man JARVIS / Cortana): a live internal **read** during conversation,
 **theory-of-mind held as hypotheses** (never asserted), a **read→behavior ladder**
@@ -71,15 +73,28 @@ The next chapter (Iron Man JARVIS / Cortana): a live internal **read** during co
 dedup / annoyance-learning that already powers the desk-object & unknown-voice questions),
 and **crystallization that rides existing gates** (eligibility + `TensionRecord` maturation +
 calibration — beliefs revisable, personality a separate slow 0.7-inertia track). Anti-chatterbox
-spine: the read fires **only when salience/affect trips**, participation gated by
-`ProactiveGovernor` + a learned threshold. Grounded by 6 read-only investigations; **no code
-built — paused at design by operator decision.**
+spine: the read fires **only when salience/affect trips**.
+
+**P0 SHIPPED — the situational read** (`commit 27076b0`, verified live + adversarially reviewed
+clean). After every voice turn, JARVIS logs an internal read of the just-finished exchange:
+what it thinks is happening (engagement / user sentiment), a self-check on its own turn (e.g.
+"may be overexplaining"), a confidence score, the **named evidence** that produced the read,
+and — gated on a salience threshold — what it **would have done if it had the authority**. It
+**changes no behavior, writes no beliefs, asks nothing**; the salience gate is *recorded but
+inert* (the anti-chatterbox spine, validated against real conversation before it can ever
+steer). Pure-stdlib, O(1) per turn, runs dead-last in `handle_transcription` (cannot perturb
+the turn), double exception-wrapped. Surfaced read-only as the **Situational Read** panel on
+`v2/grounding.html`, beside the affect readout. `consciousness/situational_read.py`,
+`conversation_handler.py` (tail hook), `dashboard/snapshot.py` (`companion_read`). A 13-agent
+adversarial review (behavior-leak / path-safety / honesty / correctness) found **zero real
+defects**. P1+ (theory-of-mind, read→behavior ladder, crystallization, companion-learning)
+remain **designed, not built**.
 
 ### Cumulative invariants at branch state
 
 | Invariant | State |
 | --- | --- |
-| Companion-cognition code | **not built** (design only; operator paused) |
+| Companion-cognition code | **P0 situational read SHIPPED** (logged-only / shadow / changes no behavior); P1+ designed |
 | Spark / affect / grounding drive | **shadow / zero-authority** (drives no lever) |
 | Weight-room promotion gate | P0 telemetry only; **no authority gate live yet** |
 | `grounded:inferred` keystone | measured **honestly** (belief-graph ~20×, not the flattering 3.3×) |
