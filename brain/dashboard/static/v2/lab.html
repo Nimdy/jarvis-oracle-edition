@@ -229,6 +229,7 @@
       '<span><div class="k">teacher streams</div><b>'+tnames.length+'</b></span>'+
       '<span><div class="k">signals captured</div><b>'+totSig+'</b></span>'+
       '<span><div class="k">quarantined</div><b style="color:'+(totQ>0?'var(--amber)':'var(--text)')+'">'+totQ+'</b></span>'+
+      '<span><div class="k">lived / synthetic</div><b><span style="color:var(--green)">'+(num(dist.total_lived)||0)+'</span> / <span style="color:var(--amber)">'+(num(dist.total_synthetic)||0)+'</span></b></span>'+
       '<span><div class="k">student NNs</div><b>'+hs.length+'</b></span>'+
       '<span><div class="k">active networks</div><b style="color:'+(live>0?'var(--green)':'var(--dim)')+'">'+live+'</b></span>';
     var g=H.tier1_gating||{};
@@ -247,6 +248,7 @@
       return '<div class="tcard" style="border-left-color:'+col+'">'+
         '<div class="nm"><span>'+t+'</span><span>'+tot+'</span></div>'+
         '<div class="row"><span>quarantined</span><b style="color:'+col+'">'+q+(tot>0?(' ('+(qrate*100).toFixed(0)+'%)'):'')+'</b></div>'+
+        '<div class="row"><span>lived / synthetic</span><b>'+(num(d.lived)||0)+' / '+(num(d.synthetic)||0)+'</b></div>'+
         '<div class="row"><span>buffer</span><b>'+buf+'</b></div>'+
         '<div class="row"><span>last signal</span><b>'+fmtDur(d.last_seen_s)+' ago</b></div>'+
       '</div>';

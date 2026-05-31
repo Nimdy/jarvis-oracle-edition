@@ -43,6 +43,7 @@ class _PromotionState:
     level: int = 0  # 0=shadow, 1=advisory, 2=active
     shadow_start_ts: float = field(default_factory=time.time)
     total_validated: int = 0
+    synthetic_validated: int = 0  # weight-room P0: synthetic-session outcomes — counted, never gate promotion
     accuracy_history: deque[float] = field(default_factory=lambda: deque(maxlen=100))
     last_promoted_at: float = 0.0
     last_demoted_at: float = 0.0
@@ -61,8 +62,17 @@ class WorldModelPromotion:
     def level(self) -> int:
         return self._state.level
 
-    def record_outcome(self, hit: bool) -> None:
-        """Record a prediction validation outcome (True=hit, False=miss)."""
+    def record_outcome(self, hit: bool, origin: str = "live") -> None:
+        """Record a prediction validation outcome (True=hit, False=miss).
+
+        Weight-room P0: an outcome produced during a synthetic session
+        (origin="synthetic") is COUNTED for telemetry but never enters the
+        accuracy history or the promotion gate — synthetic predictions must not
+        be able to promote the world model. Closes the synthetic->promotion leak.
+        """
+        if origin == "synthetic":
+            self._state.synthetic_validated += 1
+            return
         self._state.total_validated += 1
         self._state.accuracy_history.append(1.0 if hit else 0.0)
         self._check_transitions()
@@ -76,6 +86,7 @@ class WorldModelPromotion:
             "level_name": {0: "shadow", 1: "advisory", 2: "active"}.get(
                 self._state.level, "unknown"),
             "total_validated": self._state.total_validated,
+            "synthetic_validated": self._state.synthetic_validated,
             "rolling_accuracy": round(accuracy, 3),
             "rolling_window_size": len(hist),
             "hours_in_shadow": round(hours_in_shadow, 1),
@@ -90,6 +101,7 @@ class WorldModelPromotion:
             "level": self._state.level,
             "shadow_start_ts": self._state.shadow_start_ts,
             "total_validated": self._state.total_validated,
+            "synthetic_validated": self._state.synthetic_validated,
             "accuracy_history": list(self._state.accuracy_history),
             "last_promoted_at": self._state.last_promoted_at,
             "last_demoted_at": self._state.last_demoted_at,
@@ -114,6 +126,7 @@ class WorldModelPromotion:
             self._state.level = data.get("level", 0)
             self._state.shadow_start_ts = data.get("shadow_start_ts", time.time())
             self._state.total_validated = data.get("total_validated", 0)
+            self._state.synthetic_validated = data.get("synthetic_validated", 0)
             for v in data.get("accuracy_history", []):
                 self._state.accuracy_history.append(float(v))
             self._state.last_promoted_at = data.get("last_promoted_at", 0.0)
@@ -219,6 +232,7 @@ class _SimPromotionState:
     level: int = 0  # 0=shadow, 1=advisory
     shadow_start_ts: float = field(default_factory=time.time)
     total_validated: int = 0
+    synthetic_validated: int = 0  # weight-room P0: synthetic-session outcomes — counted, never gate promotion
     accuracy_history: deque[float] = field(default_factory=lambda: deque(maxlen=200))
     last_promoted_at: float = 0.0
     last_demoted_at: float = 0.0
@@ -235,8 +249,16 @@ class SimulatorPromotion:
     def level(self) -> int:
         return self._state.level
 
-    def record_outcome(self, hit: bool) -> None:
-        """Record whether a shadow simulation's prediction matched reality."""
+    def record_outcome(self, hit: bool, origin: str = "live") -> None:
+        """Record whether a shadow simulation's prediction matched reality.
+
+        Weight-room P0: outcomes from a synthetic session (origin="synthetic")
+        are counted for telemetry but never enter the accuracy history or the
+        promotion gate. Closes the synthetic->promotion leak for the simulator.
+        """
+        if origin == "synthetic":
+            self._state.synthetic_validated += 1
+            return
         self._state.total_validated += 1
         self._state.accuracy_history.append(1.0 if hit else 0.0)
         self._check_transitions()
@@ -249,6 +271,7 @@ class SimulatorPromotion:
             "level": self._state.level,
             "level_name": {0: "shadow", 1: "advisory"}.get(self._state.level, "unknown"),
             "total_validated": self._state.total_validated,
+            "synthetic_validated": self._state.synthetic_validated,
             "rolling_accuracy": round(accuracy, 3),
             "rolling_window_size": len(hist),
             "hours_in_shadow": round(hours, 1),
@@ -262,6 +285,7 @@ class SimulatorPromotion:
             "level": self._state.level,
             "shadow_start_ts": self._state.shadow_start_ts,
             "total_validated": self._state.total_validated,
+            "synthetic_validated": self._state.synthetic_validated,
             "accuracy_history": list(self._state.accuracy_history),
             "last_promoted_at": self._state.last_promoted_at,
             "last_demoted_at": self._state.last_demoted_at,
@@ -284,6 +308,7 @@ class SimulatorPromotion:
             self._state.level = data.get("level", 0)
             self._state.shadow_start_ts = data.get("shadow_start_ts", time.time())
             self._state.total_validated = data.get("total_validated", 0)
+            self._state.synthetic_validated = data.get("synthetic_validated", 0)
             for v in data.get("accuracy_history", []):
                 self._state.accuracy_history.append(float(v))
             self._state.last_promoted_at = data.get("last_promoted_at", 0.0)

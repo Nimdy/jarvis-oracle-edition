@@ -182,9 +182,17 @@ class WorldModel:
                 pass
 
         predictions = self._causal.infer(self._current, new_deltas)
+        # Weight-room P0: tag validation outcomes by session origin so that
+        # predictions validated DURING a synthetic session are counted for
+        # telemetry but never feed the promotion gate (closes the leak).
+        try:
+            from memory.gate import memory_gate as _mg
+            _origin = "synthetic" if _mg.synthetic_session_active() else "live"
+        except Exception:
+            _origin = "live"
         validated = self._causal.validate_predictions(self._current)
         for v in validated:
-            self._promotion.record_outcome(v.outcome == "hit")
+            self._promotion.record_outcome(v.outcome == "hit", origin=_origin)
             try:
                 event_bus.emit(
                     WORLD_MODEL_PREDICTION_VALIDATED,
@@ -199,7 +207,7 @@ class WorldModel:
         # Phase 3: validate simulator predictions against real state
         sim_validated = self._sim_causal.validate_predictions(self._current)
         for sv in sim_validated:
-            self._sim_promotion.record_outcome(sv.outcome == "hit")
+            self._sim_promotion.record_outcome(sv.outcome == "hit", origin=_origin)
 
         self._update_count += 1
 

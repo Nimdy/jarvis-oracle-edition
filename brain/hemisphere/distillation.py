@@ -36,6 +36,13 @@ TEACHER_QUARANTINE_THRESHOLDS: dict[str, float] = {
 }
 BUFFER_MAXLEN = 500
 QUARANTINE_MAXLEN = 100
+
+
+def _is_synthetic_origin(origin: str) -> bool:
+    """True if a signal's origin marks it as synthetic-exercise data (weight-room
+    P0). Synthetic exercises tag origin='synthetic'; everything else (live sensors,
+    'system', 'disk', unknown) counts as lived/real — the conservative default."""
+    return bool(origin) and str(origin).lower().startswith("synthetic")
 DEDUP_TIME_BUCKET_S = 2.0
 
 
@@ -76,6 +83,7 @@ class DistillationCollector:
         self._quarantine: dict[str, deque[TeacherSignal]] = {}
         self._lock = threading.Lock()
         self._counts: dict[str, int] = {}
+        self._synthetic_counts: dict[str, int] = {}  # weight-room P0: synthetic subset of _counts
         self._quarantine_counts: dict[str, int] = {}
         self._last_seen: dict[str, float] = {}
         self._recent_dedup_keys: deque[str] = deque(maxlen=200)
@@ -98,6 +106,9 @@ class DistillationCollector:
                     buf = self._buffers.setdefault(teacher, deque(maxlen=BUFFER_MAXLEN))
                     buf.extend(signals)
                     self._counts[teacher] = self._counts.get(teacher, 0) + len(signals)
+                    syn = sum(1 for s in signals if _is_synthetic_origin(s.origin))
+                    if syn:
+                        self._synthetic_counts[teacher] = self._synthetic_counts.get(teacher, 0) + syn
                     if signals:
                         self._last_seen[teacher] = signals[-1].timestamp
                     total += len(signals)
@@ -196,6 +207,8 @@ class DistillationCollector:
                 buf = self._buffers.setdefault(teacher, deque(maxlen=BUFFER_MAXLEN))
                 buf.append(signal)
                 self._counts[teacher] = self._counts.get(teacher, 0) + 1
+                if _is_synthetic_origin(origin):
+                    self._synthetic_counts[teacher] = self._synthetic_counts.get(teacher, 0) + 1
                 self._write_jsonl(TRAINING_DATA_DIR / f"distill_{teacher}.jsonl", signal)
 
     def get_training_batch(
@@ -203,12 +216,17 @@ class DistillationCollector:
         teacher: str,
         limit: int = 200,
         min_fidelity: float = 0.0,
+        lived_only: bool = False,
     ) -> list[TeacherSignal]:
-        """Return recent signals, optionally filtered by fidelity floor."""
+        """Return recent signals, optionally filtered by fidelity floor and/or to
+        lived (non-synthetic) signals only — weight-room P0/P1: lets a caller
+        compute live-shadow accuracy on real signals, excluding synthetic reps."""
         with self._lock:
             buf = self._buffers.get(teacher, deque())
             signals = list(buf)
 
+        if lived_only:
+            signals = [s for s in signals if not _is_synthetic_origin(s.origin)]
         if min_fidelity > 0:
             signals = [s for s in signals if s.fidelity >= min_fidelity]
 
@@ -230,16 +248,24 @@ class DistillationCollector:
             now = time.time()
             per_teacher: dict[str, dict] = {}
             for teacher in set(list(self._counts.keys()) + list(self._quarantine_counts.keys())):
+                _tot = self._counts.get(teacher, 0)
+                _syn = self._synthetic_counts.get(teacher, 0)
                 per_teacher[teacher] = {
-                    "total": self._counts.get(teacher, 0),
+                    "total": _tot,
                     "quarantined": self._quarantine_counts.get(teacher, 0),
                     "buffer_size": len(self._buffers.get(teacher, deque())),
+                    "synthetic": _syn,
+                    "lived": max(0, _tot - _syn),
                     "last_seen_s": round(now - self._last_seen[teacher], 1) if teacher in self._last_seen else None,
                 }
+            _all = sum(self._counts.values())
+            _all_syn = sum(self._synthetic_counts.values())
             return {
                 "teachers": per_teacher,
-                "total_signals": sum(self._counts.values()),
+                "total_signals": _all,
                 "total_quarantined": sum(self._quarantine_counts.values()),
+                "total_synthetic": _all_syn,
+                "total_lived": max(0, _all - _all_syn),
             }
 
     _MAX_JSONL_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
