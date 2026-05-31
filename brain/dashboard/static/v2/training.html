@@ -26,6 +26,21 @@
     .lm .k{font-size:9px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;}
     .lm b{font-size:15px;font-variant-numeric:tabular-nums;}
     .stage0{font-size:10px;color:var(--muted);line-height:1.55;border-left:2px solid var(--cyan);padding-left:10px;}
+    /* manual gate work — per-class lived-example progress */
+    .mgwrap{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+    @media(max-width:760px){.mgwrap{grid-template-columns:1fr;}}
+    .gatecard{border:1px solid var(--line);border-radius:5px;padding:9px 11px;background:rgba(3,8,14,.4);}
+    .gatecard.done{border-color:var(--green);}
+    .gchd{display:flex;justify-content:space-between;align-items:center;gap:6px;}
+    .grc{font-size:10.5px;font-weight:700;color:var(--text);font-family:monospace;}
+    .gct{font-size:10px;font-variant-numeric:tabular-nums;font-weight:700;}
+    .gbar{height:6px;border-radius:3px;background:rgba(255,255,255,.06);margin:6px 0;overflow:hidden;}
+    .gbar>i{display:block;height:100%;border-radius:3px;}
+    .gmeta{font-size:9px;color:var(--muted);line-height:1.5;}
+    .gmeta .rt{color:var(--cyan);font-family:monospace;}
+    .gsay{margin-top:5px;font-size:9px;color:var(--amber);font-weight:700;}
+    .gprompt{margin-top:2px;padding:3px 6px;background:rgba(3,8,20,.7);border:1px solid var(--line);border-radius:3px;color:var(--text);font-family:monospace;font-size:9.5px;}
+    .gfoot{margin-top:5px;font-size:8.5px;color:var(--dim);line-height:1.4;}
   </style>
 </head>
 <body>
@@ -57,6 +72,12 @@
       <h2>What to Say Next <span class="tag self">guidance</span></h2>
       <div class="note">Generated live from whichever gates are red — the specific moves that feed the NN / distillation right now. Corrections beat affirmations ~10×.</div>
       <div id="langguide"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Manual Gate Work Needed <span class="tag self">lived only</span> <span id="manualgap" class="floorpill"></span></h2>
+      <div class="note">Per-class progress toward the <b>30 lived examples</b> each self-knowledge class needs before its language gate passes (count ≥30 <b>and</b> quality not red) — which unlocks part of the <b>maturity validation pack</b> and lets that class graduate shadow → canary → live (its native voice goes live instead of the LLM). <b>These do not open from JARVIS running overnight</b> — they need real operator conversations that produce each class; synthetic/passive runtime does not count. Say the prompts <b>exactly</b> (first/second person — "what can <b>you</b> do", not "what can <b>she</b> do", or the route won't match).</div>
+      <div class="mgwrap" id="manualgates"></div>
     </section>
 
     <section class="card col8">
@@ -115,6 +136,16 @@
   ];
   var BOUNDED_CLASSES=['self_status','self_introspection','recent_learning','recent_research','memory_recall','identity_answer','capability_status'];
   function gateColor(v,g,y){ if(v===null) return 'var(--dim)'; return v>=g?'var(--green)':(v>=y?'var(--amber)':'var(--red)'); }
+
+  // Exact phrasing decks + expected routes (ported from v1 renderers.js). The
+  // wording matters: the route classifier needs first/second-person framing.
+  var GATE_PROMPT_DECKS={
+    recent_learning:['Jarvis, what have you learned recently?','Jarvis, what did you learn from our recent conversations?','Jarvis, what skill did you just finish learning?'],
+    recent_research:['Jarvis, what have you researched recently?','Jarvis, what did you study recently?','Jarvis, what recent sources did you learn from?'],
+    identity_answer:['Jarvis, who am I?','Jarvis, do you recognize me?','Jarvis, do you know who I am?','Jarvis, who is speaking?'],
+    capability_status:['Jarvis, what can you do?','Jarvis, what are your capabilities?','Jarvis, what are your current skills?','Jarvis, which capabilities are verified?']
+  };
+  var GATE_EXPECTED_ROUTES={ recent_learning:'INTROSPECTION → recent_learning', recent_research:'INTROSPECTION → recent_research', identity_answer:'IDENTITY → identity_answer', capability_status:'INTROSPECTION → capability_status' };
 
   var WEIGHTS=[['face_confidence',0.12],['voice_confidence',0.12],['rapport_score',0.15],['boundary_stability',0.15],['memory_accuracy',0.15],['soul_integrity',0.15],['autonomy_safety',0.16]];
   var STAGE_THEMES_FALLBACK={1:'Identity & enrollment',2:'Preferences & rapport',3:'Household & boundaries',4:'Routines & proactivity',5:'Corrections & edge cases',6:'Memory validation',7:'Autonomy probation'};
@@ -224,6 +255,43 @@
     el('langguide').innerHTML=tips.map(function(t){ return '<div class="mode"><h4>'+t.h+'</h4><p>'+t.p+'</p></div>'; }).join('');
   }
 
+  function renderManualGates(){
+    var vp=((SNAP&&SNAP.eval)||{}).validation_pack||{};
+    var targets=vp.language_evidence_targets||[];
+    var baselines=vp.language_route_class_baselines||[];
+    var box=el('manualgates'), gapEl=el('manualgap');
+    if(!targets.length){
+      box.innerHTML='<span style="color:var(--dim);font-size:10.5px">no language-evidence targets in snapshot (eval.validation_pack unavailable, or the brain predates this gate)</span>';
+      gapEl.textContent=''; return;
+    }
+    var baseByClass={}; baselines.forEach(function(b){ if(b&&b.response_class) baseByClass[b.response_class]=b; });
+    var totalGap=targets.reduce(function(a,r){ return a+Math.max(0,num(r.gap)||0); },0);
+    gapEl.textContent='lived examples remaining: '+totalGap;
+    gapEl.style.cssText=totalGap>0?'border-color:var(--amber);color:var(--amber)':'border-color:var(--green);color:var(--green)';
+    box.innerHTML=targets.map(function(r){
+      var rc=r.response_class||'?', count=num(r.count)||0, target=num(r.target_count)||30;
+      var gap=Math.max(0, num(r.gap)!=null?num(r.gap):(target-count));
+      var ok=!!r.current_ok, pct=target>0?Math.min(100,count/target*100):0;
+      var col=ok?'var(--green)':'var(--amber)';
+      var base=baseByClass[rc]||{};
+      var deck=GATE_PROMPT_DECKS[rc]||['Use a natural lived conversation that should produce this class.'];
+      var show=deck.slice(0,Math.min(4,Math.max(1,gap||1)));
+      var promptHtml=ok?'':('<div class="gsay">Say this exactly:</div>'+show.map(function(p){return '<div class="gprompt">'+esc(p)+'</div>';}).join(''));
+      return '<div class="gatecard'+(ok?' done':'')+'">'+
+        '<div class="gchd"><span class="grc">'+esc(rc)+'</span><span class="gct" style="color:'+col+'">'+(ok?'✓ ':'')+count+'/'+target+'</span></div>'+
+        '<div class="gbar"><i style="width:'+pct.toFixed(0)+'%;background:'+col+'"></i></div>'+
+        '<div class="gmeta">'+
+          (ok?('<div style="color:var(--green)">gate satisfied — '+count+' lived examples, quality '+esc(r.color||'ok')+'</div>')
+              :('<div>Need <b style="color:var(--amber)">'+gap+'</b> more lived example'+(gap===1?'':'s')+'.</div>'))+
+          '<div>Baseline: <span class="rt">'+esc((base.route||'—')+' → '+rc)+'</span>'+(base.count!=null?(' ('+base.count+')'):'')+'</div>'+
+          '<div>Expected: <span class="rt">'+esc(GATE_EXPECTED_ROUTES[rc]||'—')+'</span> · gate '+esc(r.color||'?')+' · '+esc(r.level||'shadow')+'</div>'+
+        '</div>'+
+        promptHtml+
+        (ok?'':'<div class="gfoot">Counts only after JARVIS produces the intended grounded/native response class. Third-person ("what can she do") won\'t match this route.</div>')+
+      '</div>';
+    }).join('');
+  }
+
   function renderRecovery(){
     var blocked = ST && ST.status==='blocked';
     var box=el('recovery');
@@ -241,7 +309,7 @@
       ST = r[1].status==='fulfilled' ? r[1].value : null;
       if(r[2].status==='fulfilled') SNAP=r[2].value;  // keep last good snapshot
       if(OB) renderAll(); else el('stages').innerHTML='<div class="offline">onboarding offline</div>';
-      renderLang(); renderLangGuidance();  // language gates depend on SNAP, not OB
+      renderLang(); renderLangGuidance(); renderManualGates();  // depend on SNAP, not OB
     });
   }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
