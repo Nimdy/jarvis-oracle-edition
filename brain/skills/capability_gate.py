@@ -1627,6 +1627,10 @@ class CapabilityGate:
         if not _BLOCKED_VERB_RE.search(text_stripped):
             return text
 
+        # Collect the span of every offending sentence in ONE pass (no in-place
+        # mutation — mutating mid-loop previously left multi-verb indices
+        # misaligned), then cut them out right-to-left so indices stay valid.
+        spans: list[tuple[int, int]] = []
         for verb_match in _BLOCKED_VERB_RE.finditer(text_stripped):
             verb = verb_match.group(0)
             if self._registry:
@@ -1656,11 +1660,34 @@ class CapabilityGate:
             _block_eid = self._record_block(f"sweep:{verb}")
             logger.info("Gate blocked (residual sweep): verb=%s in '%s'", verb, sentence[:80])
             self._maybe_auto_create_job(verb, parent_entry_id=_block_eid)
-            text = text[:sent_start + 1] + " I don't have that capability yet." + text[sent_end + 1:]
-            text_lower = text.lower()
-            text_stripped = _strip_diacritics(text_lower)
+            spans.append((sent_start + 1, sent_end + 1))
 
-        return text
+        if not spans:
+            return text
+
+        # Merge overlapping spans (several blocked verbs in one sentence), then
+        # remove them. Dropping the offending sentence preserves the honesty
+        # guarantee — the unverified claim/offer never reaches the user — without
+        # splicing "I don't have that capability yet." into the middle of an
+        # otherwise-natural reply (the jarring mid-flow refusal we used to emit).
+        spans.sort()
+        merged: list[tuple[int, int]] = []
+        for s, e in spans:
+            if merged and s <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+            else:
+                merged.append((s, e))
+        cleaned = text
+        for s, e in reversed(merged):
+            cleaned = cleaned[:s] + cleaned[e:]
+        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+
+        # If a real reply remains after removing the claim, use it. Otherwise the
+        # message was essentially the claim itself — answer with an honest decline
+        # so the user is not left with silence.
+        if len([w for w in cleaned.split() if any(ch.isalpha() for ch in w)]) >= 3:
+            return cleaned
+        return "I don't have that capability yet."
 
     @staticmethod
     def _rewrite_at_match(text: str, match: re.Match, replacement: str) -> str:

@@ -597,17 +597,23 @@ def test_blocks_expanded_offer_patterns():
 
 
 def test_blocks_residual_sweep_patterns():
-    """Phrases caught by the whole-chunk blocked-verb sweep."""
+    """Phrases caught by the whole-chunk blocked-verb sweep.
+
+    Guarantee: the unverified capability claim must never reach the user. When
+    the claim IS the whole message, an explicit decline is emitted. When safe
+    content surrounds the claim, the claim is removed cleanly (no broken
+    mid-flow splice) and the safe content is preserved.
+    """
     gate = CapabilityGate(_fresh_registry())
-    must_block = [
-        "Singing is something I do quite well actually.",
-        "I can help you. Singing is my forte!",
-    ]
-    for s in must_block:
-        out = gate.check_text(s)
-        assert "I don't have that capability yet" in out, (
-            f"Expected block for residual sweep: {s!r} -> {out!r}"
-        )
+    # Whole message is the claim -> explicit decline.
+    out = gate.check_text("Singing is something I do quite well actually.")
+    assert "I don't have that capability yet" in out, out
+    assert "quite well" not in out.lower(), out
+    # Claim embedded with safe content -> claim removed, safe content kept,
+    # nothing falsely claimed, response not left empty.
+    out2 = gate.check_text("I can help you. Singing is my forte!")
+    assert "forte" not in out2.lower() and "singing is" not in out2.lower(), out2
+    assert out2.strip(), out2
     print("  PASS: blocks residual sweep patterns")
 
 
