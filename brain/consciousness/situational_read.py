@@ -24,10 +24,17 @@ See docs/COMPANION_COGNITION_DESIGN.md (P0).
 """
 from __future__ import annotations
 
+import json
+import os
 import time
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
+
+# Separate shadow-store persistence (NOT soul/identity — no pollution). Lets reads
+# survive restarts so the P0->P1 earn-gate can actually accumulate its reps.
+_STATE_DIR = os.path.expanduser("~/.jarvis")
+_STATE_PATH = os.path.join(_STATE_DIR, "companion_situational_read.json")
 
 # Salience gate threshold. In P0 it gates NOTHING — the read is logged-only.
 # It is recorded so the threshold can be validated against real conversation
@@ -85,6 +92,22 @@ class SituationalRead:
             "authority": self.authority,
         }
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "SituationalRead":
+        return cls(
+            timestamp=d.get("timestamp", 0.0),
+            speaker=d.get("speaker", "unknown"),
+            engagement=d.get("engagement", "unknown"),
+            user_sentiment=d.get("user_sentiment", "neutral"),
+            self_check=d.get("self_check", ""),
+            confidence=float(d.get("confidence", 0.0) or 0.0),
+            evidence=[list(e) for e in (d.get("evidence") or [])],
+            salience=float(d.get("salience", 0.0) or 0.0),
+            salience_tripped=bool(d.get("salience_tripped", False)),
+            would_have_done=d.get("would_have_done"),
+            authority=d.get("authority", "shadow_logged_only"),
+        )
+
 
 def _word_count(text: str) -> int:
     return len((text or "").split())
@@ -105,6 +128,33 @@ class SituationalReadEngine:
         self._recent: deque = deque(maxlen=50)
         self._total = 0
         self._tripped = 0
+        self._load()
+
+    def _save(self) -> None:
+        """Persist the shadow store to its OWN file (not identity). Best-effort."""
+        try:
+            os.makedirs(_STATE_DIR, exist_ok=True)
+            data = {"total": self._total, "tripped": self._tripped,
+                    "recent": [r.to_dict() for r in self._recent]}
+            tmp = _STATE_PATH + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(data, f)
+            os.replace(tmp, _STATE_PATH)
+        except Exception:
+            pass
+
+    def _load(self) -> None:
+        try:
+            with open(_STATE_PATH) as f:
+                data = json.load(f)
+            self._total = int(data.get("total", 0))
+            self._tripped = int(data.get("tripped", 0))
+            for rd in data.get("recent", []):
+                self._recent.append(SituationalRead.from_dict(rd))
+        except FileNotFoundError:
+            pass
+        except Exception:
+            pass
 
     def observe_turn(
         self,
@@ -138,6 +188,7 @@ class SituationalReadEngine:
         self._total += 1
         if read.salience_tripped:
             self._tripped += 1
+        self._save()
         return read
 
     def _build(self, *, speaker, user_text, response_text, user_emotion,

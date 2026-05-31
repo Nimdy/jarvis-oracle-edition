@@ -21,10 +21,17 @@ See docs/COMPANION_COGNITION_DESIGN.md (P1) and docs/FINISH_ROADMAP.md (#3-4).
 """
 from __future__ import annotations
 
+import json
+import os
 import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
+
+# Separate shadow-store persistence (NOT soul/identity — no pollution). Lets the
+# per-person model survive restarts so it can accumulate reps and earn coherence.
+_STATE_DIR = os.path.expanduser("~/.jarvis")
+_TOM_STATE_PATH = os.path.join(_STATE_DIR, "companion_theory_of_mind.json")
 
 # A model needs a few corroborating reads before its hypotheses mean anything.
 _MIN_SAMPLES_FOR_CONFIDENCE = 6
@@ -96,6 +103,58 @@ class TheoryOfMindEngine:
     def __init__(self) -> None:
         self._people: dict[str, PersonModel] = {}
         self._observations = 0
+        self._load()
+
+    def _save(self) -> None:
+        """Persist to the shadow store's OWN file (not identity). Best-effort."""
+        try:
+            os.makedirs(_STATE_DIR, exist_ok=True)
+            people = {}
+            for name, pm in self._people.items():
+                people[name] = {
+                    "name": pm.name, "sample_count": pm.sample_count,
+                    "disposition": pm.disposition,
+                    "disposition_confidence": pm.disposition_confidence,
+                    "current_feeling": pm.current_feeling,
+                    "feeling_confidence": pm.feeling_confidence,
+                    "responsiveness": pm.responsiveness,
+                    "consistency": pm.consistency,
+                    "last_updated": pm.last_updated,
+                    "recent": [list(t) for t in pm._recent],
+                }
+            data = {"observations": self._observations, "people": people}
+            tmp = _TOM_STATE_PATH + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(data, f)
+            os.replace(tmp, _TOM_STATE_PATH)
+        except Exception:
+            pass
+
+    def _load(self) -> None:
+        try:
+            with open(_TOM_STATE_PATH) as f:
+                data = json.load(f)
+            for name, s in (data.get("people") or {}).items():
+                pm = PersonModel(name=s.get("name", name))
+                pm.sample_count = int(s.get("sample_count", 0))
+                pm.disposition = s.get("disposition", pm.disposition)
+                pm.disposition_confidence = float(s.get("disposition_confidence", 0.0) or 0.0)
+                pm.current_feeling = s.get("current_feeling", "unknown")
+                pm.feeling_confidence = float(s.get("feeling_confidence", 0.0) or 0.0)
+                pm.responsiveness = s.get("responsiveness", "unknown")
+                pm.consistency = float(s.get("consistency", 0.0) or 0.0)
+                pm.last_updated = float(s.get("last_updated", 0.0) or 0.0)
+                for item in (s.get("recent") or []):
+                    try:
+                        pm._recent.append((item[0], item[1]))
+                    except Exception:
+                        pass
+                self._people[name] = pm
+            self._observations = int(data.get("observations", 0))
+        except FileNotFoundError:
+            pass
+        except Exception:
+            pass
 
     def observe(self, speaker: str, read: Any) -> "PersonModel | None":
         """Fold one situational read into the speaker's model. No side effects."""
@@ -156,6 +215,7 @@ class TheoryOfMindEngine:
             pm.responsiveness = "withdrawn"
         else:
             pm.responsiveness = "mixed"
+        self._save()
         return pm
 
     def get_model(self, name: str) -> "dict | None":
