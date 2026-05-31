@@ -61,6 +61,29 @@ _TENSION_NOISE_FLOOR = 0.05
 # spark_metrics _BELIEF_SAMPLE_CAP discipline.
 _BELIEF_SAMPLE_CAP = 1000
 
+# ── Outward bias + anti-fixation (soak fix, 2026-05-31) ──────────────────────
+# A ~90min shadow soak showed the drive selecting 8/8 INWARD targets — and the
+# SAME self-referential operational belief ("slow response 9408ms — consider
+# faster routing") re-picked every cycle with rising urgency. Two corrections,
+# both VIEW-ONLY (multiply a belief's grounding tension as a TARGET; never mutate
+# the belief):
+#   * outward bias — self/operational/meta beliefs are already grounded in their
+#     own telemetry and are not externally-checkable WORLD claims, so they are
+#     heavily damped as grounding targets; world facts/scene keep full weight.
+#   * anti-fixation — a belief surfaced as the top target in the last N computes
+#     is damped so the drive ROTATES instead of re-asking one question.
+_INWARD_WEIGHT = 0.2     # self / operational / meta beliefs
+_IDENTITY_WEIGHT = 0.7   # about a person (operator-validatable, semi-outward)
+# Content markers that flag a self-referential operational/meta belief even when
+# facet routing miscategorises it (the soak belief was faceted "identity").
+_OPERATIONAL_MARKERS = (
+    "meta-learning", "meta_learning", "metacognit", "latency", "routing",
+    "faster rout", "response (", "response time", "ms)", "cadence", "tick rate",
+    "win_rate", "shadow_default", "slow response", "self-improve", "throughput",
+)
+_ANTIFIX_WINDOW = 6
+_ANTIFIX_DAMP = 0.5
+
 
 # ---------------------------------------------------------------------------
 # Facet tagging (SPARK §6 channel-selection rule).
@@ -119,6 +142,24 @@ def classify_facet(belief: Any) -> Facet:
 
     # Everything else (factual / philosophical) → web / research.
     return _FACET_FACTUAL
+
+
+def _outward_weight(belief: Any, facet: Facet) -> float:
+    """Multiplier biasing grounding tension OUTWARD (soak fix). Self/operational/
+    meta beliefs (already self-grounded, not externally checkable as world claims)
+    are heavily damped; person-identity is semi-outward; world facts/scene keep
+    full weight. Pure read, no mutation."""
+    if facet == _FACET_SELF:
+        return _INWARD_WEIGHT
+    subject = (getattr(belief, "canonical_subject", "") or "").lower()
+    if subject in _SELF_SUBJECT_HINTS:
+        return _INWARD_WEIGHT
+    claim = (getattr(belief, "rendered_claim", "") or "").lower()
+    if any(m in subject or m in claim for m in _OPERATIONAL_MARKERS):
+        return _INWARD_WEIGHT
+    if facet == _FACET_IDENTITY:
+        return _IDENTITY_WEIGHT
+    return 1.0
 
 
 # Cheapest external channel that can validate each facet (SPARK §6).
@@ -237,6 +278,7 @@ class ProvenanceScorer:
 
     def __init__(self, engine: Any | None = None) -> None:
         self._engine = engine
+        self._recent_top_ids: list[str] = []  # anti-fixation memory (soak fix)
 
     # -- store resolution (read-only) --------------------------------------
 
@@ -403,6 +445,17 @@ class ProvenanceScorer:
                 belief, is_orphan, base_conf, effective_conf, pressure,
             )
 
+            # Outward bias + anti-fixation (soak fix) — view-only re-weight of the
+            # tension as a grounding TARGET: damp self/operational/meta beliefs and
+            # recently-surfaced ones so the drive points outward and rotates.
+            facet = classify_facet(belief)
+            ow = _outward_weight(belief, facet)
+            antifix = _ANTIFIX_DAMP if bid in self._recent_top_ids else 1.0
+            tension = max(0.0, min(1.0, tension * ow * antifix))
+            detail["outward_weight"] = round(ow, 3)
+            if antifix < 1.0:
+                detail["antifix_damp"] = _ANTIFIX_DAMP
+
             if is_orphan:
                 report.orphan_count += 1
             if is_inferred:
@@ -414,7 +467,6 @@ class ProvenanceScorer:
             if tension >= _high_tension_threshold():
                 report.high_tension_count += 1
 
-            facet = classify_facet(belief)
             facet_sum[facet] = facet_sum.get(facet, 0.0) + tension
             facet_n[facet] = facet_n.get(facet, 0) + 1
 
@@ -448,6 +500,14 @@ class ProvenanceScorer:
         }
         tensions.sort(key=lambda t: t.grounding_tension, reverse=True)
         report.top_tensions = tensions[: max(0, top_n)]
+        # Anti-fixation memory: remember the surfaced top target so the next
+        # compute rotates to a different belief instead of re-asking this one.
+        if report.top_tensions:
+            _top_id = report.top_tensions[0].belief_id
+            if _top_id and _top_id not in self._recent_top_ids:
+                self._recent_top_ids.append(_top_id)
+                if len(self._recent_top_ids) > _ANTIFIX_WINDOW:
+                    self._recent_top_ids = self._recent_top_ids[-_ANTIFIX_WINDOW:]
         report.sources_available = True
         return report
 
