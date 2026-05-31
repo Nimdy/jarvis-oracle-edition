@@ -90,19 +90,46 @@ conversation signals + history, **held as confidence-scored HYPOTHESES, never as
 the missing "model the other mind." It is grounded by the spark (ask/observe) and by the companion's
 corrections.
 
-**(3) Read→behavior ladder.** The read proposes behavioral adjustments (tone, depth, pace, pivot,
-give-space, disengage, ask-a-clarifying-question). Gated exactly like `cognition/promotion.py`:
-- **shadow** — narrate the *would-be* adjustment, change nothing;
-- **advisory** — surface/suggest it (and the affect-cadence coupling proposes, unapplied);
-- **active** — actually adjust, earned by being *right* (validated against companion feedback), with a
-  kill-switch. This is the **riskiest** capability (agency over the conversation) → the most conservative
-  gating, smallest steps, fastest auto-demote.
+**(3) Read→behavior ladder.** The read can do two things; they are NOT the same risk class.
+- **(3a) Ask a question** — this path ALREADY EXISTS and must be *fed, not forked*. The working
+  desk-object / unknown-voice questions and the spark's grounding questions all flow through one
+  pipeline: `personality/curiosity_questions.py` `CuriosityQuestionBuffer` → `personality/proactive.py`
+  `ProactiveGovernor` (≤~3–6/hr, engagement + user-stress gated) → TTS → outcome learning
+  (engaged/dismissed/**annoyed** → cooldown ×4/×8, never-ask-twice via memory `has_existing_answer`). The
+  spark already integrates here (`autonomy/orchestrator.py:2608` `_ask_grounding_curiosity_question`,
+  `source="research"`, shared 3/hr cap). **The internal read asks by building a `CuriosityQuestion` and
+  calling `buf.add()`** — inheriting every dedup / rate-limit / annoyance-learning / memory-suppression
+  guard the desk/voice behavior depends on. No new ask-path; zero risk to what works. The "tried to
+  resolve, couldn't, still want to know" gate is already the design: novelty is detected and *not
+  auto-answered* — the gap becomes the question.
+- **(3b) Adjust the conversation** — tone / depth / pace / pivot / give-space / disengage. *This* is the
+  genuinely-new, riskiest capability (agency over the exchange). Gated exactly like
+  `cognition/promotion.py`: **shadow** (narrate the would-be adjustment, change nothing) → **advisory**
+  (surface/suggest; affect-cadence coupling proposes, unapplied) → **active** (actually adjust, earned by
+  being right vs companion feedback, kill-switch, fastest auto-demote). Disengage/back-away is last and
+  most conservative.
 
-**(4) Crystallization valve.** Transient reads mostly **evaporate** (they are not beliefs — same lesson as
-the `interaction_review` fix: events ≠ beliefs). A read **crystallizes into a belief only on recurrence +
-corroboration + significance** — into the self-model ("I lose people when I get technical"),
-relational-model ("David shuts down when I hedge"), or world-model. This valve is what lets the system
-*learn patterns* without re-polluting the belief graph with per-turn logs.
+**(4) Crystallization — ride the existing gates, no new threshold.** Transient reads mostly **evaporate**
+(they are not beliefs — events ≠ beliefs, the `interaction_review` lesson). A read that matters becomes a
+belief through the machinery that ALREADY governs this — never an invented "N corroborations" number:
+- **eligibility** — `contradiction_engine._is_belief_eligible` (weight/tag floors) +
+  `EXTRACTION_DISCARD_THRESHOLD` (0.2): a low-confidence read ("they *might* be annoyed" @0.18) never
+  becomes a belief no matter how often it recurs;
+- **recurrence** — the existing `TensionRecord.revisit_count` / `maturation_score` (stable only at ≥50
+  revisits AND ≥0.90 maturation, accumulating faster with corroboration) is the real "N occurrences" gate;
+- **confidence** — set/validated by `epistemic/calibration/*` (≥20 outcomes, drift detection), not hand-set;
+- **revisable** — beliefs version/supersede on new evidence (`contradiction_engine` version-collapse) and
+  recalibrate: *"how food tastes changes"* is just supersede + recalibrate. Beliefs are knowledge and
+  knowledge moves.
+- **personality vs knowledge** — a read that is *self/personality-level* (who JARVIS is) does NOT enter
+  the belief graph; it feeds the slow **0.7-inertia** trait layer (`consciousness/soul.py` semi-stable
+  traits + `personality/evolution.py`), with the rollback safeguard. Core values stay immutable. So the
+  two stability classes the operator named — fluid knowledge vs slow personality — are kept on their
+  existing separate tracks.
+
+The one genuinely-missing piece is an explicit *observation → settled-knowledge* status transition
+(today recurring observations version-collapse but never graduate from "observed" to "factual"). If we
+build it, it **rides the same gates above** (maturation + calibration), it is not a new counter.
 
 **(5) Companion-learning loop.** The read is a **skill learned from the companion**, maturity-gated like
 the 7-stage apprenticeship. Corrections ("I wasn't annoyed, I was thinking") update the user-state model
@@ -148,8 +175,13 @@ is **success**, not failure (same ethic as grounding).
 ## 8. Open questions (decide before P3/P4)
 
 1. How much **pivot-authority**, and how fast is it earned? (Tone/depth first; disengage much later?)
-2. Should the read **ask out loud** when uncertain (visible grounding), and how often — companion's tolerance?
-3. **Crystallization threshold** — how many corroborated reads make a belief?
+2. *(grounded)* Asking rides the existing `CuriosityQuestionBuffer` + `ProactiveGovernor` — "ask when it
+   wants" is the existing curiosity gate (detect gap → don't auto-answer → ask), tolerance is the governor
+   rate that already learns from dismissal/annoyance. Open sub-point: the shared hourly budget once the
+   read is another question source.
+3. *(grounded)* Crystallization rides existing eligibility + `TensionRecord` maturation + calibration
+   gates — no invented number. Open: build the optional observation→settled-knowledge transition now, or
+   let version-collapse + calibration suffice?
 4. How different is the read for the **primary companion vs the others around them** — depth of
    theory-of-mind, and what (if anything) crystallizes into beliefs for non-primary people?
 5. **Learning signal** — explicit corrections only, or also implicit (the companion's next reaction)?
