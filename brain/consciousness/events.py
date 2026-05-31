@@ -396,6 +396,17 @@ CURIOSITY_QUESTION_GENERATED = "curiosity:question_generated"
 CURIOSITY_QUESTION_ASKED = "curiosity:question_asked"
 CURIOSITY_ANSWER_PROCESSED = "curiosity:answer_processed"
 
+# Grounding Ring events (SPARK_DESIGN §8 P0 — declared, not yet emitted).
+# BELIEF_EXTERNALLY_CONFIRMED fires (P3+) when an external validator
+# (operator answer, world-model prediction validated, or source-cited
+# finding) touches a belief — the never-self-scored close at station 5.
+# THOUGHT_VALIDATION_OUTCOME fires (P3+) on ResearchIntent completion as
+# the missing teacher signal for the tension-thought selector.
+# Both are reserved here in P0 so the baselines can be observed before any
+# mechanism can move them. No subscriber, no emitter yet.
+BELIEF_EXTERNALLY_CONFIRMED = "belief:externally_confirmed"  # reserved (P0): not emitted yet
+THOUGHT_VALIDATION_OUTCOME = "thought:validation_outcome"  # reserved (P0): not emitted yet
+
 # Fractal Recall events
 FRACTAL_RECALL_SURFACED = "fractal_recall:surfaced"
 

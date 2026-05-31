@@ -225,6 +225,12 @@ class KernelLoop:
         self._deferred: list[DeferredOp] = []
         self._max_deferred = 30
         self._cadence_multiplier: float = 1.0
+        # SPARK_DESIGN §4/§5/§8 P5 — per-cycle interval multipliers. Maps a cycle
+        # nickname (meta_thought | curiosity | contradiction | truth_calibration |
+        # belief_graph) to a multiplier in [0.6, 2.0]. EMPTY by default → every
+        # cycle uses its base KERNEL_INTERVALS value verbatim (no-op). Set ONLY by
+        # the promoted affect coupling (active); shadow/kill-switch leaves it empty.
+        self._interval_multipliers: dict[str, float] = {}
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -297,6 +303,38 @@ class KernelLoop:
     def cadence_multiplier(self) -> float:
         return self._cadence_multiplier
 
+    # SPARK_DESIGN §4/§5/§8 P5 — interval-native clamp band (mirrors affect_regulation).
+    _INTERVAL_MIN = 0.6
+    _INTERVAL_MAX = 2.0
+
+    def set_interval_multipliers(self, multipliers: dict[str, float]) -> None:
+        """Set per-cycle interval multipliers (SPARK §4 interval deltas, P5).
+
+        Each value is clamped to ``[0.6, 2.0]`` (the §5 rule-7 interval band).
+        An empty dict resets to the no-op baseline (every cycle on its base
+        interval). Unknown keys are accepted and ignored by :meth:`_interval`.
+        Set ONLY by the promoted affect coupling; the default is empty (no-op).
+        """
+        clamped: dict[str, float] = {}
+        try:
+            for k, v in (multipliers or {}).items():
+                clamped[str(k)] = max(
+                    self._INTERVAL_MIN, min(self._INTERVAL_MAX, float(v)),
+                )
+        except Exception:
+            return
+        self._interval_multipliers = clamped
+
+    def _interval(self, name: str) -> float:
+        """Base interval for ``name`` scaled by its affect multiplier.
+
+        A multiplier >1 lengthens the interval (rest), <1 shortens it (urgency).
+        Absent multiplier → 1.0 → the unmodified base interval (default path).
+        """
+        base = KERNEL_INTERVALS[name]
+        mult = self._interval_multipliers.get(name, 1.0) if self._interval_multipliers else 1.0
+        return base * mult
+
     # -- main loop -----------------------------------------------------------
 
     async def _run(self) -> None:
@@ -365,7 +403,10 @@ class KernelLoop:
                             lambda: self._callbacks.on_thinking_cycle())
 
         if self._budget.remaining() > 1.0:
-            if now - self._state.last_meta_thought_time >= KERNEL_INTERVALS["META_THOUGHT_INTERVAL_S"]:
+            # SPARK §4/§8 P5 — the meta-thought cycle interval can be lengthened
+            # (serotonin/rest) or shortened (dopamine/cortisol/urgency) by the
+            # promoted affect coupling. Default multiplier 1.0 → base interval.
+            if now - self._state.last_meta_thought_time >= self._interval("META_THOUGHT_INTERVAL_S"):
                 if self._budget.checkpoint("consciousness_tick"):
                     self._callbacks.on_consciousness_tick()
                     self._state.last_meta_thought_time = now

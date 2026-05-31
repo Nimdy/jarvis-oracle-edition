@@ -450,6 +450,56 @@ def _create_app() -> FastAPI:
     async def api_eval_snapshot():
         return _cache.get("eval", {})
 
+    # ── SPARK_DESIGN §6 / §8 P4 — async Grounding Queue (read-only) ──────────
+    @app.get("/api/grounding/queue")
+    async def api_grounding_queue():
+        """Read-only Grounding Queue: pending validation questions (ranked by
+        tension × graph-leverage × staleness), the grounding-ring metrics
+        (external_validation_rate, grounded:inferred, orphan_rate,
+        avg_chain_length), the per-mechanism advisory promotion levels, and the
+        input-starvation state. Answering is operator-gated (POST below); nothing
+        here auto-fires. Falls back to the cached grounding_ring if the live
+        queue singleton is unavailable."""
+        out: dict[str, Any] = {
+            "grounding_ring": _cache.get("grounding_ring", {}),
+        }
+        try:
+            from autonomy.grounding_queue import GroundingQueue
+            GroundingQueue.get_instance().expire_stale()
+            out["queue"] = GroundingQueue.get_instance().get_status(limit=80)
+        except Exception:
+            out["queue"] = _cache.get("grounding_ring", {}).get("queue", {})
+        return out
+
+    @app.post("/api/grounding/queue/answer", dependencies=[Depends(_require_api_key)])
+    async def api_grounding_queue_answer(request: Request):
+        """OPERATOR-GATED answer to a pending grounding question (SPARK §6 / §7).
+
+        Records the operator's answer as an external-validation outcome (never
+        self-scored): a "no/wrong" still counts as grounded=True (being corrected
+        is success). View-only on the belief graph — the belief mutation is the
+        P5 active closure; here we only record the external touch on the durable
+        queue + the external-only promotion gates. Never auto-fired: this runs
+        only on an explicit operator POST with the api_key.
+
+        Body JSON: {"question_id": str, "answer": str}
+        """
+        body = await request.json()
+        question_id = str(body.get("question_id", "") or "").strip()
+        answer = str(body.get("answer", "") or "")
+        if not question_id:
+            raise HTTPException(400, "question_id required")
+        if not answer.strip():
+            raise HTTPException(400, "answer required")
+        try:
+            from autonomy.grounding_queue import GroundingQueue
+            result = GroundingQueue.get_instance().answer(question_id, answer)
+        except Exception as exc:
+            raise HTTPException(500, f"grounding answer failed: {exc}")
+        if not result.get("ok"):
+            raise HTTPException(404, result.get("error", "question_not_found"))
+        return result
+
     @app.get("/api/eval/benchmark")
     async def api_eval_benchmark():
         return _cache.get("eval", {}).get("oracle_benchmark", {})

@@ -49,6 +49,7 @@ window.V2 = (function(){
     ['/static/v2/timeline.html','timeline'],
     ['/static/v2/immune.html','immune'],
     ['/static/v2/provenance.html','provenance'],
+    ['/static/v2/grounding.html','grounding'],
     ['/static/v2/emergence.html','emergence'],
     ['/static/v2/prove.html','prove']
   ];

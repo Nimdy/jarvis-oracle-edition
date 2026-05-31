@@ -33,10 +33,11 @@ from typing import Any, Literal
 logger = logging.getLogger(__name__)
 
 DRIVE_STATE_PATH = Path("~/.jarvis/drive_state.json").expanduser()
+GROUNDING_PROMOTION_PATH = Path("~/.jarvis/grounding_drive_promotion.json").expanduser()
 
 DriveType = Literal[
     "truth", "curiosity", "mastery", "relevance",
-    "coherence", "continuity", "play",
+    "coherence", "continuity", "play", "grounding",
 ]
 
 ActionType = Literal[
@@ -46,7 +47,7 @@ ActionType = Literal[
 
 DRIVE_TYPES: tuple[DriveType, ...] = (
     "truth", "curiosity", "mastery", "relevance",
-    "coherence", "continuity", "play",
+    "coherence", "continuity", "play", "grounding",
 )
 
 
@@ -69,6 +70,29 @@ class DriveSignals:
     relevance_success_rate: float = 0.5
     saturated_topics: set[str] = field(default_factory=set)
     active_user_goals: int = 0
+    # ── SPARK_DESIGN §2.1/§3 — grounding-drive signals (default-safe) ──
+    # grounding_tension: aggregate from ProvenanceScorer (belief-map tension —
+    #   inferred + orphaned + under quarantine pressure). Floored at 0.10 in the
+    #   urgency fn, never dampened by active_user_goals.
+    grounding_tension: float = 0.0
+    # external_validation_gaps: count of high-tension beliefs that have NEVER
+    #   been touched by an external validator (the loudest grounding targets).
+    external_validation_gaps: int = 0
+    # delta_stability_misses: counterfactual-attribution windows that closed
+    #   without a meaningful, stable delta (DeltaTracker) — inward work that
+    #   produced no external movement.
+    delta_stability_misses: int = 0
+    # world_drift_events: world-model predictions that failed validation
+    #   (WORLD_MODEL_PREDICTION_* mismatch) — the world disagreeing with us.
+    world_drift_events: int = 0
+    # grounding_facet: dominant facet of the loudest tension (identity/scene/
+    #   factual/self) so the drive can route by the cheapest validating channel.
+    grounding_facet: str = "factual"
+    # grounding_target_id / grounding_target_claim: the specific belief the
+    #   loudest tension names, so the seeded question can cite it (P3 uses this).
+    grounding_target_id: str = ""
+    grounding_target_claim: str = ""
+    grounding_tool_hint: str = "web"
 
 
 @dataclass
@@ -114,6 +138,233 @@ class DriveAction:
         }
 
 
+# ── Grounding drive promotion controller (SHADOW-FIRST, SPARK §3/§8 P2) ──
+#
+# Cloned from cognition/promotion.py (shadow=0/advisory=1/active=2, gated,
+# auto-demoting). DEFAULTS TO SHADOW: the grounding drive COMPUTES tension and
+# SELECTS a DriveAction, but in shadow the orchestrator does NOT enqueue it and
+# reaches no operator — it logs "would have asked/researched". The gate is
+# external-only (never self-scored): promotion requires ≥20 external-validation
+# outcomes at rate ≥0.40 (SPARK §3 gate 1). This module ships the gate; it does
+# NOT flip it to active. The orchestrator consults ``level``/``is_shadow()``.
+
+GROUNDING_MIN_OUTCOMES = 20
+GROUNDING_MIN_SHADOW_HOURS = 4.0
+GROUNDING_PROMOTE_VALIDATION_RATE = 0.40
+GROUNDING_DEMOTE_VALIDATION_RATE = 0.20
+GROUNDING_DEMOTE_WINDOW = 20
+GROUNDING_TRANSITION_COOLDOWN_S = 300.0
+
+# SPARK §8 P4 — ADVISORY tier budget. At advisory (level 1) the grounding drive
+# may enqueue at most ONE external-validation intent per governor window AND ask
+# ONE gated question through the existing curiosity ProactiveGovernor (which
+# itself caps at MAX_QUESTIONS_PER_HOUR=3 with annoyance penalties/cooldowns).
+# The governor window is the rate-limit unit for the enqueue budget — wide enough
+# that advisory never floods the queue, narrow enough to stay responsive.
+GROUNDING_GOVERNOR_WINDOW_S = 1800.0  # 30 min — one external-validation intent / window
+GROUNDING_ADVISORY_MAX_PER_WINDOW = 1
+
+
+@dataclass
+class _GroundingPromotionState:
+    level: int = 0  # 0=shadow, 1=advisory, 2=active — DEFAULTS TO SHADOW
+    shadow_start_ts: float = field(default_factory=time.time)
+    total_outcomes: int = 0
+    validation_history: list[float] = field(default_factory=list)
+    selections_shadowed: int = 0
+    # SPARK §8 P4 advisory bookkeeping (default-safe; tolerated if absent on load).
+    advisory_enqueues: int = 0          # lifetime advisory intents enqueued
+    advisory_questions_asked: int = 0   # lifetime advisory gated questions asked
+    last_advisory_enqueue_ts: float = 0.0  # window anchor for the per-window budget
+    last_promoted_at: float = 0.0
+    last_demoted_at: float = 0.0
+
+
+class GroundingDrivePromotion:
+    """Zero-authority promotion gate for the grounding drive (defaults to shadow).
+
+    In shadow the drive computes tension and selects DriveActions; the
+    orchestrator logs them as "would have …" and never enqueues / never reaches
+    the operator. Promotion is gated on ``external_validation_rate`` — never a
+    self-score (SPARK §7: grounding reward is external-validator-only).
+    """
+
+    _instance: GroundingDrivePromotion | None = None
+
+    def __init__(self) -> None:
+        self._state = _GroundingPromotionState()
+        self._load()
+
+    @classmethod
+    def get_instance(cls) -> GroundingDrivePromotion:
+        if cls._instance is None:
+            cls._instance = GroundingDrivePromotion()
+        return cls._instance
+
+    @classmethod
+    def reset_instance(cls) -> None:
+        cls._instance = None
+
+    @property
+    def level(self) -> int:
+        return self._state.level
+
+    def is_shadow(self) -> bool:
+        return self._state.level == 0
+
+    def is_active(self) -> bool:
+        """True only when promoted to active. ALWAYS False at P2 default."""
+        return self._state.level >= 2
+
+    def is_advisory(self) -> bool:
+        """True at level 1 (SPARK §8 P4): may enqueue ≤1 external-validation
+        intent per governor window + ask ONE gated question — but drives NO
+        cadence/reward lever (that is P5/active)."""
+        return self._state.level == 1
+
+    def advisory_enqueue_allowed(self) -> bool:
+        """Whether the advisory per-governor-window enqueue budget is available.
+
+        SPARK §8 P4: at most ``GROUNDING_ADVISORY_MAX_PER_WINDOW`` (=1) intent per
+        ``GROUNDING_GOVERNOR_WINDOW_S``. Returns False outside advisory.
+        """
+        if not self.is_advisory():
+            return False
+        now = time.time()
+        if self._state.last_advisory_enqueue_ts <= 0:
+            return True
+        return (now - self._state.last_advisory_enqueue_ts) >= GROUNDING_GOVERNOR_WINDOW_S
+
+    def note_advisory_enqueue(self, *, asked_question: bool = False) -> None:
+        """Record an advisory enqueue (resets the per-window budget). Telemetry."""
+        self._state.last_advisory_enqueue_ts = time.time()
+        self._state.advisory_enqueues += 1
+        if asked_question:
+            self._state.advisory_questions_asked += 1
+        self.save()
+
+    def note_shadow_selection(self) -> None:
+        """Count a would-have-acted selection (telemetry only; no authority)."""
+        self._state.selections_shadowed += 1
+
+    def record_external_validation(self, validated: bool) -> None:
+        """Record an external-validator outcome (P3+ only; never self-scored)."""
+        self._state.total_outcomes += 1
+        self._state.validation_history.append(1.0 if validated else 0.0)
+        if len(self._state.validation_history) > 100:
+            self._state.validation_history = self._state.validation_history[-100:]
+        self._check_transitions()
+
+    def get_status(self) -> dict[str, Any]:
+        hist = self._state.validation_history
+        rate = sum(hist) / len(hist) if hist else 0.0
+        hours = (time.time() - self._state.shadow_start_ts) / 3600.0
+        return {
+            "level": self._state.level,
+            "level_name": {0: "shadow", 1: "advisory", 2: "active"}.get(
+                self._state.level, "unknown"),
+            "authority": "zero_authority_shadow" if self._state.level == 0 else (
+                "advisory" if self._state.level == 1 else "active"),
+            "total_outcomes": self._state.total_outcomes,
+            "external_validation_rate": round(rate, 4),
+            "window_size": len(hist),
+            "selections_shadowed": self._state.selections_shadowed,
+            "advisory_enqueues": self._state.advisory_enqueues,
+            "advisory_questions_asked": self._state.advisory_questions_asked,
+            "advisory_enqueue_allowed": self.advisory_enqueue_allowed(),
+            "hours_in_shadow": round(hours, 1),
+            "promotion_ready": self._promotion_eligible(),
+            "drives_levers": self.is_active(),
+        }
+
+    def save(self) -> None:
+        data = {
+            "level": self._state.level,
+            "shadow_start_ts": self._state.shadow_start_ts,
+            "total_outcomes": self._state.total_outcomes,
+            "validation_history": list(self._state.validation_history),
+            "selections_shadowed": self._state.selections_shadowed,
+            "advisory_enqueues": self._state.advisory_enqueues,
+            "advisory_questions_asked": self._state.advisory_questions_asked,
+            "last_advisory_enqueue_ts": self._state.last_advisory_enqueue_ts,
+            "last_promoted_at": self._state.last_promoted_at,
+            "last_demoted_at": self._state.last_demoted_at,
+        }
+        try:
+            GROUNDING_PROMOTION_PATH.parent.mkdir(parents=True, exist_ok=True)
+            tmp = GROUNDING_PROMOTION_PATH.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2))
+            tmp.replace(GROUNDING_PROMOTION_PATH)
+        except Exception:
+            logger.debug("Failed to save grounding drive promotion state", exc_info=True)
+
+    def _load(self) -> None:
+        try:
+            if not GROUNDING_PROMOTION_PATH.exists():
+                return
+            data = json.loads(GROUNDING_PROMOTION_PATH.read_text())
+            self._state.level = int(data.get("level", 0) or 0)
+            self._state.shadow_start_ts = data.get("shadow_start_ts", time.time())
+            self._state.total_outcomes = int(data.get("total_outcomes", 0) or 0)
+            self._state.validation_history = [
+                float(v) for v in data.get("validation_history", [])
+            ][-100:]
+            self._state.selections_shadowed = int(data.get("selections_shadowed", 0) or 0)
+            self._state.advisory_enqueues = int(data.get("advisory_enqueues", 0) or 0)
+            self._state.advisory_questions_asked = int(
+                data.get("advisory_questions_asked", 0) or 0
+            )
+            self._state.last_advisory_enqueue_ts = float(
+                data.get("last_advisory_enqueue_ts", 0.0) or 0.0
+            )
+            self._state.last_promoted_at = data.get("last_promoted_at", 0.0)
+            self._state.last_demoted_at = data.get("last_demoted_at", 0.0)
+        except Exception:
+            logger.debug("Failed to load grounding drive promotion state", exc_info=True)
+
+    def _promotion_eligible(self) -> bool:
+        if self._state.level >= 2:
+            return False
+        if self._state.total_outcomes < GROUNDING_MIN_OUTCOMES:
+            return False
+        hours = (time.time() - self._state.shadow_start_ts) / 3600.0
+        if hours < GROUNDING_MIN_SHADOW_HOURS:
+            return False
+        hist = self._state.validation_history
+        if len(hist) < GROUNDING_MIN_OUTCOMES:
+            return False
+        rate = sum(hist) / len(hist)
+        return rate >= GROUNDING_PROMOTE_VALIDATION_RATE
+
+    def _check_transitions(self) -> None:
+        now = time.time()
+        last_transition = max(self._state.last_promoted_at, self._state.last_demoted_at)
+        if last_transition > 0 and (now - last_transition) < GROUNDING_TRANSITION_COOLDOWN_S:
+            return
+        if self._promotion_eligible():
+            old = self._state.level
+            self._state.level = min(self._state.level + 1, 2)
+            if self._state.level != old:
+                self._state.last_promoted_at = now
+                logger.info("Grounding drive promoted: level %d → %d", old, self._state.level)
+                self.save()
+            return
+        hist = self._state.validation_history
+        if len(hist) >= GROUNDING_DEMOTE_WINDOW and self._state.level > 0:
+            recent = hist[-GROUNDING_DEMOTE_WINDOW:]
+            rate = sum(recent) / len(recent)
+            if rate < GROUNDING_DEMOTE_VALIDATION_RATE:
+                old = self._state.level
+                self._state.level = max(self._state.level - 1, 0)
+                self._state.last_demoted_at = now
+                self._state.shadow_start_ts = now
+                logger.warning(
+                    "Grounding drive demoted: level %d → %d (rate %.2f < %.2f)",
+                    old, self._state.level, rate, GROUNDING_DEMOTE_VALIDATION_RATE,
+                )
+                self.save()
+
+
 # ── Drive urgency computation ────────────────────────────────────────
 
 _URGENCY_THRESHOLD = 0.25
@@ -129,6 +380,7 @@ _DRIVE_FLOOR: dict[str, float] = {
     "coherence":  0.10,
     "continuity": 0.08,
     "play":       0.03,
+    "grounding":  0.10,  # SPARK §3 component 1: urgency floor 0.10
 }
 
 # Per-drive: preferred strategy, cheapest tool, escalation tool
@@ -174,6 +426,16 @@ _DRIVE_STRATEGY: dict[DriveType, dict[str, Any]] = {
         "tools": ("introspection", "codebase"),
         "escalation": None,
         "scope": "local_only",
+    },
+    # SPARK §3 component 1 / §2.3: grounding fires on belief-map tension and
+    # formulates a question answerable ONLY externally. action=research,
+    # scope=external_ok, tool routed by facet (the tool below is the default;
+    # select_action overrides tool_hint with the facet-routed channel).
+    "grounding": {
+        "action": "research",
+        "tools": ("web", "memory", "introspection"),
+        "escalation": "academic",
+        "scope": "external_ok",
     },
 }
 
@@ -258,6 +520,33 @@ def _compute_play_urgency(signals: DriveSignals) -> float:
     return min(0.5, calm * 0.6 + stability * 0.2)
 
 
+def _compute_grounding_urgency(signals: DriveSignals) -> float:
+    """Grounding drive: belief-map tension wants an external touch.
+
+    SPARK §3 component 1: urgency = grounding_tension (floor 0.10). The tension
+    is the aggregate from the ProvenanceScorer (inferred + orphaned + under
+    quarantine pressure). External-validation gaps and world-drift events
+    additively raise it (the world disagreeing with us is the loudest call to
+    ground), and stability misses (inward work that moved nothing) add a small
+    nudge.
+
+    CRITICALLY: NOT dampened by ``active_user_goals`` (SPARK §2.3 / §3) — grounding
+    a wrong belief *is* user-relevant. This is the one drive that ignores the
+    curiosity-style user-goal dampening.
+    """
+    base = max(0.0, min(1.0, signals.grounding_tension))
+    gaps = min(signals.external_validation_gaps, 10) / 10.0
+    drift = min(signals.world_drift_events, 5) / 5.0
+    misses = min(signals.delta_stability_misses, 10) / 10.0
+    urgency = base + gaps * 0.20 + drift * 0.20 + misses * 0.10
+    urgency = min(1.0, urgency)
+    # Floor 0.10 — grounding is never fully silent (always a faint pull to
+    # anchor beliefs), but the floor is applied in evaluate() alongside the
+    # other drives. Returning at least the floor here keeps it competitive even
+    # when tension is momentarily zero.
+    return max(_DRIVE_FLOOR["grounding"], urgency)
+
+
 _URGENCY_FNS: dict[DriveType, Any] = {
     "truth": _compute_truth_urgency,
     "curiosity": _compute_curiosity_urgency,
@@ -266,6 +555,7 @@ _URGENCY_FNS: dict[DriveType, Any] = {
     "coherence": _compute_coherence_urgency,
     "continuity": _compute_continuity_urgency,
     "play": _compute_play_urgency,
+    "grounding": _compute_grounding_urgency,
 }
 
 
@@ -322,6 +612,27 @@ def _play_question(signals: DriveSignals) -> str:
             "system behavior or response quality?")
 
 
+def _grounding_question(signals: DriveSignals) -> str:
+    """Question whose answer must come from OUTSIDE (SPARK §2.2/§2.4).
+
+    Names the specific belief, its provenance, and the external validation it
+    needs — phrased as a verification request, never a self-consistency check.
+    """
+    claim = (signals.grounding_target_claim or "").strip()
+    facet = signals.grounding_facet or "factual"
+    if claim:
+        if facet in ("identity", "self"):
+            return (f"Can you confirm or correct this belief I hold: "
+                    f"'{claim}'? I inferred it and have no external confirmation.")
+        if facet == "scene":
+            return (f"What current sensor observation would confirm or refute "
+                    f"this belief: '{claim}'?")
+        return (f"What external, source-cited evidence confirms or refutes "
+                f"this belief: '{claim}'? I inferred it without grounding.")
+    return ("Which currently-held belief is inferred and structurally "
+            "unsupported, and what external evidence would ground it?")
+
+
 _QUESTION_FNS: dict[DriveType, Any] = {
     "truth": _truth_question,
     "curiosity": _curiosity_question,
@@ -330,6 +641,7 @@ _QUESTION_FNS: dict[DriveType, Any] = {
     "coherence": _coherence_question,
     "continuity": _continuity_question,
     "play": _play_question,
+    "grounding": _grounding_question,
 }
 
 
@@ -476,10 +788,21 @@ class DriveManager:
         self._learn_cooldowns: dict[str, float] = {}  # skill_id -> last_proposed_ts
         self._last_signals: DriveSignals | None = None
 
-    def evaluate(self, signals: DriveSignals) -> list[DriveState]:
+    def evaluate(
+        self,
+        signals: DriveSignals,
+        urgency_bias: dict[str, float] | None = None,
+    ) -> list[DriveState]:
         """Score all drives, return sorted by urgency (highest first).
 
         Applies cooldown and decay to prevent stale drives from dominating.
+
+        SPARK §4/§8 P5 — ``urgency_bias`` (default None / empty) is an additive,
+        affect-derived delta per drive nickname, applied after the raw urgency is
+        computed and re-clamped into [0,1] (so a bias can never alone push a drive
+        past the urgency envelope, and never conjures a drive from a true zero
+        beyond its bias). None/empty is a strict no-op = unchanged behaviour, and
+        the bias is set ONLY by the promoted affect coupling.
         """
         now = time.time()
         signals.uptime_s = now - self._boot_ts
@@ -495,6 +818,17 @@ class DriveManager:
 
         # Recompute play (depends on total urgency)
         self._states["play"].urgency = _compute_play_urgency(signals)
+
+        # SPARK §4/§8 P5 — apply the affect-derived urgency bias (additive,
+        # re-clamped to [0,1]). Empty/None → no-op (default runtime behaviour).
+        if urgency_bias:
+            for dt, delta in urgency_bias.items():
+                if dt in self._states:
+                    try:
+                        biased = self._states[dt].urgency + float(delta)
+                        self._states[dt].urgency = max(0.0, min(1.0, biased))
+                    except (TypeError, ValueError):
+                        continue
 
         # Apply cooldown, graduated failure dampening, decay, and floor
         for dt in DRIVE_TYPES:
@@ -555,6 +889,13 @@ class DriveManager:
                     tags=("drive:mastery", "action:noop"),
                 )
 
+        # Grounding drive → facet-routed external-validation action (SPARK §2.3).
+        # action=research, scope=external_ok, tool routed by facet. NOT dampened
+        # by user goals (handled in the urgency fn). Carries the belief target so
+        # the orchestrator can shadow-log / (later) seed a cited question.
+        if dt == "grounding":
+            return self._select_grounding_action(top_drive, signals)
+
         strategy = _DRIVE_STRATEGY[dt]
         action_type: ActionType = strategy["action"]
         tools = strategy["tools"]
@@ -587,6 +928,47 @@ class DriveManager:
             scope=scope,
             tags=tags,
             detail=f"Drive '{dt}' urgency={top_drive.urgency:.2f}",
+        )
+
+    def _select_grounding_action(
+        self, top_drive: DriveState, signals: DriveSignals,
+    ) -> DriveAction:
+        """Build the grounding DriveAction, facet-routed to the cheapest channel.
+
+        SPARK §2.3/§6: the question must be answerable only externally, and the
+        tool is routed by facet (identity/self → operator/introspection;
+        scene → Pi senses/memory; factual → web). The action is SELECTED here;
+        whether it is enqueued / reaches the operator is gated by
+        ``GroundingDrivePromotion`` at the orchestrator (defaults to shadow).
+        """
+        facet = signals.grounding_facet or "factual"
+        tool_hint = signals.grounding_tool_hint or "web"
+        question = _grounding_question(signals)
+
+        tags = [
+            "drive:grounding",
+            "action:research",
+            f"grounding:facet:{facet}",
+        ]
+        if signals.grounding_target_id:
+            tags.append(f"grounding:belief:{signals.grounding_target_id}")
+
+        top_drive.last_acted = time.time()
+        top_drive.action_count += 1
+
+        return DriveAction(
+            drive_type="grounding",
+            action_type="research",
+            urgency=top_drive.urgency,
+            question=question,
+            tool_hint=tool_hint,
+            scope="external_ok",
+            tags=tuple(tags),
+            detail=(
+                f"Grounding drive urgency={top_drive.urgency:.2f} "
+                f"facet={facet} tension={signals.grounding_tension:.2f} "
+                f"target={signals.grounding_target_id or 'n/a'}"
+            ),
         )
 
     def _try_mastery_learn(

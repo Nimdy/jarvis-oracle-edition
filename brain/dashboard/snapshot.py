@@ -1449,6 +1449,71 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         logger.warning("Snapshot: fractal recall failed", exc_info=True)
         snapshot["fractal_recall"] = {"enabled": False}
 
+    # SPARK_DESIGN §8 P0 — Grounding Ring passive metrics + shadow gate.
+    # Read-only / zero authority: surfaces the baselines (3.3x grounded:inferred,
+    # 0.857 orphan_rate, ~1.0 avg_chain_length, ~0 external_validation_rate) so
+    # they are observable before any mechanism can move them. Nothing reads this
+    # to act. Default-safe when sources are missing.
+    try:
+        from autonomy.spark_metrics import (
+            compute_spark_metrics,
+            SparkPromotion,
+            SPARK_BASELINES,
+        )
+        _sm = compute_spark_metrics(ctx.engine)
+        _gate = SparkPromotion.get_instance()
+        _gr: dict[str, Any] = {
+            "phase": "P0_passive_metrics",
+            "authority": "zero_authority",
+            "drives_levers": _gate.is_active(),  # always False until P5/active
+            "metrics": _sm.to_dict(),
+            "baselines": dict(SPARK_BASELINES),
+            "promotion": _gate.get_status(),
+        }
+        # SPARK §8 P4 — per-mechanism advisory promotion levels + the async
+        # Grounding Queue + policy-memory grounding stats. All read-only; the
+        # advisory tier surfaces but drives NO cadence/reward lever.
+        try:
+            from autonomy.drives import GroundingDrivePromotion
+            _gr["drive_promotion"] = GroundingDrivePromotion.get_instance().get_status()
+        except Exception:
+            _gr["drive_promotion"] = {}
+        try:
+            from consciousness.meta_cognitive_thoughts import TensionThoughtPromotion
+            _gr["tension_thought_promotion"] = TensionThoughtPromotion.get_instance().get_status()
+        except Exception:
+            _gr["tension_thought_promotion"] = {}
+        try:
+            from consciousness.affect_promotion import affect_promotion as _ap
+            _gr["affect_promotion"] = _ap.get_status()
+        except Exception:
+            _gr["affect_promotion"] = {}
+        try:
+            from autonomy.grounding_queue import GroundingQueue
+            GroundingQueue.get_instance().expire_stale()
+            _gr["queue"] = GroundingQueue.get_instance().get_status(limit=50)
+        except Exception:
+            logger.debug("Snapshot: grounding queue failed", exc_info=True)
+            _gr["queue"] = {}
+        try:
+            pm = getattr(getattr(ctx, "engine", None), "_autonomy_orchestrator", None)
+            pm = getattr(pm, "_policy_memory", None)
+            if pm is not None and hasattr(pm, "get_stats"):
+                _gr["policy_stats"] = pm.get_stats()
+        except Exception:
+            _gr["policy_stats"] = {}
+        snapshot["grounding_ring"] = _gr
+    except Exception:
+        logger.warning("Snapshot: grounding ring failed", exc_info=True)
+        snapshot["grounding_ring"] = {
+            "phase": "P0_passive_metrics",
+            "authority": "zero_authority",
+            "drives_levers": False,
+            "metrics": {},
+            "baselines": {},
+            "promotion": {},
+        }
+
     # HRR / VSA shadow substrate — read-only, dormant, non-authoritative.
     # Surface the same payload /api/hrr/status exposes so the memory tab and
     # other dashboard panels can render HRR metrics without a second fetch.

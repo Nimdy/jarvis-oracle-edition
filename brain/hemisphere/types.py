@@ -51,6 +51,11 @@ class HemisphereFocus(str, enum.Enum):
     DREAM_SYNTHESIS = "dream_synthesis"
     # Skill acquisition: operational handoff outcome predictor (shadow-only)
     SKILL_ACQUISITION = "skill_acquisition"
+    # SPARK_DESIGN §3 component 2 / §8 P3: which meta-cognitive thought TRIGGER
+    # to fire from the current cognitive context (shadow-only). Pure shadow until
+    # it beats the deterministic trigger baseline (same gate as the other
+    # distillation specialists). Teacher = THOUGHT_VALIDATION_OUTCOME (external).
+    THOUGHT_TRIGGER_SELECTOR = "thought_trigger_selector"
     # P4 HRR / VSA research lane (Tier-1 stub, PRE-MATURE, shadow-only).
     # Paired code module: brain/hemisphere/hrr_specialist.py. Never wired
     # into distillation / training this sprint; never promoted to Tier-2
@@ -358,6 +363,29 @@ class DistillationConfig:
     feature_source: str = "audio_features"  # signal name to use as student input
 
 
+def _thought_trigger_count() -> int:
+    """Number of meta-cognitive thought TRIGGERS the selector classifies over.
+
+    Lazily imports the import-light, torch-free
+    ``consciousness.meta_cognitive_thoughts.THOUGHT_TRIGGER_NAMES`` so the
+    thought_trigger_selector head width tracks the real trigger set (SPARK §3
+    component 2). Falls back to the known count if consciousness is unavailable
+    at import time (e.g. a partial test harness) — the regression assert below
+    still fires whenever both modules ARE importable.
+    """
+    try:
+        from consciousness.meta_cognitive_thoughts import THOUGHT_TRIGGER_NAMES
+        return len(THOUGHT_TRIGGER_NAMES)
+    except Exception:
+        return _THOUGHT_TRIGGER_FALLBACK_DIM
+
+
+# Known count at authoring time (12 base triggers + belief_validation_curiosity).
+# Used only when consciousness.meta_cognitive_thoughts cannot be imported.
+_THOUGHT_TRIGGER_FALLBACK_DIM = 13
+_THOUGHT_TRIGGER_OUTPUT_DIM = _thought_trigger_count()
+
+
 DISTILLATION_CONFIGS: dict[str, DistillationConfig] = {
     "speaker_repr": DistillationConfig(
         teacher="ecapa_tdnn",
@@ -474,6 +502,24 @@ DISTILLATION_CONFIGS: dict[str, DistillationConfig] = {
         feature_source="skill_acquisition_features",
         is_permanent=True,
     ),
+    # SPARK_DESIGN §3 component 2 / §8 P3 — thought_trigger_selector.
+    # Shadow-only approximator of the deterministic meta-cognitive trigger
+    # selection (consciousness/meta_cognitive_thoughts.TRIGGERS). It classifies
+    # over EXACTLY the trigger set, so output_dim == len(TRIGGERS); the module
+    # assert below enforces this so adding/removing a trigger can't silently
+    # break the head shape. Teacher signal is the external-only
+    # THOUGHT_VALIDATION_OUTCOME; pure shadow until it beats the deterministic
+    # baseline (same promotion gate as the other distillation specialists).
+    "thought_trigger_selector": DistillationConfig(
+        teacher="thought_trigger_resolver",
+        student_type="approximator",
+        input_dim=24,
+        output_dim=_THOUGHT_TRIGGER_OUTPUT_DIM,
+        loss="kl_div",
+        min_samples=30,
+        feature_source="thought_trigger_features",
+        is_permanent=True,
+    ),
     # ---------------------------------------------------------------------
     # STAGE 2 RESERVED SLOT — DO NOT UNCOMMENT UNTIL STAGE 1 HAS LANDED
     # ---------------------------------------------------------------------
@@ -514,3 +560,31 @@ DISTILLATION_CONFIGS: dict[str, DistillationConfig] = {
     #     is_permanent=True,
     # ),
 }
+
+
+# ---------------------------------------------------------------------------
+# Regression invariant (SPARK_DESIGN §3 component 2 / §8 P3 / §10 risk 7):
+# the thought_trigger_selector classifies over EXACTLY the meta-cognitive
+# thought TRIGGERS, so its output head MUST have one logit per trigger. If a
+# trigger is added/removed (e.g. belief_validation_curiosity), this assert fires
+# at import time so the head width can never silently drift out of sync.
+# Only enforced when consciousness.meta_cognitive_thoughts is importable
+# (torch-free, import-light); otherwise _thought_trigger_count() already fell
+# back and there is nothing to cross-check.
+# ---------------------------------------------------------------------------
+try:
+    from consciousness.meta_cognitive_thoughts import (  # noqa: E402
+        THOUGHT_TRIGGER_NAMES as _LIVE_THOUGHT_TRIGGER_NAMES,
+    )
+except Exception:  # pragma: no cover - partial harness without consciousness
+    _LIVE_THOUGHT_TRIGGER_NAMES = None
+
+if _LIVE_THOUGHT_TRIGGER_NAMES is not None:
+    assert DISTILLATION_CONFIGS["thought_trigger_selector"].output_dim == len(
+        _LIVE_THOUGHT_TRIGGER_NAMES
+    ), (
+        "thought_trigger_selector.output_dim "
+        f"({DISTILLATION_CONFIGS['thought_trigger_selector'].output_dim}) "
+        f"!= number of thought TRIGGERS ({len(_LIVE_THOUGHT_TRIGGER_NAMES)}); "
+        "update the config or the trigger set so the selector head matches."
+    )

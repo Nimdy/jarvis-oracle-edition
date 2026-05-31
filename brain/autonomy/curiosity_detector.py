@@ -73,8 +73,17 @@ class CuriosityDetector:
         depth: str,
         tags: list[str],
         confidence: float,
+        belief_id: str = "",
+        validation_target: str = "",
     ) -> ResearchIntent | None:
-        """Evaluate a KERNEL_THOUGHT / META_THOUGHT_GENERATED for curiosity signal."""
+        """Evaluate a KERNEL_THOUGHT / META_THOUGHT_GENERATED for curiosity signal.
+
+        ``belief_id`` / ``validation_target`` (optional, default "") propagate the
+        SPARK §3 component-2 grounding provenance from a belief_validation_curiosity
+        tension-thought onto the produced intent, so completion can emit the
+        external-only THOUGHT_VALIDATION_OUTCOME teacher signal. Additive: every
+        existing caller (which omits them) is unaffected.
+        """
 
         if not _LEARNING_PHRASES.search(text):
             return None
@@ -112,6 +121,8 @@ class CuriosityDetector:
             tag_cluster=tuple(sorted(cluster)),
             trigger_count=entry.count,
             reason=f"Repeated {thought_type} ({entry.count}x): {text[:80]}",
+            belief_id=belief_id or "",
+            validation_target=validation_target or "",
         )
 
         entry.last_intent_time = time.time()
