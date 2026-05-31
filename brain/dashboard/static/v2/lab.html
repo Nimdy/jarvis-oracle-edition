@@ -35,6 +35,12 @@
     .spark .sb{flex:1 1 0;min-width:2px;background:var(--cyan);border-radius:1px 1px 0 0;opacity:.85;}
     .spark .sb.last{background:var(--green);opacity:1;}
     .ptc-cap{font-size:8.5px;color:var(--dim);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;}
+    /* distillation teacher streams */
+    .dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;}
+    .tcard{border:1px solid var(--line);border-left-width:3px;border-radius:5px;padding:8px 10px;background:rgba(3,8,14,.45);}
+    .tcard .nm{font-size:10px;font-weight:700;display:flex;justify-content:space-between;gap:6px;font-variant-numeric:tabular-nums;}
+    .tcard .row{font-size:9px;color:var(--muted);margin-top:3px;display:flex;justify-content:space-between;gap:8px;}
+    .tcard .row b{color:var(--text);font-variant-numeric:tabular-nums;}
   </style>
 </head>
 <body>
@@ -58,6 +64,17 @@
       <div class="note">The sleep-cycle consolidation buffer: clusters → quality gate → canonical memory. Totals are cumulative; the buffer is often idle (empty) between cycles. Click an artifact to see its verdict.</div>
       <div class="totrow" id="dream-tot"></div>
       <div class="md" style="grid-template-columns:200px 1fr;"><div class="list" id="dream-list"></div><div class="detail" id="dream-detail"><span class="placeholder">select an artifact…</span></div></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Distillation Flow &amp; Metrics</h2>
+      <div class="note">How JARVIS outgrows its shell: baseline models/LLM act as <b>teachers</b> → fidelity-scored buffers (low-fidelity <b>quarantined</b>) → student-NN training → tier-1 gating (accuracy floor + regression cooldown) → promotion only when a student beats the baseline, at which point it <b>replaces</b> the baseline at inference. <b>"active networks"</b> = operational student specialists; whether each one beats the baseline is its accuracy in the NN Inspector above (e.g. <code>memory</code> 0.95 vs <code>mood</code> 0.38). Promotion-over-baseline is the move off the LLM — per-network, not a single count.</div>
+      <div class="totrow" id="distill-tot"></div>
+      <div class="note" id="distill-gating" style="margin:0 0 10px"></div>
+      <h3 style="font-size:11px;margin:6px 0 5px;color:var(--muted)">Teacher signal streams <span style="color:var(--dim);font-weight:400">(border = quarantine rate: green &lt;5% · amber &lt;20% · red ≥20%)</span></h3>
+      <div class="dgrid" id="distill-teachers"></div>
+      <h3 style="font-size:11px;margin:14px 0 5px;color:var(--muted)">Skill-acquisition student · distillation maturation</h3>
+      <div class="totrow" id="distill-spec"></div>
     </section>
 
     <section class="card col12">
@@ -198,9 +215,56 @@
   el('nn-list').addEventListener('click', function(e){ var t=e.target.closest('[data-nn]'); if(t){ nnSel=+t.getAttribute('data-nn'); renderNN(); } });
   el('dream-list').addEventListener('click', function(e){ var t=e.target.closest('[data-art]'); if(t){ artSel=+t.getAttribute('data-art'); renderDream(); } });
 
+  function fmtDur(s){ s=num(s); if(s===null) return '—'; if(s<60) return s.toFixed(0)+'s'; if(s<3600) return (s/60).toFixed(0)+'m'; if(s<86400) return (s/3600).toFixed(1)+'h'; return (s/86400).toFixed(1)+'d'; }
+  function renderDistill(){
+    var H=(SNAP&&SNAP.hemisphere)||{};
+    var dist=H.distillation||{}, teachers=dist.teachers||{};
+    var tnames=Object.keys(teachers);
+    var hs=(H.hemisphere_state||{}).hemispheres||[];
+    var live=hs.filter(function(h){ var st=(h.status||'').toLowerCase(); return st==='active'||st==='promoted'||h.promoted===true; }).length;
+    var totSig=num(dist.total_signals), totQ=num(dist.total_quarantined);
+    if(totSig===null){ totSig=0; tnames.forEach(function(t){ totSig+=num(teachers[t].total)||0; }); }
+    if(totQ===null){ totQ=0; tnames.forEach(function(t){ totQ+=num(teachers[t].quarantined)||0; }); }
+    el('distill-tot').innerHTML=
+      '<span><div class="k">teacher streams</div><b>'+tnames.length+'</b></span>'+
+      '<span><div class="k">signals captured</div><b>'+totSig+'</b></span>'+
+      '<span><div class="k">quarantined</div><b style="color:'+(totQ>0?'var(--amber)':'var(--text)')+'">'+totQ+'</b></span>'+
+      '<span><div class="k">student NNs</div><b>'+hs.length+'</b></span>'+
+      '<span><div class="k">active networks</div><b style="color:'+(live>0?'var(--green)':'var(--dim)')+'">'+live+'</b></span>';
+    var g=H.tier1_gating||{};
+    var disabled=g.disabled_for_session||[];
+    var cooldowns=g.regression_cooldown_remaining_s||{};
+    var cd=Object.keys(cooldowns).filter(function(k){ return (num(cooldowns[k])||0)>0; });
+    var gnote='Tier-1 gating: ';
+    if((disabled.length||0)===0 && cd.length===0) gnote+='<span style="color:var(--green)">no focuses disabled, no regression cooldowns active</span>'+(g.accuracy_floor!=null?(' · accuracy floor '+f3(g.accuracy_floor)):'');
+    else gnote+=(disabled.length?('<b style="color:var(--red)">disabled this session: '+disabled.map(cap).join(', ')+'</b>'):'')+(cd.length?((disabled.length?' · ':'')+'<b style="color:var(--amber)">regression cooldown: '+cd.map(function(k){return cap(k)+' '+fmtDur(cooldowns[k]);}).join(', ')+'</b>'):'');
+    el('distill-gating').innerHTML=gnote;
+    tnames.sort(function(a,b){ return (num(teachers[b].total)||0)-(num(teachers[a].total)||0); });
+    el('distill-teachers').innerHTML = tnames.length ? tnames.map(function(t){
+      var d=teachers[t]||{}, tot=num(d.total)||0, q=num(d.quarantined)||0, buf=num(d.buffer_size)||0;
+      var qrate=tot>0?q/tot:0;
+      var col=qrate>=0.2?'var(--red)':(qrate>=0.05?'var(--amber)':'var(--green)');
+      return '<div class="tcard" style="border-left-color:'+col+'">'+
+        '<div class="nm"><span>'+t+'</span><span>'+tot+'</span></div>'+
+        '<div class="row"><span>quarantined</span><b style="color:'+col+'">'+q+(tot>0?(' ('+(qrate*100).toFixed(0)+'%)'):'')+'</b></div>'+
+        '<div class="row"><span>buffer</span><b>'+buf+'</b></div>'+
+        '<div class="row"><span>last signal</span><b>'+fmtDur(d.last_seen_s)+' ago</b></div>'+
+      '</div>';
+    }).join('') : '<span class="placeholder">no teacher streams (recovering?)</span>';
+    var sp=(SNAP&&SNAP.skill_acquisition_specialist)||{};
+    function kv(k,v,color){ return '<span><div class="k">'+k+'</div><b'+(color?' style="color:'+color+'"':'')+'>'+v+'</b></span>'; }
+    el('distill-spec').innerHTML = (sp&&Object.keys(sp).length) ? (
+      kv('maturity', sp.maturity||'—')+
+      kv('synthetic acc', num(sp.synthetic_accuracy)!=null?(sp.synthetic_accuracy*100).toFixed(0)+'%':'—')+
+      kv('live-shadow acc', num(sp.live_shadow_accuracy)!=null?(sp.live_shadow_accuracy*100).toFixed(0)+'%':'—')+
+      kv('networks', num(sp.network_count)||0)+
+      kv('promotion', sp.promotion_eligible?'eligible':'not yet', sp.promotion_eligible?'var(--green)':'var(--dim)')+
+      kv('status', sp.status||'—')
+    ) : '<span class="placeholder">skill-acquisition specialist unavailable</span>';
+  }
   function renderBanner(){ el('mode').textContent = (NN.length+' networks · '+( ((SNAP&&SNAP.dream_artifacts&&SNAP.dream_artifacts.buffer)||{}).total_created || 0 )+' dream artifacts'); }
   function renderRecovery(){ el('recovery').style.display='none'; }
-  function renderAll(){ renderRecovery(); renderNN(); renderDream(); renderPTC(); renderBanner(); }
+  function renderAll(){ renderRecovery(); renderNN(); renderDream(); renderDistill(); renderPTC(); renderBanner(); }
 
   function refresh(){
     Promise.allSettled([fetchJSON('/api/full-snapshot'), fetchJSON('/api/self-improve/specialists')]).then(function(r){
