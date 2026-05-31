@@ -900,6 +900,26 @@ class CapabilityGate:
         self._perception_evidence_fresh = fresh
         self._perception_evidence_ts = time.time() if fresh else 0.0
 
+    def get_confabulation_ledger(self, limit: int = 15) -> dict[str, Any]:
+        """Read-only view of the bidirectional confabulation ledger (SPARK §7).
+
+        Surfaces the running counters + the most recent ledger entries so the
+        affect/anthropomorphism guard is observable in shadow (SPARK §8 P1
+        logged-shadow). View-only — never mutates gate state. ``backed`` entries
+        are anthropomorphic phrasings the gate ALLOWED because a real signal
+        backed them; ``unbacked`` are ones it rewrote/blocked as confabulation.
+        """
+        recent = list(self._recent_confabulations)
+        if limit and len(recent) > limit:
+            recent = recent[-limit:]
+        return {
+            "backed_anthropomorphized": self._confab_backed_anthropomorphized,
+            "unbacked": self._confab_unbacked,
+            "backed_mismatch": self._confab_backed_mismatch,
+            "affect_nickname_rewrites": self._affect_nickname_rewrites,
+            "recent": list(reversed(recent)),  # most-recent first
+        }
+
     # ── Claim classifier teacher signal recording ─────────────────────────
 
     def _record_claim_signal(

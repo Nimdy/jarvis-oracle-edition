@@ -1502,6 +1502,26 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
                 _gr["policy_stats"] = pm.get_stats()
         except Exception:
             _gr["policy_stats"] = {}
+        # SPARK §8 P1 — logged-shadow OBSERVABILITY (read-only / zero authority):
+        # make the shadow cognition legible — what the affect layer reads, what the
+        # grounding drive would ASK, and what the confabulation guard caught.
+        # Affect readout is an OPERATOR DIAGNOSTIC (readout-not-feeling); JARVIS's
+        # own expression of affect stays gated by capability_gate regardless.
+        try:
+            from consciousness.affect_state import affect_state as _affect
+            _gr["affect_readout"] = _affect.get_status()
+        except Exception:
+            _gr["affect_readout"] = {}
+        try:
+            from autonomy.drives import GroundingDrivePromotion
+            _gr["shadow_questions"] = GroundingDrivePromotion.get_instance().get_recent_selections(limit=15)
+        except Exception:
+            _gr["shadow_questions"] = []
+        try:
+            from skills.capability_gate import capability_gate
+            _gr["confabulation_ledger"] = capability_gate.get_confabulation_ledger(limit=15)
+        except Exception:
+            _gr["confabulation_ledger"] = {}
         snapshot["grounding_ring"] = _gr
     except Exception:
         logger.warning("Snapshot: grounding ring failed", exc_info=True)

@@ -47,6 +47,12 @@
     .answered .av-confirmed{color:var(--green);border-color:var(--green);}
     .answered .av-refuted{color:var(--amber);border-color:var(--amber);}
     .hint{color:var(--dim);font-size:11px;padding:26px 6px;text-align:center;}
+    /* affect readout */
+    .prov{font-size:8.5px;color:var(--dim);margin-top:4px;line-height:1.55;}
+    .clamp{font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid var(--amber);color:var(--amber);margin-left:6px;vertical-align:middle;}
+    .levers{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;border-top:1px dashed var(--line);padding-top:9px;align-items:center;}
+    .lever{font-size:9px;padding:3px 8px;border-radius:3px;border:1px solid var(--line);color:var(--dim);white-space:nowrap;}
+    .lever b{color:var(--muted);font-variant-numeric:tabular-nums;}
   </style>
 </head>
 <body>
@@ -60,10 +66,23 @@
   <main>
     <section class="card col12">
       <h2>Grounding-Ring Metrics <span class="asof" id="asof"></span></h2>
-      <div class="note">External-grounding baselines (targets: <b>grounded:inferred ↓ from 3.3×</b>, <b>orphan_rate ↓ from 0.857</b>, <b>avg_chain_length ↑ above 1.0</b>, <b>external_validation_rate ↑ toward 0.40</b>). <code>external_validation_rate</code> is movable ONLY by a real external validator (cited source / operator answer / world-model validation) — never self-scored.</div>
+      <div class="note">External-grounding baselines (targets: <b>grounded:inferred ↓ from ~20× (belief graph)</b>, <b>orphan_rate ↓ from 0.857</b>, <b>avg_chain_length ↑ above 1.0</b>, <b>external_validation_rate ↑ toward 0.40</b>). <code>external_validation_rate</code> is movable ONLY by a real external validator (cited source / operator answer / world-model validation) — never self-scored.</div>
       <div class="topgrid" id="metrics"></div>
       <div class="levels" id="levels"></div>
       <div class="banner" id="starv"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Affect Readout <span class="asof" id="affecttick"></span></h2>
+      <div class="note"><b>Operator diagnostic — readout, not feeling.</b> Three governed scalars computed deterministically from real signals every tick (dopamine = novelty / reward / world-model accuracy; serotonin = coherence / curiosity-satisfaction / calibration; cortisol = contradiction-debt / quarantine-pressure / friction). <b>cannot-lie clamp</b>: a scalar is forced to exactly <b>0.0</b> if all its source readings are 0. The levers below are <b>proposed and UNAPPLIED</b> (shadow). JARVIS's own expression of these states stays blocked by the capability gate regardless.</div>
+      <div class="topgrid" id="affect"></div>
+      <div class="levers" id="affectlevers"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Shadow Grounding Questions <span class="asof" id="shadowqcount"></span></h2>
+      <div class="note">What the grounding drive <b>would ask the world</b>, selected in shadow — <b>never enqueued, never delivered to anyone</b>. The spark's outward curiosity made visible before it has any authority. Durable count: <b id="shadowqtot">—</b> selections shadowed (recent questions reset on restart; the count persists).</div>
+      <div class="qlist" id="shadowq" style="max-height:340px"></div>
     </section>
 
     <section class="card col12">
@@ -76,6 +95,13 @@
       <h2>Recently Answered</h2>
       <div class="note">External-validation outcomes recorded by the operator. Confirmed and refuted both anchor the belief externally.</div>
       <div class="qlist" id="answered" style="max-height:280px"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Confabulation Ledger <span class="asof" id="confabcount"></span></h2>
+      <div class="note">The bidirectional honesty guard (SPARK §7), made observable. <b>backed</b> = anthropomorphic phrasing the gate ALLOWED because a real signal backed it; <b>unbacked</b> = phrasing it rewrote/blocked as confabulation; <b>backed mismatch</b> = signal present but label wrong; <b>affect-name rewrites</b> = "dopamine/serotonin/cortisol" stripped from output. This is the layer that keeps affect a readout and never a claim.</div>
+      <div class="topgrid" id="confabstats"></div>
+      <div class="qlist" id="confab" style="max-height:260px"></div>
     </section>
   </main>
 
@@ -230,6 +256,91 @@
     }).join('');
   }
 
+  // ---- affect readout (operator diagnostic; readout-not-feeling) ----
+  function affectColor(nick, lv){
+    if(lv===null) return 'var(--dim)';
+    if(nick==='cortisol') return lv>=0.66?'var(--red)':(lv>=0.4?'var(--amber)':'var(--green)');
+    return lv>=0.6?'var(--green)':(lv>=0.35?'var(--amber)':'var(--dim)');
+  }
+  function provLine(p){
+    if(!p) return '';
+    return Object.keys(p).map(function(k){
+      var v=p[k], val=Array.isArray(v)?v[1]:v;
+      return esc(k)+'='+(val==null?'—':(typeof val==='number'?f2(val):esc(String(val))));
+    }).join(' · ');
+  }
+  function renderAffect(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var a=gr.affect_readout||{};
+    el('affecttick').textContent=a.tick_count!=null?('tick '+a.tick_count):'';
+    if(!a.computed){
+      el('affect').innerHTML='<div class="hint">affect not yet computed this session — '+esc(a.note||'no tick recorded')+'</div>';
+      el('affectlevers').innerHTML=''; return;
+    }
+    var html='';
+    ['dopamine','serotonin','cortisol'].forEach(function(n){
+      var ro=a[n]||{}, lv=num(ro.level), raw=num(ro.raw);
+      html+='<div class="stat"><div class="k">'+n+'</div>'+
+        '<div class="v" style="color:'+affectColor(n,lv)+'">'+(lv===null?'—':f2(lv))+
+          (ro.cannot_lie_clamped?'<span class="clamp">clamp 0</span>':'')+'</div>'+
+        '<div class="sub">raw '+(raw===null?'—':f2(raw))+(ro.all_sources_zero?' · all-zero':'')+'</div>'+
+        '<div class="prov">'+provLine(ro.provenance)+'</div>'+
+      '</div>';
+    });
+    el('affect').innerHTML=html;
+    var lv=a.proposed_levers||{}, parts=[];
+    if(lv.cadence_multiplier!=null) parts.push('<span class="lever">cadence ×<b>'+f2(lv.cadence_multiplier)+'</b></span>');
+    if(lv.urgency_bias!=null) parts.push('<span class="lever">urgency_bias <b>'+f2(lv.urgency_bias)+'</b></span>');
+    if(lv.memory_reinforcement!=null) parts.push('<span class="lever">mem_reinforce ×<b>'+f2(lv.memory_reinforcement)+'</b></span>');
+    var im=lv.interval_multipliers||{};
+    Object.keys(im).forEach(function(k){ parts.push('<span class="lever">'+esc(k)+' ×<b>'+f2(im[k])+'</b></span>'); });
+    el('affectlevers').innerHTML='<span class="lever" style="border-color:var(--magenta);color:var(--magenta)">PROPOSED · UNAPPLIED (shadow)</span>'+parts.join('')+(a.demote_signal?'<span class="lever" style="border-color:var(--red);color:var(--red)">demote signal</span>':'');
+  }
+
+  // ---- shadow grounding questions (would-have; never enqueued) ----
+  function renderShadowQ(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var qs=gr.shadow_questions||[];
+    var tot=(gr.drive_promotion||{}).selections_shadowed;
+    el('shadowqtot').textContent=tot!=null?tot:'—';
+    el('shadowqcount').textContent=qs.length+' recent';
+    if(!qs.length){ el('shadowq').innerHTML='<div class="hint">no would-have questions retained yet — drive has not selected a grounding target since restart (durable count persists above)</div>'; return; }
+    el('shadowq').innerHTML=qs.map(function(s){
+      return '<div class="q">'+
+        '<div class="top"><span class="qt">'+esc(s.question||'(no question text)')+'</span>'+
+          '<span class="pill" style="margin-left:auto">'+ago(s.ts)+'</span></div>'+
+        '<div class="meta">'+
+          '<span class="pill fac">'+esc(s.facet||'?')+'</span>'+
+          '<span class="pill">would have '+esc(s.verb||'researched')+' → '+esc(s.channel||'?')+'</span>'+
+          (s.belief_id?'<span class="pill">belief '+esc(s.belief_id)+'</span>':'')+
+          '<span class="pill">urgency '+f2(s.urgency)+'</span>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  // ---- confabulation ledger (honesty guard observability) ----
+  function renderConfab(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var c=gr.confabulation_ledger||{};
+    var stats='';
+    stats+=metricStat('backed (allowed)', num(c.backed_anthropomorphized)==null?'—':c.backed_anthropomorphized, 'real signal backed it');
+    stats+=metricStat('unbacked (caught)', num(c.unbacked)==null?'—':c.unbacked, 'rewritten / blocked', num(c.unbacked)?'var(--amber)':null);
+    stats+=metricStat('backed mismatch', num(c.backed_mismatch)==null?'—':c.backed_mismatch, 'signal/label mismatch');
+    stats+=metricStat('affect-name rewrites', num(c.affect_nickname_rewrites)==null?'—':c.affect_nickname_rewrites, 'nickname stripped');
+    el('confabstats').innerHTML=stats;
+    var r=c.recent||[];
+    el('confabcount').textContent=r.length+' recent';
+    if(!r.length){ el('confab').innerHTML='<div class="hint">no confabulation events recorded — the affect/anthropomorphism guard has not fired</div>'; return; }
+    el('confab').innerHTML=r.map(function(e){
+      var txt=e.text||e.claim||e.phrase||e.original||e.rewritten||JSON.stringify(e);
+      var verdict=(e.backed!=null)?(e.backed?'backed':'unbacked'):(e.verdict||e.action||e.kind||'');
+      return '<div class="q"><div class="top"><span class="qt">'+esc(String(txt).slice(0,200))+'</span>'+
+        (verdict?'<span class="pill" style="margin-left:auto">'+esc(verdict)+'</span>':'')+
+        (e.ts?'<span class="pill">'+ago(e.ts)+'</span>':'')+'</div></div>';
+    }).join('');
+  }
+
   function renderMode(){
     var gr=(DATA&&DATA.grounding_ring)||{};
     var q=(DATA&&DATA.queue)||gr.queue||{};
@@ -241,7 +352,7 @@
     fetchJSON('/api/grounding/queue').then(function(d){
       DATA=d; lastOkTs=Date.now();
       // /api/grounding/queue returns {grounding_ring, queue}; the page reads both.
-      renderMetrics(); renderStarvation(); renderPending(); renderAnswered(); renderMode();
+      renderMetrics(); renderStarvation(); renderAffect(); renderShadowQ(); renderPending(); renderAnswered(); renderConfab(); renderMode();
     }).catch(function(){
       el('qlist').innerHTML='<div class="hint" style="color:var(--red)">grounding queue endpoint offline — showing nothing rather than a fabricated queue</div>';
       el('starv').className='banner starv-bad';

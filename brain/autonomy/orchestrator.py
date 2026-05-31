@@ -2371,14 +2371,22 @@ class AutonomyOrchestrator:
             )
             return True
 
+        verb = "asked the operator" if action.tool_hint == "introspection" else "researched"
+
         # ── SHADOW (level 0, default) — select-only, never reach operator ──────
         if gate is not None:
             try:
-                gate.note_shadow_selection()
+                gate.note_shadow_selection(
+                    question=(action.question or ""),
+                    belief_id=belief_id,
+                    facet=facet,
+                    channel=channel_label,
+                    urgency=float(getattr(action, "urgency", 0.0) or 0.0),
+                    verb=verb,
+                )
             except Exception:
                 pass
 
-        verb = "asked the operator" if action.tool_hint == "introspection" else "researched"
         logger.info(
             "Grounding drive (SHADOW, zero authority): would have %s via %s "
             "[facet=%s belief=%s urgency=%.2f] — Q: %s",

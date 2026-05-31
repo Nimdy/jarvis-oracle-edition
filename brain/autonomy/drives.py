@@ -193,6 +193,11 @@ class GroundingDrivePromotion:
 
     def __init__(self) -> None:
         self._state = _GroundingPromotionState()
+        # In-memory observability ring (NOT persisted): the most recent would-have
+        # grounding questions the drive selected in shadow, so the operator can see
+        # WHAT it would ask — never enqueued, never reaches anyone. SPARK §8 P1
+        # logged-shadow. Resets on restart (the durable count is selections_shadowed).
+        self._recent_selections: list[dict[str, Any]] = []
         self._load()
 
     @classmethod
@@ -243,9 +248,43 @@ class GroundingDrivePromotion:
             self._state.advisory_questions_asked += 1
         self.save()
 
-    def note_shadow_selection(self) -> None:
-        """Count a would-have-acted selection (telemetry only; no authority)."""
+    def note_shadow_selection(
+        self,
+        *,
+        question: str = "",
+        belief_id: str = "",
+        facet: str = "",
+        channel: str = "",
+        urgency: float = 0.0,
+        verb: str = "",
+    ) -> None:
+        """Count a would-have-acted selection (telemetry only; no authority).
+
+        Optionally retains the would-have question for read-only observability
+        (SPARK §8 P1 logged-shadow): surface WHAT the drive would ask the world,
+        never enqueue it. All kwargs optional → backward-compatible.
+        """
         self._state.selections_shadowed += 1
+        if question or belief_id:
+            self._recent_selections.append({
+                "ts": time.time(),
+                "question": (question or "")[:300],
+                "belief_id": belief_id,
+                "facet": facet,
+                "channel": channel,
+                "urgency": round(float(urgency or 0.0), 3),
+                "verb": verb,
+            })
+            if len(self._recent_selections) > 25:
+                self._recent_selections = self._recent_selections[-25:]
+
+    def get_recent_selections(self, limit: int = 15) -> list[dict[str, Any]]:
+        """Read-only view of the most recent would-have grounding questions
+        (most-recent first). Observability only — these were never enqueued."""
+        recent = list(self._recent_selections)
+        if limit and len(recent) > limit:
+            recent = recent[-limit:]
+        return list(reversed(recent))
 
     def record_external_validation(self, validated: bool) -> None:
         """Record an external-validator outcome (P3+ only; never self-scored)."""
