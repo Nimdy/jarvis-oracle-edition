@@ -5712,3 +5712,28 @@ async def handle_transcription(
             )
         except Exception:
             logger.debug("Meta-learning reflection failed", exc_info=True)
+
+    # ─── Companion Cognition P0: situational read (LOGGED-ONLY / shadow) ───
+    # Observe the just-completed exchange and log JARVIS's internal read of it:
+    # what it thinks is happening, why, how confident, what evidence contributed,
+    # and what it WOULD have done if it had the authority.  Zero behavior — no
+    # tone change, no belief write, no ask.  The salience/affect gate is recorded
+    # but never acted on (the anti-chatterbox spine, validated before it steers).
+    # Runs last so it can never perturb the turn.  See
+    # docs/COMPANION_COGNITION_DESIGN.md (P0).
+    try:
+        from consciousness.situational_read import situational_read_engine as _sit_read
+        from consciousness.affect_state import affect_state as _sit_affect
+        _sit_read.observe_turn(
+            speaker=speaker,
+            user_text=text,
+            response_text=reply,
+            user_emotion=emotion,
+            follow_up=follow_up,
+            latency_ms=latency_ms,
+            complexity=complexity,
+            route=(routing.tool.value if routing else ""),
+            affect=_sit_affect.snapshot(),
+        )
+    except Exception:
+        logger.debug("Situational read (companion P0) failed", exc_info=True)

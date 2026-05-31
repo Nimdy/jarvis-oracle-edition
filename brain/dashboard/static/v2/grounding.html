@@ -80,6 +80,12 @@
     </section>
 
     <section class="card col12">
+      <h2>Situational Read <span class="asof" id="sitreadtick"></span></h2>
+      <div class="note"><b>Companion Cognition P0 — logged-only, shadow.</b> JARVIS's internal read of each just-finished exchange: what it thinks is happening, why, how confident, what evidence contributed, and what it <b>would have done</b> if it had the authority. <b>Changes no behavior, writes no beliefs, asks nothing.</b> The salience gate (when a read <b>would</b> prompt behavior) is recorded but never acted on — the anti-chatterbox spine, validated against real conversation before it ever steers. <span id="sitreadgate"></span></div>
+      <div class="qlist" id="sitread" style="max-height:360px"></div>
+    </section>
+
+    <section class="card col12">
       <h2>Shadow Grounding Questions <span class="asof" id="shadowqcount"></span></h2>
       <div class="note">What the grounding drive <b>would ask the world</b>, selected in shadow — <b>never enqueued, never delivered to anyone</b>. The spark's outward curiosity made visible before it has any authority. Durable count: <b id="shadowqtot">—</b> selections shadowed (recent questions reset on restart; the count persists).</div>
       <div class="qlist" id="shadowq" style="max-height:340px"></div>
@@ -341,6 +347,33 @@
     }).join('');
   }
 
+  // ---- situational read (companion cognition P0; logged-only / shadow) ----
+  function salColor(sal){ return sal>=0.66?'var(--amber)':(sal>=0.4?'var(--magenta)':'var(--dim)'); }
+  function renderSituational(){
+    var cr=(DATA&&DATA.companion_read)||{};
+    el('sitreadtick').textContent=(cr.observed_turns!=null?(cr.observed_turns+' turns read'):'');
+    var trip=cr.salience_tripped_count||0, thr=cr.salience_threshold;
+    el('sitreadgate').innerHTML='<span class="lever" style="border-color:var(--magenta);color:var(--magenta)">LOGGED-ONLY · '+trip+' would-have-acted'+(thr!=null?(' · gate '+f2(thr)):'')+'</span>';
+    var rs=cr.recent||[];
+    if(!rs.length){ el('sitread').innerHTML='<div class="hint">no exchanges read since restart — JARVIS logs an internal read after each conversation turn</div>'; return; }
+    el('sitread').innerHTML=rs.map(function(r){
+      var sal=num(r.salience), col=salColor(sal||0);
+      var ev=(r.evidence||[]).map(function(e){ return esc(String(e[0]))+'='+esc(String(e[1])); }).join(' · ');
+      return '<div class="q" style="border-left:3px solid '+col+';padding-left:8px">'+
+        '<div class="top"><span class="qt">'+esc(r.engagement||'?')+' · '+esc(r.user_sentiment||'?')+'</span>'+
+          '<span class="pill" style="margin-left:auto">'+ago(r.timestamp)+'</span></div>'+
+        '<div class="meta">'+
+          '<span class="pill">'+esc(r.speaker||'?')+'</span>'+
+          '<span class="pill" style="color:'+col+'">salience '+(sal===null?'—':f2(sal))+(r.salience_tripped?' · TRIPPED':'')+'</span>'+
+          '<span class="pill">conf '+f2(num(r.confidence)||0)+'</span>'+
+        '</div>'+
+        '<div class="meta"><span class="qt" style="opacity:.85">self-check: '+esc(r.self_check||'')+'</span></div>'+
+        (r.would_have_done?'<div class="meta"><span class="pill" style="border-color:var(--magenta);color:var(--magenta)">would-have: '+esc(r.would_have_done)+'</span></div>':'')+
+        '<div class="prov" style="margin-top:4px">'+ev+'</div>'+
+      '</div>';
+    }).join('');
+  }
+
   function renderMode(){
     var gr=(DATA&&DATA.grounding_ring)||{};
     var q=(DATA&&DATA.queue)||gr.queue||{};
@@ -352,7 +385,7 @@
     fetchJSON('/api/grounding/queue').then(function(d){
       DATA=d; lastOkTs=Date.now();
       // /api/grounding/queue returns {grounding_ring, queue}; the page reads both.
-      renderMetrics(); renderStarvation(); renderAffect(); renderShadowQ(); renderPending(); renderAnswered(); renderConfab(); renderMode();
+      renderMetrics(); renderStarvation(); renderAffect(); renderSituational(); renderShadowQ(); renderPending(); renderAnswered(); renderConfab(); renderMode();
     }).catch(function(){
       el('qlist').innerHTML='<div class="hint" style="color:var(--red)">grounding queue endpoint offline — showing nothing rather than a fabricated queue</div>';
       el('starv').className='banner starv-bad';

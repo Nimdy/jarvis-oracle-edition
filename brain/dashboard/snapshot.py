@@ -1547,6 +1547,26 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
             "promotion": {},
         }
 
+    # Companion Cognition P0 — situational read (LOGGED-ONLY / shadow).
+    # JARVIS's internal read of recent exchanges: what it thinks is happening,
+    # why, how confident, what evidence, and what it WOULD have done if allowed.
+    # Changes no behavior, writes no beliefs, asks nothing. Surfaced so the read
+    # and its salience gate can be validated before any later phase acts on it.
+    # See docs/COMPANION_COGNITION_DESIGN.md (P0).
+    try:
+        from consciousness.situational_read import situational_read_engine as _sit_read
+        snapshot["companion_read"] = _sit_read.get_status()
+    except Exception:
+        logger.debug("Snapshot: companion read failed", exc_info=True)
+        snapshot["companion_read"] = {
+            "phase": "P0_situational_read",
+            "authority": "shadow_logged_only",
+            "changes_behavior": False,
+            "observed_turns": 0,
+            "latest": None,
+            "recent": [],
+        }
+
     # HRR / VSA shadow substrate — read-only, dormant, non-authoritative.
     # Surface the same payload /api/hrr/status exposes so the memory tab and
     # other dashboard panels can render HRR metrics without a second fetch.
