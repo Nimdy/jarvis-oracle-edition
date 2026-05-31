@@ -5,6 +5,89 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
+## The Spark Branch — Grounding Ring + Weight-Room Discipline + Companion-Cognition Design (2026-05-31, branch `thespark`)
+
+The arc of this branch is the transition from **background cognition** (thoughts that
+log but change nothing) toward **live companion cognition** (a read that shapes behavior,
+learned over time). Everything that touches *behavior* is shadow-first / zero-authority /
+gate-earned; the companion-cognition loop itself is **DESIGNED, not built** (the operator
+explicitly paused the build). Scope is reaffirmed **one JARVIS, one primary companion,
+household-aware — not multi-tenant**.
+
+### A) Grounding Ring (the "spark") — SHIPPED, shadow-only
+
+Curiosity pointed OUTWARD to validate beliefs against external truth = the audit's
+keystone fix = `SyntheticSoul §5/§6.5`. Plan in `docs/SPARK_DESIGN.md`.
+
+| Area | Change | Evidence |
+| --- | --- | --- |
+| P0 passive metrics | Read-only grounding-ring baselines + `SparkPromotion` gate (default shadow); ProvenanceScorer is view-only | `autonomy/spark_metrics.py`, `epistemic/provenance_scorer.py` |
+| P1 shadow observability | Affect readout (3 scalars + provenance + cannot-lie clamp), would-have grounding questions, confabulation ledger — all surfaced read-only on `grounding.html` | `consciousness/affect_state.py`, `dashboard/snapshot.py` (commit `5b8d680`) |
+| `grounded:inferred` honesty | The keystone metric corrected through 3 fixes: narrow denominator (vs its 3.3× baseline), re-based to belief-graph reality (~20× = 4 grounded of 583), and a memory-store access-path fix | commits `88303d1` → `4cbe8dc` → `1d66e33` |
+| Grounding-drive selector | Soak showed 8/8 INWARD targets, fixated on one self-log. Fixed in ProvenanceScorer (view-only): outward bias (self/operational/meta ×0.2, world ×1.0) + anti-fixation (rotate, don't re-ask) | commits `e1c3ad3`, `3b1e41b` |
+
+### B) Belief-graph honesty — SHIPPED
+
+The spark soak traced the inward-belief pollution to its source: `reflection.py` minted a
+self-activity log per conversation (`interaction_review`, weight 0.3) that **leaked past the
+`weight < 0.30` eligibility gate at exactly 0.30** and became an identity-type belief — ~219
+of 220 inferred beliefs were these self-logs. Fix: `interaction_review` is categorically
+belief-ineligible (stays an episodic memory; never an epistemic belief). Honest framing —
+this grounds nothing new; it stops miscounting telemetry as beliefs.
+`epistemic/contradiction_engine.py` (commit `bfe6686`).
+
+### C) Weight-room discipline — P0 SHIPPED, P1+ designed
+
+The synthetic "weight room" (`synthetic/*.py`) is good, but "earn promotion on real reps,
+not faked" was doc-only. Design (`docs/WEIGHT_ROOM_DESIGN.md`): an **asymmetric** gate —
+block *authority* (promotion / broadcast-slot / `is_active`), never *training*. P0 SHIPPED:
+origin telemetry (`DistillationCollector` per-origin lived/synthetic counts) + **closed a
+real synthetic→promotion leak** (`world_model`/`simulator` `record_outcome` now tags origin
+from the synthetic-session gate, so synthetic predictions can't inflate promotion accuracy).
+`cognition/promotion.py`, `cognition/world_model.py`, `hemisphere/distillation.py`
+(commit `64ceb63`).
+
+### D) Grounding observability fix — SHIPPED
+
+Starvation banner falsely reported "no Pi signal" with the Pi connected. Three-layer fix:
+bogus proxy → only-recomputed-at-advisory (stale at shadow) → wrong perception attr. Now a
+live readout from `ctx.perception.get_connected_sensors()`. Verified `pi_signal_available:
+true`. `autonomy/orchestrator.py`, `dashboard/snapshot.py` (commits `0edce24` → `530c973`).
+
+### E) dashboardV2 maturation panels — SHIPPED (frontend, sync-no-restart)
+
+| Panel | Page | Surfaces |
+| --- | --- | --- |
+| Distillation Flow & Metrics | `v2/lab.html` | teacher streams (total/quarantined%/buffer/last-seen), lived/synthetic split, tier-1 gating, skill-acquisition maturation | (commit `2709dc5`) |
+| Language Evidence & Native Voice | `v2/training.html` | 7 evidence gates vs thresholds, `native_usage_rate` (the "outgrow-the-LLM" metric), + a live "What to Say Next" guide keyed off red gates | (commit `a1ed762`) |
+| Manual Gate Work Needed | `v2/training.html` | per-class lived-example progress (e.g. 6/30) + exact prompt decks — what the operator must say to unlock maturity | (commit `e9662e8`) |
+
+### F) Companion Cognition — DESIGN ONLY, not built (`docs/COMPANION_COGNITION_DESIGN.md`)
+
+The next chapter (Iron Man JARVIS / Cortana): a live internal **read** during conversation,
+**theory-of-mind held as hypotheses** (never asserted), a **read→behavior ladder**
+(tone/depth/pace/pivot/disengage, crawl→walk→run, gated shadow→advisory→active), asking that
+**feeds the existing `CuriosityQuestionBuffer`** (no new ask-path — inherits the rate-limit /
+dedup / annoyance-learning that already powers the desk-object & unknown-voice questions),
+and **crystallization that rides existing gates** (eligibility + `TensionRecord` maturation +
+calibration — beliefs revisable, personality a separate slow 0.7-inertia track). Anti-chatterbox
+spine: the read fires **only when salience/affect trips**, participation gated by
+`ProactiveGovernor` + a learned threshold. Grounded by 6 read-only investigations; **no code
+built — paused at design by operator decision.**
+
+### Cumulative invariants at branch state
+
+| Invariant | State |
+| --- | --- |
+| Companion-cognition code | **not built** (design only; operator paused) |
+| Spark / affect / grounding drive | **shadow / zero-authority** (drives no lever) |
+| Weight-room promotion gate | P0 telemetry only; **no authority gate live yet** |
+| `grounded:inferred` keystone | measured **honestly** (belief-graph ~20×, not the flattering 3.3×) |
+| Synthetic→promotion leak | **closed** (origin-tagged) |
+| Scope | one JARVIS, one primary companion, household-aware (**not** multi-tenant) |
+
+---
+
 ## Evidence-Integrity Triad + Spatial Mind's-Eye Stones 1/1.5/2 + `/mind` Matrix View (2026-05-30, SHIPPED)
 
 Branch `aliceinwonderland`.  Two threads, both verified live on the running
