@@ -78,11 +78,19 @@ class SparkMetrics:
     # BROAD VIEW: model_inference / (observation + cited external knowledge). Lower
     # because external_source dominates; kept separate so neither masks the other.
     grounded_inferred_ratio_incl_external: float = 0.0
+    # CONTINUITY: the SAME narrow ratio computed on the MEMORY STORE (all recorded
+    # memories — a different, larger population than the active belief graph). This
+    # is the historic ~3.5x figure tracked in SPARK_DESIGN; kept alongside the
+    # belief-graph keystone per operator decision (2026-05-31) so re-baselining the
+    # keystone to belief-graph reality doesn't lose the previously-tracked number.
+    grounded_inferred_ratio_memory_store: float = 0.0
     avg_chain_length: float = 0.0
     # Provenance / sample bookkeeping (honesty: where did the numbers come from)
     grounded_count: int = 0          # directly-grounded observation (narrow / keystone)
     external_knowledge_count: int = 0  # cited external_source (web/academic)
     grounded_count_incl_external: int = 0  # observation + external knowledge (broad)
+    memory_store_grounded_count: int = 0   # memory store: observed + user_claim
+    memory_store_inferred_count: int = 0   # memory store: model_inference
     inferred_count: int = 0
     sampled_beliefs: int = 0
     sources_available: bool = False
@@ -95,10 +103,14 @@ class SparkMetrics:
             "grounded_inferred_ratio": round(self.grounded_inferred_ratio, 4),
             "grounded_inferred_ratio_incl_external": round(
                 self.grounded_inferred_ratio_incl_external, 4),
+            "grounded_inferred_ratio_memory_store": round(
+                self.grounded_inferred_ratio_memory_store, 4),
             "avg_chain_length": round(self.avg_chain_length, 4),
             "grounded_count": self.grounded_count,
             "external_knowledge_count": self.external_knowledge_count,
             "grounded_count_incl_external": self.grounded_count_incl_external,
+            "memory_store_grounded_count": self.memory_store_grounded_count,
+            "memory_store_inferred_count": self.memory_store_inferred_count,
             "inferred_count": self.inferred_count,
             "sampled_beliefs": self.sampled_beliefs,
             "sources_available": self.sources_available,
@@ -217,6 +229,26 @@ def compute_spark_metrics(engine: Any | None) -> SparkMetrics:
     except Exception:
         logger.debug("spark_metrics: provenance ratios unavailable", exc_info=True)
 
+    # --- CONTINUITY: memory-store grounded:inferred (the historic ~3.5x) ----
+    # Different population from the belief-graph keystone above: ALL recorded
+    # memories, via memory_storage.get_stats()["by_provenance"]. View-only; kept
+    # alongside per operator decision so the belief-graph re-baseline doesn't lose
+    # the previously-tracked figure.
+    try:
+        ms = getattr(engine, "memory_storage", None) if engine is not None else None
+        if ms is not None and hasattr(ms, "get_stats"):
+            bp = (ms.get_stats() or {}).get("by_provenance", {}) or {}
+            ms_obs = int(bp.get("observed", 0) or 0) + int(bp.get("user_claim", 0) or 0)
+            ms_inf = int(bp.get("model_inference", 0) or 0)
+            metrics.memory_store_grounded_count = ms_obs
+            metrics.memory_store_inferred_count = ms_inf
+            if ms_obs > 0:
+                metrics.grounded_inferred_ratio_memory_store = ms_inf / ms_obs
+            elif ms_inf > 0:
+                metrics.grounded_inferred_ratio_memory_store = float(ms_inf)
+    except Exception:
+        logger.debug("spark_metrics: memory-store ratio unavailable", exc_info=True)
+
     # --- avg_chain_length (live ~1.0) via fractal recall -------------------
     try:
         fr = getattr(cs, "_fractal_recall_engine", None) if cs else None
@@ -250,7 +282,17 @@ SPARK_PROMOTION_PATH = os.path.join(
 # P0 baselines are aspirational targets, recorded so the success direction is
 # unambiguous in telemetry. They are NOT optimization targets (SPARK §7).
 SPARK_BASELINES = {
-    "grounded_inferred_ratio": 3.3,   # target: trending DOWN
+    # KEYSTONE reads the active BELIEF GRAPH (consistent with orphan_rate /
+    # avg_chain_length, which are also belief-graph metrics). Belief-graph reality
+    # measured at the P0 cold boot 2026-05-31: 82 model_inference vs only 4
+    # directly-grounded (observed+user_claim) of 583 active beliefs → ~20.5x.
+    # This SUPERSEDES the old 3.3x, which was mistakenly computed on the MEMORY
+    # STORE — a different (larger) population. The small grounded denominator makes
+    # the ratio volatile until grounding accrues, but the target direction (DOWN)
+    # is unambiguous. The memory-store view (~3.5x) is retained separately below
+    # for continuity (operator decision 2026-05-31).
+    "grounded_inferred_ratio": 20.5,              # belief graph; target ↓
+    "grounded_inferred_ratio_memory_store": 3.5,  # memory store; continuity view
     "orphan_rate": 0.857,             # target: trending DOWN
     "avg_chain_length": 1.0,          # target: rising ABOVE 1.0
     "external_validation_rate": 0.0,  # target: rising toward >0.40
