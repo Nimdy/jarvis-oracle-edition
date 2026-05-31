@@ -37,9 +37,24 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Provenance classes that count as externally / observationally grounded vs.
-# model-inferred. Mirrors the ProvenanceType vocabulary in consciousness/events.
-_GROUNDED_PROVENANCE = frozenset({"observed", "user_claim", "external_source"})
+# Provenance classes, split so the KEYSTONE ratio stays comparable to its
+# baseline and to the audit's source-trust concern. Mirrors the ProvenanceType
+# vocabulary in consciousness/events.
+#
+# HONESTY / OPEN-QUESTION #1 (SPARK_DESIGN §11): does source-cited *external
+# knowledge* (web/academic) count as "grounded"? It is NOT grounding of JARVIS's
+# own world (its senses + the operator), and it is already the dominant class —
+# so folding it into the denominator DILUTES the very inference-vs-grounding
+# signal the keystone metric exists to surface. We therefore keep the headline
+# ``grounded_inferred_ratio`` NARROW (directly-grounded observation only) so it
+# matches the 3.3x baseline, and expose the broad view as a SEPARATE, clearly
+# labelled ``grounded_inferred_ratio_incl_external``. Neither hides the other;
+# whether external_source should later be promoted into "grounded" is David's
+# open-question-#1 decision, not a silent default.
+_OBSERVATION_PROVENANCE = frozenset({"observed", "user_claim"})  # senses + operator
+_EXTERNAL_KNOWLEDGE_PROVENANCE = frozenset({"external_source"})   # cited web/academic
+# Broad set (observation + external knowledge), retained for the _incl_external view.
+_GROUNDED_PROVENANCE = _OBSERVATION_PROVENANCE | _EXTERNAL_KNOWLEDGE_PROVENANCE
 _INFERRED_PROVENANCE = frozenset({"model_inference"})
 
 # Cache TTL for the (potentially full-store) belief enumeration. The orchestrator
@@ -57,10 +72,17 @@ class SparkMetrics:
     orphan_rate: float = 0.0
     inference_validation_gap: float = 0.0
     external_validation_rate: float = 0.0
+    # KEYSTONE: model_inference / directly-grounded observation (senses+operator),
+    # comparable to the 3.3x baseline and to the audit's source-trust concern.
     grounded_inferred_ratio: float = 0.0
+    # BROAD VIEW: model_inference / (observation + cited external knowledge). Lower
+    # because external_source dominates; kept separate so neither masks the other.
+    grounded_inferred_ratio_incl_external: float = 0.0
     avg_chain_length: float = 0.0
     # Provenance / sample bookkeeping (honesty: where did the numbers come from)
-    grounded_count: int = 0
+    grounded_count: int = 0          # directly-grounded observation (narrow / keystone)
+    external_knowledge_count: int = 0  # cited external_source (web/academic)
+    grounded_count_incl_external: int = 0  # observation + external knowledge (broad)
     inferred_count: int = 0
     sampled_beliefs: int = 0
     sources_available: bool = False
@@ -71,8 +93,12 @@ class SparkMetrics:
             "inference_validation_gap": round(self.inference_validation_gap, 4),
             "external_validation_rate": round(self.external_validation_rate, 4),
             "grounded_inferred_ratio": round(self.grounded_inferred_ratio, 4),
+            "grounded_inferred_ratio_incl_external": round(
+                self.grounded_inferred_ratio_incl_external, 4),
             "avg_chain_length": round(self.avg_chain_length, 4),
             "grounded_count": self.grounded_count,
+            "external_knowledge_count": self.external_knowledge_count,
+            "grounded_count_incl_external": self.grounded_count_incl_external,
             "inferred_count": self.inferred_count,
             "sampled_beliefs": self.sampled_beliefs,
             "sources_available": self.sources_available,
@@ -92,9 +118,12 @@ def compute_spark_metrics(engine: Any | None) -> SparkMetrics:
 
     Sources:
       * orphan_rate            — belief_graph integrity.compute_integrity
-      * grounded_inferred_ratio — belief provenance counts (model_inference /
-                                  (observed + user_claim + external_source))
-      * inference_validation_gap — model_inference − grounded count (raw signed)
+      * grounded_inferred_ratio — KEYSTONE: model_inference / directly-grounded
+                                  observation (observed + user_claim); baseline
+                                  ~3.3x. A separate ..._incl_external also divides
+                                  by cited external_source (open-question #1).
+      * inference_validation_gap — model_inference − directly-grounded observation
+                                  (raw signed; positive ⇒ inference exceeds grounding)
       * external_validation_rate — gate-recorded external-validator outcomes
                                   only (never a provenance proxy); ~0 in P0
       * avg_chain_length        — fractal_recall.get_state()["avg_chain_length"]
@@ -138,27 +167,40 @@ def compute_spark_metrics(engine: Any | None) -> SparkMetrics:
             beliefs = belief_store.get_active_beliefs()
             if len(beliefs) > _BELIEF_SAMPLE_CAP:
                 beliefs = beliefs[-_BELIEF_SAMPLE_CAP:]
-            grounded = 0
-            inferred = 0
+            observation = 0   # directly-grounded: senses + operator (narrow)
+            external = 0      # cited external knowledge (web/academic)
+            inferred = 0      # model_inference
             for b in beliefs:
                 prov = getattr(b, "provenance", "unknown")
-                if prov in _GROUNDED_PROVENANCE:
-                    grounded += 1
+                if prov in _OBSERVATION_PROVENANCE:
+                    observation += 1
+                elif prov in _EXTERNAL_KNOWLEDGE_PROVENANCE:
+                    external += 1
                 if prov in _INFERRED_PROVENANCE:
                     inferred += 1
-            metrics.grounded_count = grounded
+            broad = observation + external
+            metrics.grounded_count = observation
+            metrics.external_knowledge_count = external
+            metrics.grounded_count_incl_external = broad
             metrics.inferred_count = inferred
             metrics.sampled_beliefs = len(beliefs)
             if beliefs:
                 metrics.sources_available = True
-            # grounded:inferred ratio — design names it model_inference /
-            # (observed+user_claim+external_source). Baseline ~3.3x.
-            if grounded > 0:
-                metrics.grounded_inferred_ratio = inferred / grounded
+            # KEYSTONE grounded:inferred ratio = model_inference / directly-grounded
+            # OBSERVATION (observed+user_claim). Comparable to the 3.3x baseline and
+            # to the audit's source-trust concern (see _OBSERVATION_PROVENANCE note).
+            if observation > 0:
+                metrics.grounded_inferred_ratio = inferred / observation
             elif inferred > 0:
                 metrics.grounded_inferred_ratio = float(inferred)
-            # inference_validation_gap = model_inference − grounded (raw signed)
-            metrics.inference_validation_gap = float(inferred - grounded)
+            # BROAD view = model_inference / (observation + cited external knowledge).
+            if broad > 0:
+                metrics.grounded_inferred_ratio_incl_external = inferred / broad
+            elif inferred > 0:
+                metrics.grounded_inferred_ratio_incl_external = float(inferred)
+            # inference_validation_gap = model_inference − directly-grounded
+            # observation (raw signed): positive ⇒ more inference than grounding.
+            metrics.inference_validation_gap = float(inferred - observation)
             # external_validation_rate — HONESTY (SPARK §7/§9): movable ONLY by a
             # real external-validator event (BELIEF_EXTERNALLY_CONFIRMED / user
             # answer / world-model validation), never a static provenance proxy.

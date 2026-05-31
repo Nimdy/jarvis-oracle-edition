@@ -100,12 +100,16 @@
     var evr=num(m.external_validation_rate);
     if(evr===null) evr=num(ps.external_validation_rate);
     var gi=num(m.grounded_inferred_ratio), orph=num(m.orphan_rate), acl=num(m.avg_chain_length);
+    var giX=num(m.grounded_inferred_ratio_incl_external), extK=num(m.external_knowledge_count);
     var html='';
     // external_validation_rate: target ↑ toward 0.40 (green at >=0.40)
     html+=metricStat('external validation rate', evr===null?'—':f3(evr), 'target ↑ ≥0.40',
        V2.bandColor(evr,0.40,0.20));
-    // grounded:inferred ratio: target ↓ from 3.3 (green when below)
-    html+=metricStat('grounded : inferred', gi===null?'—':f2(gi)+'×', 'target ↓ from 3.3×',
+    // grounded:inferred ratio (KEYSTONE = inference vs directly-grounded
+    // observation; senses+operator only). target ↓ from 3.3×. The broad
+    // "incl-web" view (open-Q#1) is shown in the sub so neither masks the other.
+    html+=metricStat('grounded : inferred', gi===null?'—':f2(gi)+'×',
+       'target ↓ from 3.3× · vs obs only'+(giX===null?'':' · incl-web '+f2(giX)+'×'),
        gi===null?'var(--dim)':(gi<=2.0?'var(--green)':(gi<=3.3?'var(--amber)':'var(--red)')));
     // orphan_rate: target ↓ from 0.857
     html+=metricStat('orphan rate', orph===null?'—':f3(orph), 'target ↓ from 0.857',
