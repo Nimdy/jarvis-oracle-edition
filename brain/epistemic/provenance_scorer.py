@@ -77,9 +77,15 @@ _IDENTITY_WEIGHT = 0.7   # about a person (operator-validatable, semi-outward)
 # Content markers that flag a self-referential operational/meta belief even when
 # facet routing miscategorises it (the soak belief was faceted "identity").
 _OPERATIONAL_MARKERS = (
+    # operational / performance self-telemetry
     "meta-learning", "meta_learning", "metacognit", "latency", "routing",
     "faster rout", "response (", "response time", "ms)", "cadence", "tick rate",
     "win_rate", "shadow_default", "slow response", "self-improve", "throughput",
+    # self-activity logs (soak2 confirmed n=8: the belief graph is dominated by
+    # auto-generated "I had a conversation / completed an interaction / reflected
+    # on exchange / response was X" self-observations — not world claims).
+    "conversation", "interaction", "exchange", "reflected on", "response was",
+    "turn(s)", "topic:",
 )
 _ANTIFIX_WINDOW = 6
 _ANTIFIX_DAMP = 0.5
