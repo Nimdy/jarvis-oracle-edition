@@ -34,10 +34,10 @@ from typing import Any
 # before any later phase is allowed to act on it.
 _SALIENCE_THRESHOLD = 0.5
 
-# Affect cortisol above this reads as conversational tension worth noting.
-_CORTISOL_TENSION = 0.45
 # A long reply to a simple turn is the classic "am I overexplaining?" tell.
 _OVEREXPLAIN_WORDS = 90
+# A turn that took this long to answer is conversationally notable (the user waited).
+_SLOW_TURN_MS = 8000
 
 _NEGATIVE_EMOTIONS = frozenset(
     {"angry", "frustrated", "sad", "annoyed", "anxious", "stressed", "upset", "fear", "disgust"}
@@ -183,19 +183,26 @@ class SituationalReadEngine:
             except Exception:
                 cortisol = dopamine = None
 
-        # ── salience: how notable is this moment? (the behavior gate, shadow) ──
+        # ── salience: is THIS exchange notable? (the behavior gate, shadow) ──
+        # Driven by CONVERSATIONAL signals only. The affect cortisol/dopamine
+        # above are JARVIS's OWN internal state (epistemic friction / reward),
+        # not a read of the conversation — cortisol's floor is the 0.5 baseline,
+        # so it must never trip a conversational gate. They are kept as context
+        # in `evidence`; a genuinely turn-scoped affect signal can feed salience
+        # in a later phase, explicitly labelled as such.
+        slow_turn = bool(latency_ms and latency_ms > _SLOW_TURN_MS)
+        if slow_turn:
+            evidence.append(["latency_ms", latency_ms])
+        overexplain = self_check != "reply length proportionate"
         salience = 0.0
         if sentiment == "negative":
             salience = max(salience, 0.7)
         if engagement == "disengaging":
             salience = max(salience, 0.6)
-        if self_check != "reply length proportionate":
+        if overexplain:
             salience = max(salience, 0.55)
-        if cortisol is not None and cortisol >= _CORTISOL_TENSION:
-            salience = max(salience, min(1.0, 0.4 + cortisol))
-        if latency_ms and latency_ms > 8000:
+        if slow_turn:
             salience = max(salience, 0.5)
-            evidence.append(["latency_ms", latency_ms])
         salience = max(0.0, min(1.0, salience))
         tripped = salience >= _SALIENCE_THRESHOLD
 
@@ -214,14 +221,14 @@ class SituationalReadEngine:
         if tripped:
             if sentiment == "negative" and engagement == "disengaging":
                 would = "would consider giving space / checking in"
-            elif self_check != "reply length proportionate":
+            elif overexplain:
                 would = "would consider being more concise / checking if this helps"
             elif sentiment == "negative":
                 would = "would consider softening tone"
             elif engagement == "disengaging":
                 would = "would consider pivoting or asking if this is useful"
-            else:
-                would = "would consider acknowledging the shift"
+            elif slow_turn:
+                would = "would consider acknowledging the delay"
 
         return SituationalRead(
             timestamp=time.time(),
