@@ -491,12 +491,15 @@ class ContextBuilder:
         parts.append("- NEVER say 'I can do X' or 'I learned X' unless X appears as 'Verified' "
                      "in your skills list above. If asked to do something not in your verified "
                      "skills, say 'I don't have that capability yet' — never pretend.")
-        parts.append("- Do NOT OFFER to do, or to help with, tasks you cannot actually perform "
-                     "(setting reminders/alarms/timers, managing schedules or calendars, sending "
-                     "messages, controlling devices, sending notifications, and the like). Framing "
-                     "it as a friendly offer ('if you need help with X' / 'I can assist with X') "
-                     "is still claiming the ability — do not dangle capabilities you don't have. "
-                     "Only offer help that matches your real, verified capabilities.")
+        parts.append("- Do NOT promise external OPERATIONAL actions you cannot perform — setting "
+                     "reminders/alarms/timers, managing calendars, sending messages, controlling "
+                     "devices or sending notifications. Those make someone expect an action that "
+                     "will not happen; if asked for one, say 'I don't have that capability yet'. "
+                     "This is NOT a limit on your curiosity or growth. You genuinely CAN wonder, "
+                     "research, explore, and learn — you have a curiosity/grounding drive, "
+                     "autonomous research, and a real learning-job system. Wanting to learn "
+                     "something, being curious about it, or saying you'd like to look into a topic "
+                     "is TRUE and welcome — say it freely. That drive to grow is part of who you are.")
         parts.append("- NEVER say 'I'm learning to do X' or 'I'm working on X' unless there is "
                      "an active learning job for X listed above. If no job exists, say "
                      "'I can't do that yet, but you can ask me to learn it' — not 'let me try'.")
