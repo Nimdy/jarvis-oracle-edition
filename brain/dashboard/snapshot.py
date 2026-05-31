@@ -1490,6 +1490,12 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
             _gr["affect_promotion"] = {}
         try:
             from autonomy.grounding_queue import GroundingQueue
+            # Refresh the input-starvation readout live so the banner is accurate
+            # at any tier (assess_starvation otherwise runs only in the advisory
+            # path; at shadow it would show a stale default — "no Pi signal" etc).
+            _ao = getattr(ctx.engine, "_autonomy_orchestrator", None) if getattr(ctx, "engine", None) else None
+            if _ao is not None and hasattr(_ao, "refresh_starvation"):
+                _ao.refresh_starvation()
             GroundingQueue.get_instance().expire_stale()
             _gr["queue"] = GroundingQueue.get_instance().get_status(limit=50)
         except Exception:

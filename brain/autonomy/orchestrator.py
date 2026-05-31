@@ -2395,6 +2395,29 @@ class AutonomyOrchestrator:
         )
         return True
 
+    def refresh_starvation(self) -> None:
+        """Recompute the input-starvation readout from the live environment.
+
+        assess_starvation otherwise runs only inside the advisory handler, so at
+        shadow tier the dashboard banner showed a stale default ("operator absent,
+        no Pi signal") regardless of reality. Called at snapshot-build so the
+        banner is a LIVE readout at any tier. Read-only except the queue readout.
+        """
+        try:
+            from autonomy.grounding_queue import GroundingQueue, assess_starvation
+            queue = GroundingQueue.get_instance()
+            operator_present = self._operator_present()
+            starv = assess_starvation(
+                operator_present=operator_present,
+                pi_signal_available=self._pi_signal_available(),
+                web_exhausted=False,  # web is generally reachable for factual facets
+                pending_batch_size=queue.pending_count(),
+                last_operator_seen_ts=time.time() if operator_present else 0.0,
+            )
+            queue.set_starvation(starv)
+        except Exception:
+            logger.debug("refresh_starvation failed", exc_info=True)
+
     def _pi_signal_available(self) -> bool:
         """Best-effort read: is the Pi actually streaming sensory signal?
 
