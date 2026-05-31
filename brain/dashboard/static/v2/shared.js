@@ -25,6 +25,7 @@ window.V2 = (function(){
   // [href, label, stub?] — drop the stub flag when a page ships.
   var NAVPAGES=[
     ['#sep','core'],
+    ['/static/v2/cockpit.html','cockpit'],
     ['/static/v2/awakening.html','awakening'],
     ['/static/v2/integrity.html','integrity'],
     ['/static/v2/maturity.html','maturity'],

@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Live Cognition Cockpit (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only — does not modify the shared toolkit */
+    .reason{font-size:15px;line-height:1.5;color:var(--text);border-left:4px solid var(--dim);
+      padding:8px 0 8px 13px;margin:4px 0 10px;background:rgba(8,15,23,.4);border-radius:0 4px 4px 0;}
+    .reason .asof{display:block;font-size:9px;color:var(--dim);margin-top:4px;letter-spacing:.04em;}
+    .hero-grid{display:flex;gap:20px;flex-wrap:wrap;align-items:baseline;margin:6px 0;}
+    .hs{display:flex;flex-direction:column;gap:1px;}
+    .hs .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .hs .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.05;}
+    .hs .v.sm{font-size:14px;}
+    .tickbar{display:flex;gap:16px;flex-wrap:wrap;font-size:10px;color:var(--muted);margin-top:8px;
+      border-top:1px dashed var(--line);padding-top:8px;}
+    .tickbar b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .heroact{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;}
+    /* flow rail */
+    .rail{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+    .node{flex:1 1 120px;min-width:120px;border:1px solid var(--line);border-radius:5px;padding:8px 9px;
+      background:rgba(3,8,14,.5);cursor:pointer;}
+    .node:hover{border-color:var(--cyan);}
+    .node .nm{font-size:10px;color:var(--text);font-weight:700;}
+    .node .ns{font-size:9px;letter-spacing:.04em;text-transform:uppercase;margin-top:2px;}
+    .node .nd{font-size:9px;color:var(--dim);margin-top:3px;}
+    .node .nl{font-size:9px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums;}
+    /* matrix table */
+    table.mx{width:100%;border-collapse:collapse;font-size:10px;margin-top:6px;}
+    table.mx th{text-align:left;color:var(--muted);font-weight:400;letter-spacing:.04em;text-transform:uppercase;
+      font-size:8.5px;border-bottom:1px solid var(--line);padding:4px 6px;}
+    table.mx td{padding:4px 6px;border-bottom:1px solid #0c151e;vertical-align:top;}
+    table.mx tr.row{cursor:pointer;} table.mx tr.row:hover td{background:rgba(0,204,255,.05);}
+    table.mx tr.gated{opacity:.45;}
+    table.mx .cyc{color:var(--text);font-weight:700;}
+    table.mx .num{font-variant-numeric:tabular-nums;text-align:right;}
+    .mxlegend{font-size:9px;color:var(--dim);margin-top:7px;line-height:1.5;}
+    .mxlegend b{color:var(--amber);}
+    /* thoughts */
+    .th{font-size:10px;color:var(--muted);padding:7px 0;border-top:1px dashed var(--line);cursor:pointer;}
+    .th:first-child{border-top:none;} .th:hover .tx{color:var(--cyan);}
+    .th .tx{color:var(--text);font-size:11px;}
+    .th .meta{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);margin-top:3px;}
+    /* drives */
+    .drive{padding:6px 0;border-top:1px dashed var(--line);cursor:pointer;}
+    .drive:first-child{border-top:none;}
+    .drive .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+    .drive .nm{color:var(--text);font-size:11px;font-weight:700;text-transform:capitalize;}
+    .drive .meta{font-size:9px;color:var(--dim);margin-top:2px;}
+    .supp{font-size:9px;border:1px solid var(--amber);color:var(--amber);border-radius:3px;padding:1px 5px;background:rgba(255,176,0,.08);}
+    /* lists / queue / ledger */
+    .li{font-size:10px;color:var(--muted);padding:6px 0;border-top:1px dashed var(--line);cursor:pointer;}
+    .li:first-child{border-top:none;} .li:hover .lt{color:var(--cyan);}
+    .li .lt{color:var(--text);font-size:11px;}
+    .li .meta{font-size:9px;letter-spacing:.03em;color:var(--dim);margin-top:2px;}
+    .ledger{max-height:340px;overflow:auto;}
+    .lg{font-size:10px;color:var(--muted);padding:4px 0;border-bottom:1px solid #0c151e;display:flex;gap:8px;align-items:baseline;}
+    .lg .lts{color:var(--dim);min-width:62px;font-variant-numeric:tabular-nums;}
+    .lg .lk{font-size:8px;border:1px solid var(--line);border-radius:2px;padding:0 4px;letter-spacing:.05em;text-transform:uppercase;}
+    .degraded{border:1px dashed var(--amber);border-radius:4px;padding:7px 10px;background:rgba(255,176,0,.05);
+      font-size:10px;color:var(--amber);margin-bottom:8px;}
+    .degraded b{color:#ffd27a;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · LIVE COGNITION COCKPIT</h1><span class="v2">dashboardV2</span>
+    <span class="sub">What is JARVIS doing right now, and why. One 2s read-only poll over the live engine; every field maps to a real endpoint or renders UNKNOWN — never faked, never green-on-null.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <!-- ===== PANEL 1 · Current-State Hero ===== -->
+    <section class="card col12">
+      <h2>Current State · Why</h2>
+      <div class="note">The plain-English current-reason line is composed client-side from real fields (core.phase / narrative.current_focus / mode / consciousness.stage+focus / attention.user_emotion / top-urgency drive / suppression / primary_concern). The left border is colored by <b>trust_state</b>. Kernel tick figures are live from <code>/api/kernel/performance</code> (avg/p95/max only — <b style="color:var(--amber)">no p50/p99: not computed</b>).</div>
+      <div class="reason" id="hero-reason">—</div>
+      <div class="hero-grid" id="hero-stats"></div>
+      <div class="tickbar" id="hero-ticks"></div>
+      <div class="heroact">
+        <button class="btn-act sm" id="hero-raw">raw snapshot ↗</button>
+        <button class="btn-act sm" id="hero-chat">💬 chat</button>
+      </div>
+    </section>
+
+    <!-- ===== PANEL 2 · Live Flow Rail ===== -->
+    <section class="card col12">
+      <h2>Live Flow Rail</h2>
+      <div class="note">Cognition pipeline as a status+recency rail. Node status (idle/active/error) is real per subsystem. <b>age_s is time-since-last-status-change</b> ("idle for Ns"), NOT a cycle cadence. Per-node latency is instrumented ONLY for the kernel (p95/avg); every other node shows <b>—</b> honestly. Click a node → its most-recent causal chain.</div>
+      <div class="rail" id="flow-rail"></div>
+    </section>
+
+    <!-- ===== PANEL 3 · Service Tick Matrix ===== -->
+    <section class="card col12">
+      <h2>Service Tick Matrix</h2>
+      <div class="note">Per-cycle table for the consciousness cycles. <b style="color:var(--amber)">CADENCE = documented code constants, mode-dependent, NOT live</b> (no <code>/api/consciousness/cycles</code> endpoint exists). LAST-RUN / DURATION are reconstructed from the 50-event <code>operations.timeline</code> window — low-frequency cycles fall outside it and show "— outside window", never a fake 0. Mode-suppressed cycles (not in allowed_cycles) are greyed. Click a row → its causal chain.</div>
+      <table class="mx"><thead><tr>
+        <th>cycle</th><th class="num">doc cadence</th><th>last run</th><th class="num">duration</th><th>status</th><th>last output</th><th>allowed</th>
+      </tr></thead><tbody id="mx-body"></tbody></table>
+      <div class="mxlegend" id="mx-legend"></div>
+    </section>
+
+    <!-- ===== PANEL 4 · Last Thoughts ===== -->
+    <section class="card col6">
+      <h2>Last Thoughts</h2>
+      <div class="note"><b>TEMPLATED reasoning artifacts</b> (human-written structure, real data, no free-form emergence). thought → trigger (source) → type (route) → tags/evidence (effect). Tier-1 (pattern_recognition / uncertainty_acknowledgment) is actionable; Tier-2 (existential_wonder / …) is decorative. Click → full thought detail.</div>
+      <div class="statline" id="th-stat" style="font-size:10px;color:var(--muted);margin-bottom:4px;"></div>
+      <div id="th-list"></div>
+    </section>
+
+    <!-- ===== PANEL 5 · Motive Drives ===== -->
+    <section class="card col6">
+      <h2>Motive Drives</h2>
+      <div class="note">The 7-drive board: <b>urgency</b> (banded) | strategy (trigger) | suppression | last action → outcome. Drives fire when urgency clears a per-drive act bar (the API exposes no numeric threshold — not invented). <b>suppression</b> text is the most useful honesty signal (cooldown / dampened). success_rate is shown even at 0.0. Click → that drive's recent research.</div>
+      <div id="drive-list"></div>
+    </section>
+
+    <!-- ===== PANEL 6 · Research Queue ===== -->
+    <section class="card col6">
+      <h2>Research Queue</h2>
+      <div class="note">Autonomy work queue: pending intents (queued/running/blocked) + the last completed jobs (capped at 10). <b>priority is a pre-research estimate, not a quality score</b>. Click → full research job detail (sources, findings, impact delta).</div>
+      <div id="rq-pending"></div>
+      <div style="font-size:9px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin:10px 0 2px;border-top:1px dashed var(--line);padding-top:8px;">recently completed</div>
+      <div id="rq-completed"></div>
+    </section>
+
+    <!-- ===== PANEL 8 · Causal Chain Inspector ===== -->
+    <section class="card col6">
+      <h2>Causal Chain Inspector</h2>
+      <div class="note">Walk one execution as a node→node tree (subsystem / event_type / outcome / tool path). The strongest "how did this happen" surface. Chains are <b>static snapshots</b> reconstructed at click-time from the immutable attribution ledger — they do not animate. Click a root → its chain.</div>
+      <div class="statline" id="cc-stat" style="font-size:10px;color:var(--muted);margin-bottom:4px;"></div>
+      <div id="cc-list"></div>
+      <div class="heroact"><button class="btn-act sm" id="cc-explorer">trace explorer ↗</button></div>
+    </section>
+
+    <!-- ===== PANEL 9 · Flight Recorder ===== -->
+    <section class="card col6">
+      <h2>Flight Recorder</h2>
+      <div class="note">Per-conversation episodes: Input → Route → Identity → Memories → Gates → LLM → Output → Latency → Feedback — the request-level black box. This is the ONE place real measured end-to-end latency exists. <b>LLM stage is implicit</b> (inferred from route). Bounded to 50 episodes; empty on a fresh boot. Click → full episode breakdown.</div>
+      <div id="fr-list"></div>
+    </section>
+
+    <!-- ===== PANEL 10 · Consciousness Flow Map (degraded) ===== -->
+    <section class="card col6">
+      <h2>Consciousness Flow Map</h2>
+      <div class="note">Intended as a live event-dataflow graph (KERNEL_THOUGHT events streaming between subsystems).</div>
+      <div class="degraded"><b>NOT a live event stream — needs an SSE endpoint (recovery debt).</b> No event-stream endpoint exists; KERNEL_THOUGHT events go to the internal event_bus only, and /ws only rebroadcasts the whole snapshot on hash-change. Below is a <b>snapshot-derived activity ledger</b> — observer.recent + thoughts.recent + operations.timeline, merged & time-sorted desc, reconstructed from 2s snapshots. It honestly shows "what fired recently", not a real dataflow.</div>
+      <div class="ledger" id="flow-ledger"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script src="/static/v2/v2-drill.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f3=V2.f3, pct1=V2.pct1, el=V2.el, ago=V2.ago,
+      bandColor=V2.bandColor, cap=V2.cap, tag=V2.tag, barRow=V2.barRow;
+  V2.renderNav('/static/v2/cockpit.html');
+
+  // window._lastSnap is the SHARED CONTRACT cache every drill-down (V2D) reads.
+  window._lastSnap = window._lastSnap || { full:null, kperf:null, thoughts:null, _ts:0 };
+  var lastOkTs=0;
+
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function FS(){ return (window._lastSnap.full)||null; }
+  function KP(){ return (window._lastSnap.kperf)||null; }
+  function TH(){ return (window._lastSnap.thoughts)||((window._lastSnap.full||{}).thoughts)||null; }
+
+  // ---- trust ladder color (grounded > provisional > conflicted > degraded > unknown) ----
+  function trustColor(state){
+    switch(String(state||'').toLowerCase()){
+      case 'grounded': return 'var(--green)';
+      case 'provisional': return 'var(--cyan)';
+      case 'conflicted': return 'var(--amber)';
+      case 'degraded': return 'var(--red)';
+      default: return 'var(--dim)';
+    }
+  }
+  function statusColor(st){
+    st=String(st||'').toLowerCase();
+    if(st==='active'||st==='running') return 'var(--green)';
+    if(st==='error'||st==='failed') return 'var(--red)';
+    if(st==='idle'||st==='completed') return 'var(--muted)';
+    if(st==='skipped'||st==='queued'||st==='blocked') return 'var(--amber)';
+    return 'var(--dim)';
+  }
+
+  // ===== PANEL 1 · Current-State Hero + current-reason composer =====
+  // ACTIVITY verb map (narrative.current_focus already does this server-side; map as fallback).
+  var PHASE_VERB={OBSERVING:'Observing the environment',PROCESSING:'Thinking about the request',
+    LISTENING:'Listening',STANDBY:'Standing by',IDLE:'Idle'};
+
+  function topDrive(fs){
+    var dd=(((fs.autonomy||{}).drives||{}).drives)||{};
+    var best=null;
+    Object.keys(dd).forEach(function(k){
+      var u=num(dd[k].urgency); if(u===null) return;
+      if(!best || u>best.u){ best={name:k,u:u,d:dd[k]}; }
+    });
+    return best;
+  }
+
+  function composeReason(fs){
+    if(!fs) return {text:'UNKNOWN — snapshot unavailable', border:'var(--dim)'};
+    var core=fs.core||{}, mode=fs.mode||{}, cons=fs.consciousness||{}, att=fs.attention||{},
+        narr=fs.narrative||{}, summary=fs.summary||{}, ts=fs.trust_state||{};
+    var clauses=[];
+    // ACTIVITY — prefer narrative.current_focus (already verb-mapped); else map phase.
+    var activity=narr.current_focus || (core.phase?PHASE_VERB[core.phase]||cap(core.phase):null);
+    if(activity){ clauses.push('JARVIS is '+activity); } else { clauses.push('JARVIS is in an UNKNOWN state'); }
+    if(mode.mode) clauses.push('in '+cap(mode.mode)+' mode');
+    if(cons.stage) clauses.push(cap(cons.stage)+' stage');
+    var line=clauses.join(', ');
+    // FOCUS (consciousness.current_focus) — distinct from narrative activity.
+    if(cons.current_focus && cons.current_focus!==narr.current_focus) line+=', focus: '+cons.current_focus;
+    // USER emotion when confidently detected.
+    var emoConf=num(att.emotion_confidence);
+    if(att.user_emotion && (emoConf===null || emoConf>0.3)) line+=', user seems '+att.user_emotion;
+    // DRIVE — single highest-urgency drive.
+    var td=topDrive(fs);
+    if(td && td.u>0) line+=' — '+td.name+' ('+td.u.toFixed(2)+') active';
+    // SUPPRESSION verbatim from that drive.
+    if(td && td.d && td.d.suppression) line+='; '+td.name+' '+td.d.suppression;
+    // CONCERN
+    var concern=narr.primary_concern;
+    if(concern && String(concern).toLowerCase()!=='none') line+='. Concern: '+concern;
+    return { text:line+'.', border:trustColor(ts.state) };
+  }
+
+  function hsBlock(k,v,color,small){
+    return '<div class="hs"><span class="k">'+k+'</span><span class="v'+(small?' sm':'')+'"'+(color?' style="color:'+color+'"':'')+'>'+v+'</span></div>';
+  }
+
+  function renderHero(){
+    var fs=FS(), kp=KP();
+    var r=composeReason(fs);
+    el('hero-reason').style.borderLeftColor=r.border;
+    el('hero-reason').innerHTML=esc(r.text)+'<span class="asof">· as of '+ago(window._lastSnap._ts)+(fs?'':' · FETCH FAILED — fail-closed')+'</span>';
+    el('mode').textContent=fs&&(fs.mode||{}).mode?('mode: '+(fs.mode.mode)):'mode: —';
+
+    if(!fs){ el('hero-stats').innerHTML='<div class="offline">snapshot offline</div>'; el('hero-ticks').innerHTML=''; return; }
+    var core=fs.core||{}, mode=fs.mode||{}, cons=fs.consciousness||{}, summary=fs.summary||{}, ts=fs.trust_state||{}, health=fs.health||{};
+    var aware=num(cons.awareness_level), trans=num(cons.transcendence_level);
+    var mult=num(((mode.profile||{}).tick_cadence_multiplier));
+    el('hero-stats').innerHTML=
+      hsBlock('phase', cap(core.phase||'—'), 'var(--cyan)', true)+
+      hsBlock('tone', cap(core.tone||'—'), null, true)+
+      hsBlock('mode', cap(mode.mode||'—'), null, true)+
+      hsBlock('stage', cap(cons.stage||'—'), 'var(--green)', true)+
+      hsBlock('awareness', aware===null?'—':(aware*100).toFixed(0)+'%', bandColor(aware,0.85,0.6), true)+
+      hsBlock('transcendence', trans===null?'—':trans.toFixed(1), bandColor(trans,8,4), true)+
+      hsBlock('trust', cap(summary.trust_label||ts.state||'—'), trustColor(ts.state), true)+
+      hsBlock('uptime', V2.fmtUptime(health.uptime_s));
+
+    // kernel tick fields — from /api/kernel/performance (avg/p95/max only; NO p50/p99).
+    if(!kp){ el('hero-ticks').innerHTML='<span class="offline">kernel performance UNAVAILABLE — fail-closed</span>'; return; }
+    var ticks=num(kp.tick_count), avg=num(kp.avg_tick_ms), p95=num(kp.p95_tick_ms), mx=num(kp.max_tick_ms),
+        ovr=num(kp.budget_overruns), slow=num(kp.slow_ticks), defb=num(kp.deferred_backlog);
+    var ovrPct=(ovr!==null&&ticks)?((ovr/ticks)*100):null;
+    var slowPct=(slow!==null&&ticks)?((slow/ticks)*100):null;
+    el('hero-ticks').innerHTML=
+      'ticks <b>'+(ticks===null?'—':ticks.toLocaleString())+'</b> · '+
+      'avg <b>'+(avg===null?'—':avg.toFixed(2)+'ms')+'</b> · '+
+      'p95 <b>'+(p95===null?'—':p95.toFixed(2)+'ms')+'</b> · '+
+      'max <b>'+(mx===null?'—':mx.toFixed(2)+'ms')+'</b> · '+
+      'overruns <b>'+(ovr===null?'—':ovr.toLocaleString())+(ovrPct===null?'':' ('+ovrPct.toFixed(2)+'%)')+'</b> · '+
+      'slow-ticks <b>'+(slow===null?'—':slow.toLocaleString())+(slowPct===null?'':' ('+slowPct.toFixed(2)+'%)')+'</b> · '+
+      'deferred-backlog <b>'+(defb===null?'—':defb)+'</b> · '+
+      'cadence×<b>'+(mult===null?'—':mult.toFixed(2))+'</b> · '+
+      'budget_ms <b style="color:var(--dim)">not exposed</b> · p50/p99 <b style="color:var(--dim)">not computed</b> · snapshot age <b>'+ago(window._lastSnap._ts)+'</b>';
+  }
+
+  // ===== PANEL 2 · Live Flow Rail =====
+  // last-fired per subsystem reconstructed from operations.timeline (latest ts).
+  function timelineLatest(fs){
+    var tl=((fs.operations||{}).timeline)||[];
+    var byub={};
+    tl.forEach(function(e){ var s=e.subsystem; if(!s) return; var t=num(e.ts)||0;
+      if(!byub[s] || t>byub[s].ts){ byub[s]={ts:t,event:e.event,msg:e.msg}; } });
+    return byub;
+  }
+
+  function renderRail(){
+    var fs=FS(), kp=KP();
+    var box=el('flow-rail');
+    if(!fs){ box.innerHTML='<div class="offline">operations offline</div>'; return; }
+    var ops=fs.operations||{};
+    var cur=ops.current||{};
+    var bg=ops.background||[];
+    var latest=timelineLatest(fs);
+    var p95=num((kp||{}).p95_tick_ms), avg=num((kp||{}).avg_tick_ms);
+    // logical pipeline order; map by key, render every background subsystem after.
+    var nodes=bg.slice();
+    // ensure a kernel node exists for the real latency.
+    var html=nodes.map(function(n){
+      var key=n.key, status=n.status, age=num(n.age_s);
+      var isActive=(cur && (cur.name===key||cur.label===n.label) && status!=='idle');
+      var lat;
+      if(key==='kernel'){ lat='p95 '+(p95===null?'—':p95.toFixed(2)+'ms')+' · avg '+(avg===null?'—':avg.toFixed(2)+'ms'); }
+      else if(isActive && num(cur.duration_s)!==null){ lat='active '+num(cur.duration_s).toFixed(1)+'s'; }
+      else { lat='latency — (not instrumented)'; }
+      var lf=latest[key];
+      return '<div class="node" data-sub="'+esc(key)+'" title="'+(key==='kernel'?'kernel aggregate latency':'per-node latency not instrumented')+'">'+
+        '<div class="nm">'+esc(n.label||cap(key))+'</div>'+
+        '<div class="ns" style="color:'+statusColor(status)+'">● '+esc(status||'—')+'</div>'+
+        '<div class="nd">'+(n.detail?esc(String(n.detail).slice(0,40)):(age===null?'':'idle for '+Math.round(age)+'s'))+'</div>'+
+        '<div class="nl">last fired '+(lf?ago(lf.ts):'—')+'</div>'+
+        '<div class="nl">'+esc(lat)+'</div></div>';
+    }).join('');
+    box.innerHTML=html||'<div class="offline">no subsystems reported</div>';
+  }
+
+  // ===== PANEL 3 · Service Tick Matrix =====
+  // CADENCE = documented code constants (consciousness_system.py), hardcoded, NOT live.
+  var CYCLES=[
+    {key:'meta_thought',    label:'Meta-Thought',       cadence:'8s'},
+    {key:'autonomy',        label:'Autonomy',           cadence:'30s'},
+    {key:'analysis',        label:'Analysis',           cadence:'30s'},
+    {key:'world_model',     label:'World-Model',        cadence:'5s (30s asleep)'},
+    {key:'mutation',        label:'Mutation',           cadence:'180s'},
+    {key:'quarantine',      label:'Quarantine',         cadence:'60s'},
+    {key:'scene_continuity',label:'Scene-Continuity',   cadence:'60s'},
+    {key:'hemisphere',      label:'Hemisphere-Evolution',cadence:'120s'},
+    {key:'goals',           label:'Goals',              cadence:'120s'},
+    {key:'dream',           label:'Dream',              cadence:'30s'},
+    {key:'self_improve',    label:'Self-Improve',       cadence:'900s'},
+    {key:'study',           label:'Study',              cadence:'120s'},
+    {key:'learning_job',    label:'Learning-Jobs',      cadence:'300s'},
+    {key:'salience_decay',  label:'Salience-Decay',     cadence:'mode-dependent'}
+  ];
+
+  function renderMatrix(){
+    var fs=FS();
+    var body=el('mx-body'), legend=el('mx-legend');
+    if(!fs){ body.innerHTML='<tr><td colspan="7" class="offline">operations offline</td></tr>'; legend.innerHTML=''; return; }
+    var ops=fs.operations||{};
+    var tl=ops.timeline||[];
+    var bg={}; (ops.background||[]).forEach(function(n){ bg[n.key]=n; });
+    var allowed=(((fs.mode||{}).profile||{}).allowed_cycles)||null;
+    // reconstruct last-run (latest ts) + duration (started→completed pair) from the 50-event window.
+    function recon(key){
+      var events=tl.filter(function(e){ return e.subsystem===key; }).sort(function(a,b){ return (num(a.ts)||0)-(num(b.ts)||0); });
+      if(!events.length) return {lastTs:null,dur:null,msg:null};
+      var last=events[events.length-1];
+      var dur=null, started=null;
+      events.forEach(function(e){
+        if(e.event==='started') started=num(e.ts);
+        else if(e.event==='completed' && started!==null){ dur=(num(e.ts)-started); }
+      });
+      return {lastTs:num(last.ts), dur:dur, msg:last.msg||last.event};
+    }
+    var rows=CYCLES.map(function(c){
+      var rc=recon(c.key);
+      var sub=bg[c.key]||{};
+      var isAllowed = (allowed===null) ? null : (allowed.indexOf(c.key)>=0);
+      var gated = (isAllowed===false);
+      var st=sub.status||'—';
+      var lastRun = rc.lastTs===null ? '<span style="color:var(--dim)">— outside window</span>' : ago(rc.lastTs);
+      var dur = rc.dur===null ? '<span style="color:var(--dim)">—</span>' : rc.dur.toFixed(2)+'s';
+      var out = rc.msg ? esc(String(rc.msg).slice(0,40)) : '<span style="color:var(--dim)">—</span>';
+      var allowedTxt = isAllowed===null ? '<span style="color:var(--dim)">—</span>'
+        : (isAllowed ? '<span style="color:var(--green)">yes</span>' : '<span style="color:var(--amber)">mode-gated</span>');
+      return '<tr class="row'+(gated?' gated':'')+'" data-sub="'+esc(c.key)+'">'+
+        '<td class="cyc">'+esc(c.label)+'</td>'+
+        '<td class="num" style="color:var(--dim)">'+esc(c.cadence)+'</td>'+
+        '<td>'+lastRun+'</td>'+
+        '<td class="num">'+dur+'</td>'+
+        '<td style="color:'+statusColor(st)+'">'+esc(st)+'</td>'+
+        '<td>'+out+'</td>'+
+        '<td>'+allowedTxt+'</td></tr>';
+    }).join('');
+    body.innerHTML=rows;
+    legend.innerHTML='<b>doc cadence (code constant), mode-dependent, not live</b> — intervals shift under _DEEP_LEARNING / _DREAMING modes; the active value may differ. '+
+      'LAST-RUN / DURATION are reconstructed from the 50-event <code>operations.timeline</code> window — low-frequency cycles (self-improve 900s, learning-jobs 300s) legitimately show "— outside window". '+
+      'NEXT-RUN ETA is not computable (no last_run_ts serialized) → omitted. STATUS &amp; ALLOWED are real. Click a row → most-recent causal chain for that subsystem.';
+  }
+
+  // ===== PANEL 4 · Last Thoughts =====
+  function renderThoughts(){
+    var th=TH();
+    var stat=el('th-stat'), list=el('th-list');
+    if(!th){ stat.innerHTML='<span class="offline">thoughts UNAVAILABLE</span>'; list.innerHTML=''; return; }
+    stat.innerHTML='total generated <b style="color:var(--text)">'+(num(th.total_generated)===null?'—':th.total_generated)+'</b> · showing latest '+Math.min(8,(th.recent||[]).length)+' (small fresh corpus)';
+    var rec=(th.recent||[]).slice(0,8);
+    list.innerHTML=rec.length?rec.map(function(t,i){
+      var conf=num(t.confidence), refs=(t.evidence_refs||[]).length;
+      return '<div class="th" data-idx="'+i+'">'+
+        '<div class="tx">'+esc(String(t.text||'—').slice(0,160))+'</div>'+
+        '<div class="meta">'+cap(t.type||'—')+' · trigger: '+cap(t.trigger||'—')+' · '+(t.depth||'—')+
+        ' · conf '+(conf===null?'—':conf.toFixed(2))+' · '+refs+' evidence ref'+(refs===1?'':'s')+' · '+ago(t.time)+'</div></div>';
+    }).join(''):'<div class="offline" style="color:var(--dim)">no recent thoughts — fresh boot</div>';
+  }
+
+  // ===== PANEL 5 · Motive Drives =====
+  var DRIVE_ORDER=['truth','curiosity','mastery','relevance','coherence','continuity','play'];
+  function outcomeSym(o){
+    if(o==='positive') return '<span style="color:var(--green)">✓</span>';
+    if(o==='negative') return '<span style="color:var(--red)">✗</span>';
+    return '<span style="color:var(--dim)">●</span>';
+  }
+  function renderDrives(){
+    var fs=FS();
+    var box=el('drive-list');
+    if(!fs){ box.innerHTML='<div class="offline">drives offline</div>'; return; }
+    var dd=(((fs.autonomy||{}).drives||{}).drives)||{};
+    var keys=DRIVE_ORDER.filter(function(k){return k in dd;}).concat(Object.keys(dd).filter(function(k){return DRIVE_ORDER.indexOf(k)<0;}));
+    if(!keys.length){ box.innerHTML='<div class="offline" style="color:var(--dim)">no drives reported</div>'; return; }
+    box.innerHTML=keys.map(function(k){
+      var d=dd[k], u=num(d.urgency);
+      var uColor = u===null?'var(--dim)':(u>0.5?'var(--red)':(u>0.2?'var(--amber)':(u>0?'var(--green)':'var(--dim)')));
+      var sr=num(d.success_rate), ac=num(d.action_count);
+      var bar=barRow('urgency', u===null?null:u*100, u===null?'—':u.toFixed(3), uColor);
+      return '<div class="drive" data-drive="'+esc(k)+'">'+
+        '<div class="top"><span class="nm">'+esc(k)+'</span>'+
+          (d.suppression?'<span class="supp">'+esc(d.suppression)+'</span>':'')+'</div>'+
+        bar+
+        '<div class="meta">strategy: '+cap(d.strategy||'—')+' · fires when urgency clears its act threshold · '+
+          'actions '+(ac===null?'—':ac)+' · success '+(sr===null?'—':(sr*100).toFixed(0)+'%')+' · '+
+          'last '+(d.last_acted?ago(d.last_acted):'never')+' '+outcomeSym(d.last_outcome)+'</div></div>';
+    }).join('');
+  }
+
+  // ===== PANEL 6 · Research Queue =====
+  function renderQueue(){
+    var fs=FS();
+    var pend=el('rq-pending'), comp=el('rq-completed');
+    if(!fs){ pend.innerHTML='<div class="offline">autonomy offline</div>'; comp.innerHTML=''; return; }
+    var auto=fs.autonomy||{};
+    var queue=auto.queue||[], completed=auto.completed||[];
+    pend.innerHTML=queue.length?queue.map(function(q,i){
+      // pending rows drill with negative idx (V2D convention).
+      return '<div class="li" data-ridx="'+(-(i+1))+'">'+
+        '<div class="lt">'+esc(String(q.question||'—').slice(0,90))+'</div>'+
+        '<div class="meta"><span style="color:'+drvStatusColor(q.status)+'">'+esc(q.status||'—')+'</span>'+
+        ' · priority '+(num(q.priority)===null?'—':num(q.priority).toFixed(3))+
+        (q.scope?' · '+esc(q.scope):'')+' · '+ago(q.created_at)+'</div></div>';
+    }).join(''):'<div class="offline" style="color:var(--dim)">no pending research</div>';
+    comp.innerHTML=completed.length?completed.map(function(c,i){
+      var ok=(c.result||{}).success;
+      return '<div class="li" data-ridx="'+i+'">'+
+        '<div class="lt">'+esc(String(c.question||'—').slice(0,90))+'</div>'+
+        '<div class="meta"><span style="color:'+drvStatusColor(c.status)+'">'+esc(c.status||'—')+'</span>'+
+        (ok===true?' · <span style="color:var(--green)">✓ success</span>':(ok===false?' · <span style="color:var(--red)">✗</span>':''))+
+        ((c.result||{}).tool_used?' · '+esc(c.result.tool_used):'')+' · '+ago(c.completed_at)+'</div></div>';
+    }).join(''):'<div class="offline" style="color:var(--dim)">no completed research yet</div>';
+  }
+  function drvStatusColor(st){
+    st=String(st||'').toLowerCase();
+    if(st==='completed') return 'var(--green)';
+    if(st==='failed'||st==='cancelled') return 'var(--red)';
+    if(st==='running') return 'var(--cyan)';
+    return 'var(--amber)';
+  }
+
+  // ===== PANEL 8 · Causal Chain Inspector (root list) =====
+  function renderChains(){
+    var fs=FS();
+    var stat=el('cc-stat'), list=el('cc-list');
+    var te=(fs||{}).trace_explorer;
+    if(!te){ stat.innerHTML='<span class="offline">trace explorer UNAVAILABLE in snapshot</span>'; list.innerHTML=''; return; }
+    var roots=te.root_chains||[];
+    stat.innerHTML='roots <b style="color:var(--text)">'+roots.length+'</b> · click any to walk the node→node tree';
+    list.innerHTML=roots.length?roots.slice(0,8).map(function(r){
+      var oc=r.outcome_counts||{};
+      var ocTxt=Object.keys(oc).map(function(k){ return k+':'+oc[k]; }).join(' ');
+      return '<div class="li" data-root="'+esc(r.root_entry_id)+'">'+
+        '<div class="lt">'+esc(String(r.root_entry_id||'—').slice(0,28))+'</div>'+
+        '<div class="meta">'+(num(r.entry_count)||0)+' ev · '+esc((r.subsystems||[]).slice(0,4).join(', ')||'—')+
+        (ocTxt?' · '+esc(ocTxt):'')+'</div></div>';
+    }).join(''):'<div class="offline" style="color:var(--dim)">no causal chains in cache window</div>';
+  }
+
+  // ===== PANEL 9 · Flight Recorder =====
+  function renderFlight(){
+    var fs=FS();
+    var list=el('fr-list');
+    if(!fs){ list.innerHTML='<div class="offline">snapshot offline</div>'; return; }
+    var eps=fs.episodes||[];
+    list.innerHTML=eps.length?eps.slice().reverse().slice(0,8).map(function(ep){
+      var origIdx=eps.indexOf(ep);
+      var lat=num(ep.response_latency_ms);
+      return '<div class="li" data-eidx="'+origIdx+'">'+
+        '<div class="lt">'+esc(String(ep.user_input||'—').slice(0,80))+'</div>'+
+        '<div class="meta">'+esc(ep.speaker||'—')+(ep.emotion?' ('+esc(ep.emotion)+')':'')+
+        ' · route '+esc(ep.tool_route||'—')+' · '+(lat===null?'— ms':lat.toFixed(0)+' ms')+
+        ' · '+ago(ep.timestamp)+'</div></div>';
+    }).join(''):'<div class="offline" style="color:var(--dim)">no episodes — fresh boot</div>';
+  }
+
+  // ===== PANEL 10 · Consciousness Flow Map (snapshot-derived activity ledger) =====
+  function renderFlowMap(){
+    var fs=FS(), th=TH();
+    var box=el('flow-ledger');
+    if(!fs){ box.innerHTML='<div class="offline">snapshot offline</div>'; return; }
+    var items=[];
+    // observer.recent
+    ((fs.observer||{}).recent||[]).forEach(function(o){
+      items.push({ts:num(o.time)||0, kind:'observer', label:esc((o.type||'—')+(o.target?' · '+o.target:'')),
+        conf:num(o.confidence)});
+    });
+    // thoughts.recent
+    ((th||{}).recent||[]).forEach(function(t,i){
+      items.push({ts:num(t.time)||0, kind:'thought', label:esc(cap(t.type||'—')+' — '+String(t.text||'').slice(0,60)), tidx:i});
+    });
+    // operations.timeline
+    (((fs.operations||{}).timeline)||[]).forEach(function(e){
+      items.push({ts:num(e.ts)||0, kind:'timeline', label:esc((e.subsystem||'—')+' '+(e.event||'')+(e.msg?' · '+String(e.msg).slice(0,40):''))});
+    });
+    items.sort(function(a,b){ return b.ts-a.ts; });
+    if(!items.length){ box.innerHTML='<div class="offline" style="color:var(--dim)">no recent activity in snapshot</div>'; return; }
+    var kindColor={observer:'var(--cyan)',thought:'var(--magenta)',timeline:'var(--green)'};
+    box.innerHTML=items.slice(0,40).map(function(it){
+      var clickable = it.kind==='thought' && it.tidx!=null;
+      return '<div class="lg"'+(clickable?' style="cursor:pointer" data-tidx="'+it.tidx+'"':'')+'>'+
+        '<span class="lts">'+ago(it.ts)+'</span>'+
+        '<span class="lk" style="border-color:'+kindColor[it.kind]+';color:'+kindColor[it.kind]+'">'+it.kind+'</span>'+
+        '<span style="flex:1;color:var(--text)">'+it.label+(it.conf!=null?' <span style="color:var(--dim)">conf '+it.conf.toFixed(2)+'</span>':'')+'</span></div>';
+    }).join('');
+  }
+
+  // ===== RECOVERY BANNER — this page's PARTIAL/UNAVAILABLE blind spots =====
+  function renderRecovery(){
+    var box=el('recovery');
+    box.style.display='block';
+    box.innerHTML='<b>This page\'s known blind spots (recovery debt) — nothing here is faked to cover them:</b>'+
+      '<span class="why">• <b>Per-cycle tick timing</b> — no <code>/api/consciousness/cycles</code> endpoint; the Service Tick Matrix cadence column is documented code constants (not live), and last-run/duration are reconstructed from the lossy 50-event timeline window.</span>'+
+      '<span class="why">• <b>Kernel p50 / p99</b> — not computed (PerformanceMetrics only has avg/p95/max); absolute budget_ms not serialized (only cadence multiplier).</span>'+
+      '<span class="why">• <b>Live event stream</b> — the Consciousness Flow Map is a snapshot-derived activity ledger, NOT a live KERNEL_THOUGHT stream; needs a new SSE endpoint.</span>'+
+      '<span class="why">• <b>Per-node latency</b> — instrumented only for the kernel aggregate; every other Flow Rail node shows "—" (not instrumented).</span>'+
+      '<span class="why">• <b>Research score</b> — no composite post-research quality score; priority shown is a pre-research estimate.</span>'+
+      (FS()&&KP()?'':'<span class="why" style="color:var(--red)">• <b>FETCH FAILED this cycle</b> — affected panels render UNKNOWN (fail-closed) until the next successful poll.</span>');
+  }
+
+  function renderAll(){
+    renderRecovery(); renderHero(); renderRail(); renderMatrix(); renderThoughts();
+    renderDrives(); renderQueue(); renderChains(); renderFlight(); renderFlowMap();
+  }
+
+  // ===== SINGLE 2s POLL LOOP — caches the merged object into window._lastSnap =====
+  function poll(){
+    Promise.allSettled([
+      fetchJSON('/api/full-snapshot'),
+      fetchJSON('/api/kernel/performance'),
+      fetchJSON('/api/consciousness/thoughts')
+    ]).then(function(rs){
+      try{
+        if(rs[0].status==='fulfilled') window._lastSnap.full=rs[0].value; else window._lastSnap.full=null;
+        if(rs[1].status==='fulfilled') window._lastSnap.kperf=rs[1].value; else window._lastSnap.kperf=null;
+        if(rs[2].status==='fulfilled') window._lastSnap.thoughts=rs[2].value; else window._lastSnap.thoughts=null;
+        // stamp _ts with current epoch-seconds (cognition.html clock idiom: Date.now()/1000).
+        window._lastSnap._ts=Date.now()/1000;
+        if(rs.some(function(r){return r.status==='fulfilled';})) lastOkTs=Date.now();
+        if(rs.some(function(r){return r.status==='rejected';})) V2.toast('a cockpit fetch failed — affected panels show UNKNOWN', false);
+        renderAll();
+      }catch(e){ V2.toast('cockpit render error: '+e.message, false); }
+    }).catch(function(e){ V2.toast('cockpit poll failed: '+e.message, false); renderAll(); });
+  }
+
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  poll(); setInterval(poll, 2000); tick(); setInterval(tick, 1000);
+
+  // ===== CLICK HANDLERS — all open window.V2D.* drill-downs (read-only) =====
+  el('hero-raw').addEventListener('click', function(){ window.V2D.debugSnapshot(); });
+  el('hero-chat').addEventListener('click', function(){ V2.chat(); });
+  el('cc-explorer').addEventListener('click', function(){ window.V2D.traceExplorer(); });
+
+  // Flow Rail node → most-recent root for that subsystem (else trace explorer).
+  el('flow-rail').addEventListener('click', function(ev){
+    var n=ev.target.closest&&ev.target.closest('.node'); if(!n) return;
+    var sub=n.getAttribute('data-sub');
+    var te=(FS()||{}).trace_explorer||{};
+    var root=findRootForSub(te,sub);
+    if(root) window.V2D.traceChain(root); else window.V2D.traceExplorer();
+  });
+  // Matrix row → most-recent root for that subsystem.
+  el('mx-body').addEventListener('click', function(ev){
+    var tr=ev.target.closest&&ev.target.closest('tr.row'); if(!tr) return;
+    var sub=tr.getAttribute('data-sub');
+    if(sub==='dream'){ window.V2D.evalDetail(); return; }
+    var te=(FS()||{}).trace_explorer||{};
+    var root=findRootForSub(te,sub);
+    if(root) window.V2D.traceChain(root); else window.V2D.traceExplorer();
+  });
+  el('th-list').addEventListener('click', function(ev){
+    var r=ev.target.closest&&ev.target.closest('.th'); if(!r) return;
+    window.V2D.thoughtDetail(+r.getAttribute('data-idx'));
+  });
+  el('drive-list').addEventListener('click', function(ev){
+    var r=ev.target.closest&&ev.target.closest('.drive'); if(!r) return;
+    var drive=r.getAttribute('data-drive');
+    // find this drive's most recent completed research (source match), else trace explorer.
+    var auto=(FS()||{}).autonomy||{};
+    var completed=auto.completed||[];
+    var idx=-1;
+    for(var i=0;i<completed.length;i++){ var c=completed[i];
+      if(String(c.source_event||'').indexOf(drive)>=0 || String(c.reason||'').indexOf(drive)>=0 || (c.tag_cluster&&c.tag_cluster.indexOf(drive)>=0)){ idx=i; break; } }
+    if(idx>=0) window.V2D.researchDetail(idx); else window.V2D.traceExplorer();
+  });
+  el('rq-pending').addEventListener('click', function(ev){
+    var r=ev.target.closest&&ev.target.closest('.li'); if(!r) return;
+    window.V2D.researchDetail(+r.getAttribute('data-ridx'));
+  });
+  el('rq-completed').addEventListener('click', function(ev){
+    var r=ev.target.closest&&ev.target.closest('.li'); if(!r) return;
+    window.V2D.researchDetail(+r.getAttribute('data-ridx'));
+  });
+  el('cc-list').addEventListener('click', function(ev){
+    var r=ev.target.closest&&ev.target.closest('.li'); if(!r) return;
+    window.V2D.traceChain(r.getAttribute('data-root'));
+  });
+  el('fr-list').addEventListener('click', function(ev){
+    var r=ev.target.closest&&ev.target.closest('.li'); if(!r) return;
+    window.V2D.flightDetail(+r.getAttribute('data-eidx'));
+  });
+  el('flow-ledger').addEventListener('click', function(ev){
+    var r=ev.target.closest&&ev.target.closest('[data-tidx]'); if(!r) return;
+    window.V2D.thoughtDetail(+r.getAttribute('data-tidx'));
+  });
+
+  function findRootForSub(te,sub){
+    var roots=(te.root_chains||[]).filter(function(r){ return (r.subsystems||[]).indexOf(sub)>=0; });
+    if(!roots.length) return null;
+    roots.sort(function(a,b){ return (num(b.last_ts)||0)-(num(a.last_ts)||0); });
+    return roots[0].root_entry_id;
+  }
+})();
+</script>
+</body>
+</html>
