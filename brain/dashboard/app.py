@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+from collections import deque
 import logging
 import os
 import secrets
@@ -21,7 +23,7 @@ import time
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Depends, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -51,6 +53,8 @@ from consciousness.events import (
     KERNEL_ERROR,
     CONSCIOUSNESS_ANALYSIS,
     AUTONOMY_L3_ACTIVATION_DENIED,
+    KERNEL_THOUGHT,
+    MEMORY_WRITE,
 )
 from consciousness.modes import mode_manager, MODE_CHANGE
 from reasoning.response import ResponseGenerator
@@ -124,7 +128,53 @@ class _HealthCounters:
         }
 
 
+class _EventStream:
+    """Bounded ring of recent event-bus events for the cockpit SSE feed.
+
+    A READ-ONLY tap: each handler is bulletproof (never raises) so it cannot trip
+    the EventBus per-handler circuit breaker for real consumers. Captures a curated
+    set of event types into a fixed ring; the /api/events/stream route streams new
+    entries to the dashboard's Live Cognition Cockpit.
+    """
+
+    _STREAM_TYPES = (
+        KERNEL_THOUGHT, MEMORY_WRITE, MODE_CHANGE, CONSCIOUSNESS_ANALYSIS,
+        CONVERSATION_RESPONSE, KERNEL_ERROR, AUTONOMY_L3_ACTIVATION_DENIED,
+        PERCEPTION_BARGE_IN,
+    )
+
+    def __init__(self, maxlen: int = 300) -> None:
+        self._ring: deque = deque(maxlen=maxlen)
+        self._seq = 0
+        self._lock = threading.Lock()
+
+    def start(self) -> None:
+        for et in self._STREAM_TYPES:
+            event_bus.on(et, self._make(et))
+
+    def _make(self, etype: str) -> Callable[..., None]:
+        def _handler(**kwargs: Any) -> None:
+            try:
+                with self._lock:
+                    self._seq += 1
+                    seq = self._seq
+                summ: dict[str, Any] = {}
+                for k, v in list(kwargs.items())[:6]:
+                    summ[k] = v if isinstance(v, (int, float, bool, type(None))) else str(v)[:140]
+                self._ring.append({"seq": seq, "ts": time.time(), "type": etype, "data": summ})
+            except Exception:  # NEVER raise inside emit() — would trip the bus circuit breaker
+                pass
+        return _handler
+
+    def head(self) -> int:
+        return self._seq
+
+    def since(self, cursor: int) -> list[dict[str, Any]]:
+        return [e for e in list(self._ring) if e["seq"] > cursor]
+
+
 _health = _HealthCounters()
+_events = _EventStream()
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
@@ -1137,6 +1187,39 @@ def _create_app() -> FastAPI:
     async def api_full_snapshot():
         """Single endpoint the frontend can use instead of N parallel fetches."""
         return _cache
+
+    @app.get("/api/events/stream")
+    async def api_events_stream(request: Request):
+        """SSE live feed of recent event-bus events for the cockpit Flow Map.
+
+        Read-only tap on _events (a bounded ring filled by bulletproof bus
+        handlers). Streams each new event as it fires; exits on client disconnect.
+        Sends periodic keepalive comments so proxies don't drop the connection.
+        """
+        async def _gen():
+            cursor = _events.head()
+            yield "retry: 3000\n\n"
+            yield "data: " + json.dumps({"hello": True, "head": cursor}) + "\n\n"
+            idle = 0
+            while True:
+                if await request.is_disconnected():
+                    break
+                new = _events.since(cursor)
+                if new:
+                    idle = 0
+                    for e in new:
+                        cursor = e["seq"]
+                        yield "data: " + json.dumps(e) + "\n\n"
+                else:
+                    idle += 1
+                    if idle >= 20:  # ~8s keepalive
+                        idle = 0
+                        yield ": keepalive\n\n"
+                await asyncio.sleep(0.4)
+        return StreamingResponse(
+            _gen(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+        )
 
     @app.get("/api/language-kernel")
     async def api_language_kernel():
@@ -4087,6 +4170,7 @@ async def create_dashboard(
     _perc_orch = perc_orch
 
     _health.start()
+    _events.start()
 
     app = _create_app()
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")

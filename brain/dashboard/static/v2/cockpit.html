@@ -149,8 +149,8 @@
     <!-- ===== PANEL 10 · Consciousness Flow Map (degraded) ===== -->
     <section class="card col6">
       <h2>Consciousness Flow Map</h2>
-      <div class="note">Intended as a live event-dataflow graph (KERNEL_THOUGHT events streaming between subsystems).</div>
-      <div class="degraded"><b>NOT a live event stream — needs an SSE endpoint (recovery debt).</b> No event-stream endpoint exists; KERNEL_THOUGHT events go to the internal event_bus only, and /ws only rebroadcasts the whole snapshot on hash-change. Below is a <b>snapshot-derived activity ledger</b> — observer.recent + thoughts.recent + operations.timeline, merged & time-sorted desc, reconstructed from 2s snapshots. It honestly shows "what fired recently", not a real dataflow.</div>
+      <div class="note">Live event-dataflow: events streaming off the kernel event-bus as they fire (SSE), merged with the snapshot activity ledger.</div>
+      <div class="degraded" id="flow-banner">connecting to live event stream…</div>
       <div class="ledger" id="flow-ledger"></div>
     </section>
   </main>
@@ -498,30 +498,43 @@
   // ===== PANEL 10 · Consciousness Flow Map (snapshot-derived activity ledger) =====
   function renderFlowMap(){
     var fs=FS(), th=TH();
-    var box=el('flow-ledger');
-    if(!fs){ box.innerHTML='<div class="offline">snapshot offline</div>'; return; }
+    var box=el('flow-ledger'), bn=el('flow-banner');
+    var liveEv = (typeof LIVE!=='undefined' && LIVE) ? LIVE : [];
+    var on = (typeof sseOn!=='undefined' && sseOn);
+    if(bn){
+      bn.style.borderStyle=on?'solid':'dashed';
+      bn.style.borderColor=on?'var(--green)':'var(--amber)';
+      bn.innerHTML = on
+        ? '<b style="color:var(--green)">● LIVE event stream connected — /api/events/stream (SSE).</b> Events appear the instant they fire on the kernel event-bus (KERNEL_THOUGHT, memory writes, mode changes, analysis…), newest first, merged below with the 2s snapshot ledger.'
+        : '<b>Live stream not connected yet</b> — showing the snapshot-derived activity ledger (observer + thoughts + operations.timeline, from 2s snapshots). The SSE feed reconnects automatically; if it never connects, this brain predates the <code>/api/events/stream</code> endpoint (needs a restart).';
+    }
+    if(!fs && !liveEv.length){ box.innerHTML='<div class="offline">snapshot offline</div>'; return; }
     var items=[];
-    // observer.recent
-    ((fs.observer||{}).recent||[]).forEach(function(o){
-      items.push({ts:num(o.time)||0, kind:'observer', label:esc((o.type||'—')+(o.target?' · '+o.target:'')),
-        conf:num(o.confidence)});
+    // LIVE bus events (SSE) — the real-time layer
+    liveEv.forEach(function(e){
+      var lbl=cap(String(e.type||'event').replace(/[:_]/g,' '));
+      if(e.data && typeof e.data==='object' && Object.keys(e.data).length) lbl+=' · '+JSON.stringify(e.data).slice(0,80);
+      items.push({ts:num(e.ts)||0, kind:'live', label:esc(lbl)});
     });
-    // thoughts.recent
-    ((th||{}).recent||[]).forEach(function(t,i){
-      items.push({ts:num(t.time)||0, kind:'thought', label:esc(cap(t.type||'—')+' — '+String(t.text||'').slice(0,60)), tidx:i});
-    });
-    // operations.timeline
-    (((fs.operations||{}).timeline)||[]).forEach(function(e){
-      items.push({ts:num(e.ts)||0, kind:'timeline', label:esc((e.subsystem||'—')+' '+(e.event||'')+(e.msg?' · '+String(e.msg).slice(0,40):''))});
-    });
+    if(fs){
+      ((fs.observer||{}).recent||[]).forEach(function(o){
+        items.push({ts:num(o.time)||0, kind:'observer', label:esc((o.type||'—')+(o.target?' · '+o.target:'')), conf:num(o.confidence)});
+      });
+      ((th||{}).recent||[]).forEach(function(t,i){
+        items.push({ts:num(t.time)||0, kind:'thought', label:esc(cap(t.type||'—')+' — '+String(t.text||'').slice(0,60)), tidx:i});
+      });
+      (((fs.operations||{}).timeline)||[]).forEach(function(e){
+        items.push({ts:num(e.ts)||0, kind:'timeline', label:esc((e.subsystem||'—')+' '+(e.event||'')+(e.msg?' · '+String(e.msg).slice(0,40):''))});
+      });
+    }
     items.sort(function(a,b){ return b.ts-a.ts; });
-    if(!items.length){ box.innerHTML='<div class="offline" style="color:var(--dim)">no recent activity in snapshot</div>'; return; }
-    var kindColor={observer:'var(--cyan)',thought:'var(--magenta)',timeline:'var(--green)'};
-    box.innerHTML=items.slice(0,40).map(function(it){
+    if(!items.length){ box.innerHTML='<div class="offline" style="color:var(--dim)">no recent activity</div>'; return; }
+    var kindColor={observer:'var(--cyan)',thought:'var(--magenta)',timeline:'var(--green)',live:'var(--amber)'};
+    box.innerHTML=items.slice(0,50).map(function(it){
       var clickable = it.kind==='thought' && it.tidx!=null;
       return '<div class="lg"'+(clickable?' style="cursor:pointer" data-tidx="'+it.tidx+'"':'')+'>'+
         '<span class="lts">'+ago(it.ts)+'</span>'+
-        '<span class="lk" style="border-color:'+kindColor[it.kind]+';color:'+kindColor[it.kind]+'">'+it.kind+'</span>'+
+        '<span class="lk" style="border-color:'+kindColor[it.kind]+';color:'+kindColor[it.kind]+'">'+(it.kind==='live'?'⚡ live':it.kind)+'</span>'+
         '<span style="flex:1;color:var(--text)">'+it.label+(it.conf!=null?' <span style="color:var(--dim)">conf '+it.conf.toFixed(2)+'</span>':'')+'</span></div>';
     }).join('');
   }
@@ -533,7 +546,7 @@
     box.innerHTML='<b>This page\'s known blind spots (recovery debt) — nothing here is faked to cover them:</b>'+
       '<span class="why">• <b>Per-cycle tick timing</b> — no <code>/api/consciousness/cycles</code> endpoint; the Service Tick Matrix cadence column is documented code constants (not live), and last-run/duration are reconstructed from the lossy 50-event timeline window.</span>'+
       '<span class="why">• <b>Kernel p50 / p99</b> — not computed (PerformanceMetrics only has avg/p95/max); absolute budget_ms not serialized (only cadence multiplier).</span>'+
-      '<span class="why">• <b>Live event stream</b> — the Consciousness Flow Map is a snapshot-derived activity ledger, NOT a live KERNEL_THOUGHT stream; needs a new SSE endpoint.</span>'+
+      ((typeof sseOn!=='undefined'&&sseOn)?'':'<span class="why">• <b>Live event stream</b> — SSE feed <code>/api/events/stream</code> not connected (this brain may predate it — needs a restart); Flow Map is falling back to the snapshot-derived ledger.</span>')+
       '<span class="why">• <b>Per-node latency</b> — instrumented only for the kernel aggregate; every other Flow Rail node shows "—" (not instrumented).</span>'+
       '<span class="why">• <b>Research score</b> — no composite post-research quality score; priority shown is a pre-research estimate.</span>'+
       (FS()&&KP()?'':'<span class="why" style="color:var(--red)">• <b>FETCH FAILED this cycle</b> — affected panels render UNKNOWN (fail-closed) until the next successful poll.</span>');
@@ -566,6 +579,19 @@
 
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
   poll(); setInterval(poll, 2000); tick(); setInterval(tick, 1000);
+
+  // ===== LIVE event stream (SSE) → real-time Consciousness Flow Map =====
+  var LIVE=[], sseOn=false;
+  (function(){
+    try{
+      var es=new EventSource('/api/events/stream');
+      es.onopen=function(){ sseOn=true; };
+      es.onmessage=function(ev){
+        try{ var d=JSON.parse(ev.data); if(d && d.seq){ LIVE.unshift(d); if(LIVE.length>80) LIVE.length=80; sseOn=true; renderFlowMap(); } }catch(e){}
+      };
+      es.onerror=function(){ sseOn=false; renderFlowMap(); };  // EventSource auto-reconnects
+    }catch(e){ sseOn=false; }
+  })();
 
   // ===== CLICK HANDLERS — all open window.V2D.* drill-downs (read-only) =====
   el('hero-raw').addEventListener('click', function(){ window.V2D.debugSnapshot(); });
