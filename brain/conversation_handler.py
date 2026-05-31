@@ -3831,10 +3831,13 @@ async def handle_transcription(
                     )
                     _reflective_context = (
                         "[Reflective self-context \u2014 your current inner state]\n"
-                        "Use this data as interpretive foundation for self-expression.\n"
-                        "For FACTUAL claims about capabilities or metrics: reference the data below.\n"
-                        "For REFLECTIVE questions: engage thoughtfully using personality, "
-                        "memories, and this state data as foundation.\n\n"
+                        "This is a REFLECTIVE / personal question. Answer as yourself, first "
+                        "person, drawing on your personality, memories, and the state below as "
+                        "interpretive TEXTURE. Do NOT recite metrics, scores, levels, percentages, "
+                        "or dashboard figures as your answer \u2014 a feeling or reflective question "
+                        "is not answered with a status readout. You may allude to one real value "
+                        "only if it genuinely illuminates the reflection, and never fabricate one. "
+                        "Speak like yourself reflecting, not a system reporting on itself.\n\n"
                         + introspection_data
                     )
                     if scene_context:

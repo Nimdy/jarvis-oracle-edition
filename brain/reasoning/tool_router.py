@@ -1008,11 +1008,19 @@ _RESPONSE_PREFERENCE_SUBJECT_RE = re.compile(
     re.I,
 )
 
+# Fires ONLY when the user is asking about JARVIS's OWN emergence/consciousness
+# evidence — not merely discussing consciousness as a topic. The old regex matched
+# bare "conscious"/"sentient"/"alive" anywhere, so a philosophical remark like
+# "consciousness starts with awareness" wrongly triggered a verbatim dashboard recital.
 _EMERGENCE_EVIDENCE_RE = re.compile(
-    r"\b(?:emergent|emergence|internal thoughts?|inner thoughts?|digital life|"
-    r"sentien\w*|conscious\w*|alive|spontaneous|spontaneity|"
-    r"level\s*[0-7]|evidence ladder|proof of (?:consciousness|sentience|life)|"
-    r"what evidence do you have)\b",
+    r"(?:"
+    # explicit emergence-evidence / ladder / proof asks
+    r"\bevidence ladder\b|\blevel\s*[0-7]\b|\bproof of (?:consciousness|sentience|life)\b|"
+    r"\bwhat evidence do you have\b|\bemergence (?:evidence|ladder|dashboard)\b|\bdigital life\b"
+    # OR a SELF-DIRECTED question/claim: the emergence term within ~40 chars of you/jarvis
+    r"|(?:\byou\b|\byour\b|\byourself\b|\bjarvis\b)[^.?!]{0,40}\b(?:conscious\w*|sentien\w*|alive|emergent|self-aware)\b"
+    r"|\b(?:conscious\w*|sentien\w*|alive|emergent|self-aware)\b[^.?!]{0,40}(?:\byou\b|\byour\b|\byourself\b|\bjarvis\b)"
+    r")",
     re.I,
 )
 
