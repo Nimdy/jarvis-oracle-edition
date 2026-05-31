@@ -1495,7 +1495,14 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
             # path; at shadow it would show a stale default — "no Pi signal" etc).
             _ao = getattr(ctx.engine, "_autonomy_orchestrator", None) if getattr(ctx, "engine", None) else None
             if _ao is not None and hasattr(_ao, "refresh_starvation"):
-                _ao.refresh_starvation()
+                # Pass the Pi signal from the known-good perception ref (same call
+                # that populates snapshot["sensors"]) so the banner is correct.
+                _pi_sig = False
+                try:
+                    _pi_sig = bool(ctx.perception and ctx.perception.get_connected_sensors())
+                except Exception:
+                    _pi_sig = False
+                _ao.refresh_starvation(pi_signal_available=_pi_sig)
             GroundingQueue.get_instance().expire_stale()
             _gr["queue"] = GroundingQueue.get_instance().get_status(limit=50)
         except Exception:
