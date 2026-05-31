@@ -294,7 +294,7 @@
     if(!fs){ box.innerHTML='<div class="offline">operations offline</div>'; return; }
     var ops=fs.operations||{};
     var cur=ops.current||{};
-    var bg=ops.background||[];
+    var bg=((ops.background||{}).items)||[];
     var latest=timelineLatest(fs);
     var p95=num((kp||{}).p95_tick_ms), avg=num((kp||{}).avg_tick_ms);
     // logical pipeline order; map by key, render every background subsystem after.
@@ -343,7 +343,7 @@
     if(!fs){ body.innerHTML='<tr><td colspan="7" class="offline">operations offline</td></tr>'; legend.innerHTML=''; return; }
     var ops=fs.operations||{};
     var tl=ops.timeline||[];
-    var bg={}; (ops.background||[]).forEach(function(n){ bg[n.key]=n; });
+    var bg={}; (((ops.background||{}).items)||[]).forEach(function(n){ bg[n.key]=n; });
     var allowed=(((fs.mode||{}).profile||{}).allowed_cycles)||null;
     // reconstruct last-run (latest ts) + duration (started→completed pair) from the 50-event window.
     function recon(key){
