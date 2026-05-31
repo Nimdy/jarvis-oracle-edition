@@ -198,6 +198,35 @@ def emit_thought_validation_outcome(
     except Exception:
         pass
 
+    # NATIVE-COGNITION SEED (FINISH_ROADMAP native pivot, step 1): capture this
+    # reasoning->outcome pairing as a distillation training signal. Pure SHADOW
+    # accumulation — no NN, no behavior, no promotion. It is the first training
+    # data from which a native reasoning specialist could LATER be distilled
+    # (jump-before-dunk: collect the reps before the muscle can exist). This is the
+    # opposite of qwen-verb-hacking — it grows JARVIS's own cognition, not a guard.
+    try:
+        from hemisphere.distillation import distillation_collector
+        distillation_collector.record(
+            teacher="reasoning_validation",
+            signal_type="belief_validation",
+            data={
+                "belief_id": belief_id,
+                "validation_target": payload["validation_target"],
+                "source_event": payload["source_event"],
+                "tool_used": payload["tool_used"],
+                "finding_count": payload["finding_count"],
+                "scope": payload["scope"],
+                "grounded": bool(grounded),
+                "refuted": payload["refuted"],
+            },
+            metadata={"native_pivot": "reasoning_seed",
+                      "outcome": "grounded" if grounded else "ungrounded"},
+            origin="live",
+            fidelity=1.0,
+        )
+    except Exception:
+        pass
+
     return payload
 
 
