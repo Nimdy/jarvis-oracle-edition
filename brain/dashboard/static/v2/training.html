@@ -255,6 +255,14 @@
     el('langguide').innerHTML=tips.map(function(t){ return '<div class="mode"><h4>'+t.h+'</h4><p>'+t.p+'</p></div>'; }).join('');
   }
 
+  // Session-relative progress: remember each class's lived count the first time we
+  // see it this browser session, so the panel can show "+N this session" — is it
+  // actually improving as you train? (Resets when you reload/reopen the tab.)
+  function _mgBase(rc, count){
+    try{ var k='mgbase_'+rc, v=sessionStorage.getItem(k);
+      if(v===null){ sessionStorage.setItem(k, String(count)); return count; }
+      return parseInt(v,10); }catch(e){ return count; }
+  }
   function renderManualGates(){
     var vp=((SNAP&&SNAP.eval)||{}).validation_pack||{};
     var targets=vp.language_evidence_targets||[];
@@ -265,20 +273,21 @@
       gapEl.textContent=''; return;
     }
     var baseByClass={}; baselines.forEach(function(b){ if(b&&b.response_class) baseByClass[b.response_class]=b; });
-    var totalGap=targets.reduce(function(a,r){ return a+Math.max(0,num(r.gap)||0); },0);
-    gapEl.textContent='lived examples remaining: '+totalGap;
-    gapEl.style.cssText=totalGap>0?'border-color:var(--amber);color:var(--amber)':'border-color:var(--green);color:var(--green)';
-    box.innerHTML=targets.map(function(r){
+    var totalGap=0, totalCount=0, totalTarget=0, totalDelta=0, doneCount=0;
+    var cards=targets.map(function(r){
       var rc=r.response_class||'?', count=num(r.count)||0, target=num(r.target_count)||30;
       var gap=Math.max(0, num(r.gap)!=null?num(r.gap):(target-count));
       var ok=!!r.current_ok, pct=target>0?Math.min(100,count/target*100):0;
       var col=ok?'var(--green)':'var(--amber)';
+      var delta=count-_mgBase(rc,count);
+      totalGap+=gap; totalCount+=count; totalTarget+=target; totalDelta+=Math.max(0,delta); if(ok)doneCount++;
+      var deltaBadge=delta>0?(' <span style="color:var(--green)">▲ +'+delta+' this session</span>'):'';
       var base=baseByClass[rc]||{};
       var deck=GATE_PROMPT_DECKS[rc]||['Use a natural lived conversation that should produce this class.'];
       var show=deck.slice(0,Math.min(4,Math.max(1,gap||1)));
       var promptHtml=ok?'':('<div class="gsay">Say this exactly:</div>'+show.map(function(p){return '<div class="gprompt">'+esc(p)+'</div>';}).join(''));
       return '<div class="gatecard'+(ok?' done':'')+'">'+
-        '<div class="gchd"><span class="grc">'+esc(rc)+'</span><span class="gct" style="color:'+col+'">'+(ok?'✓ ':'')+count+'/'+target+'</span></div>'+
+        '<div class="gchd"><span class="grc">'+esc(rc)+'</span><span class="gct" style="color:'+col+'">'+(ok?'✓ ':'')+count+'/'+target+deltaBadge+'</span></div>'+
         '<div class="gbar"><i style="width:'+pct.toFixed(0)+'%;background:'+col+'"></i></div>'+
         '<div class="gmeta">'+
           (ok?('<div style="color:var(--green)">gate satisfied — '+count+' lived examples, quality '+esc(r.color||'ok')+'</div>')
@@ -290,6 +299,16 @@
         (ok?'':'<div class="gfoot">Counts only after JARVIS produces the intended grounded/native response class. Third-person ("what can she do") won\'t match this route.</div>')+
       '</div>';
     }).join('');
+    // Overall improvement strip — absolute progress + is-it-moving-this-session.
+    var ovPct=totalTarget>0?Math.round(totalCount/totalTarget*100):0;
+    var summary='<div style="margin-bottom:9px;padding:8px 11px;border:1px solid '+(totalDelta>0?'var(--green)':'var(--line)')+';border-radius:5px;background:rgba(3,8,14,.45)">'+
+      '<b style="color:var(--text)">'+doneCount+'/'+targets.length+'</b> gates satisfied &nbsp;·&nbsp; <b style="color:var(--text)">'+totalCount+'/'+totalTarget+'</b> lived examples ('+ovPct+'%)'+
+      (totalDelta>0?(' &nbsp;·&nbsp; <b style="color:var(--green)">▲ +'+totalDelta+' this session — improving</b>')
+                   :(' &nbsp;·&nbsp; <span style="color:var(--dim)">no new lived examples yet this session — keep talking</span>'))+
+      '</div>';
+    box.innerHTML=summary+cards;
+    gapEl.textContent='lived remaining: '+totalGap+(totalDelta>0?(' · ▼'+totalDelta+' this session'):'');
+    gapEl.style.cssText=totalGap>0?'border-color:var(--amber);color:var(--amber)':'border-color:var(--green);color:var(--green)';
   }
 
   function renderRecovery(){
