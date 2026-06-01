@@ -1567,6 +1567,12 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
             _cr["theory_of_mind"] = _tom.get_status()  # Companion P1 (shadow)
         except Exception:
             _cr["theory_of_mind"] = {}
+        try:
+            # Environmental memory-of-normal — the "be there for the room" half (shadow).
+            from consciousness.environmental_normal import environmental_normal_engine as _env
+            _cr["environmental_normal"] = _env.get_status()
+        except Exception:
+            _cr["environmental_normal"] = {}
         snapshot["companion_read"] = _cr
     except Exception:
         logger.debug("Snapshot: companion read failed", exc_info=True)

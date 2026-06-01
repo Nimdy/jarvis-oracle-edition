@@ -1136,6 +1136,13 @@ class ConsciousnessSystem:
                 "Scene continuity: %d entities (%d visible, %d displays)",
                 entity_ct, visible_ct, display_ct,
             )
+            # Environmental memory-of-normal (shadow): learn each object's usual
+            # spot, would-note a real deviation. Complements the novel-object ask.
+            try:
+                from consciousness.environmental_normal import environmental_normal_engine as _env_normal
+                _env_normal.observe_scene(state)
+            except Exception:
+                logger.debug("Environmental memory-of-normal observe error", exc_info=True)
         except Exception:
             logger.debug("Scene continuity tick error", exc_info=True)
 

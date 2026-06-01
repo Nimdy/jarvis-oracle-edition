@@ -389,6 +389,24 @@
                 '<span class="pill">spoken: false</span></div></div>';
             }).join('');
         })()+
+        (function(){
+          var en=(cr.environmental_normal)||{}, m=en.metrics||{}, normals=en.learned_normals||[], dev=en.observations||[];
+          if(!en.phase) return '';
+          var head='<div class="note" style="margin:10px 0 4px"><b>Environmental presence — memory-of-normal (shadow, NEVER spoken).</b> JARVIS learns each object\'s usual spot by quiet observation, then would gently note a real deviation ("the cup isn\'t where it usually lives"). The "be there for the room" half. Complements (does not touch) the novel-object curiosity ask.</div>'+
+            '<div class="meta" style="margin-bottom:4px"><span class="pill">ticks observed '+(num(m.ticks_observed)||0)+'</span>'+
+            '<span class="pill">objects observed '+(num(m.objects_observed)||0)+'</span>'+
+            '<span class="pill">learned normals '+(num(m.objects_with_learned_normal)||0)+'</span>'+
+            '<span class="pill">deviations noticed '+(num(m.deviations_noticed_total)||0)+'</span></div>';
+          var devHtml=dev.length?dev.map(function(o){
+            return '<div class="q" style="border-left:3px solid var(--amber);padding-left:8px">'+
+              '<div class="top"><span class="qt">would gently note: '+esc(o.would_gently_note)+'</span></div>'+
+              '<div class="meta"><span class="pill">usual: '+esc(o.usual_region)+' '+f2(o.usual_region_frac)+'</span>'+
+              '<span class="pill">now: '+esc(String(o.current_region||'(not visible)'))+'</span>'+
+              '<span class="pill">spoken: false</span></div></div>';
+          }).join(''):'';
+          var normHtml=normals.length?'<div class="hint" style="margin-top:4px">learned usual spots: '+normals.map(function(n){ return esc(n.object)+' → '+esc(n.usual_region)+' ('+f2(n.usual_region_frac)+', '+(num(n.observations)||0)+' obs)'; }).join(' · ')+'</div>':'<div class="hint" style="margin-top:4px">still learning the room — no object has reached a confident usual spot yet (needs '+(num(m.min_observations_for_normal)||15)+'+ observations in one region)</div>';
+          return head+devHtml+normHtml;
+        })()+
         '<div class="note" style="margin:8px 0 4px"><b>Per-turn reads ↓</b></div>';
     }
     var rs=cr.recent||[];
