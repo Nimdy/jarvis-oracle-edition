@@ -87,6 +87,8 @@ JARVIS GROWS into both, maturity-gated; both are currently scaffolded-but-not-re
 | 11 | P5 | build_shadow | **Companion-learning loop** — corrections + implicit engagement tune theory-of-mind + read calibration. |
 | 12 | P5 | **EARNED** | Calibration tightens only as real corrections arrive. |
 
+**✅ Presence-read (relational, shadow) SHIPPED (2026-06-01, commit da9daec) — the first "be there for the person" increment (north-star).** Notices when a person shifts from their usual read → logs a gentle would-note ("seemed quieter/more withdrawn than usual lately"); NEVER spoken, hypothesis, salience-gated; verified correctly QUIET when steady (no false alarms). Complements (does not touch) the novel-object curiosity ask. **Next "be there" increment:** the ENVIRONMENTAL half ("the cup moved from its usual spot") — gated on the spatial mind's-eye memory-of-normal (PRE-MATURE; not to be faked).
+
 ## 2) Spark / Grounding Ring  (P0+P1 shipped-shadow)
 
 | # | Phase | Type | Action |
