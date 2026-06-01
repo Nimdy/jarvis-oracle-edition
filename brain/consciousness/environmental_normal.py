@@ -2,37 +2,36 @@
 Environmental memory-of-normal — the "be there for the room" half of presence.
 
 Shadow-only. Learns, by quiet observation over time, where each object USUALLY
-lives in the room (its dominant region) and how reliably it is present. Then it
-notices when a known object is CLEARLY out of its usual spot, or genuinely gone,
-and logs the gentle thing JARVIS *would* note ("the cup isn't in its usual spot
-— it usually sits on the desk"). It is NEVER spoken, it is a hypothesis, and it
-is salience-gated (a confident learned normal + a debounced, persistent shift).
+lives in the room (its dominant region), then notices when a known object is
+actually SEEN somewhere other than where it lives, and logs the gentle thing
+JARVIS *would* note ("the cup isn't in its usual spot — it usually sits on the
+desk, but right now it's on the left"). It is NEVER spoken, it is a hypothesis,
+and it is salience-gated (a confident learned normal + a debounced, real sighting
+elsewhere).
 
-This is the dignity-anchor's environmental half (north star). For someone whose
-memory is fading, "your keys aren't where they live" is exactly the gentle,
-dignity-preserving nudge — but ONLY if JARVIS actually KNOWS, from a real learned
-normal AND from what the perception layer actually BELIEVES. A guessed location,
-or "I don't see the cup" when the cup is merely behind your arm, would be the
-betrayal we exist to avoid.
+DESIGN STANCE (data-minimal — decided with David after an adversarial review).
+This subsystem makes exactly ONE kind of claim: "moved". It only ever says a
+thing is in the WRONG place — and only from a REAL fresh sighting of it there.
+It deliberately does NOT claim a thing is GONE/MISSING. Reliable absence ("your
+cup is gone") would require distinguishing occlusion (behind your arm, still
+here) from removal (actually taken away), which in turn needs person-occlusion
+geometry we have chosen NOT to wire — both to avoid piping person-presence data
+into perception that doesn't truly need it (sovereignty / data-minimization),
+and because "moved to the wrong spot" is the honest, higher-value dignity-anchor
+nudge anyway. So: it KNOWS (from a real sighting), it never GUESSES absence.
 
-THE KEY DISCIPLINE (learned from an adversarial review): the scene tracker
-already distinguishes what is genuinely here from what is merely not-detected-
-this-frame. Each entity carries a `state` (visible / occluded / missing /
-removed) and a `permanence_confidence`. `occluded` means the tracker is CONFIDENT
-the object is still present (e.g. a person is standing in front of it); only
-`missing` / `removed` mean it believes the object is gone. So:
-  - We LEARN an object's usual spot + presence from what the tracker believes is
-    PRESENT (visible OR occluded), not just what is freshly detected — otherwise
-    movable objects (the cup/keys) that spend most time occluded never accrue.
-  - We assert "moved" only from a FRESH visible detection in a different region.
-  - We assert "missing" only when the tracker ITSELF believes the object is gone
-    (a missing/removed track), never merely because it dropped out of frame.
-  - Deviations must persist for >=2 consecutive ticks (debounce) before they are
-    surfaced or counted — a single boundary-jitter or detector blink is not a move.
+HOW IT STAYS ALIVE WITHOUT OCCLUSION. A movable object (cup/keys) is rarely the
+single freshly-detected object every tick, but the scene tracker keeps believing
+it EXISTS (its permanence_confidence stays up, its state lingers visible/missing
+with a remembered region) through detection gaps. We accrue an object's usual
+spot from what the tracker still BELIEVES EXISTS (permanence above a floor, not
+yet "removed"), not just from what is freshly detected this frame — so the cup
+learns its spot through the gaps, instead of needing 15 unbroken minutes of
+continuous detection.
 
 Complements, and does NOT touch:
   - the novel-object curiosity ask (that lane = "new thing in the room, what is
-    it?"); this lane = "a KNOWN thing has moved from / vanished from where it lives".
+    it?"); this lane = "a KNOWN thing has been seen away from where it lives".
   - the PRE-MATURE hrr_scene spatial mind's-eye (the heavy spatial graph). This
     is a lightweight per-label accumulator riding the MATURE scene-tracker entities.
 
@@ -55,18 +54,17 @@ logger = logging.getLogger(__name__)
 # --- Gates (deliberately conservative — see module docstring) -------------
 _MIN_OBS = 15            # present-ticks an object must accrue before it can have a "usual spot"
 _MIN_DOMINANCE = 0.70    # fraction of present-ticks in one region to call it the usual spot
-_MIN_PRESENCE = 0.60     # fraction of life-ticks present to call an object "usually present"
-_CONF_FLOOR = 0.35       # ignore low-confidence fresh detections (noise)
-_PERM_FLOOR = 0.35       # tracker's permanence_confidence floor to count an occluded object as present
-_DEBOUNCE = 2            # consecutive ticks a deviation must hold before it is surfaced/counted
+_CONF_FLOOR = 0.35       # ignore low-confidence FRESH detections (noise) for the "moved" claim
+_PERM_FLOOR = 0.40       # tracker permanence_confidence floor to count an object as still-existing
+_DEBOUNCE = 2            # consecutive ticks a deviation must hold before surfaced/counted (and to clear)
+_COUNT_CAP = 240         # total region-observations before exponential forgetting (lets a real relocation adapt)
 _STALE_TICKS = 720       # evict a never-learned object unseen this many ticks (~12h at 60s)
 _MAX_OBJECTS = 200       # hard cap on tracked labels (eviction backstop)
 _EXCLUDE_REGIONS = {"unknown", "background"}  # not a place an object "lives" on the desk
-_PRESENT_STATES = {"visible", "occluded"}      # tracker believes the object is here
-_GONE_STATES = {"missing", "removed"}          # tracker believes the object is gone
+_EXIST_EXCLUDE_STATES = {"removed", "candidate"}  # gave-up / unconfirmed — not "still believed to exist"
 _SAVE_EVERY = 5          # persist every N observe ticks
 _MAX_NORMALS_OUT = 10    # cap learned-normals surfaced in status
-_STATE_VERSION = 2       # bumped from the visible-only v1 schema
+_STATE_VERSION = 3       # bumped: v1 visible-only, v2 occluded-premise, v3 permanence-accrual / moved-only
 
 _STATE_DIR = os.path.expanduser("~/.jarvis")
 _STATE_PATH = os.path.join(_STATE_DIR, "environmental_normal.json")
@@ -81,7 +79,7 @@ class ObjectNormal:
     """The learned usual layout of one labelled object."""
     label: str
     region_counts: dict[str, int] = field(default_factory=dict)
-    seen_ticks: int = 0          # ticks the tracker believed this object PRESENT (visible|occluded)
+    seen_ticks: int = 0          # ticks the tracker believed this object existed (permanence-present)
     first_tick: int = 0
     last_tick: int = 0
     last_region: str = "unknown"
@@ -94,7 +92,7 @@ class ObjectNormal:
         region, count = max(self.region_counts.items(), key=lambda kv: kv[1])
         return (region, (count / total) if total else 0.0)
 
-    def presence_frac(self, current_tick: int) -> float:
+    def present_frac(self, current_tick: int) -> float:
         if current_tick < self.first_tick:   # only possible via a corrupt/edited state file
             return 0.0
         life = max(1, current_tick - self.first_tick + 1)
@@ -105,6 +103,17 @@ class ObjectNormal:
             return False
         region, frac = self.dominant()
         return frac >= _MIN_DOMINANCE and region not in _EXCLUDE_REGIONS
+
+    def accrue(self, region: str, tick: int, now: float) -> None:
+        self.seen_ticks += 1
+        self.region_counts[region] = self.region_counts.get(region, 0) + 1
+        self.last_region = region
+        self.last_tick = tick
+        self.last_updated = now
+        # Exponential forgetting so a genuine permanent relocation can become the
+        # new usual spot over time (and counts stay bounded).
+        if sum(self.region_counts.values()) > _COUNT_CAP:
+            self.region_counts = {r: c // 2 for r, c in self.region_counts.items() if c // 2 > 0}
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -132,15 +141,16 @@ class ObjectNormal:
 
 class EnvironmentalNormalEngine:
     """Shadow memory-of-normal: learns each object's usual spot from what the tracker
-    believes is present, would-notes a real, debounced deviation. Never speaks, never
-    writes a belief, never changes behavior."""
+    believes EXISTS, would-note a real, debounced 'moved' sighting. Never claims absence,
+    never speaks, never writes a belief, never changes behavior."""
 
     def __init__(self) -> None:
         self._objects: dict[str, ObjectNormal] = {}
         self._tick: int = 0
         self._flagged_total: int = 0
         self._counted: set[str] = set()        # "label|kind" deviations already counted (persisted)
-        self._dev_streak: dict[str, int] = {}  # "label|kind" -> consecutive-tick count (in-memory)
+        self._streak: dict[str, int] = {}      # "label|kind" -> consecutive active ticks (in-memory)
+        self._idle: dict[str, int] = {}        # "label|kind" -> consecutive inactive ticks (in-memory)
         self._last_observations: list[dict[str, Any]] = []
         self._last_load_ok: bool = True
         self._load()
@@ -154,9 +164,9 @@ class EnvironmentalNormalEngine:
         now = time.time()
 
         # Per-label aggregation across (possibly multiple) tracks of the same label.
-        present_region: dict[str, tuple[str, float]] = {}  # label -> (region, perm/conf) of best PRESENT track
-        fresh_region: dict[str, tuple[str, float]] = {}     # label -> (region, conf) of best FRESH VISIBLE track
-        gone_labels: set[str] = set()                        # labels with a missing/removed track
+        exist_region: dict[str, str] = {}      # label -> region to accrue (tracker believes it exists)
+        exist_best: dict[str, tuple[int, float]] = {}  # label -> (visible_priority, weight) of the chosen track
+        fresh_regions: dict[str, set[str]] = {}        # label -> set of regions where it is FRESH-visible now
         for e in (scene_state.get("entities") or []):
             if not isinstance(e, dict):
                 continue
@@ -169,116 +179,103 @@ class EnvironmentalNormalEngine:
             region = e.get("region") or "unknown"
             conf = float(e.get("confidence") or 0.0)
             perm = float(e.get("permanence_confidence") or 0.0)
-            if state in _PRESENT_STATES and perm >= _PERM_FLOOR and region not in _EXCLUDE_REGIONS:
-                # Existence-confidence: visible carries detection conf; occluded leans on permanence.
-                weight = conf if state == "visible" else perm
-                cur = present_region.get(label)
-                if cur is None or weight > cur[1]:
-                    present_region[label] = (region, weight)
-            if state == "visible" and conf >= _CONF_FLOOR and region not in _EXCLUDE_REGIONS:
-                cur = fresh_region.get(label)
-                if cur is None or conf > cur[1]:
-                    fresh_region[label] = (region, conf)
-            if state in _GONE_STATES:
-                gone_labels.add(label)
+            is_visible = (state == "visible" and conf >= _CONF_FLOOR)
 
-        # Accrue the usual spot from what the tracker believes is PRESENT.
-        for label, (region, _w) in present_region.items():
+            # Fresh-visible regions (for the "moved" claim — only real, current sightings).
+            if is_visible and region not in _EXCLUDE_REGIONS:
+                fresh_regions.setdefault(label, set()).add(region)
+
+            # Existence accrual: tracker still believes the object is here (permanence),
+            # not yet given-up/unconfirmed, and in a real region. Prefer a fresh-visible
+            # track's region over a stale remembered one.
+            believed_exists = (state not in _EXIST_EXCLUDE_STATES and perm >= _PERM_FLOOR)
+            if believed_exists and region not in _EXCLUDE_REGIONS:
+                priority = 1 if is_visible else 0
+                weight = conf if is_visible else perm
+                cur = exist_best.get(label)
+                if cur is None or (priority, weight) > cur:
+                    exist_best[label] = (priority, weight)
+                    exist_region[label] = region
+
+        for label, region in exist_region.items():
             on = self._objects.get(label)
             if on is None:
                 on = ObjectNormal(label=label, first_tick=self._tick)
                 self._objects[label] = on
-            on.seen_ticks += 1
-            on.region_counts[region] = on.region_counts.get(region, 0) + 1
-            on.last_region = region
-            on.last_tick = self._tick
-            on.last_updated = now
+            on.accrue(region, self._tick, now)
 
-        self._last_observations = self._debounce(
-            self._compute_candidates(present_region, fresh_region, gone_labels)
-        )
+        self._last_observations = self._debounce(self._compute_candidates(fresh_regions))
 
         if self._tick % _SAVE_EVERY == 0:
             self._prune()
             self._save()
         return list(self._last_observations)
 
-    def _compute_candidates(
-        self,
-        present_region: dict[str, tuple[str, float]],
-        fresh_region: dict[str, tuple[str, float]],
-        gone_labels: set[str],
-    ) -> list[dict[str, Any]]:
-        """Raw (pre-debounce) deviations: which known objects are out of their usual spot,
-        or believed gone, RIGHT NOW — using the tracker's authoritative belief."""
+    def _compute_candidates(self, fresh_regions: dict[str, set[str]]) -> list[dict[str, Any]]:
+        """Raw (pre-debounce) 'moved' deviations: a known object FRESHLY SEEN away from its
+        usual spot — and NOT also seen in its usual spot this tick."""
         out: list[dict[str, Any]] = []
         for label, on in self._objects.items():
             if not on.has_normal():
                 continue
+            seen = fresh_regions.get(label)
+            if not seen:
+                continue  # no fresh sighting this tick → no claim (we never assert absence)
             dom_region, dom_frac = on.dominant()
-            present_here = label in present_region
-            fresh = fresh_region.get(label)
-            note = None
-            kind = None
-            cur_region = None
-            if fresh is not None and fresh[0] != dom_region:
-                # MOVED: a fresh visible detection places it in a different real region.
-                cur_region = fresh[0]
-                note = ("the %s isn't in its usual spot — it usually sits in the %s, "
-                        "but right now it's in the %s"
-                        % (label, _human(dom_region), _human(cur_region)))
-                kind = "moved"
-            elif (not present_here) and (label in gone_labels) and on.presence_frac(self._tick) >= _MIN_PRESENCE:
-                # MISSING: the tracker itself believes it is gone (missing/removed track,
-                # and NOT currently visible/occluded) — and it is usually reliably present.
-                note = ("i don't see the %s right now — it usually sits in the %s"
-                        % (label, _human(dom_region)))
-                kind = "missing"
-            if note:
-                out.append({
-                    "object": label,
-                    "would_gently_note": note,
-                    "kind": kind,
-                    "usual_region": dom_region,
-                    "usual_region_frac": round(dom_frac, 2),
-                    "current_region": cur_region,
-                    "observations": on.seen_ticks,
-                    "basis": "a hypothesis from the room's learned usual layout, not a fact",
-                    "spoken": False,
-                    "writes_belief": False,
-                    "status": "shadow_logged_only",
-                })
+            if dom_region in seen:
+                continue  # it IS in its usual spot (perhaps also elsewhere) → not "moved"
+            elsewhere = [r for r in seen if r not in _EXCLUDE_REGIONS and r != dom_region]
+            if not elsewhere:
+                continue
+            cur_region = sorted(elsewhere)[0]
+            out.append({
+                "object": label,
+                "would_gently_note": ("the %s isn't in its usual spot — it usually sits in the %s, "
+                                       "but right now it's in the %s"
+                                       % (label, _human(dom_region), _human(cur_region))),
+                "kind": "moved",
+                "usual_region": dom_region,
+                "usual_region_frac": round(dom_frac, 2),
+                "current_region": cur_region,
+                "observations": on.seen_ticks,
+                "basis": "a hypothesis from the room's learned usual layout, not a fact",
+                "spoken": False,
+                "writes_belief": False,
+                "status": "shadow_logged_only",
+            })
         return out
 
     def _debounce(self, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Only surface/count a deviation once it has held for >=_DEBOUNCE consecutive ticks.
-        Kills single-tick boundary jitter / detector blinks. Counts distinct (label,kind) once,
-        and (with persisted _counted) does not re-count a standing deviation across restarts."""
-        keys_now = {"%s|%s" % (c["object"], c["kind"]): c for c in candidates}
-        # bump streaks for active candidates; drop streaks for cleared ones
-        for k in list(self._dev_streak.keys()):
-            if k not in keys_now:
-                del self._dev_streak[k]
-                self._counted.discard(k)   # fully cleared → a future recurrence counts as new
+        """Surface/count a deviation only once it has held for >=_DEBOUNCE consecutive ticks,
+        and only clear it (allowing a future recurrence to count) once it has been gone for
+        >=_DEBOUNCE ticks. Kills single-tick jitter both ways; _counted (persisted) keeps a
+        standing deviation from being re-counted across restarts; distinct on (label,kind)."""
+        active = {"%s|%s" % (c["object"], c["kind"]): c for c in candidates}
         surfaced: list[dict[str, Any]] = []
-        for k, c in keys_now.items():
-            self._dev_streak[k] = self._dev_streak.get(k, 0) + 1
-            if self._dev_streak[k] >= _DEBOUNCE:
-                surfaced.append(c)
-                if k not in self._counted:
-                    self._flagged_total += 1
-                    self._counted.add(k)
+        for k in set(self._streak) | set(self._idle) | set(self._counted) | set(active):
+            if k in active:
+                self._streak[k] = self._streak.get(k, 0) + 1
+                self._idle.pop(k, None)
+                if self._streak[k] >= _DEBOUNCE:
+                    surfaced.append(active[k])
+                    if k not in self._counted:
+                        self._flagged_total += 1
+                        self._counted.add(k)
+            else:
+                self._streak.pop(k, None)
+                self._idle[k] = self._idle.get(k, 0) + 1
+                if self._idle[k] >= _DEBOUNCE:
+                    self._counted.discard(k)
+                    self._idle.pop(k, None)
         return surfaced
 
     def _prune(self) -> None:
-        """Evict never-learned, long-unseen labels (YOLO long-tail) and enforce a hard cap,
-        so _objects + the persisted file + objects_observed don't grow without bound."""
+        """Evict never-learned, long-unseen labels (YOLO long-tail) and enforce a hard cap."""
         stale = [lbl for lbl, on in self._objects.items()
                  if (not on.has_normal()) and (self._tick - on.last_tick) > _STALE_TICKS]
         for lbl in stale:
             del self._objects[lbl]
         if len(self._objects) > _MAX_OBJECTS:
-            # keep the most-observed; drop the rest (learned normals are never dropped first)
             ranked = sorted(self._objects.items(),
                             key=lambda kv: (kv[1].has_normal(), kv[1].seen_ticks), reverse=True)
             self._objects = dict(ranked[:_MAX_OBJECTS])
@@ -298,29 +295,33 @@ class EnvironmentalNormalEngine:
                 "usual_region": region,
                 "usual_region_frac": round(frac, 2),
                 "observations": on.seen_ticks,
-                "present_frac": round(on.presence_frac(self._tick), 2),
+                "present_frac": round(on.present_frac(self._tick), 2),
             })
         return {
             "phase": "environmental_memory_of_normal",
             "lane": "be_there_for_the_room",
+            "claim_kinds": ["moved"],
+            "claims_absence": False,
+            "uses_person_data": False,
             "spoken": False,
             "writes_belief": False,
             "changes_behavior": False,
             "authority": "shadow_logged_only",
-            "note": ("shadow — learns each object's usual spot from what the perception tracker "
-                     "believes is PRESENT (visible OR occluded, not just freshly detected), then "
-                     "would gently note a real, debounced deviation ('the cup isn't where it "
-                     "usually lives' / 'i don't see the cup — the tracker believes it's gone'). "
-                     "Complements (does not touch) the novel-object curiosity ask and the "
-                     "PRE-MATURE hrr_scene mind's-eye."),
+            "note": ("shadow, data-minimal — learns each object's usual spot from what the "
+                     "perception tracker still BELIEVES EXISTS (permanence, not just freshly "
+                     "detected), then would gently note only a real, debounced 'moved' sighting "
+                     "('the cup isn't where it usually lives'). It deliberately does NOT claim a "
+                     "thing is gone/missing (that would need person-occlusion data we choose not "
+                     "to wire). Complements (does not touch) the novel-object curiosity ask and "
+                     "the PRE-MATURE hrr_scene mind's-eye."),
             "tick_interval_s": 60,
             "last_load_ok": self._last_load_ok,
             "metrics": {
                 "ticks_observed": self._tick,
                 "objects_tracked": len(self._objects),
                 "objects_with_learned_normal": len(normals),
-                "deviations_noticed_total": self._flagged_total,
-                "current_deviations": len(self._last_observations),
+                "moved_noticed_total": self._flagged_total,
+                "current_moved": len(self._last_observations),
                 "min_observations_for_normal": _MIN_OBS,
                 "min_dominance_for_normal": _MIN_DOMINANCE,
                 "deviation_debounce_ticks": _DEBOUNCE,
@@ -353,10 +354,13 @@ class EnvironmentalNormalEngine:
                 return
             with open(_STATE_PATH) as f:
                 payload = json.load(f)
-            version = int(payload.get("version", 1))
+            try:
+                version = int(payload.get("version", 1))
+            except (TypeError, ValueError):
+                version = 1
             if version != _STATE_VERSION:
-                # schema changed (e.g. v1 visible-only accrual) — start fresh rather than
-                # carry forward normals learned under different semantics. Back up the old file.
+                # schema/semantics changed — start fresh rather than carry forward normals
+                # learned under different rules. Back up the old file.
                 logger.warning(
                     "environmental_normal: state version %s != %s — starting fresh (backing up old file)",
                     version, _STATE_VERSION,

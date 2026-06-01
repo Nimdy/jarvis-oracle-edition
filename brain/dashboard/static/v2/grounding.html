@@ -392,16 +392,17 @@
         (function(){
           var en=(cr.environmental_normal)||{}, m=en.metrics||{}, normals=en.learned_normals||[], dev=en.observations||[];
           if(!en.phase) return '';
-          var head='<div class="note" style="margin:10px 0 4px"><b>Environmental presence — memory-of-normal (shadow, NEVER spoken).</b> JARVIS learns each object\'s usual spot by quiet observation, then would gently note a real deviation ("the cup isn\'t where it usually lives"). The "be there for the room" half. Complements (does not touch) the novel-object curiosity ask.</div>'+
+          var head='<div class="note" style="margin:10px 0 4px"><b>Environmental presence — memory-of-normal (shadow, NEVER spoken).</b> JARVIS learns each object\'s usual spot from what the tracker still <i>believes exists</i> (permanence, not just freshly seen), then would gently note only a real, debounced <b>"moved"</b> sighting ("the cup isn\'t where it usually lives"). The "be there for the room" half. <b>Data-minimal:</b> it never claims a thing is <i>gone</i> (that would need person-occlusion data we deliberately don\'t wire) — it only reports a thing SEEN in the wrong place. Complements (does not touch) the novel-object curiosity ask.</div>'+
             '<div class="meta" style="margin-bottom:4px"><span class="pill">ticks observed '+(num(m.ticks_observed)||0)+'</span>'+
             '<span class="pill">objects tracked '+(num(m.objects_tracked)||0)+'</span>'+
             '<span class="pill">learned normals '+(num(m.objects_with_learned_normal)||0)+'</span>'+
-            '<span class="pill">deviations noticed '+(num(m.deviations_noticed_total)||0)+'</span></div>';
+            '<span class="pill">moved noticed '+(num(m.moved_noticed_total)||0)+'</span>'+
+            '<span class="pill">claims absence: '+(en.claims_absence?'yes':'no')+'</span></div>';
           var devHtml=dev.length?dev.map(function(o){
             return '<div class="q" style="border-left:3px solid var(--amber);padding-left:8px">'+
               '<div class="top"><span class="qt">would gently note: '+esc(o.would_gently_note)+'</span></div>'+
               '<div class="meta"><span class="pill">usual: '+esc(o.usual_region)+' '+f2(o.usual_region_frac)+'</span>'+
-              '<span class="pill">now: '+esc(String(o.current_region||'(not visible)'))+'</span>'+
+              '<span class="pill">seen in: '+esc(String(o.current_region||'?'))+'</span>'+
               '<span class="pill">spoken: false</span></div></div>';
           }).join(''):'';
           var normHtml=normals.length?'<div class="hint" style="margin-top:4px">learned usual spots: '+normals.map(function(n){ return esc(n.object)+' → '+esc(n.usual_region)+' ('+f2(n.usual_region_frac)+', '+(num(n.observations)||0)+' obs)'; }).join(' · ')+'</div>':'<div class="hint" style="margin-top:4px">still learning the room — no object has reached a confident usual spot yet (needs '+(num(m.min_observations_for_normal)||15)+'+ observations in one region)</div>';
