@@ -38,6 +38,15 @@ _MIN_SAMPLES_FOR_CONFIDENCE = 6
 # Recent-window the rolling disposition is computed over.
 _RECENT_WINDOW = 20
 
+# Companion P2 — crystallization valve. MIRRORS the real belief gates so a proposal
+# is honest about why it isn't a belief yet (contradiction_engine: revisit_count>=50
+# AND maturation_score>=0.90; EXTRACTION_DISCARD_THRESHOLD 0.2). P2 only PROPOSES +
+# LOGS — it NEVER writes a belief (writing is a later, separately-earned step).
+_CRYST_MIN_CORROBORATIONS = 50   # mirrors TensionRecord.revisit_count >= 50
+_CRYST_MIN_STABILITY = 0.90      # mirrors maturation_score >= 0.90
+_CRYST_MIN_CONFIDENCE = 0.2      # mirrors EXTRACTION_DISCARD_THRESHOLD
+_CRYST_PROPOSE_FLOOR = 8         # don't even surface a proposal below this many reads
+
 _ENGAGEMENT_PHRASE = {
     "engaged": "tends to be engaged",
     "neutral": "fairly neutral / steady",
@@ -222,6 +231,42 @@ class TheoryOfMindEngine:
         pm = self._people.get((name or "").strip())
         return pm.to_dict() if pm else None
 
+    def get_crystallization_proposals(self) -> list[dict[str, Any]]:
+        """Companion P2 (SHADOW): for each STABLE person-model, PROPOSE crystallizing
+        it into a relational belief — but NEVER write it. Each proposal is logged
+        against the REAL belief gates (>=50 corroborations, >=0.90 stability, conf>=0.2)
+        so it's honest about why it isn't a belief yet. Writing is a later earned step;
+        P2 only proposes + logs. No belief-graph writes, ever, here."""
+        out: list[dict[str, Any]] = []
+        for pm in self._people.values():
+            if pm.sample_count < _CRYST_PROPOSE_FLOOR:
+                continue
+            if pm.disposition.startswith("forming"):
+                continue
+            conf = float(pm.disposition_confidence or 0.0)
+            if conf < _CRYST_MIN_CONFIDENCE:
+                continue  # below the discard floor — never a belief, however often it recurs
+            corrob_ok = pm.sample_count >= _CRYST_MIN_CORROBORATIONS
+            stable_ok = pm.consistency >= _CRYST_MIN_STABILITY
+            blocking: list[str] = []
+            if not corrob_ok:
+                blocking.append("corroborations %d/%d" % (pm.sample_count, _CRYST_MIN_CORROBORATIONS))
+            if not stable_ok:
+                blocking.append("stability %.2f/%.2f" % (pm.consistency, _CRYST_MIN_STABILITY))
+            out.append({
+                "person": pm.name,
+                "candidate_belief": "%s — %s; reads as %s, %s in conversation" % (
+                    pm.name, pm.disposition, pm.current_feeling, pm.responsiveness),
+                "confidence": round(conf, 3),
+                "corroborations": pm.sample_count,
+                "stability": round(float(pm.consistency or 0.0), 3),
+                "would_crystallize": bool(corrob_ok and stable_ok),
+                "blocking": blocking,
+                "writes_belief": False,
+                "status": "shadow_proposed_not_written",
+            })
+        return out
+
     def get_status(self) -> dict[str, Any]:
         models = sorted(self._people.values(), key=lambda p: p.sample_count, reverse=True)
         return {
@@ -234,6 +279,13 @@ class TheoryOfMindEngine:
             "total_observations": self._observations,
             "min_samples_for_confidence": _MIN_SAMPLES_FOR_CONFIDENCE,
             "models": [m.to_dict() for m in models[:8]],
+            "crystallization": {
+                "phase": "P2_crystallization_valve",
+                "writes_beliefs": False,
+                "min_corroborations": _CRYST_MIN_CORROBORATIONS,
+                "min_stability": _CRYST_MIN_STABILITY,
+                "proposals": self.get_crystallization_proposals(),
+            },
         }
 
 

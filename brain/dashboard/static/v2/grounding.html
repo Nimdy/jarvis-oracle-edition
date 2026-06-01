@@ -365,7 +365,19 @@
             '<div class="meta"><span class="pill">disposition: '+esc(m.disposition)+' ('+f2(m.disposition_confidence)+')</span>'+
             '<span class="pill">feeling: '+esc(m.current_feeling)+' ('+f2(m.feeling_confidence)+')</span>'+
             '<span class="pill">'+esc(m.responsiveness)+'</span></div></div>';
-        }).join('')+'<div class="note" style="margin:8px 0 4px"><b>Per-turn reads ↓</b></div>';
+        }).join('')+
+        (function(){
+          var cz=(tom.crystallization)||{}, props=cz.proposals||[];
+          if(!props.length) return '';
+          return '<div class="note" style="margin:8px 0 4px"><b>Crystallization valve (P2 — shadow: PROPOSES a belief, NEVER writes it).</b> A stable read would become a belief only at ≥'+(cz.min_corroborations||50)+' corroborations + ≥'+f2(cz.min_stability||0.9)+' stability (the real belief gates) — and even then P2 only proposes. Logged, not written.</div>'+
+            props.map(function(p){
+              return '<div class="q" style="border-left:3px solid var(--cyan);padding-left:8px">'+
+                '<div class="top"><span class="qt">would form: '+esc(p.candidate_belief)+'</span></div>'+
+                '<div class="meta"><span class="pill" style="color:'+(p.would_crystallize?'var(--green)':'var(--cyan)')+'">'+(p.would_crystallize?'gates met — still not written (P2 only proposes)':'not yet: '+esc((p.blocking||[]).join(', ')))+'</span>'+
+                '<span class="pill">conf '+f2(p.confidence)+'</span><span class="pill">writes_belief: false</span></div></div>';
+            }).join('');
+        })()+
+        '<div class="note" style="margin:8px 0 4px"><b>Per-turn reads ↓</b></div>';
     }
     var rs=cr.recent||[];
     if(!rs.length && !tomHtml){ el('sitread').innerHTML='<div class="hint">no exchanges read since restart — JARVIS logs an internal read after each conversation turn</div>'; return; }
