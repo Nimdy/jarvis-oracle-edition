@@ -47,6 +47,16 @@ _CRYST_MIN_STABILITY = 0.90      # mirrors maturation_score >= 0.90
 _CRYST_MIN_CONFIDENCE = 0.2      # mirrors EXTRACTION_DISCARD_THRESHOLD
 _CRYST_PROPOSE_FLOOR = 8         # don't even surface a proposal below this many reads
 
+# Presence-read (the "be there" noticing). Relational first increment: notice when a
+# person has shifted from their usual read ("seemed quieter/more pressed lately"),
+# logged as a gentle would-note — NEVER spoken (shadow), a HYPOTHESIS, salience-gated
+# so it flags a real shift, not noise. Complements (does NOT touch) the novel-object
+# curiosity ask. Environmental "the cup moved" half is a later increment (needs the
+# spatial memory-of-normal, currently PRE-MATURE).
+_PRESENCE_MIN_WINDOW = 8         # need this many recent reads to judge a trend
+_PRESENCE_DELTA = 0.30           # recent-vs-baseline shift to count as meaningful
+_PRESENCE_ABS = 0.40             # and the recent fraction must itself be this high
+
 _ENGAGEMENT_PHRASE = {
     "engaged": "tends to be engaged",
     "neutral": "fairly neutral / steady",
@@ -270,6 +280,42 @@ class TheoryOfMindEngine:
             })
         return out
 
+    def get_presence_observations(self) -> list[dict[str, Any]]:
+        """Presence-read (SHADOW): notice when a person has shifted from their usual
+        read — log a gentle 'would note', NEVER spoken. A HYPOTHESIS; salience-gated to
+        a real recent-vs-baseline shift, not noise. Complements (does NOT touch) the
+        novel-object curiosity ask. The 'be there for the person' half."""
+        def _frac(window, idx, val):
+            return sum(1 for t in window if t[idx] == val) / len(window) if window else 0.0
+        out: list[dict[str, Any]] = []
+        for pm in self._people.values():
+            recent = list(pm._recent)
+            if len(recent) < _PRESENCE_MIN_WINDOW:
+                continue
+            cut = max(3, len(recent) // 3)
+            newer, older = recent[-cut:], recent[:-cut]
+            if not older:
+                continue
+            dis_new, dis_old = _frac(newer, 0, "disengaging"), _frac(older, 0, "disengaging")
+            neg_new, neg_old = _frac(newer, 1, "negative"), _frac(older, 1, "negative")
+            note = None
+            if (dis_new - dis_old) >= _PRESENCE_DELTA and dis_new >= _PRESENCE_ABS:
+                note = "%s has seemed quieter / more withdrawn than usual lately" % pm.name
+            elif (neg_new - neg_old) >= _PRESENCE_DELTA and neg_new >= _PRESENCE_ABS:
+                note = "%s has read as more frustrated / down than usual lately" % pm.name
+            if note:
+                out.append({
+                    "person": pm.name,
+                    "would_gently_note": note,
+                    "basis": "recent reads shifted vs this person's baseline (a hypothesis, not a fact)",
+                    "recent_disengaged_frac": round(dis_new, 2),
+                    "recent_negative_frac": round(neg_new, 2),
+                    "spoken": False,
+                    "writes_belief": False,
+                    "status": "shadow_logged_only",
+                })
+        return out
+
     def get_status(self) -> dict[str, Any]:
         models = sorted(self._people.values(), key=lambda p: p.sample_count, reverse=True)
         return {
@@ -288,6 +334,12 @@ class TheoryOfMindEngine:
                 "min_corroborations": _CRYST_MIN_CORROBORATIONS,
                 "min_stability": _CRYST_MIN_STABILITY,
                 "proposals": self.get_crystallization_proposals(),
+            },
+            "presence": {
+                "phase": "presence_read_relational",
+                "spoken": False,
+                "note": "shadow — gentle would-notes when a person shifts from their usual read; complements (does not touch) the novel-object curiosity ask",
+                "observations": self.get_presence_observations(),
             },
         }
 

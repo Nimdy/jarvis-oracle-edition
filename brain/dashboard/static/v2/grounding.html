@@ -377,6 +377,18 @@
                 '<span class="pill">conf '+f2(p.confidence)+'</span><span class="pill">writes_belief: false</span></div></div>';
             }).join('');
         })()+
+        (function(){
+          var pz=(tom.presence)||{}, obs=pz.observations||[];
+          if(!obs.length) return '';
+          return '<div class="note" style="margin:8px 0 4px"><b>Presence read (shadow — gentle "would notice", NEVER spoken).</b> When a person shifts from their usual read. A hypothesis, not a fact. This complements (does not touch) the novel-object curiosity ask.</div>'+
+            obs.map(function(o){
+              return '<div class="q" style="border-left:3px solid var(--amber);padding-left:8px">'+
+                '<div class="top"><span class="qt">would gently note: '+esc(o.would_gently_note)+'</span></div>'+
+                '<div class="meta"><span class="pill">recent withdrawn '+f2(o.recent_disengaged_frac)+'</span>'+
+                '<span class="pill">recent negative '+f2(o.recent_negative_frac)+'</span>'+
+                '<span class="pill">spoken: false</span></div></div>';
+            }).join('');
+        })()+
         '<div class="note" style="margin:8px 0 4px"><b>Per-turn reads ↓</b></div>';
     }
     var rs=cr.recent||[];
