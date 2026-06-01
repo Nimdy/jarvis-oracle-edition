@@ -1237,7 +1237,7 @@ class PerceptionOrchestrator:
     # Scene summary (Layer 3B)
     # ------------------------------------------------------------------
 
-    def _on_scene_summary(self, detections=None, frame_size=None, scene_change_score=0.0, **_):
+    def _on_scene_summary(self, detections=None, frame_size=None, scene_change_score=0.0, person_bboxes=None, **_):
         """Handle scene_summary events from the Pi aggregator."""
         if not detections:
             return
@@ -1255,9 +1255,13 @@ class PerceptionOrchestrator:
                 hit_count=d.get("hit_count", 1),
             ))
 
-        person_bboxes: list[tuple[int, int, int, int]] = []
+        # Transient occlusion GEOMETRY only, from the Pi (same frame as detections):
+        # where a body blocks the view this frame. Used solely by scene_tracker ->
+        # estimate_region_visibility (occluded-vs-removed). NEVER tracked as an entity,
+        # persisted, or tied to identity — persons are already filtered out of scene_dets.
+        person_boxes = [tuple(b) for b in (person_bboxes or []) if b and len(b) == 4]
 
-        snapshot = self._scene_tracker.update(scene_dets, fw, fh, person_bboxes)
+        snapshot = self._scene_tracker.update(scene_dets, fw, fh, person_boxes)
         self._last_scene_snapshot = snapshot
 
         entity_ct = len(snapshot.entities)

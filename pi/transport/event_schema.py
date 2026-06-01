@@ -83,12 +83,19 @@ def face_crop_event(crop_b64: str, track_id: int, confidence: float) -> Percepti
 
 
 def scene_summary(detections: list[dict], frame_size: tuple[int, int],
-                  scene_change_score: float) -> PerceptionEvent:
-    """Compact scene object summary from Pi aggregator (non-person COCO detections)."""
+                  scene_change_score: float,
+                  person_bboxes: list | None = None) -> PerceptionEvent:
+    """Compact scene object summary from Pi aggregator (non-person COCO detections).
+
+    person_bboxes is transient occlusion GEOMETRY only — [x1,y1,x2,y2] rectangles of
+    where a body blocks the view this frame, in the SAME frame as detections. The brain
+    uses it solely for region-visibility (occluded-vs-removed) reasoning; it is never
+    tracked as an entity, persisted, or tied to identity/face/name."""
     return PerceptionEvent(
         source="vision", type="scene_summary",
         data={"detections": detections, "frame_size": list(frame_size),
-              "scene_change_score": scene_change_score})
+              "scene_change_score": scene_change_score,
+              "person_bboxes": person_bboxes or []})
 
 
 # --- System event factories ---

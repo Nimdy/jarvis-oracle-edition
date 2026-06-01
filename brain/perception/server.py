@@ -362,7 +362,8 @@ class PerceptionServer:
                 event_bus.emit(PERCEPTION_SCENE_SUMMARY,
                                detections=event.data.get("detections", []),
                                frame_size=event.data.get("frame_size", [640, 480]),
-                               scene_change_score=event.data.get("scene_change_score", 0.0))
+                               scene_change_score=event.data.get("scene_change_score", 0.0),
+                               person_bboxes=event.data.get("person_bboxes", []))
             case "sensor_health":
                 health_data = {
                     "cpu_temp_c": event.data.get("cpu_temp_c", 0),

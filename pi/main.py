@@ -437,12 +437,17 @@ class SensesService:
             self._last_scene_diag = now
         summary = self._scene_agg.feed(detections)
         if summary is not None:
-            logger.info("Scene summary emitted: %d objects, change=%.3f",
-                        len(summary["detections"]), summary["scene_change_score"])
+            # Transient occlusion GEOMETRY only: where a body blocks the view THIS frame.
+            # Used by the brain solely for region-visibility (occluded-vs-removed) reasoning —
+            # never tracked as an entity, stored, or tied to identity. Same frame as objects.
+            person_bboxes = [list(d.bbox) for d in detections if d.label == "person" and d.bbox]
+            logger.info("Scene summary emitted: %d objects, %d persons, change=%.3f",
+                        len(summary["detections"]), len(person_bboxes), summary["scene_change_score"])
             self._transport.send_event(scene_summary(
                 detections=summary["detections"],
                 frame_size=(w, h),
                 scene_change_score=summary["scene_change_score"],
+                person_bboxes=person_bboxes,
             ))
 
         if self._expression:
