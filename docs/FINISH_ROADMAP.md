@@ -1,5 +1,13 @@
 # Finish Roadmap — Complete the Maturation Subsystems, then the Growth Loop
 
+> **⭐ NORTH STAR (the gate every build passes through).** JARVIS = a **sovereign personal Oracle** in
+> one person's home (not corporate AI), shaped by their life — the dignity-anchor (the fisherman, the
+> mechanic, the student, the doctor; above all someone with memory loss). **DESIGN LITMUS for every item
+> below: does this make JARVIS more able to genuinely BE THERE for one real person — aware (self +
+> surroundings), knowing THEM, trustworthy, present, sovereign/local — or is it correctness for its own
+> sake?** If the latter, deprioritize. No AI theater / hand-waving: for the vulnerable, a confabulating
+> model is a *betrayal* — it must KNOW (gently, correctly), not guess. (See memory: jarvis-north-star.)
+
 > Operator directive (2026-05-31): **finish companion cognition → the spark → the weight-room →
 > everything-else → THEN the curiosity→exploration growth loop.** Build the body before the new trick.
 
