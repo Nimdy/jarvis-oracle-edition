@@ -20,14 +20,22 @@ into perception that doesn't truly need it (sovereignty / data-minimization),
 and because "moved to the wrong spot" is the honest, higher-value dignity-anchor
 nudge anyway. So: it KNOWS (from a real sighting), it never GUESSES absence.
 
-HOW IT STAYS ALIVE WITHOUT OCCLUSION. A movable object (cup/keys) is rarely the
-single freshly-detected object every tick, but the scene tracker keeps believing
-it EXISTS (its permanence_confidence stays up, its state lingers visible/missing
-with a remembered region) through detection gaps. We accrue an object's usual
-spot from what the tracker still BELIEVES EXISTS (permanence above a floor, not
-yet "removed"), not just from what is freshly detected this frame — so the cup
-learns its spot through the gaps, instead of needing 15 unbroken minutes of
-continuous detection.
+HOW IT LEARNS. We accrue an object's usual spot from what the tracker still
+BELIEVES EXISTS (permanence above a floor, not yet "removed"), not only from what
+is freshly detected this frame — so a briefly-undetected object keeps accruing
+its spot for a short window instead of resetting instantly.
+
+HONEST LIMITATION (current perception pipeline). The pipeline does NOT feed
+person/occlusion geometry, so an undetected object's permanence decays FAST
+(there is no slow "occluded" floor), and this engine samples the tracker only
+once per ~60 s. So permanence bridges only SHORT gaps, not long occlusions:
+a frequently-undetected movable object (the cup/keys this lane most wants) learns
+its usual spot SLOWLY, and in a sparse scene this lane may legitimately stay
+silent for a long time. That is honest under-firing, not "working" — it FAILS
+SAFE (it can still never assert absence, and "moved" requires a confident fresh
+sighting). The lane gets meaningfully sharper only as perception matures
+(person-aware occlusion, finer regions with hysteresis, faster accrual cadence) —
+see get_status()["limitations"].
 
 Complements, and does NOT touch:
   - the novel-object curiosity ask (that lane = "new thing in the room, what is
@@ -54,7 +62,8 @@ logger = logging.getLogger(__name__)
 # --- Gates (deliberately conservative — see module docstring) -------------
 _MIN_OBS = 15            # present-ticks an object must accrue before it can have a "usual spot"
 _MIN_DOMINANCE = 0.70    # fraction of present-ticks in one region to call it the usual spot
-_CONF_FLOOR = 0.35       # ignore low-confidence FRESH detections (noise) for the "moved" claim
+_CONF_FLOOR = 0.35       # ignore low-confidence FRESH detections (noise) for accrual
+_MOVED_CONF = 0.50       # a "moved" sighting elsewhere must be a CONFIDENT fresh detection (anti-jitter)
 _PERM_FLOOR = 0.40       # tracker permanence_confidence floor to count an object as still-existing
 _DEBOUNCE = 2            # consecutive ticks a deviation must hold before surfaced/counted (and to clear)
 _COUNT_CAP = 240         # total region-observations before exponential forgetting (lets a real relocation adapt)
@@ -153,6 +162,7 @@ class EnvironmentalNormalEngine:
         self._idle: dict[str, int] = {}        # "label|kind" -> consecutive inactive ticks (in-memory)
         self._last_observations: list[dict[str, Any]] = []
         self._last_load_ok: bool = True
+        self._last_scene_ts: float | None = None   # staleness guard: skip frozen snapshots
         self._load()
 
     # --- observation ------------------------------------------------------
@@ -160,13 +170,20 @@ class EnvironmentalNormalEngine:
         """Fold one scene snapshot into the learned normal. Returns current would-notes (shadow)."""
         if not isinstance(scene_state, dict):
             return list(self._last_observations)
+        # Staleness guard: get_state() returns the LAST snapshot even if the tracker has not
+        # updated (Pi silent / loop stalled). Re-folding a frozen snapshot would re-count the
+        # same instant as fresh presence and could hold a stale "moved" forever. Skip it.
+        ts = scene_state.get("timestamp")
+        if ts is not None and self._last_scene_ts is not None and ts <= self._last_scene_ts:
+            return list(self._last_observations)
+        self._last_scene_ts = ts
         self._tick += 1
         now = time.time()
 
         # Per-label aggregation across (possibly multiple) tracks of the same label.
         exist_region: dict[str, str] = {}      # label -> region to accrue (tracker believes it exists)
         exist_best: dict[str, tuple[int, float]] = {}  # label -> (visible_priority, weight) of the chosen track
-        fresh_regions: dict[str, set[str]] = {}        # label -> set of regions where it is FRESH-visible now
+        fresh_regions: dict[str, dict[str, float]] = {}  # label -> {region: max fresh-visible conf}
         for e in (scene_state.get("entities") or []):
             if not isinstance(e, dict):
                 continue
@@ -181,9 +198,12 @@ class EnvironmentalNormalEngine:
             perm = float(e.get("permanence_confidence") or 0.0)
             is_visible = (state == "visible" and conf >= _CONF_FLOOR)
 
-            # Fresh-visible regions (for the "moved" claim — only real, current sightings).
+            # Fresh-visible regions + their best confidence (for the "moved" claim — only real,
+            # current sightings; confidence is used to gate out low-conf jitter).
             if is_visible and region not in _EXCLUDE_REGIONS:
-                fresh_regions.setdefault(label, set()).add(region)
+                fr = fresh_regions.setdefault(label, {})
+                if conf > fr.get(region, 0.0):
+                    fr[region] = conf
 
             # Existence accrual: tracker still believes the object is here (permanence),
             # not yet given-up/unconfirmed, and in a real region. Prefer a fresh-visible
@@ -211,9 +231,9 @@ class EnvironmentalNormalEngine:
             self._save()
         return list(self._last_observations)
 
-    def _compute_candidates(self, fresh_regions: dict[str, set[str]]) -> list[dict[str, Any]]:
-        """Raw (pre-debounce) 'moved' deviations: a known object FRESHLY SEEN away from its
-        usual spot — and NOT also seen in its usual spot this tick."""
+    def _compute_candidates(self, fresh_regions: dict[str, dict[str, float]]) -> list[dict[str, Any]]:
+        """Raw (pre-debounce) 'moved' deviations: a known object CONFIDENTLY, FRESHLY SEEN away
+        from its usual spot — and NOT also seen in its usual spot this tick."""
         out: list[dict[str, Any]] = []
         for label, on in self._objects.items():
             if not on.has_normal():
@@ -224,10 +244,13 @@ class EnvironmentalNormalEngine:
             dom_region, dom_frac = on.dominant()
             if dom_region in seen:
                 continue  # it IS in its usual spot (perhaps also elsewhere) → not "moved"
-            elsewhere = [r for r in seen if r not in _EXCLUDE_REGIONS and r != dom_region]
+            # Require a CONFIDENT sighting elsewhere (anti-jitter): a low-conf blip in a
+            # neighbouring region must not assert "moved". Pick the most-confident such region.
+            elsewhere = [(r, c) for r, c in seen.items()
+                         if r not in _EXCLUDE_REGIONS and r != dom_region and c >= _MOVED_CONF]
             if not elsewhere:
                 continue
-            cur_region = sorted(elsewhere)[0]
+            cur_region = max(elsewhere, key=lambda rc: rc[1])[0]
             out.append({
                 "object": label,
                 "would_gently_note": ("the %s isn't in its usual spot — it usually sits in the %s, "
@@ -249,8 +272,9 @@ class EnvironmentalNormalEngine:
         """Surface/count a deviation only once it has held for >=_DEBOUNCE consecutive ticks,
         and only clear it (allowing a future recurrence to count) once it has been gone for
         >=_DEBOUNCE ticks. Kills single-tick jitter both ways; _counted (persisted) keeps a
-        standing deviation from being re-counted across restarts; distinct on (label,kind)."""
-        active = {"%s|%s" % (c["object"], c["kind"]): c for c in candidates}
+        standing deviation from being re-counted across restarts. Keyed on (label,kind,region)
+        so a sighting that jitters to a DIFFERENT wrong region must itself persist before it counts."""
+        active = {"%s|%s|%s" % (c["object"], c["kind"], c.get("current_region")): c for c in candidates}
         surfaced: list[dict[str, Any]] = []
         for k in set(self._streak) | set(self._idle) | set(self._counted) | set(active):
             if k in active:
@@ -316,6 +340,15 @@ class EnvironmentalNormalEngine:
                      "the PRE-MATURE hrr_scene mind's-eye."),
             "tick_interval_s": 60,
             "last_load_ok": self._last_load_ok,
+            "maturity": "thin_pending_perception",
+            "limitations": [
+                "no person/occlusion geometry in the pipeline -> undetected objects decay fast, "
+                "so permanence bridges only short gaps; sparsely-seen movable objects learn slowly "
+                "and this lane may legitimately stay silent (honest under-firing, fails safe).",
+                "accrual samples the tracker once per ~60s (the tracker updates ~every 3s) -> coarse.",
+                "regions are coarse thirds with no hysteresis -> a confident sighting is required for "
+                "'moved', but a near-boundary object could still occasionally read as moved.",
+            ],
             "metrics": {
                 "ticks_observed": self._tick,
                 "objects_tracked": len(self._objects),
@@ -373,6 +406,9 @@ class EnvironmentalNormalEngine:
             self._tick = int(payload.get("tick", 0))
             self._flagged_total = int(payload.get("flagged_total", 0))
             self._counted = set(payload.get("counted") or [])
+            # Seed streaks so a still-standing deviation re-surfaces on the first post-restart
+            # tick (no one-tick "all clear" flicker); a no-longer-active one ages out via idle.
+            self._streak = {k: _DEBOUNCE for k in self._counted}
             self._objects = {
                 label: ObjectNormal.from_dict(d)
                 for label, d in (payload.get("objects") or {}).items()
