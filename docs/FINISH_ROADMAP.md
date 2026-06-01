@@ -69,8 +69,8 @@ JARVIS GROWS into both, maturity-gated; both are currently scaffolded-but-not-re
 | 1 | P0 | build_shadow | ✅ Verify P0 fires in the live path + dashboard panel surfacing read-volume/trigger-rate (DONE — Situational Read panel on `v2/grounding.html`). |
 | 2 | P0→P1 gate | wire_gate | Define the read-validity floor (trigger not pinned, reads coherent) + emit a `would-promote` signal once cleared. |
 | 3 | P1 | build_shadow | **Theory-of-Mind shadow** — extend `soul.Relationship` with confidence-scored per-person hypotheses (feels/wants/responding-how) from emotion+rapport+conversation; shadow store only. |
-| 4 | P1 | **EARNED** | Hold until per-person hypotheses are coherent vs transcript reality. |
-| 5 | P2 | build_shadow | **Crystallization valve** — recurring reads *propose* belief crystallizations via existing gates; logged, not written. |
+| 4 | P1 | ✅ EARNED | 54 reads, coherent model (David: steady/positive/responsive, consistency 0.75) — judged coherent 2026-06-01. |
+| 5 | P2 | ✅ SHIPPED (shadow) | **Crystallization valve** live (`theory_of_mind.get_crystallization_proposals`): stable models *propose* a relational belief, logged against the REAL gates (≥50 corroborations + ≥0.90 stability, EXTRACTION_DISCARD 0.2), **never written**. Surfaced on v2/grounding. David's proposal blocks on stability 0.75/0.90 (close). Uses DOMINANT sentiment (not latest mood). |
 | 6 | P2 gate | wire_gate | Belief written only when `maturation_score≥50 AND calibration≥0.90`. |
 | 7 | P2 | **EARNED** | Accumulate recurring reads until the valve is trusted. |
 | 8 | P3 | build_shadow | **Read→behavior advisory (narrated)** — suggest tone/depth/pace/pivot/give-space; narrate "would have…"; zero auto-act. |

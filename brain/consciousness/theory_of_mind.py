@@ -253,10 +253,13 @@ class TheoryOfMindEngine:
                 blocking.append("corroborations %d/%d" % (pm.sample_count, _CRYST_MIN_CORROBORATIONS))
             if not stable_ok:
                 blocking.append("stability %.2f/%.2f" % (pm.consistency, _CRYST_MIN_STABILITY))
+            # A durable belief reflects the DOMINANT sentiment over the window, not the
+            # latest turn's mood (current_feeling) — else the proposed belief flips per turn.
+            dom_feeling = _top(pm._sent_counts)[0] or pm.current_feeling
             out.append({
                 "person": pm.name,
-                "candidate_belief": "%s — %s; reads as %s, %s in conversation" % (
-                    pm.name, pm.disposition, pm.current_feeling, pm.responsiveness),
+                "candidate_belief": "%s — %s; tends to read as %s, %s in conversation" % (
+                    pm.name, pm.disposition, dom_feeling, pm.responsiveness),
                 "confidence": round(conf, 3),
                 "corroborations": pm.sample_count,
                 "stability": round(float(pm.consistency or 0.0), 3),
