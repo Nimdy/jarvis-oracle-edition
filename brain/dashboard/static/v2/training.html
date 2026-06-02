@@ -317,10 +317,17 @@
         var v=num(sc[dk]); if(v===null) return; var c=DIM_COACH[dk]; if(!c) return;
         var gap=c.g-v; if(gap>0.0001 && gap>worstGap){ worstGap=gap; worst={key:dk,val:v,c:c}; }
       });
-      return {rc:rc,count:count,ok:ok,color:g.color||'?',level:p.level||'shadow',scores:sc,worst:worst};
+      // count is only ONE of 7 dims; once >=30 more reps do nothing. Blocker
+      // then = the worst QUALITY dim, which is corrected, not counted.
+      var countMet=count>=TARGET_COUNT;
+      var qualityBlocked=countMet && !ok && worst && worst.key!=='sample_count';
+      return {rc:rc,count:count,ok:ok,color:g.color||'?',level:p.level||'shadow',scores:sc,worst:worst,countMet:countMet,qualityBlocked:qualityBlocked};
     }).sort(function(a,b){
-      if(a.ok!==b.ok) return a.ok?1:-1;            // unfinished first
-      return (a.count)-(b.count);                   // then lowest count first
+      if(a.ok!==b.ok) return a.ok?1:-1;            // green last
+      // among unfinished: count-gap first (closest to 30), then quality-blocked
+      var ag=Math.max(0,TARGET_COUNT-a.count), bg=Math.max(0,TARGET_COUNT-b.count);
+      if((ag>0)!==(bg>0)) return ag>0?-1:1;        // still-counting before quality-only
+      return ag-bg || (a.count-b.count);
     });
   }
 
@@ -337,14 +344,28 @@
     var say=deck[spotIdx % deck.length];                 // rotate the phrasing too
     var w=r.worst;
     var gap=Math.max(0,TARGET_COUNT-r.count);
-    var pct=Math.min(100,r.count/TARGET_COUNT*100);
     var col=r.color==='red'?'var(--red)':'var(--amber)';
-    var why = w ? ('<b style="color:var(--amber)">'+esc(w.c.h)+'</b> ('+esc(w.key)+' '+w.val.toFixed(2)+') — '+w.c.t)
+    // style_quality is distillation-downstream (recovers as fresh healthy
+    // examples land + the model retrains) — it is NOT directly hand-correctable,
+    // so don't tell the user to "say" something for it; label it as passive.
+    var passive = w && w.key==='style_quality' && gap<=0;
+    var why = passive
+        ? ('<b style="color:var(--dim)">style_quality '+w.val.toFixed(2)+'</b> — recovers on its own as the recent-example window refills with healthy frames and the shadow model retrains (often post-reboot debt). No specific phrase needed; keep this class in normal rotation.')
+      : w ? ('<b style="color:var(--amber)">'+esc(w.c.h)+'</b> ('+esc(w.key)+' '+w.val.toFixed(2)+') — '+w.c.t)
                 : (gap>0?('Needs <b style="color:var(--amber)">'+gap+'</b> more lived example'+(gap===1?'':'s')+'.'):'Quality below threshold — keep correcting.');
-    // big counter for THIS class — the headline number the user tracks
-    var counter = gap>0
-      ? ('<b style="color:'+col+';font-size:15px">'+r.count+'</b><span style="color:var(--dim)"> / '+TARGET_COUNT+'</span> &nbsp;·&nbsp; <b style="color:'+col+'">'+gap+' to go</b>')
-      : ('<b style="color:'+col+';font-size:15px">'+r.count+'</b><span style="color:var(--dim)"> / '+TARGET_COUNT+'</span> &nbsp;·&nbsp; <span style="color:var(--amber)">count met — fix quality below</span>');
+    // Counter is dimension-aware: while still under 30, track the COUNT; once the
+    // count is met the blocker is a QUALITY dim — track THAT 0→threshold instead,
+    // so we never show a misleading "52/30" as if more reps help.
+    var counter, pct;
+    if(gap>0){
+      pct=Math.min(100,r.count/TARGET_COUNT*100);
+      counter='count <b style="color:'+col+';font-size:15px">'+r.count+'</b><span style="color:var(--dim)"> / '+TARGET_COUNT+'</span> &nbsp;·&nbsp; <b style="color:'+col+'">'+gap+' to go</b>';
+    } else if(w){
+      pct=Math.min(100,(w.val/w.c.g)*100);
+      counter='✓ count '+r.count+'/'+TARGET_COUNT+' — now <b style="color:'+col+'">'+esc(w.key)+'</b> <b style="color:'+col+';font-size:15px">'+w.val.toFixed(2)+'</b><span style="color:var(--dim)"> / '+w.c.g.toFixed(2)+' needed</span> &nbsp;·&nbsp; <span style="color:var(--amber)">correct, don’t repeat</span>';
+    } else {
+      pct=100; counter='✓ count '+r.count+'/'+TARGET_COUNT+' — quality below threshold, keep correcting';
+    }
     return '<div style="margin-bottom:10px;padding:11px 13px;border:1px solid '+col+';border-radius:6px;background:rgba(20,14,3,.4)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">'+
         '<span style="font-size:9.5px;color:'+col+';letter-spacing:.08em;font-weight:700">▶ SAY THIS NEXT · '+esc(GATE_CLASS_LABEL[r.rc]||r.rc)+'</span>'+
@@ -367,34 +388,41 @@
     }
     var rows=_gateClasses();
     var needs=rows.filter(function(r){return !r.ok;});
-    var totalGap=0, totalCount=0, totalDelta=0, doneCount=0;
+    var stillCounting=0, totalDelta=0, doneCount=0;
     var cards=rows.map(function(r){
       var count=r.count, gap=Math.max(0,TARGET_COUNT-count);
-      var pct=Math.min(100,count/TARGET_COUNT*100);
+      var w=r.worst;
       var col=r.ok?'var(--green)':(r.color==='red'?'var(--red)':'var(--amber)');
       var delta=count-_mgBase(r.rc,count);
-      totalGap+=gap; totalCount+=count; totalDelta+=Math.max(0,delta); if(r.ok)doneCount++;
+      if(gap>0) stillCounting++; totalDelta+=Math.max(0,delta); if(r.ok)doneCount++;
       var deltaBadge=delta>0?(' <span style="color:var(--green)">▲ +'+delta+'</span>'):'';
-      var w=r.worst;
-      var line = r.ok ? ('<div style="color:var(--green)">gate satisfied — '+count+' examples, '+esc(r.level)+'</div>')
-        : ('<div>'+(gap>0?('Need <b style="color:var(--amber)">'+gap+'</b> more'):'count ok')+
-           (w?(' · blocker: <b style="color:'+(r.color==='red'?'var(--red)':'var(--amber)')+'">'+esc(w.key)+'</b> '+w.val.toFixed(2)):'')+'</div>');
+      // header counter: cap at 30 (don't show 52/30); show ✓ once count met
+      var countTxt=(count>=TARGET_COUNT?('✓ '+TARGET_COUNT):count)+'/'+TARGET_COUNT;
+      // bar: count progress while under 30; once met, the worst-quality dim's progress
+      var pct = gap>0 ? Math.min(100,count/TARGET_COUNT*100)
+                      : (w?Math.min(100,(w.val/w.c.g)*100):100);
+      var line = r.ok ? ('<div style="color:var(--green)">gate satisfied — '+count+' examples · '+esc(r.level)+'</div>')
+        : (gap>0
+            ? ('<div>Need <b style="color:var(--amber)">'+gap+'</b> more example'+(gap===1?'':'s')+(w?(' · then '+esc(w.key)):'')+'</div>')
+            : ('<div>✓ count met — blocker now <b style="color:'+(r.color==='red'?'var(--red)':'var(--amber)')+'">'+esc(w?w.key:'quality')+'</b> '+(w?(w.val.toFixed(2)+' / '+w.c.g.toFixed(2)):'')+' <span style="color:var(--dim)">(correct, don’t repeat)</span></div>'));
       return '<div class="gatecard'+(r.ok?' done':'')+'">'+
-        '<div class="gchd"><span class="grc">'+esc(r.rc)+'</span><span class="gct" style="color:'+col+'">'+(r.ok?'✓ ':'')+count+'/'+TARGET_COUNT+deltaBadge+'</span></div>'+
+        '<div class="gchd"><span class="grc">'+esc(r.rc)+'</span><span class="gct" style="color:'+col+'">'+(r.ok?'✓ ':'')+countTxt+deltaBadge+'</span></div>'+
         '<div class="gbar"><i style="width:'+pct.toFixed(0)+'%;background:'+col+'"></i></div>'+
         '<div class="gmeta">'+line+
           '<div>Route: <span class="rt">'+esc(GATE_EXPECTED_ROUTES[r.rc]||'—')+'</span> · gate '+esc(r.color)+' · '+esc(r.level)+'</div>'+
         '</div>'+
       '</div>';
     }).join('');
-    var ovPct=Math.round(totalCount/(rows.length*TARGET_COUNT)*100);
+    var qualityOnly=needs.length-stillCounting;     // count met but quality red
     var summary='<div style="margin-bottom:9px;padding:8px 11px;border:1px solid '+(totalDelta>0?'var(--green)':'var(--line)')+';border-radius:5px;background:rgba(3,8,14,.45)">'+
-      '<b style="color:var(--text)">'+doneCount+'/'+rows.length+'</b> gates green &nbsp;·&nbsp; <b style="color:var(--text)">'+totalCount+'/'+(rows.length*TARGET_COUNT)+'</b> lived examples ('+ovPct+'%)'+
-      (totalDelta>0?(' &nbsp;·&nbsp; <b style="color:var(--green)">▲ +'+totalDelta+' this session</b>')
-                   :(' &nbsp;·&nbsp; <span style="color:var(--dim)">no new examples this session — keep talking</span>'))+
+      '<b style="color:'+(doneCount===rows.length?'var(--green)':'var(--text)')+'">'+doneCount+'/'+rows.length+'</b> gates green'+
+      (stillCounting?(' &nbsp;·&nbsp; <b style="color:var(--amber)">'+stillCounting+'</b> still counting to 30'):'')+
+      (qualityOnly>0?(' &nbsp;·&nbsp; <b style="color:var(--red)">'+qualityOnly+'</b> need quality fixes (count met)'):'')+
+      (totalDelta>0?(' &nbsp;·&nbsp; <span style="color:var(--green)">▲ +'+totalDelta+' this session</span>')
+                   :(' &nbsp;·&nbsp; <span style="color:var(--dim)">no new examples this session</span>'))+
       '</div>';
     box.innerHTML=_renderSpotlight(needs)+summary+cards;
-    gapEl.textContent=needs.length?(needs.length+'/'+rows.length+' gates need work · '+totalGap+' reps to go'):('✓ '+rows.length+'/'+rows.length+' green');
+    gapEl.textContent=needs.length?(doneCount+'/'+rows.length+' green · '+needs.length+' need work'):('✓ '+rows.length+'/'+rows.length+' green');
     gapEl.style.cssText=needs.length?'border-color:var(--amber);color:var(--amber)':'border-color:var(--green);color:var(--green)';
   }
 
