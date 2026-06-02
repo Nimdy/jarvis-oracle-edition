@@ -64,7 +64,7 @@ _MIN_OBS = 15            # present-ticks an object must accrue before it can hav
 _MIN_DOMINANCE = 0.70    # fraction of present-ticks in one region to call it the usual spot
 _CONF_FLOOR = 0.35       # ignore low-confidence FRESH detections (noise) for accrual
 _MOVED_CONF = 0.50       # a "moved" sighting elsewhere must be a CONFIDENT fresh detection (anti-jitter)
-_PERM_FLOOR = 0.40       # tracker permanence_confidence floor to count an object as still-existing
+_PERM_FLOOR = 0.34       # just below the tracker's occluded floor (0.35) so occluded-but-present objects keep accruing
 _DEBOUNCE = 2            # consecutive ticks a deviation must hold before surfaced/counted (and to clear)
 _COUNT_CAP = 240         # total region-observations before exponential forgetting (lets a real relocation adapt)
 _STALE_TICKS = 720       # evict a never-learned object unseen this many ticks (~12h at 60s)
@@ -340,14 +340,15 @@ class EnvironmentalNormalEngine:
                      "the PRE-MATURE hrr_scene mind's-eye."),
             "tick_interval_s": 60,
             "last_load_ok": self._last_load_ok,
-            "maturity": "thin_pending_perception",
+            "maturity": "occlusion_live_coarse_sampling",
             "limitations": [
-                "no person/occlusion geometry in the pipeline -> undetected objects decay fast, "
-                "so permanence bridges only short gaps; sparsely-seen movable objects learn slowly "
-                "and this lane may legitimately stay silent (honest under-firing, fails safe).",
-                "accrual samples the tracker once per ~60s (the tracker updates ~every 3s) -> coarse.",
-                "regions are coarse thirds with no hysteresis -> a confident sighting is required for "
-                "'moved', but a near-boundary object could still occasionally read as moved.",
+                "person-occlusion geometry IS now wired Pi->brain: an object behind a person goes "
+                "'occluded' (still believed present) instead of phantom-removed, and accrues its "
+                "usual spot through occlusion. (This was the main blocker — now resolved/verified live.)",
+                "accrual still samples the tracker once per ~60s (it updates ~every 3s) -> coarse; "
+                "learning a usual spot takes minutes-to-hours of presence.",
+                "regions are coarse thirds with no hysteresis -> 'moved' requires a confident fresh "
+                "sighting, but a near-boundary object could still occasionally read as moved.",
             ],
             "metrics": {
                 "ticks_observed": self._tick,
