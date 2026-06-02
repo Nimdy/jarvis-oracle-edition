@@ -30,7 +30,13 @@
     .mgwrap{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
     @media(max-width:760px){.mgwrap{grid-template-columns:1fr;}}
     .gatecard{border:1px solid var(--line);border-radius:5px;padding:9px 11px;background:rgba(3,8,14,.4);}
-    .gatecard.done{border-color:var(--green);}
+    .gatecard.st-green{border-color:var(--green);}
+    .gatecard.st-talk{border-color:var(--amber);}
+    .gatecard.st-healing{border-color:#5b6b8a;opacity:.78;}
+    .stchip{font-size:8px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;}
+    .stchip.green{background:rgba(0,255,150,.14);color:var(--green);}
+    .stchip.talk{background:rgba(255,176,0,.16);color:var(--amber);}
+    .stchip.healing{background:rgba(120,150,200,.14);color:#9fb4d6;}
     .gchd{display:flex;justify-content:space-between;align-items:center;gap:6px;}
     .grc{font-size:10.5px;font-weight:700;color:var(--text);font-family:monospace;}
     .gct{font-size:10px;font-variant-numeric:tabular-nums;font-weight:700;}
@@ -304,6 +310,15 @@
   // this carries ALL SEVEN classes (incl. the red self-knowledge ones), unlike
   // validation_pack.language_evidence_targets which only lists the four that
   // already passed. count comes from counts_by_response_class.
+  // Dimensions that the operator CANNOT move by talking — they recover passively
+  // (distillation-downstream / window-refill). Used to classify HEALING vs TALK.
+  var PASSIVE_DIMS={ style_quality:true };
+  // ONE state model used everywhere: 'green' | 'talk' | 'healing'.
+  //   green   = gate passing.
+  //   talk    = an actionable blocker exists (count<30, or a correctable quality
+  //             dim like exactness/provenance/fail_closed/native) -> show a prompt.
+  //   healing = the ONLY blockers left are passive (style_quality) -> no phrase
+  //             helps; it self-heals. Never show a "say this" prompt for these.
   function _gateClasses(){
     var L=(SNAP&&(SNAP.language||((SNAP.eval||{}).language)))||{};
     var gs=L.gate_scores_by_class||{}, cbc=L.counts_by_response_class||{}, prom=L.promotion||{};
@@ -311,65 +326,63 @@
       var g=gs[rc]||{}, sc=g.scores||{}, p=prom[rc]||{};
       var count=num(cbc[rc])||0;
       var ok=(g.color==='green');
-      // worst failing dimension drives the coaching for this class
-      var worst=null, worstGap=-1;
+      var gap=Math.max(0,TARGET_COUNT-count);
+      // collect every failing dim, split into actionable vs passive
+      var actionable=null, aGap=-1, passive=null, pGap=-1;
       DIM_ORDER.forEach(function(dk){
         var v=num(sc[dk]); if(v===null) return; var c=DIM_COACH[dk]; if(!c) return;
-        var gap=c.g-v; if(gap>0.0001 && gap>worstGap){ worstGap=gap; worst={key:dk,val:v,c:c}; }
+        var d=c.g-v; if(d<=0.0001) return;
+        if(PASSIVE_DIMS[dk]){ if(d>pGap){pGap=d; passive={key:dk,val:v,c:c};} }
+        else if(dk!=='sample_count'){ if(d>aGap){aGap=d; actionable={key:dk,val:v,c:c};} }
       });
-      // count is only ONE of 7 dims; once >=30 more reps do nothing. Blocker
-      // then = the worst QUALITY dim, which is corrected, not counted.
-      var countMet=count>=TARGET_COUNT;
-      var qualityBlocked=countMet && !ok && worst && worst.key!=='sample_count';
-      return {rc:rc,count:count,ok:ok,color:g.color||'?',level:p.level||'shadow',scores:sc,worst:worst,countMet:countMet,qualityBlocked:qualityBlocked};
+      // determine state + the single blocker we surface
+      var state, blocker;
+      if(ok){ state='green'; blocker=null; }
+      else if(gap>0){ state='talk'; blocker=actionable; }        // still counting
+      else if(actionable){ state='talk'; blocker=actionable; }   // count met, correctable
+      else if(passive){ state='healing'; blocker=passive; }      // only style left
+      else { state='talk'; blocker=null; }
+      return {rc:rc,count:count,gap:gap,ok:ok,color:g.color||'?',level:p.level||'shadow',
+              scores:sc,state:state,blocker:blocker,passive:passive};
     }).sort(function(a,b){
-      if(a.ok!==b.ok) return a.ok?1:-1;            // green last
-      // among unfinished: count-gap first (closest to 30), then quality-blocked
-      var ag=Math.max(0,TARGET_COUNT-a.count), bg=Math.max(0,TARGET_COUNT-b.count);
-      if((ag>0)!==(bg>0)) return ag>0?-1:1;        // still-counting before quality-only
-      return ag-bg || (a.count-b.count);
+      // talk (actionable) first, then healing, then green; within talk: still-counting first
+      var rank={talk:0,healing:1,green:2};
+      if(rank[a.state]!==rank[b.state]) return rank[a.state]-rank[b.state];
+      if((a.gap>0)!==(b.gap>0)) return a.gap>0?-1:1;
+      return a.gap-b.gap || (a.count-b.count);
     });
   }
 
-  // The rotating spotlight: cycles through the classes that still need work and
-  // shows ONE big "say this next" card at a time (this is the rotating coach
-  // from the old dashboard). Static per-class cards live below it.
-  function _renderSpotlight(needs){
-    if(!needs.length) return '<div style="margin-bottom:9px;padding:11px 13px;border:1px solid var(--green);border-radius:6px;background:rgba(3,20,12,.4)">'+
-      '<div style="color:var(--green);font-weight:700;font-size:12px;margin-bottom:3px">✓ All seven language gates green — nothing to say right now.</div>'+
-      '<div style="font-size:10px;color:var(--muted);line-height:1.5">Gates decay as the recent-example window rolls and across restarts. Check back in a few hours — when one slips, it reappears here with the exact prompt. The daily upkeep shrinks as JARVIS outgrows the shell.</div>'+
-    '</div>';
-    var r=needs[spotIdx % needs.length];
-    var deck=GATE_PROMPT_DECKS[r.rc]||['Use a natural lived conversation that should produce this class.'];
-    var say=deck[spotIdx % deck.length];                 // rotate the phrasing too
-    var w=r.worst;
-    var gap=Math.max(0,TARGET_COUNT-r.count);
-    var col=r.color==='red'?'var(--red)':'var(--amber)';
-    // style_quality is distillation-downstream (recovers as fresh healthy
-    // examples land + the model retrains) — it is NOT directly hand-correctable,
-    // so don't tell the user to "say" something for it; label it as passive.
-    var passive = w && w.key==='style_quality' && gap<=0;
-    var why = passive
-        ? ('<b style="color:var(--dim)">style_quality '+w.val.toFixed(2)+'</b> — recovers on its own as the recent-example window refills with healthy frames and the shadow model retrains (often post-reboot debt). No specific phrase needed; keep this class in normal rotation.')
-      : w ? ('<b style="color:var(--amber)">'+esc(w.c.h)+'</b> ('+esc(w.key)+' '+w.val.toFixed(2)+') — '+w.c.t)
-                : (gap>0?('Needs <b style="color:var(--amber)">'+gap+'</b> more lived example'+(gap===1?'':'s')+'.'):'Quality below threshold — keep correcting.');
-    // Counter is dimension-aware: while still under 30, track the COUNT; once the
-    // count is met the blocker is a QUALITY dim — track THAT 0→threshold instead,
-    // so we never show a misleading "52/30" as if more reps help.
-    var counter, pct;
-    if(gap>0){
-      pct=Math.min(100,r.count/TARGET_COUNT*100);
-      counter='count <b style="color:'+col+';font-size:15px">'+r.count+'</b><span style="color:var(--dim)"> / '+TARGET_COUNT+'</span> &nbsp;·&nbsp; <b style="color:'+col+'">'+gap+' to go</b>';
-    } else if(w){
-      pct=Math.min(100,(w.val/w.c.g)*100);
-      counter='✓ count '+r.count+'/'+TARGET_COUNT+' — now <b style="color:'+col+'">'+esc(w.key)+'</b> <b style="color:'+col+';font-size:15px">'+w.val.toFixed(2)+'</b><span style="color:var(--dim)"> / '+w.c.g.toFixed(2)+' needed</span> &nbsp;·&nbsp; <span style="color:var(--amber)">correct, don’t repeat</span>';
-    } else {
-      pct=100; counter='✓ count '+r.count+'/'+TARGET_COUNT+' — quality below threshold, keep correcting';
+  // The rotating spotlight: cycles ONLY through 'talk' classes (the ones a phrase
+  // can actually move). Healing/green classes never appear here — they'd be a lie.
+  function _renderSpotlight(talk, healing){
+    if(!talk.length){
+      var msg = healing&&healing.length
+        ? ('Nothing to <b>say</b> right now — '+healing.length+' class'+(healing.length===1?'':'es')+' '+(healing.length===1?'is':'are')+' <b style="color:#9fb4d6">self-healing</b> (style_quality refills on its own post-reboot). Just keep normal conversation going; they re-green without specific prompts.')
+        : 'Gates decay as the recent-example window rolls and across restarts. When one needs a phrase, it appears here. The daily upkeep shrinks as JARVIS outgrows the shell.';
+      return '<div style="margin-bottom:9px;padding:11px 13px;border:1px solid var(--green);border-radius:6px;background:rgba(3,20,12,.4)">'+
+        '<div style="color:var(--green);font-weight:700;font-size:12px;margin-bottom:3px">✓ No prompts needed right now</div>'+
+        '<div style="font-size:10px;color:var(--muted);line-height:1.5">'+msg+'</div></div>';
     }
+    var r=talk[spotIdx % talk.length];
+    var deck=GATE_PROMPT_DECKS[r.rc]||['Use a natural lived conversation that should produce this class.'];
+    var say=deck[spotIdx % deck.length];
+    var b=r.blocker, col=r.color==='red'?'var(--red)':'var(--amber)';
+    // counter + why depend on WHICH blocker: count (say more) vs quality (correct)
+    var counter, why, pct;
+    if(r.gap>0){
+      pct=Math.min(100,r.count/TARGET_COUNT*100);
+      counter='count <b style="color:'+col+';font-size:15px">'+r.count+'</b><span style="color:var(--dim)"> / '+TARGET_COUNT+'</span> &nbsp;·&nbsp; <b style="color:'+col+'">'+r.gap+' to go</b>';
+      why='Say the prompt above ~'+r.gap+' more time'+(r.gap===1?'':'s')+' to reach 30 captured examples.'+(b?(' <span style="color:var(--dim)">Then the next blocker is '+esc(b.key)+'.</span>'):'');
+    } else if(b){           // count met, correctable quality dim
+      pct=Math.min(100,(b.val/b.c.g)*100);
+      counter='✓ count '+TARGET_COUNT+'/'+TARGET_COUNT+' &nbsp;·&nbsp; now <b style="color:'+col+'">'+esc(b.key)+'</b> <b style="color:'+col+';font-size:15px">'+b.val.toFixed(2)+'</b><span style="color:var(--dim)"> / '+b.c.g.toFixed(2)+' needed</span>';
+      why='<b style="color:'+col+'">'+esc(b.c.h)+'</b> — '+b.c.t;
+    } else { pct=100; counter='quality below threshold'; why='Keep correcting in this class.'; }
     return '<div style="margin-bottom:10px;padding:11px 13px;border:1px solid '+col+';border-radius:6px;background:rgba(20,14,3,.4)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">'+
         '<span style="font-size:9.5px;color:'+col+';letter-spacing:.08em;font-weight:700">▶ SAY THIS NEXT · '+esc(GATE_CLASS_LABEL[r.rc]||r.rc)+'</span>'+
-        '<span style="font-size:9px;color:var(--dim)">'+((spotIdx%needs.length)+1)+' of '+needs.length+' classes · auto-rotating ~6s</span>'+
+        '<span style="font-size:9px;color:var(--dim)">'+((spotIdx%talk.length)+1)+' of '+talk.length+' to say · auto-rotating ~6s</span>'+
       '</div>'+
       '<div style="padding:9px 11px;background:rgba(3,8,20,.8);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:monospace;font-size:14px;font-weight:600">“'+esc(say)+'”</div>'+
       '<div class="gbar" style="margin:7px 0 5px"><i style="width:'+pct.toFixed(0)+'%;background:'+col+'"></i></div>'+
@@ -387,43 +400,48 @@
       gapEl.textContent=''; return;
     }
     var rows=_gateClasses();
-    var needs=rows.filter(function(r){return !r.ok;});
-    var stillCounting=0, totalDelta=0, doneCount=0;
+    var talk=rows.filter(function(r){return r.state==='talk';});
+    var healing=rows.filter(function(r){return r.state==='healing';});
+    var green=rows.filter(function(r){return r.state==='green';});
+    var totalDelta=0;
     var cards=rows.map(function(r){
-      var count=r.count, gap=Math.max(0,TARGET_COUNT-count);
-      var w=r.worst;
-      var col=r.ok?'var(--green)':(r.color==='red'?'var(--red)':'var(--amber)');
-      var delta=count-_mgBase(r.rc,count);
-      if(gap>0) stillCounting++; totalDelta+=Math.max(0,delta); if(r.ok)doneCount++;
+      var b=r.blocker, delta=r.count-_mgBase(r.rc,r.count);
+      totalDelta+=Math.max(0,delta);
       var deltaBadge=delta>0?(' <span style="color:var(--green)">▲ +'+delta+'</span>'):'';
-      // header counter: cap at 30 (don't show 52/30); show ✓ once count met
-      var countTxt=(count>=TARGET_COUNT?('✓ '+TARGET_COUNT):count)+'/'+TARGET_COUNT;
-      // bar: count progress while under 30; once met, the worst-quality dim's progress
-      var pct = gap>0 ? Math.min(100,count/TARGET_COUNT*100)
-                      : (w?Math.min(100,(w.val/w.c.g)*100):100);
-      var line = r.ok ? ('<div style="color:var(--green)">gate satisfied — '+count+' examples · '+esc(r.level)+'</div>')
-        : (gap>0
-            ? ('<div>Need <b style="color:var(--amber)">'+gap+'</b> more example'+(gap===1?'':'s')+(w?(' · then '+esc(w.key)):'')+'</div>')
-            : ('<div>✓ count met — blocker now <b style="color:'+(r.color==='red'?'var(--red)':'var(--amber)')+'">'+esc(w?w.key:'quality')+'</b> '+(w?(w.val.toFixed(2)+' / '+w.c.g.toFixed(2)):'')+' <span style="color:var(--dim)">(correct, don’t repeat)</span></div>'));
-      return '<div class="gatecard'+(r.ok?' done':'')+'">'+
-        '<div class="gchd"><span class="grc">'+esc(r.rc)+'</span><span class="gct" style="color:'+col+'">'+(r.ok?'✓ ':'')+countTxt+deltaBadge+'</span></div>'+
+      var countTxt=(r.count>=TARGET_COUNT?('✓ '+TARGET_COUNT):r.count)+'/'+TARGET_COUNT;
+      // one color per STATE — green / amber(talk) / blue-grey(healing)
+      var col=r.state==='green'?'var(--green)':(r.state==='healing'?'#9fb4d6':(r.color==='red'?'var(--red)':'var(--amber)'));
+      var chip=r.state==='green'?'<span class="stchip green">green</span>'
+              :r.state==='healing'?'<span class="stchip healing">self-healing</span>'
+              :'<span class="stchip talk">needs you</span>';
+      // bar tracks the relevant metric for this state
+      var pct = r.state==='green'?100
+              : r.gap>0?Math.min(100,r.count/TARGET_COUNT*100)
+              : (b?Math.min(100,(b.val/b.c.g)*100):100);
+      var line = r.state==='green'
+          ? ('<div style="color:var(--green)">gate satisfied — '+r.count+' examples · '+esc(r.level)+'</div>')
+        : r.state==='healing'
+          ? ('<div style="color:#9fb4d6">self-healing — only <b>'+esc(b.key)+'</b> '+b.val.toFixed(2)+' / '+b.c.g.toFixed(2)+' left; refills on its own (no phrase needed)</div>')
+        : r.gap>0
+          ? ('<div>Say it <b style="color:var(--amber)">'+r.gap+'</b> more time'+(r.gap===1?'':'s')+(b?(' <span style="color:var(--dim)">· then '+esc(b.key)+'</span>'):'')+'</div>')
+          : ('<div>✓ count met — <b style="color:'+col+'">correct</b> its <b style="color:'+col+'">'+esc(b?b.key:'answers')+'</b> '+(b?(b.val.toFixed(2)+' / '+b.c.g.toFixed(2)):'')+' <span style="color:var(--dim)">(don’t just repeat)</span></div>');
+      return '<div class="gatecard st-'+r.state+'">'+
+        '<div class="gchd"><span class="grc">'+esc(r.rc)+chip+'</span><span class="gct" style="color:'+col+'">'+countTxt+deltaBadge+'</span></div>'+
         '<div class="gbar"><i style="width:'+pct.toFixed(0)+'%;background:'+col+'"></i></div>'+
         '<div class="gmeta">'+line+
           '<div>Route: <span class="rt">'+esc(GATE_EXPECTED_ROUTES[r.rc]||'—')+'</span> · gate '+esc(r.color)+' · '+esc(r.level)+'</div>'+
         '</div>'+
       '</div>';
     }).join('');
-    var qualityOnly=needs.length-stillCounting;     // count met but quality red
-    var summary='<div style="margin-bottom:9px;padding:8px 11px;border:1px solid '+(totalDelta>0?'var(--green)':'var(--line)')+';border-radius:5px;background:rgba(3,8,14,.45)">'+
-      '<b style="color:'+(doneCount===rows.length?'var(--green)':'var(--text)')+'">'+doneCount+'/'+rows.length+'</b> gates green'+
-      (stillCounting?(' &nbsp;·&nbsp; <b style="color:var(--amber)">'+stillCounting+'</b> still counting to 30'):'')+
-      (qualityOnly>0?(' &nbsp;·&nbsp; <b style="color:var(--red)">'+qualityOnly+'</b> need quality fixes (count met)'):'')+
-      (totalDelta>0?(' &nbsp;·&nbsp; <span style="color:var(--green)">▲ +'+totalDelta+' this session</span>')
-                   :(' &nbsp;·&nbsp; <span style="color:var(--dim)">no new examples this session</span>'))+
+    var summary='<div style="margin-bottom:9px;padding:8px 11px;border:1px solid '+(totalDelta>0?'var(--green)':'var(--line)')+';border-radius:5px;background:rgba(3,8,14,.45);font-size:11px">'+
+      '<b style="color:'+(green.length===rows.length?'var(--green)':'var(--text)')+'">'+green.length+'/'+rows.length+'</b> green'+
+      (talk.length?(' &nbsp;·&nbsp; <b style="color:var(--amber)">'+talk.length+'</b> need you (say a prompt)'):'')+
+      (healing.length?(' &nbsp;·&nbsp; <b style="color:#9fb4d6">'+healing.length+'</b> self-healing'):'')+
+      (totalDelta>0?(' &nbsp;·&nbsp; <span style="color:var(--green)">▲ +'+totalDelta+' this session</span>'):'')+
       '</div>';
-    box.innerHTML=_renderSpotlight(needs)+summary+cards;
-    gapEl.textContent=needs.length?(doneCount+'/'+rows.length+' green · '+needs.length+' need work'):('✓ '+rows.length+'/'+rows.length+' green');
-    gapEl.style.cssText=needs.length?'border-color:var(--amber);color:var(--amber)':'border-color:var(--green);color:var(--green)';
+    box.innerHTML=_renderSpotlight(talk,healing)+summary+cards;
+    gapEl.textContent=talk.length?(talk.length+' to say · '+green.length+'/'+rows.length+' green'):(healing.length?(healing.length+' self-healing · '+green.length+'/'+rows.length+' green'):('✓ '+rows.length+'/'+rows.length+' green'));
+    gapEl.style.cssText=talk.length?'border-color:var(--amber);color:var(--amber)':'border-color:var(--green);color:var(--green)';
   }
 
   function renderRecovery(){
