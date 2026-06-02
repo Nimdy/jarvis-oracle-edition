@@ -76,7 +76,7 @@
 
     <section class="card col12">
       <h2>Manual Gate Work Needed <span class="tag self">lived only</span> <span id="manualgap" class="floorpill"></span></h2>
-      <div class="note">Per-class progress toward the <b>30 lived examples</b> each self-knowledge class needs before its language gate passes (count ≥30 <b>and</b> quality not red) — which unlocks part of the <b>maturity validation pack</b> and lets that class graduate shadow → canary → live (its native voice goes live instead of the LLM). <b>These do not open from JARVIS running overnight</b> — they need real operator conversations that produce each class; synthetic/passive runtime does not count. Say the prompts <b>exactly</b> (first/second person — "what can <b>you</b> do", not "what can <b>she</b> do", or the route won't match).</div>
+      <div class="note">The <b>rotating coach</b> at top cycles every ~6s through the classes that still need work, showing <b>exactly what to say next</b> and <b>why</b> (the specific failing dimension). All <b>seven</b> bounded classes are tracked toward <b>30 lived examples</b> each, count ≥30 <b>and</b> quality not red — which unlocks part of the <b>maturity validation pack</b> and graduates the class shadow → canary → live (native voice instead of the LLM). <b>These do not open from JARVIS running overnight</b> — they need real operator conversations; synthetic/passive runtime does not count. Say the prompts <b>exactly</b> (first/second person — "what can <b>you</b> do", not "what can <b>she</b> do", or the route won't match).</div>
       <div class="mgwrap" id="manualgates"></div>
     </section>
 
@@ -139,13 +139,47 @@
 
   // Exact phrasing decks + expected routes (ported from v1 renderers.js). The
   // wording matters: the route classifier needs first/second-person framing.
+  // ALL seven bounded classes are covered so the coach surfaces the RED ones
+  // (self_status/self_introspection/memory_recall) that still need work, not
+  // just the four that already passed.
   var GATE_PROMPT_DECKS={
+    self_status:['Jarvis, what is your current status?','Jarvis, give me a status report.','Jarvis, how are your systems right now?','Jarvis, what state are you in?'],
+    self_introspection:['Jarvis, explain how your memory works.','Jarvis, describe your own architecture.','Jarvis, how do you think?','Jarvis, walk me through how you reach an answer.'],
+    memory_recall:['Jarvis, what do you remember about <X>?','Jarvis, what did I tell you about <X>?','Jarvis, do you recall <X>?','Jarvis, what do you know about <X> from before?'],
     recent_learning:['Jarvis, what have you learned recently?','Jarvis, what did you learn from our recent conversations?','Jarvis, what skill did you just finish learning?'],
     recent_research:['Jarvis, what have you researched recently?','Jarvis, what did you study recently?','Jarvis, what recent sources did you learn from?'],
     identity_answer:['Jarvis, who am I?','Jarvis, do you recognize me?','Jarvis, do you know who I am?','Jarvis, who is speaking?'],
     capability_status:['Jarvis, what can you do?','Jarvis, what are your capabilities?','Jarvis, what are your current skills?','Jarvis, which capabilities are verified?']
   };
-  var GATE_EXPECTED_ROUTES={ recent_learning:'INTROSPECTION → recent_learning', recent_research:'INTROSPECTION → recent_research', identity_answer:'IDENTITY → identity_answer', capability_status:'INTROSPECTION → capability_status' };
+  var GATE_EXPECTED_ROUTES={
+    self_status:'STATUS → self_status',
+    self_introspection:'INTROSPECTION → self_introspection',
+    memory_recall:'MEMORY → memory_recall',
+    recent_learning:'INTROSPECTION → recent_learning',
+    recent_research:'INTROSPECTION → recent_research',
+    identity_answer:'IDENTITY → identity_answer',
+    capability_status:'INTROSPECTION → capability_status'
+  };
+  // Human label per class for the spotlight header.
+  var GATE_CLASS_LABEL={
+    self_status:'Status report', self_introspection:'Self-reflection', memory_recall:'Memory recall',
+    recent_learning:'Recent learning', recent_research:'Recent research',
+    identity_answer:'Identity', capability_status:'Capability status'
+  };
+  // Per-DIMENSION coaching — given the specific failing sub-score, what to DO.
+  // Keyed to the scorer dimensions in jarvis_eval/language_scorers.py.
+  var DIM_COACH={
+    sample_count:    {g:1.0,  h:'needs more lived examples', t:'Ask this class enough times to reach ≥30 captured examples. Each clean exchange counts once.'},
+    provenance_fidelity:{g:0.90,h:'answers not grounded', t:'Ask “what’s your source?” and CORRECT any confabulation. Grounding rises only from verified-record answers — a correction trains it ~10× an affirmation.'},
+    exactness:       {g:0.85, h:'answers inexact (LLM fallback)', t:'Re-ask the SAME bounded prompt verbatim. Repetition sharpens the deterministic template so the native articulator fires instead of the LLM.'},
+    fail_closed_correctness:{g:0.90,h:'guesses instead of declining', t:'Ask something it CAN’T know and confirm it says “I don’t have that.” Correct it when it fabricates. (For the vulnerable, a guess is a betrayal.)'},
+    native_usage_rate:{g:0.70,h:'using the LLM, not its own voice', t:'Use the EXACT bounded prompt below so the native path fires. Off-script phrasing routes to the LLM and doesn’t count.'},
+    hallucination_rate:{g:0.95,h:'ungrounded replies present', t:'Spot-check recent replies for accuracy; correct misalignments and repeat probes in the same category.'},
+    style_quality:   {g:0.90,h:'distilled style not trained yet', t:'Rises automatically once this class has enough clean, grounded, exact examples — fix the dimensions above first.'}
+  };
+  var DIM_ORDER=['sample_count','provenance_fidelity','exactness','fail_closed_correctness','native_usage_rate','hallucination_rate','style_quality'];
+  var TARGET_COUNT=30;
+  var spotIdx=0;  // rotating spotlight cursor (advances on its own timer)
 
   var WEIGHTS=[['face_confidence',0.12],['voice_confidence',0.12],['rapport_score',0.15],['boundary_stability',0.15],['memory_accuracy',0.15],['soul_integrity',0.15],['autonomy_safety',0.16]];
   var STAGE_THEMES_FALLBACK={1:'Identity & enrollment',2:'Preferences & rapport',3:'Household & boundaries',4:'Routines & proactivity',5:'Corrections & edge cases',6:'Memory validation',7:'Autonomy probation'};
@@ -263,52 +297,91 @@
       if(v===null){ sessionStorage.setItem(k, String(count)); return count; }
       return parseInt(v,10); }catch(e){ return count; }
   }
+  // Build a normalized per-class record straight from gate_scores_by_class —
+  // this carries ALL SEVEN classes (incl. the red self-knowledge ones), unlike
+  // validation_pack.language_evidence_targets which only lists the four that
+  // already passed. count comes from counts_by_response_class.
+  function _gateClasses(){
+    var L=(SNAP&&(SNAP.language||((SNAP.eval||{}).language)))||{};
+    var gs=L.gate_scores_by_class||{}, cbc=L.counts_by_response_class||{}, prom=L.promotion||{};
+    return BOUNDED_CLASSES.map(function(rc){
+      var g=gs[rc]||{}, sc=g.scores||{}, p=prom[rc]||{};
+      var count=num(cbc[rc])||0;
+      var ok=(g.color==='green');
+      // worst failing dimension drives the coaching for this class
+      var worst=null, worstGap=-1;
+      DIM_ORDER.forEach(function(dk){
+        var v=num(sc[dk]); if(v===null) return; var c=DIM_COACH[dk]; if(!c) return;
+        var gap=c.g-v; if(gap>0.0001 && gap>worstGap){ worstGap=gap; worst={key:dk,val:v,c:c}; }
+      });
+      return {rc:rc,count:count,ok:ok,color:g.color||'?',level:p.level||'shadow',scores:sc,worst:worst};
+    }).sort(function(a,b){
+      if(a.ok!==b.ok) return a.ok?1:-1;            // unfinished first
+      return (a.count)-(b.count);                   // then lowest count first
+    });
+  }
+
+  // The rotating spotlight: cycles through the classes that still need work and
+  // shows ONE big "say this next" card at a time (this is the rotating coach
+  // from the old dashboard). Static per-class cards live below it.
+  function _renderSpotlight(needs){
+    if(!needs.length) return '<div style="margin-bottom:9px;padding:9px 12px;border:1px solid var(--green);border-radius:5px;background:rgba(3,20,12,.4);color:var(--green)"><b>All seven language gates satisfied ✓</b> — keep rotating the five conversation modes to hold them green.</div>';
+    var r=needs[spotIdx % needs.length];
+    var deck=GATE_PROMPT_DECKS[r.rc]||['Use a natural lived conversation that should produce this class.'];
+    var say=deck[spotIdx % deck.length];                 // rotate the phrasing too
+    var w=r.worst;
+    var gap=Math.max(0,TARGET_COUNT-r.count);
+    var why = w ? ('<b style="color:var(--amber)">'+esc(w.c.h)+'</b> ('+esc(w.key)+' '+w.val.toFixed(2)+') — '+w.c.t)
+                : (gap>0?('Needs <b style="color:var(--amber)">'+gap+'</b> more lived example'+(gap===1?'':'s')+'.'):'Quality below threshold — keep correcting.');
+    return '<div style="margin-bottom:10px;padding:11px 13px;border:1px solid var(--amber);border-radius:6px;background:rgba(20,14,3,.4)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px">'+
+        '<span style="font-size:9px;color:var(--amber);letter-spacing:.08em;font-weight:700">▶ SAY THIS NEXT · '+esc(GATE_CLASS_LABEL[r.rc]||r.rc)+'</span>'+
+        '<span style="font-size:9px;color:var(--dim)">'+((spotIdx%needs.length)+1)+'/'+needs.length+' · auto-rotating</span>'+
+      '</div>'+
+      '<div style="padding:7px 10px;background:rgba(3,8,20,.75);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:monospace;font-size:13px;font-weight:600">'+esc(say)+'</div>'+
+      '<div style="margin-top:6px;font-size:10px;color:var(--muted);line-height:1.55">'+why+'</div>'+
+      '<div style="margin-top:4px;font-size:9px;color:var(--dim)">route: <span style="color:var(--cyan);font-family:monospace">'+esc(GATE_EXPECTED_ROUTES[r.rc]||'—')+'</span> · count '+r.count+'/'+TARGET_COUNT+' · gate '+esc(r.color)+'</div>'+
+    '</div>';
+  }
+
   function renderManualGates(){
-    var vp=((SNAP&&SNAP.eval)||{}).validation_pack||{};
-    var targets=vp.language_evidence_targets||[];
-    var baselines=vp.language_route_class_baselines||[];
     var box=el('manualgates'), gapEl=el('manualgap');
-    if(!targets.length){
-      box.innerHTML='<span style="color:var(--dim);font-size:10.5px">no language-evidence targets in snapshot (eval.validation_pack unavailable, or the brain predates this gate)</span>';
+    var L=(SNAP&&(SNAP.language||((SNAP.eval||{}).language)))||null;
+    if(!L||!L.gate_scores_by_class){
+      box.innerHTML='<span style="color:var(--dim);font-size:10.5px">no language gate scores in snapshot (language panel unavailable, or the brain predates this gate)</span>';
       gapEl.textContent=''; return;
     }
-    var baseByClass={}; baselines.forEach(function(b){ if(b&&b.response_class) baseByClass[b.response_class]=b; });
-    var totalGap=0, totalCount=0, totalTarget=0, totalDelta=0, doneCount=0;
-    var cards=targets.map(function(r){
-      var rc=r.response_class||'?', count=num(r.count)||0, target=num(r.target_count)||30;
-      var gap=Math.max(0, num(r.gap)!=null?num(r.gap):(target-count));
-      var ok=!!r.current_ok, pct=target>0?Math.min(100,count/target*100):0;
-      var col=ok?'var(--green)':'var(--amber)';
-      var delta=count-_mgBase(rc,count);
-      totalGap+=gap; totalCount+=count; totalTarget+=target; totalDelta+=Math.max(0,delta); if(ok)doneCount++;
-      var deltaBadge=delta>0?(' <span style="color:var(--green)">▲ +'+delta+' this session</span>'):'';
-      var base=baseByClass[rc]||{};
-      var deck=GATE_PROMPT_DECKS[rc]||['Use a natural lived conversation that should produce this class.'];
-      var show=deck.slice(0,Math.min(4,Math.max(1,gap||1)));
-      var promptHtml=ok?'':('<div class="gsay">Say this exactly:</div>'+show.map(function(p){return '<div class="gprompt">'+esc(p)+'</div>';}).join(''));
-      return '<div class="gatecard'+(ok?' done':'')+'">'+
-        '<div class="gchd"><span class="grc">'+esc(rc)+'</span><span class="gct" style="color:'+col+'">'+(ok?'✓ ':'')+count+'/'+target+deltaBadge+'</span></div>'+
+    var rows=_gateClasses();
+    var needs=rows.filter(function(r){return !r.ok;});
+    var totalGap=0, totalCount=0, totalDelta=0, doneCount=0;
+    var cards=rows.map(function(r){
+      var count=r.count, gap=Math.max(0,TARGET_COUNT-count);
+      var pct=Math.min(100,count/TARGET_COUNT*100);
+      var col=r.ok?'var(--green)':(r.color==='red'?'var(--red)':'var(--amber)');
+      var delta=count-_mgBase(r.rc,count);
+      totalGap+=gap; totalCount+=count; totalDelta+=Math.max(0,delta); if(r.ok)doneCount++;
+      var deltaBadge=delta>0?(' <span style="color:var(--green)">▲ +'+delta+'</span>'):'';
+      var w=r.worst;
+      var line = r.ok ? ('<div style="color:var(--green)">gate satisfied — '+count+' examples, '+esc(r.level)+'</div>')
+        : ('<div>'+(gap>0?('Need <b style="color:var(--amber)">'+gap+'</b> more'):'count ok')+
+           (w?(' · blocker: <b style="color:'+(r.color==='red'?'var(--red)':'var(--amber)')+'">'+esc(w.key)+'</b> '+w.val.toFixed(2)):'')+'</div>');
+      return '<div class="gatecard'+(r.ok?' done':'')+'">'+
+        '<div class="gchd"><span class="grc">'+esc(r.rc)+'</span><span class="gct" style="color:'+col+'">'+(r.ok?'✓ ':'')+count+'/'+TARGET_COUNT+deltaBadge+'</span></div>'+
         '<div class="gbar"><i style="width:'+pct.toFixed(0)+'%;background:'+col+'"></i></div>'+
-        '<div class="gmeta">'+
-          (ok?('<div style="color:var(--green)">gate satisfied — '+count+' lived examples, quality '+esc(r.color||'ok')+'</div>')
-              :('<div>Need <b style="color:var(--amber)">'+gap+'</b> more lived example'+(gap===1?'':'s')+'.</div>'))+
-          '<div>Baseline: <span class="rt">'+esc((base.route||'—')+' → '+rc)+'</span>'+(base.count!=null?(' ('+base.count+')'):'')+'</div>'+
-          '<div>Expected: <span class="rt">'+esc(GATE_EXPECTED_ROUTES[rc]||'—')+'</span> · gate '+esc(r.color||'?')+' · '+esc(r.level||'shadow')+'</div>'+
+        '<div class="gmeta">'+line+
+          '<div>Route: <span class="rt">'+esc(GATE_EXPECTED_ROUTES[r.rc]||'—')+'</span> · gate '+esc(r.color)+' · '+esc(r.level)+'</div>'+
         '</div>'+
-        promptHtml+
-        (ok?'':'<div class="gfoot">Counts only after JARVIS produces the intended grounded/native response class. Third-person ("what can she do") won\'t match this route.</div>')+
       '</div>';
     }).join('');
-    // Overall improvement strip — absolute progress + is-it-moving-this-session.
-    var ovPct=totalTarget>0?Math.round(totalCount/totalTarget*100):0;
+    var ovPct=Math.round(totalCount/(rows.length*TARGET_COUNT)*100);
     var summary='<div style="margin-bottom:9px;padding:8px 11px;border:1px solid '+(totalDelta>0?'var(--green)':'var(--line)')+';border-radius:5px;background:rgba(3,8,14,.45)">'+
-      '<b style="color:var(--text)">'+doneCount+'/'+targets.length+'</b> gates satisfied &nbsp;·&nbsp; <b style="color:var(--text)">'+totalCount+'/'+totalTarget+'</b> lived examples ('+ovPct+'%)'+
-      (totalDelta>0?(' &nbsp;·&nbsp; <b style="color:var(--green)">▲ +'+totalDelta+' this session — improving</b>')
-                   :(' &nbsp;·&nbsp; <span style="color:var(--dim)">no new lived examples yet this session — keep talking</span>'))+
+      '<b style="color:var(--text)">'+doneCount+'/'+rows.length+'</b> gates green &nbsp;·&nbsp; <b style="color:var(--text)">'+totalCount+'/'+(rows.length*TARGET_COUNT)+'</b> lived examples ('+ovPct+'%)'+
+      (totalDelta>0?(' &nbsp;·&nbsp; <b style="color:var(--green)">▲ +'+totalDelta+' this session</b>')
+                   :(' &nbsp;·&nbsp; <span style="color:var(--dim)">no new examples this session — keep talking</span>'))+
       '</div>';
-    box.innerHTML=summary+cards;
-    gapEl.textContent='lived remaining: '+totalGap+(totalDelta>0?(' · ▼'+totalDelta+' this session'):'');
-    gapEl.style.cssText=totalGap>0?'border-color:var(--amber);color:var(--amber)':'border-color:var(--green);color:var(--green)';
+    box.innerHTML=_renderSpotlight(needs)+summary+cards;
+    gapEl.textContent=needs.length?(needs.length+' gate'+(needs.length===1?'':'s')+' red · '+totalGap+' lived remaining'):'all gates green';
+    gapEl.style.cssText=needs.length?'border-color:var(--amber);color:var(--amber)':'border-color:var(--green);color:var(--green)';
   }
 
   function renderRecovery(){
@@ -349,7 +422,12 @@
     });
   }
 
-  refresh(); setInterval(refresh, 30000); tick(); setInterval(tick, 1000); wireActions();
+  // Rotating spotlight: advance the "say this next" cursor every 6s and
+  // re-render the manual-gate coach (cheap, reads cached SNAP — no fetch).
+  function rotateSpot(){ spotIdx++; if(SNAP) renderManualGates(); }
+
+  refresh(); setInterval(refresh, 30000); tick(); setInterval(tick, 1000);
+  setInterval(rotateSpot, 6000); wireActions();
 })();
 </script>
 </body>
