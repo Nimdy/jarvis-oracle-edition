@@ -35,6 +35,31 @@
     .opblk .opnote{font-size:9px;color:var(--dim);line-height:1.5;margin-top:6px;}
     .opblk .v2-field{margin:4px 0;}
     .stagebtns{display:flex;gap:6px;flex-wrap:wrap;}
+    /* skill learning + registry */
+    .floorpill{font-size:9px;border:1px solid var(--line);border-radius:10px;padding:1px 8px;color:var(--muted);font-weight:600;}
+    .skl{border:1px solid var(--amber);border-radius:6px;padding:10px 12px;margin:8px 0;background:rgba(20,14,3,.32);cursor:pointer;}
+    .skl.done{border-color:var(--green);background:rgba(3,20,12,.28);}
+    .skl:hover{border-color:var(--cyan);}
+    .skl .sh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+    .skl .snm{font-weight:700;color:var(--text);font-size:12px;}
+    .skl .sid{font-family:var(--mono,monospace);font-size:9px;color:var(--muted);}
+    .skl .sbadge{font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:1px 7px;border-radius:3px;}
+    .skl .asked{margin:6px 0;padding:5px 9px;border-left:2px solid var(--cyan);background:rgba(3,8,20,.5);font-size:10px;color:var(--text);font-style:italic;}
+    .skl .asked b{font-style:normal;color:var(--cyan);}
+    .ladder{display:flex;gap:4px;margin:8px 0 5px;flex-wrap:wrap;}
+    .lphase{flex:1;min-width:64px;border:1px solid var(--line);border-radius:4px;padding:4px 6px;font-size:9px;text-align:center;color:var(--muted);}
+    .lphase.cur{border-color:var(--amber);color:var(--amber);background:rgba(20,14,3,.5);font-weight:700;}
+    .lphase.past{border-color:var(--green);color:var(--green);}
+    .lphase .pexit{display:block;font-size:8px;color:var(--dim);margin-top:2px;font-family:var(--mono,monospace);}
+    .skl .smeta{font-size:9.5px;color:var(--muted);line-height:1.6;margin-top:4px;}
+    .skl .smeta .rt{color:var(--cyan);font-family:var(--mono,monospace);}
+    .skl .claim-unv{color:var(--amber);font-weight:700;}
+    .skl .claim-ver{color:var(--green);font-weight:700;}
+    .reg{display:grid;grid-template-columns:1.4fr auto auto;gap:4px 12px;align-items:center;font-size:10px;border-bottom:1px solid var(--line);padding:5px 0;cursor:pointer;}
+    .reg:last-child{border-bottom:none;}
+    .reg:hover{background:rgba(0,200,255,.05);}
+    .reg .rnm{color:var(--text);}
+    .reg .rst{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;text-align:right;}
   </style>
 </head>
 <body>
@@ -85,6 +110,13 @@
       <div class="note">The human-in-the-loop ledgers: L3 escalations awaiting review, and the attestation ledger of proven capabilities.</div>
       <div class="statline" id="esc-stats"></div>
       <div class="ni" id="esc-ni"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Skill Learning &amp; Registry <span id="skill-count" class="floorpill"></span></h2>
+      <div class="note">Every skill JARVIS is learning or has verified. <b>Active learning jobs</b> show the phase ladder (assess → collect → train → verify → register), live exit-condition progress, <b>what you asked it to learn</b> (so you can confirm the subject is true), and its claimability — a skill cannot claim a capability until held-out evidence passes. <b>Click any row</b> to load its id into the operator actions below.</div>
+      <div id="skill-learning"></div>
+      <div id="skill-registry"></div>
     </section>
 
     <section class="card col12 opsec">
@@ -162,8 +194,12 @@
   "use strict";
   var V2=window.V2;
   var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, gateState=V2.gateState, cap=V2.cap;
-  var SI=null, SCAN=null, SPEC=null, ACQ=null, PE=null, PLUG=null, CG=null, ESC=null, ATT=null, lastOkTs=0;
+  var SI=null, SCAN=null, SPEC=null, ACQ=null, PE=null, PLUG=null, CG=null, ESC=null, ATT=null, SKILLS=null, lastOkTs=0;
   V2.renderNav('/static/v2/capability.html');
+
+  // local HTML-escape (note: `esc` is used elsewhere as the escalation object, so use escH)
+  function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  var SKILL_PHASES=['assess','collect','train','verify','register'];
 
   // a fail-CLOSED gate tile: ok=true => green, false => red, else => amber/unknown
   function gate(label, v, detail){
@@ -319,7 +355,85 @@
     el('mode').textContent='self-improve stage '+(stage===null?'—':stage)+' · acq '+sch;
   }
 
-  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderEscalation(); }
+  function fillSkillId(id){ var f=el('op-skill-id'); if(f){ f.value=id; f.scrollIntoView({behavior:'smooth',block:'center'}); V2.toast('skill id loaded: '+id, true); } }
+  window._fillSkillId=fillSkillId;  // referenced from inline onclick
+
+  function _phaseLadder(curPhase){
+    var ci=SKILL_PHASES.indexOf(String(curPhase||'').toLowerCase());
+    return '<div class="ladder">'+SKILL_PHASES.map(function(p,i){
+      var cls=i<ci?'past':(i===ci?'cur':'');
+      var mark=i<ci?'✓ ':(i===ci?'▶ ':'');
+      return '<div class="lphase '+cls+'">'+mark+escH(p)+'</div>';
+    }).join('')+'</div>';
+  }
+
+  // JOBS holds learning-job detail keyed by skill_id, fetched lazily for learning skills.
+  var JOBS={};
+  function renderSkillLearning(){
+    var box=el('skill-learning'), reg=el('skill-registry'), cnt=el('skill-count');
+    var data=SKILLS&&SKILLS.registry;
+    if(!data){ box.innerHTML='<span style="color:var(--dim);font-size:10.5px">skills endpoint offline</span>'; reg.innerHTML=''; cnt.textContent=''; return; }
+    var skills=data.skills||[];
+    var learning=skills.filter(function(s){return String(s.status).toLowerCase()==='learning';});
+    var verified=skills.filter(function(s){return String(s.status).toLowerCase()!=='learning';});
+    cnt.textContent=(data.total||skills.length)+' skills · '+learning.length+' learning';
+    cnt.style.cssText=learning.length?'border-color:var(--amber);color:var(--amber)':'';
+
+    // --- active learning jobs (rich drill-down) ---
+    if(!learning.length){
+      box.innerHTML='<div style="font-size:10.5px;color:var(--muted);padding:4px 0">No skills currently in a learning job. Ask JARVIS (by voice) to learn a skill — it appears here with its plan, the request that triggered it, and live phase progress.</div>';
+    } else {
+      box.innerHTML=learning.map(function(s){
+        var job=JOBS[s.skill_id];           // may be undefined until detail fetch lands
+        var jb=(job&&job.learning_job)||{};
+        var sk=(job&&job.skill)||s;
+        var asked=(jb.requested_by||{});
+        var phase=jb.phase||'—';
+        var claim=jb.claimability_status||sk.claimability_status||'unverified';
+        var plan=jb.plan||{};
+        var phases=plan.phases||[];
+        var curExit='';
+        phases.forEach(function(p){ if(String(p.name).toLowerCase()===String(phase).toLowerCase()) curExit=(p.exit_conditions||[]).join(', '); });
+        var vreq=(sk.verification_required||[]);
+        return '<div class="skl" onclick="_fillSkillId(\''+escH(s.skill_id)+'\')" title="click to load into operator actions">'+
+          '<div class="sh"><span><span class="snm">'+escH(s.name||s.skill_id)+'</span> <span class="sid">'+escH(s.skill_id)+'</span></span>'+
+            '<span class="sbadge" style="background:rgba(255,176,0,.15);color:var(--amber)">'+escH(jb.status||'learning')+' · '+escH(phase)+'</span></div>'+
+          (asked.user_text?('<div class="asked"><b>You asked:</b> “'+escH(asked.user_text)+'”'+(asked.speaker?(' <span style="color:var(--dim);font-style:normal">— '+escH(asked.speaker)+(asked.matrix_trigger?' · matrix':' · voice')+'</span>'):'')+'</div>'):'')+
+          (plan.summary?('<div class="smeta" style="color:var(--text)">'+escH(plan.summary)+'</div>'):'')+
+          _phaseLadder(phase)+
+          (curExit?('<div class="smeta">current exit: <span class="rt">'+escH(curExit)+'</span></div>'):'')+
+          '<div class="smeta">'+
+            'claimable: <span class="'+(claim==='verified'?'claim-ver':'claim-unv')+'">'+escH(claim)+'</span>'+
+            ' · evidence: '+(sk.has_evidence?'<span style="color:var(--green)">present</span>':'<span style="color:var(--amber)">none yet</span>')+
+            ' · risk: '+escH(jb.risk_level||'—')+
+            (jb.job_id?(' · job <span class="rt">'+escH(jb.job_id)+'</span>'):'')+
+          '</div>'+
+          (vreq.length?('<div class="smeta">must prove: <span class="rt">'+vreq.map(escH).join(', ')+'</span></div>'):'')+
+          '<div class="smeta" style="color:var(--dim)">click row → loads id into Operator Actions below</div>'+
+        '</div>';
+      }).join('');
+      // lazily fetch full job detail for any learning skill we don't have yet
+      learning.forEach(function(s){
+        if(JOBS[s.skill_id]===undefined){
+          JOBS[s.skill_id]=null;  // mark in-flight
+          fetchJSON('/api/skills/'+encodeURIComponent(s.skill_id)).then(function(d){ JOBS[s.skill_id]=d; renderSkillLearning(); }).catch(function(){});
+        }
+      });
+    }
+
+    // --- verified registry (compact, click-to-load) ---
+    reg.innerHTML='<div style="font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin:10px 0 4px">Verified registry ('+verified.length+')</div>'+
+      verified.map(function(s){
+        var stc=String(s.status).toLowerCase()==='verified'?'var(--green)':'var(--muted)';
+        return '<div class="reg" onclick="_fillSkillId(\''+escH(s.skill_id)+'\')" title="click to load id">'+
+          '<span class="rnm">'+escH(s.name||s.skill_id)+' <span class="sid">'+escH(s.skill_id)+'</span></span>'+
+          '<span class="sid">'+escH(s.capability_type||'')+'</span>'+
+          '<span class="rst" style="color:'+stc+'">'+escH(s.status)+(s.has_evidence?' ✓':'')+'</span>'+
+        '</div>';
+      }).join('');
+  }
+
+  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderEscalation(); renderSkillLearning(); }
 
   function refresh(){
     Promise.allSettled([
@@ -331,7 +445,8 @@
       fetchJSON('/api/plugins'),
       fetchJSON('/api/codegen'),
       fetchJSON('/api/autonomy/escalations'),
-      fetchJSON('/api/autonomy/attestation')
+      fetchJSON('/api/autonomy/attestation'),
+      fetchJSON('/api/skills')
     ]).then(function(r){
       SI  = r[0].status==='fulfilled'?r[0].value:null;
       SCAN= r[1].status==='fulfilled'?r[1].value:null;
@@ -342,6 +457,7 @@
       CG  = r[6].status==='fulfilled'?r[6].value:null;
       ESC = r[7].status==='fulfilled'?r[7].value:null;
       ATT = r[8].status==='fulfilled'?r[8].value:null;
+      SKILLS = r[9].status==='fulfilled'?r[9].value:null;
       if(r.some(function(x){return x.status==='fulfilled';})) lastOkTs=Date.now();
       renderAll();
     });
