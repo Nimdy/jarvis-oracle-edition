@@ -76,7 +76,7 @@
 
     <section class="card col12">
       <h2>Manual Gate Work Needed <span class="tag self">lived only</span> <span id="manualgap" class="floorpill"></span></h2>
-      <div class="note">The <b>rotating coach</b> at top cycles every ~6s through the classes that still need work, showing <b>exactly what to say next</b> and <b>why</b> (the specific failing dimension). All <b>seven</b> bounded classes are tracked toward <b>30 lived examples</b> each, count ≥30 <b>and</b> quality not red — which unlocks part of the <b>maturity validation pack</b> and graduates the class shadow → canary → live (native voice instead of the LLM). <b>These do not open from JARVIS running overnight</b> — they need real operator conversations; synthetic/passive runtime does not count. Say the prompts <b>exactly</b> (first/second person — "what can <b>you</b> do", not "what can <b>she</b> do", or the route won't match).</div>
+      <div class="note">The <b>rotating coach</b> at top cycles every ~6s through the classes that still need work — each shows <b>exactly what to say</b>, a live <b>counter (X/30 · N to go)</b>, and <b>why</b> (the failing dimension). This is your <b>daily upkeep</b>: gates decay as the recent-example window rolls and across restarts, so something will pop up here every few hours — it gets <b>lighter over time</b> as JARVIS outgrows the shell. All <b>seven</b> bounded classes are tracked toward <b>30 lived examples</b> each (count ≥30 <b>and</b> quality not red) → graduates the class shadow → canary → live (native voice instead of the LLM) and feeds the <b>maturity validation pack</b>. <b>Voice/lived only</b> — overnight runtime doesn't count. Say the prompts <b>exactly</b> (first/second person — "what can <b>you</b> do", not "what can <b>she</b> do", or the route won't match).</div>
       <div class="mgwrap" id="manualgates"></div>
     </section>
 
@@ -120,6 +120,9 @@
   "use strict";
   var V2=window.V2;
   var fetchJSON=V2.fetchJSON, num=V2.num, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, cap=V2.cap;
+  // esc is local to shared.js (not exported); every v2 page defines its own.
+  // Without this the manual-gate coach throws ReferenceError and renders blank.
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   var OB=null, ST=null, SNAP=null, lastOkTs=0;
   V2.renderNav('/static/v2/training.html');
 
@@ -325,22 +328,33 @@
   // shows ONE big "say this next" card at a time (this is the rotating coach
   // from the old dashboard). Static per-class cards live below it.
   function _renderSpotlight(needs){
-    if(!needs.length) return '<div style="margin-bottom:9px;padding:9px 12px;border:1px solid var(--green);border-radius:5px;background:rgba(3,20,12,.4);color:var(--green)"><b>All seven language gates satisfied ✓</b> — keep rotating the five conversation modes to hold them green.</div>';
+    if(!needs.length) return '<div style="margin-bottom:9px;padding:11px 13px;border:1px solid var(--green);border-radius:6px;background:rgba(3,20,12,.4)">'+
+      '<div style="color:var(--green);font-weight:700;font-size:12px;margin-bottom:3px">✓ All seven language gates green — nothing to say right now.</div>'+
+      '<div style="font-size:10px;color:var(--muted);line-height:1.5">Gates decay as the recent-example window rolls and across restarts. Check back in a few hours — when one slips, it reappears here with the exact prompt. The daily upkeep shrinks as JARVIS outgrows the shell.</div>'+
+    '</div>';
     var r=needs[spotIdx % needs.length];
     var deck=GATE_PROMPT_DECKS[r.rc]||['Use a natural lived conversation that should produce this class.'];
     var say=deck[spotIdx % deck.length];                 // rotate the phrasing too
     var w=r.worst;
     var gap=Math.max(0,TARGET_COUNT-r.count);
+    var pct=Math.min(100,r.count/TARGET_COUNT*100);
+    var col=r.color==='red'?'var(--red)':'var(--amber)';
     var why = w ? ('<b style="color:var(--amber)">'+esc(w.c.h)+'</b> ('+esc(w.key)+' '+w.val.toFixed(2)+') — '+w.c.t)
                 : (gap>0?('Needs <b style="color:var(--amber)">'+gap+'</b> more lived example'+(gap===1?'':'s')+'.'):'Quality below threshold — keep correcting.');
-    return '<div style="margin-bottom:10px;padding:11px 13px;border:1px solid var(--amber);border-radius:6px;background:rgba(20,14,3,.4)">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px">'+
-        '<span style="font-size:9px;color:var(--amber);letter-spacing:.08em;font-weight:700">▶ SAY THIS NEXT · '+esc(GATE_CLASS_LABEL[r.rc]||r.rc)+'</span>'+
-        '<span style="font-size:9px;color:var(--dim)">'+((spotIdx%needs.length)+1)+'/'+needs.length+' · auto-rotating</span>'+
+    // big counter for THIS class — the headline number the user tracks
+    var counter = gap>0
+      ? ('<b style="color:'+col+';font-size:15px">'+r.count+'</b><span style="color:var(--dim)"> / '+TARGET_COUNT+'</span> &nbsp;·&nbsp; <b style="color:'+col+'">'+gap+' to go</b>')
+      : ('<b style="color:'+col+';font-size:15px">'+r.count+'</b><span style="color:var(--dim)"> / '+TARGET_COUNT+'</span> &nbsp;·&nbsp; <span style="color:var(--amber)">count met — fix quality below</span>');
+    return '<div style="margin-bottom:10px;padding:11px 13px;border:1px solid '+col+';border-radius:6px;background:rgba(20,14,3,.4)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">'+
+        '<span style="font-size:9.5px;color:'+col+';letter-spacing:.08em;font-weight:700">▶ SAY THIS NEXT · '+esc(GATE_CLASS_LABEL[r.rc]||r.rc)+'</span>'+
+        '<span style="font-size:9px;color:var(--dim)">'+((spotIdx%needs.length)+1)+' of '+needs.length+' classes · auto-rotating ~6s</span>'+
       '</div>'+
-      '<div style="padding:7px 10px;background:rgba(3,8,20,.75);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:monospace;font-size:13px;font-weight:600">'+esc(say)+'</div>'+
-      '<div style="margin-top:6px;font-size:10px;color:var(--muted);line-height:1.55">'+why+'</div>'+
-      '<div style="margin-top:4px;font-size:9px;color:var(--dim)">route: <span style="color:var(--cyan);font-family:monospace">'+esc(GATE_EXPECTED_ROUTES[r.rc]||'—')+'</span> · count '+r.count+'/'+TARGET_COUNT+' · gate '+esc(r.color)+'</div>'+
+      '<div style="padding:9px 11px;background:rgba(3,8,20,.8);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:monospace;font-size:14px;font-weight:600">“'+esc(say)+'”</div>'+
+      '<div class="gbar" style="margin:7px 0 5px"><i style="width:'+pct.toFixed(0)+'%;background:'+col+'"></i></div>'+
+      '<div style="font-size:11px;margin-bottom:4px">'+counter+'</div>'+
+      '<div style="font-size:10px;color:var(--muted);line-height:1.55">'+why+'</div>'+
+      '<div style="margin-top:4px;font-size:9px;color:var(--dim)">route: <span style="color:var(--cyan);font-family:monospace">'+esc(GATE_EXPECTED_ROUTES[r.rc]||'—')+'</span> · gate '+esc(r.color)+' · '+esc(r.level)+'</div>'+
     '</div>';
   }
 
@@ -380,7 +394,7 @@
                    :(' &nbsp;·&nbsp; <span style="color:var(--dim)">no new examples this session — keep talking</span>'))+
       '</div>';
     box.innerHTML=_renderSpotlight(needs)+summary+cards;
-    gapEl.textContent=needs.length?(needs.length+' gate'+(needs.length===1?'':'s')+' red · '+totalGap+' lived remaining'):'all gates green';
+    gapEl.textContent=needs.length?(needs.length+'/'+rows.length+' gates need work · '+totalGap+' reps to go'):('✓ '+rows.length+'/'+rows.length+' green');
     gapEl.style.cssText=needs.length?'border-color:var(--amber);color:var(--amber)':'border-color:var(--green);color:var(--green)';
   }
 
