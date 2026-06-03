@@ -32,11 +32,11 @@
     .gatecard{border:1px solid var(--line);border-radius:5px;padding:9px 11px;background:rgba(3,8,14,.4);}
     .gatecard.st-green{border-color:var(--green);}
     .gatecard.st-talk{border-color:var(--amber);}
-    .gatecard.st-healing{border-color:#5b6b8a;opacity:.78;}
+    .gatecard.st-refresh{border-color:#3a7bd5;opacity:.85;}
     .stchip{font-size:8px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;}
     .stchip.green{background:rgba(0,255,150,.14);color:var(--green);}
     .stchip.talk{background:rgba(255,176,0,.16);color:var(--amber);}
-    .stchip.healing{background:rgba(120,150,200,.14);color:#9fb4d6;}
+    .stchip.refresh{background:rgba(58,123,213,.18);color:#7fb0ff;}
     .gchd{display:flex;justify-content:space-between;align-items:center;gap:6px;}
     .grc{font-size:10.5px;font-weight:700;color:var(--text);font-family:monospace;}
     .gct{font-size:10px;font-variant-numeric:tabular-nums;font-weight:700;}
@@ -82,7 +82,7 @@
 
     <section class="card col12">
       <h2>Manual Gate Work Needed <span class="tag self">lived only</span> <span id="manualgap" class="floorpill"></span> <a href="/api/playbook" target="_blank" class="tag" style="text-decoration:none;border:1px solid var(--cyan);color:var(--cyan);padding:1px 7px;border-radius:3px;font-size:9px;margin-left:6px;">📖 playbook</a></h2>
-      <div class="note">The <b>rotating coach</b> at top cycles every ~6s through the classes that still need work — each shows <b>exactly what to say</b>, a live <b>counter</b>, and <b>why</b> (the failing dimension). This mirrors the <b>Manual Gate Work Tracker</b> in the <a href="/api/playbook" target="_blank" style="color:var(--cyan)">companion-training playbook</a> (kept in sync). This is your <b>daily upkeep</b>: gates decay as the recent-example window rolls (~25-item, so idle traffic rolls good examples out — resting doesn't heal a class) and across restarts, so something pops up here every few hours — it gets <b>lighter over time</b> as JARVIS outgrows the shell. <b>Count ≥30 is necessary but NOT sufficient</b> — a class also needs its 7 quality dimensions green (native routing, grounding, fail-closed). <b>Voice/lived only</b>. Say prompts <b>exactly</b> (first/second person, or the route won't match); <b>correct</b> wrong answers — corrections beat affirmations ~10×.</div>
+      <div class="note">Three states, color-coded: <b style="color:var(--amber)">needs you</b> = real work (count &lt;30, or a quality dim you fix by <b>correcting</b> how it answers); <b style="color:#7fb0ff">refresh ↻</b> = <b>healthy but aged out</b> — the class's native voice works, its recent examples just rolled out of the shared 25-slot window, so <b>one quick ask re-greens it</b> (no correction); <b style="color:var(--green)">green</b> = passing. <b>The whack-a-mole is real and expected:</b> all 7 classes share ONE ~25-example window, so heavily training one evicts another's evidence → it flips to <b style="color:#7fb0ff">refresh ↻</b>. You <b>can't hold all 7 green at once by grinding</b> — instead <b>rotate lightly across all 7</b> so each stays warm. Promotion is per-class (own green streak), not all-at-once. Mirrors the <a href="/api/playbook" target="_blank" style="color:var(--cyan)">playbook tracker</a>. Say prompts <b>exactly</b> (first/second person) — corrections beat affirmations ~10×.</div>
       <div class="mgwrap" id="manualgates"></div>
     </section>
 
@@ -310,15 +310,24 @@
   // this carries ALL SEVEN classes (incl. the red self-knowledge ones), unlike
   // validation_pack.language_evidence_targets which only lists the four that
   // already passed. count comes from counts_by_response_class.
-  // Dimensions that the operator CANNOT move by talking — they recover passively
-  // (distillation-downstream / window-refill). Used to classify HEALING vs TALK.
-  var PASSIVE_DIMS={ style_quality:true };
-  // ONE state model used everywhere: 'green' | 'talk' | 'healing'.
+  // Dimensions the operator CANNOT correct by what they SAY — they move only as
+  // recent, grounded examples of THIS class sit in the shared rolling window.
+  // All 7 classes share ONE ~25-slot window, so heavily training one class evicts
+  // another's evidence — that class then scores against the corpus average and
+  // reads red on these dims even though it's perfectly healthy. The fix is a quick
+  // REFRESH touch (one rep), not correction. (Scorer is intentionally left as-is —
+  // the red is honest "you've neglected this class lately" pressure.)
+  var WINDOW_DIMS={ provenance_fidelity:true, style_quality:true };
+  // ONE state model used everywhere:
   //   green   = gate passing.
-  //   talk    = an actionable blocker exists (count<30, or a correctable quality
-  //             dim like exactness/provenance/fail_closed/native) -> show a prompt.
-  //   healing = the ONLY blockers left are passive (style_quality) -> no phrase
-  //             helps; it self-heals. Never show a "say this" prompt for these.
+  //   talk    = a CORRECTABLE blocker: count<30 (say it more) OR a quality dim you
+  //             fix by HOW you converse (exactness/fail_closed/native/hallucination)
+  //             -> show a prompt + correction guidance. (genuinely undertrained)
+  //   refresh = count>=30 AND the class is otherwise healthy (native high), but its
+  //             window-scored dims (provenance/style) dipped because its recent
+  //             examples aged out of the shared window -> ONE touch re-greens it.
+  //             This is the whack-a-mole case: NOT undertrained, just evicted.
+  var NATIVE_HEALTHY=0.70;  // native_usage at/above this => the muscle works
   function _gateClasses(){
     var L=(SNAP&&(SNAP.language||((SNAP.eval||{}).language)))||{};
     var gs=L.gate_scores_by_class||{}, cbc=L.counts_by_response_class||{}, prom=L.promotion||{};
@@ -327,26 +336,28 @@
       var count=num(cbc[rc])||0;
       var ok=(g.color==='green');
       var gap=Math.max(0,TARGET_COUNT-count);
-      // collect every failing dim, split into actionable vs passive
-      var actionable=null, aGap=-1, passive=null, pGap=-1;
+      var native=num(sc.native_usage_rate); if(native===null) native=0;
+      // split failing dims: window-scored (refresh) vs correctable-by-conversation (talk)
+      var correctable=null, cGap=-1, windowDim=null, wGap=-1;
       DIM_ORDER.forEach(function(dk){
         var v=num(sc[dk]); if(v===null) return; var c=DIM_COACH[dk]; if(!c) return;
         var d=c.g-v; if(d<=0.0001) return;
-        if(PASSIVE_DIMS[dk]){ if(d>pGap){pGap=d; passive={key:dk,val:v,c:c};} }
-        else if(dk!=='sample_count'){ if(d>aGap){aGap=d; actionable={key:dk,val:v,c:c};} }
+        if(WINDOW_DIMS[dk]){ if(d>wGap){wGap=d; windowDim={key:dk,val:v,c:c};} }
+        else if(dk!=='sample_count'){ if(d>cGap){cGap=d; correctable={key:dk,val:v,c:c};} }
       });
-      // determine state + the single blocker we surface
+      // state: green > talk(correctable/counting) > refresh(healthy-but-evicted)
       var state, blocker;
       if(ok){ state='green'; blocker=null; }
-      else if(gap>0){ state='talk'; blocker=actionable; }        // still counting
-      else if(actionable){ state='talk'; blocker=actionable; }   // count met, correctable
-      else if(passive){ state='healing'; blocker=passive; }      // only style left
+      else if(gap>0){ state='talk'; blocker=correctable; }                 // still counting
+      else if(correctable){ state='talk'; blocker=correctable; }           // real quality gap
+      else if(windowDim && native>=NATIVE_HEALTHY){ state='refresh'; blocker=windowDim; } // healthy, aged out
+      else if(windowDim){ state='talk'; blocker=windowDim; }               // low native + window dim => still real
       else { state='talk'; blocker=null; }
       return {rc:rc,count:count,gap:gap,ok:ok,color:g.color||'?',level:p.level||'shadow',
-              scores:sc,state:state,blocker:blocker,passive:passive};
+              native:native,scores:sc,state:state,blocker:blocker};
     }).sort(function(a,b){
-      // talk (actionable) first, then healing, then green; within talk: still-counting first
-      var rank={talk:0,healing:1,green:2};
+      // talk (real work) first, then refresh (quick touch), then green
+      var rank={talk:0,refresh:1,green:2};
       if(rank[a.state]!==rank[b.state]) return rank[a.state]-rank[b.state];
       if((a.gap>0)!==(b.gap>0)) return a.gap>0?-1:1;
       return a.gap-b.gap || (a.count-b.count);
@@ -355,13 +366,13 @@
 
   // The rotating spotlight: cycles ONLY through 'talk' classes (the ones a phrase
   // can actually move). Healing/green classes never appear here — they'd be a lie.
-  function _renderSpotlight(talk, healing){
+  function _renderSpotlight(talk, refresh){
     if(!talk.length){
-      var msg = healing&&healing.length
-        ? ('Nothing to <b>say</b> right now — '+healing.length+' class'+(healing.length===1?'':'es')+' '+(healing.length===1?'is':'are')+' <b style="color:#9fb4d6">self-healing</b> (style_quality refills on its own post-reboot). Just keep normal conversation going; they re-green without specific prompts.')
-        : 'Gates decay as the recent-example window rolls and across restarts. When one needs a phrase, it appears here. The daily upkeep shrinks as JARVIS outgrows the shell.';
+      var msg = refresh&&refresh.length
+        ? (refresh.length+' class'+(refresh.length===1?'':'es')+' just need a <b style="color:#7fb0ff">quick refresh touch</b> — '+(refresh.length===1?'it is':'they are')+' healthy (native voice works) but '+(refresh.length===1?'its':'their')+' recent examples aged out of the shared 25-slot window. <b>Ask each one once</b> (cards below) to re-green; no correction needed.')
+        : 'All classes warm. Gates decay as the shared recent-example window rolls — when one needs a touch, it appears here. Upkeep shrinks as JARVIS outgrows the shell.';
       return '<div style="margin-bottom:9px;padding:11px 13px;border:1px solid var(--green);border-radius:6px;background:rgba(3,20,12,.4)">'+
-        '<div style="color:var(--green);font-weight:700;font-size:12px;margin-bottom:3px">✓ No prompts needed right now</div>'+
+        '<div style="color:var(--green);font-weight:700;font-size:12px;margin-bottom:3px">✓ No correction work needed</div>'+
         '<div style="font-size:10px;color:var(--muted);line-height:1.5">'+msg+'</div></div>';
     }
     var r=talk[spotIdx % talk.length];
@@ -401,7 +412,7 @@
     }
     var rows=_gateClasses();
     var talk=rows.filter(function(r){return r.state==='talk';});
-    var healing=rows.filter(function(r){return r.state==='healing';});
+    var refresh=rows.filter(function(r){return r.state==='refresh';});
     var green=rows.filter(function(r){return r.state==='green';});
     var totalDelta=0;
     var cards=rows.map(function(r){
@@ -409,10 +420,10 @@
       totalDelta+=Math.max(0,delta);
       var deltaBadge=delta>0?(' <span style="color:var(--green)">▲ +'+delta+'</span>'):'';
       var countTxt=(r.count>=TARGET_COUNT?('✓ '+TARGET_COUNT):r.count)+'/'+TARGET_COUNT;
-      // one color per STATE — green / amber(talk) / blue-grey(healing)
-      var col=r.state==='green'?'var(--green)':(r.state==='healing'?'#9fb4d6':(r.color==='red'?'var(--red)':'var(--amber)'));
+      // one color per STATE — green / amber(talk) / blue(refresh)
+      var col=r.state==='green'?'var(--green)':(r.state==='refresh'?'#7fb0ff':(r.color==='red'?'var(--red)':'var(--amber)'));
       var chip=r.state==='green'?'<span class="stchip green">green</span>'
-              :r.state==='healing'?'<span class="stchip healing">self-healing</span>'
+              :r.state==='refresh'?'<span class="stchip refresh">refresh ↻</span>'
               :'<span class="stchip talk">needs you</span>';
       // bar tracks the relevant metric for this state
       var pct = r.state==='green'?100
@@ -420,8 +431,8 @@
               : (b?Math.min(100,(b.val/b.c.g)*100):100);
       var line = r.state==='green'
           ? ('<div style="color:var(--green)">gate satisfied — '+r.count+' examples · '+esc(r.level)+'</div>')
-        : r.state==='healing'
-          ? ('<div style="color:#9fb4d6">self-healing — only <b>'+esc(b.key)+'</b> '+b.val.toFixed(2)+' / '+b.c.g.toFixed(2)+' left; refills on its own (no phrase needed)</div>')
+        : r.state==='refresh'
+          ? ('<div style="color:#7fb0ff">healthy (native '+(r.native*100).toFixed(0)+'%) — just aged out of the shared window. <b>Ask it once</b> to re-green; '+esc(b.key)+' '+b.val.toFixed(2)+'/'+b.c.g.toFixed(2)+'</div>')
         : r.gap>0
           ? ('<div>Say it <b style="color:var(--amber)">'+r.gap+'</b> more time'+(r.gap===1?'':'s')+(b?(' <span style="color:var(--dim)">· then '+esc(b.key)+'</span>'):'')+'</div>')
           : ('<div>✓ count met — <b style="color:'+col+'">correct</b> its <b style="color:'+col+'">'+esc(b?b.key:'answers')+'</b> '+(b?(b.val.toFixed(2)+' / '+b.c.g.toFixed(2)):'')+' <span style="color:var(--dim)">(don’t just repeat)</span></div>');
@@ -435,13 +446,13 @@
     }).join('');
     var summary='<div style="margin-bottom:9px;padding:8px 11px;border:1px solid '+(totalDelta>0?'var(--green)':'var(--line)')+';border-radius:5px;background:rgba(3,8,14,.45);font-size:11px">'+
       '<b style="color:'+(green.length===rows.length?'var(--green)':'var(--text)')+'">'+green.length+'/'+rows.length+'</b> green'+
-      (talk.length?(' &nbsp;·&nbsp; <b style="color:var(--amber)">'+talk.length+'</b> need you (say a prompt)'):'')+
-      (healing.length?(' &nbsp;·&nbsp; <b style="color:#9fb4d6">'+healing.length+'</b> self-healing'):'')+
+      (talk.length?(' &nbsp;·&nbsp; <b style="color:var(--amber)">'+talk.length+'</b> need you (correction/count)'):'')+
+      (refresh.length?(' &nbsp;·&nbsp; <b style="color:#7fb0ff">'+refresh.length+'</b> need a quick touch ↻'):'')+
       (totalDelta>0?(' &nbsp;·&nbsp; <span style="color:var(--green)">▲ +'+totalDelta+' this session</span>'):'')+
       '</div>';
-    box.innerHTML=_renderSpotlight(talk,healing)+summary+cards;
-    gapEl.textContent=talk.length?(talk.length+' to say · '+green.length+'/'+rows.length+' green'):(healing.length?(healing.length+' self-healing · '+green.length+'/'+rows.length+' green'):('✓ '+rows.length+'/'+rows.length+' green'));
-    gapEl.style.cssText=talk.length?'border-color:var(--amber);color:var(--amber)':'border-color:var(--green);color:var(--green)';
+    box.innerHTML=_renderSpotlight(talk,refresh)+summary+cards;
+    gapEl.textContent=talk.length?(talk.length+' to train · '+green.length+'/'+rows.length+' green'):(refresh.length?(refresh.length+' to refresh ↻ · '+green.length+'/'+rows.length+' green'):('✓ '+rows.length+'/'+rows.length+' green'));
+    gapEl.style.cssText=talk.length?'border-color:var(--amber);color:var(--amber)':(refresh.length?'border-color:#7fb0ff;color:#7fb0ff':'border-color:var(--green);color:var(--green)');
   }
 
   function renderRecovery(){
