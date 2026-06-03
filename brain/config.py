@@ -158,9 +158,22 @@ class WakeWordConfig(BaseModel):
     speaking_threshold_mult: float = 2.0
     speaking_hits_required: int = 3
     cooldown_s: float = 2.0
-    silence_duration_s: float = 2.0
+    # Endpointing: how long a pause must last before we treat speech as ended.
+    # 2.0s felt like robot turn-taking (a long dead pause after every sentence);
+    # 0.8s makes the back-and-forth feel conversational without clipping speech.
+    silence_duration_s: float = 0.8
     max_record_s: float = 30.0
     follow_up_timeout_s: float = 4.0
+    # --- Conversational barge-in (interrupt JARVIS mid-speech) ---
+    # When True, sustained USER SPEECH ENERGY during playback interrupts JARVIS
+    # and disregards the in-flight reply — no wake word required ("just talk over
+    # it" / a stop-word). Conservative energy gate + consecutive-hits avoids
+    # self-interrupt from JARVIS's own voice tail (mic + speaker are separate USB
+    # devices on this rig, so acoustic coupling is low). The wake-word barge-in
+    # path still works too.
+    barge_in_on_speech: bool = True
+    barge_in_energy_rms: float = 900.0     # int16 RMS floor for "user is talking"
+    barge_in_hits_required: int = 4        # ~consecutive frames above floor (~0.3s)
 
 
 class EmotionConfig(BaseModel):
