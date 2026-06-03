@@ -3058,6 +3058,26 @@ async def handle_transcription(
     if routing.tool != ToolType.NONE:
         ops_tracker.set_subsystem("reasoning", "processing", f"tool: {routing.tool.value}")
 
+    # Tell the capability gate which route this turn is on so it can exempt
+    # GROUNDED SELF-KNOWLEDGE answers (status / memory / introspection / identity)
+    # from capability-claim rewriting. Without this the gate treated "here's what
+    # I remember about David" like an external capability claim and spliced in
+    # "I don't have that capability yet", logging the whole turn as a
+    # negative_example (208 such rewrites observed live). The blocked-verb floor
+    # (I can sing / fly / book) still applies on every route — see _evaluate_claim.
+    try:
+        from skills.capability_gate import capability_gate as _route_gate
+        _STRICT_ROUTE_HINT = {
+            ToolType.STATUS: "status",
+            ToolType.SYSTEM_STATUS: "status",
+            ToolType.MEMORY: "memory",
+            ToolType.INTROSPECTION: "introspection",
+            ToolType.IDENTITY: "identity",
+        }
+        _route_gate.set_route_hint(_STRICT_ROUTE_HINT.get(routing.tool))
+    except Exception:
+        logger.debug("capability_gate route-hint set failed", exc_info=True)
+
     if not _is_golden_route:
         try:
             from goals.signal_producers import detect_conversation_goal, record_observe_outcome

@@ -458,6 +458,27 @@ _BLOCKED_VERB_RE = re.compile(
     ) + r')\b',
 )
 
+# Routes whose answers are GROUNDED SELF-KNOWLEDGE (the system reporting on its
+# own measured state / stored memories), not external-capability claims.
+_STRICT_SELF_KNOWLEDGE_ROUTES: frozenset[str] = frozenset({
+    "status", "introspection", "memory", "identity",
+})
+
+# Self-knowledge verbs: epistemic / state-reporting actions the system performs
+# ON ITSELF (recall, store, recognize, monitor). These describe internal state,
+# not an external action capability. The strict-route exemption fires ONLY when
+# the flagged claim is built around one of these — so "I remember X" passes but
+# "I can book you a flight" / "I will fly the drone" are NOT spared (they are
+# action capabilities that happen to occur on a self-knowledge route).
+_SELF_KNOWLEDGE_CLAIM_RE = re.compile(
+    r'\b(?:remember|recall|recollect|know|knew|store|stored|storing|retain|'
+    r'retrieve|recogni[sz]e|identif(?:y|ied)|track|monitor|observ|sense|'
+    r'detect(?:ed)?|measur|report|introspect|reflect|am aware|aware of|'
+    r'have (?:a |the )?(?:memor|record|profile|note)|my (?:memor|status|state|'
+    r'name|identity|architecture|configuration))\b',
+    re.IGNORECASE,
+)
+
 _FIRST_PERSON_RE = re.compile(r'\b(?:I|me|my|myself|we|us|our|ourselves)\b', re.I)
 _SELF_NAME_RE = re.compile(r'\b(?:jarvis)\b', re.I)
 _SELF_REFERENCE_RE = re.compile(
@@ -994,7 +1015,7 @@ class CapabilityGate:
             "has_reflective_exclusion": bool(_REFLECTIVE_EXCLUSION_RE.search(c_lower)),
             "has_verified_skill_context": False,
             "route_is_none": self._route_hint == "none",
-            "route_is_strict": self._route_hint in ("status", "introspection"),
+            "route_is_strict": self._route_hint in _STRICT_SELF_KNOWLEDGE_ROUTES,
             "status_mode": self._status_mode,
             "registry_verified": registry_status == "verified",
             "registry_learning": registry_status == "learning",
@@ -1193,6 +1214,26 @@ class CapabilityGate:
         if self._is_grounded_observation(claimed, modified):
             self._claims_grounded += 1
             self._record_claim_signal(claimed, "grounded", is_readiness_frame=rf, pattern_index=pi)
+            return modified
+
+        # Layer 1.1: strict self-knowledge route exemption.
+        # On status/memory/introspection/identity routes, a claim built around a
+        # SELF-KNOWLEDGE verb ("I remember X", "I store memories in...", "my
+        # current status is Y") is the system reporting its own state, NOT an
+        # external capability — exempt it so the gate stops splicing "I don't
+        # have that capability yet" into grounded self-report. Guarded THREE ways
+        # so action capabilities can never slip through on these routes:
+        #   1. route must be a strict self-knowledge route, AND
+        #   2. the claim must contain a self-knowledge verb (remember/store/...), AND
+        #   3. the claim must NOT contain a blocked capability verb (sing/fly/...).
+        # "I can book you a flight" has no self-knowledge verb -> not exempted.
+        if (self._route_hint in _STRICT_SELF_KNOWLEDGE_ROUTES
+                and _SELF_KNOWLEDGE_CLAIM_RE.search(claimed)
+                and not _contains_blocked_capability(claimed)):
+            self._claims_passed += 1
+            self._recent_passed.append(f"[self-knowledge:{self._route_hint}] {claimed}")
+            self._record_claim_signal(claimed, "self-knowledge-route",
+                                      is_readiness_frame=rf, pattern_index=pi)
             return modified
 
         # Layer 1.5: user-preference alignment acknowledgements
