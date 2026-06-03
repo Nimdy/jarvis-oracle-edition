@@ -241,9 +241,51 @@ class LanguagePromotionGovernor:
                     transition_type="promotion",
                 )
 
+    def _is_healthy_but_evicted(self, state: ClassPromotionState) -> bool:
+        """A promoted class is red ONLY because its recent examples aged out of
+        the shared ~25-example window, NOT because its quality dropped.
+
+        All 7 response classes share one recent-example window, so heavily
+        training one class evicts another's evidence; the neglected class then
+        scores its window-based provenance against the corpus average and reads
+        red — even though its native articulator still works perfectly. Demoting
+        such a class (undoing earned canary/live rank) punishes depth of training
+        and is not an honest quality signal.
+
+        Signature of healthy-but-evicted:
+          - native voice still works    (native_usage_rate >= NATIVE_USAGE_GREEN)
+          - enough lived examples       (sample_count not deficient)
+          - the red is provenance-only  (no hallucination / quality failure)
+        A genuine quality drop (low native, hallucination, too few samples) is
+        NOT shielded and still rolls back.
+        """
+        from jarvis_eval.language_scorers import NATIVE_USAGE_GREEN
+        sc = state.last_scores or {}
+        native = sc.get("native_usage_rate")
+        samples = sc.get("sample_count")
+        if native is None or native < NATIVE_USAGE_GREEN:
+            return False
+        if samples is not None and samples < 1.0:
+            return False
+        # window-eviction shows up as the provenance_low reason; a real quality
+        # problem surfaces as insufficient_samples / hallucination_ceiling.
+        return state.last_gate_reason == "provenance_low"
+
     def _maybe_rollback(self, state: ClassPromotionState, now: float) -> None:
         if state.consecutive_red >= ROLLBACK_THRESHOLD:
             if state.level != "shadow":
+                # Shield earned rank from shared-window eviction: a healthy class
+                # (native voice works, just aged out of the window) keeps its
+                # level instead of being demoted for training something else.
+                if self._is_healthy_but_evicted(state):
+                    logger.info(
+                        "Language gate rollback SUPPRESSED: %s %s held "
+                        "(red_streak=%d but healthy-evicted: native_usage ok, "
+                        "reason=%s — recent examples aged out of shared window)",
+                        state.response_class, state.level,
+                        state.consecutive_red, state.last_gate_reason,
+                    )
+                    return
                 old_level = state.level
                 rollback_reason = (
                     f"red_streak={state.consecutive_red} "
