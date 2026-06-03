@@ -910,9 +910,15 @@ def _to_speakable_memory_sentence(preview: str, max_chars: int = 170) -> str:
     return text
 
 
-def _format_personal_activity_memory_reply(memory_ctx: str, max_items: int = 2) -> str:
+def _format_personal_activity_memory_reply(
+    memory_ctx: str,
+    max_items: int = 2,
+    *,
+    lead: str = "Here's what I remember from that time.",
+    empty_msg: str = "I couldn't find matching memories for that time window.",
+) -> str:
     if not memory_ctx.strip():
-        return "I couldn't find matching memories for that time window."
+        return empty_msg
 
     total = 0
     header = re.search(r"Found\s+(\d+)\s+relevant memory\(ies\)", memory_ctx, re.IGNORECASE)
@@ -956,7 +962,7 @@ def _format_personal_activity_memory_reply(memory_ctx: str, max_items: int = 2) 
         return _format_grounded_fallback("Memory recall", memory_ctx, max_lines=8, max_chars=560)
 
     total = total or len(ranked_items)
-    parts = ["Here's what I remember from that time."]
+    parts = [lead]
     parts.extend(selected)
     if total > len(selected):
         parts.append("I can pull more details if you want.")
@@ -3288,6 +3294,31 @@ async def handle_transcription(
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                 print(f"  [Brain] Memory deterministic recall reply ({len(reply)} chars)")
+            elif (
+                memory_mode == "search"
+                and memory_ctx
+                and not memory_ctx.lower().startswith("no memories found")
+            ):
+                # General-topic recall ("what do you remember about X") — the
+                # search already ran through the gated, provenance-boosted,
+                # ranker-reranked pipeline (memory.search), so render the result
+                # DETERMINISTICALLY instead of letting the LLM narrate over it.
+                # This is the native arm that was missing: it makes memory_recall
+                # fail-closed (no fabrication beyond retrieved memories) and lets
+                # the class earn native_usage / exactness / fail_closed credit.
+                _memory_native_used = True
+                _memory_provenance = "grounded_memory_context_native"
+                _memory_confidence = 0.9
+                _memory_safety_flags.append("deterministic_grounded_recall")
+                reply = _format_personal_activity_memory_reply(
+                    memory_ctx,
+                    max_items=3,
+                    lead="Here's what I remember about that.",
+                    empty_msg="I don't have any memories matching that.",
+                )
+                await _broadcast_chunk_sync(reply, tone)
+                _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                print(f"  [Brain] Memory deterministic grounded recall reply ({len(reply)} chars)")
             elif not ollama:
                 reply = _format_grounded_fallback("Memory recall", memory_ctx or "No memory data available.")
                 await _broadcast_chunk_sync(reply, tone)
