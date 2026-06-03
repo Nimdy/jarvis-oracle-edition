@@ -3878,6 +3878,41 @@ def _create_app() -> FastAPI:
             "live_overlay": live,
         }
 
+    @app.get("/api/playbook")
+    async def api_playbook():
+        """Raw companion-training playbook markdown (read-only).
+
+        Lets the training dashboard deep-link to the Manual Gate Work Tracker
+        so the live coach and the written playbook stay one source of truth.
+        Returns the raw markdown plus mtime so the page can render/anchor it.
+        """
+        repo_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..")
+        )
+        path = os.path.join(repo_root, "docs", "COMPANION_TRAINING_PLAYBOOK.md")
+        if not os.path.exists(path):
+            return {
+                "source": "docs/COMPANION_TRAINING_PLAYBOOK.md",
+                "exists": False,
+                "markdown": "",
+            }
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read()
+            st = os.stat(path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": type(exc).__name__, "detail": str(exc)},
+                status_code=500,
+            )
+        return {
+            "source": "docs/COMPANION_TRAINING_PLAYBOOK.md",
+            "exists": True,
+            "mtime": st.st_mtime,
+            "size": st.st_size,
+            "markdown": text,
+        }
+
     @app.get("/maturity", response_class=HTMLResponse)
     async def serve_maturity_page():
         path = os.path.join(
