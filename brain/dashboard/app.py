@@ -1776,6 +1776,79 @@ def _create_app() -> FastAPI:
             for m in memories
         ]
 
+    @app.get("/api/memories/search")
+    async def api_memory_search(q: str = "", tag: str = "", type: str = "",
+                                limit: int = 20):
+        """Search/filter memories by keyword, tag, or type.
+
+        Declared BEFORE /api/memories/{memory_id} so FastAPI matches the literal
+        /search path instead of capturing "search" as a memory id (the bug that
+        kept this endpoint permanently shadowed -> always 404).
+
+        For a text query this uses the real semantic-retrieval pipeline
+        (``memory.search.semantic_search``: vector search -> identity pre-filter
+        -> learned ranker rerank, provenance-boosted, through the MemoryGate)
+        rather than a recent-200 substring scan. The old implementation only
+        looked at the 200 newest memories and matched a raw substring, so most of
+        a 1000+ memory corpus was invisible and the epistemic ranking/provenance
+        layer was bypassed entirely.
+
+        Tag/type-only filtering (no ``q``) scans the corpus directly, since those
+        are structured-field filters, not meaning queries.
+        """
+        if not _engine:
+            return []
+
+        def _shape(m, score=None):
+            payload_str = m.payload if isinstance(m.payload, str) else str(m.payload)
+            row = {
+                "id": m.id,
+                "type": m.type,
+                "payload": payload_str[:300],
+                "weight": round(getattr(m, "weight", 0.0) or 0.0, 3),
+                "tags": list(getattr(m, "tags", []) or []),
+                "timestamp": getattr(m, "timestamp", None),
+            }
+            if score is not None:
+                row["relevance"] = round(float(score), 3)
+            return row
+
+        results: list[dict[str, Any]] = []
+        if q:
+            # Meaning query -> full gated/ranked retrieval pipeline.
+            try:
+                from memory.search import semantic_search
+                hits = semantic_search(q, top_k=max(limit, 20))
+                for m in hits:
+                    if tag and tag not in (getattr(m, "tags", []) or []):
+                        continue
+                    if type and m.type != type:
+                        continue
+                    results.append(_shape(m, getattr(m, "weight", None)))
+                    if len(results) >= limit:
+                        break
+            except Exception:
+                logger.exception("semantic memory search failed; falling back to recent scan")
+                results = []
+
+        if not results:
+            # No query (tag/type browse) or semantic path unavailable:
+            # structured scan over the full corpus via the storage singleton.
+            from memory.storage import memory_storage
+            corpus = memory_storage.get_all() if not q else memory_storage.get_recent(200)
+            for m in corpus:
+                if tag and tag not in (getattr(m, "tags", []) or []):
+                    continue
+                if type and m.type != type:
+                    continue
+                payload_str = m.payload if isinstance(m.payload, str) else str(m.payload)
+                if q and q.lower() not in payload_str.lower():
+                    continue
+                results.append(_shape(m))
+                if len(results) >= limit:
+                    break
+        return results
+
     @app.get("/api/memories/{memory_id}")
     async def api_memory_detail(memory_id: str):
         if not _engine:
@@ -2477,74 +2550,11 @@ def _create_app() -> FastAPI:
 
     # -- memory browser ------------------------------------------------------
 
-    @app.get("/api/memories/search")
-    async def api_memory_search(q: str = "", tag: str = "", type: str = "",
-                                limit: int = 20):
-        """Search/filter memories by keyword, tag, or type.
-
-        For a text query this uses the real semantic-retrieval pipeline
-        (``memory.search.semantic_search``: vector search -> identity
-        pre-filter -> learned ranker rerank, provenance-boosted, through
-        the MemoryGate) rather than a recent-200 substring scan. The old
-        implementation only looked at the 200 newest memories and matched a
-        raw substring, so most of a 1000+ memory corpus was invisible and
-        the epistemic ranking/provenance layer was bypassed entirely.
-
-        Tag/type-only filtering (no ``q``) still scans the corpus directly,
-        since those are structured-field filters, not meaning queries.
-        """
-        if not _engine:
-            return []
-
-        def _shape(m, score=None):
-            payload_str = m.payload if isinstance(m.payload, str) else str(m.payload)
-            row = {
-                "id": m.id,
-                "type": m.type,
-                "payload": payload_str[:300],
-                "weight": round(getattr(m, "weight", 0.0) or 0.0, 3),
-                "tags": list(getattr(m, "tags", []) or []),
-                "timestamp": getattr(m, "timestamp", None),
-            }
-            if score is not None:
-                row["relevance"] = round(float(score), 3)
-            return row
-
-        results: list[dict[str, Any]] = []
-        if q:
-            # Meaning query -> full gated/ranked retrieval pipeline.
-            try:
-                from memory.search import semantic_search
-                hits = semantic_search(q, top_k=max(limit, 20))
-                for m in hits:
-                    if tag and tag not in (getattr(m, "tags", []) or []):
-                        continue
-                    if type and m.type != type:
-                        continue
-                    results.append(_shape(m, getattr(m, "weight", None)))
-                    if len(results) >= limit:
-                        break
-            except Exception:
-                logger.exception("semantic memory search failed; falling back to recent scan")
-                results = []
-
-        if not results:
-            # No query (tag/type browse) or semantic path unavailable:
-            # structured scan over the full corpus via the storage singleton.
-            from memory.storage import memory_storage
-            corpus = memory_storage.get_all() if not q else memory_storage.get_recent(200)
-            for m in corpus:
-                if tag and tag not in (getattr(m, "tags", []) or []):
-                    continue
-                if type and m.type != type:
-                    continue
-                payload_str = m.payload if isinstance(m.payload, str) else str(m.payload)
-                if q and q.lower() not in payload_str.lower():
-                    continue
-                results.append(_shape(m))
-                if len(results) >= limit:
-                    break
-        return results
+    # NOTE: /api/memories/search is declared ABOVE /api/memories/{memory_id}
+    # (search the file upward). FastAPI matches routes in declaration order, so a
+    # literal path like /search MUST precede the /{memory_id} catch-all or it gets
+    # captured as memory_id="search" and 404s. This was the real reason memory
+    # search never worked.
 
     # -- library ingest ------------------------------------------------------
 
