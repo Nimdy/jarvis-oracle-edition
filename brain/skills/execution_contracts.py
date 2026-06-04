@@ -102,7 +102,27 @@ _WEB_SCRAPING_CONTRACT = SkillExecutionContract(
     smoke_test_name="test:scraper_returns_structured_data",
     requires_sandbox=True,
     acquisition_eligible=True,
-    smoke_fixtures=(),
+    # Two deterministic fixtures. The success case proves the scraper actually
+    # fetches + parses real HTML (example.com is IANA-reserved and stable, with a
+    # fixed <title>Example Domain</title>); asserting that title + status 200 is a
+    # real operational proof, not theater. The error case proves it returns
+    # structured data on failure (port 1 on localhost always refuses — no DNS, no
+    # external network, deterministic in any environment). Subset match: only the
+    # stable invariants are asserted; content_summary/url are left unchecked.
+    smoke_fixtures=(
+        SkillSmokeFixture(
+            name="scrape_example_domain_title",
+            input_type="url",
+            input="https://example.com",
+            expected={"title": "Example Domain", "status_code": 200},
+        ),
+        SkillSmokeFixture(
+            name="connection_error_structured",
+            input_type="url",
+            input="http://127.0.0.1:1/",
+            expected={"title": "", "status_code": 500},
+        ),
+    ),
 )
 
 _API_INTEGRATION_CONTRACT = SkillExecutionContract(
