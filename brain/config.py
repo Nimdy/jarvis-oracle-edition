@@ -159,9 +159,11 @@ class WakeWordConfig(BaseModel):
     speaking_hits_required: int = 3
     cooldown_s: float = 2.0
     # Endpointing: how long a pause must last before we treat speech as ended.
-    # 2.0s felt like robot turn-taking (a long dead pause after every sentence);
-    # 0.8s makes the back-and-forth feel conversational without clipping speech.
-    silence_duration_s: float = 0.8
+    # 2.0s felt like robot turn-taking; 0.8s was TOO aggressive — it cut David off
+    # mid-sentence on a normal thinking/breathing pause. 1.5s is the sweet spot:
+    # natural pauses don't clip you, but it's still snappier than the old 2.0s.
+    # (Real fix for true fluidity is Tier 2 streaming ASR, not just this timeout.)
+    silence_duration_s: float = 1.5
     max_record_s: float = 30.0
     follow_up_timeout_s: float = 4.0
     # --- Conversational barge-in (interrupt JARVIS mid-speech) ---
