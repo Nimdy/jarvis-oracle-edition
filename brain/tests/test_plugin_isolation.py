@@ -736,3 +736,72 @@ class TestAuditTrail:
             assert resp.audit_entry.get("execution_mode") == "in_process"
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+class TestExecutionModeElection:
+    """Acquisition codegen must elect isolated_subprocess (own venv) when the
+    generated plugin imports anything beyond the in-process stdlib-safe allowlist,
+    instead of defaulting to in_process and failing the import gate. Mirrors
+    PluginRegistry._check_imports so the election never drifts from the gate."""
+
+    @staticmethod
+    def _elect(code_files, plan=None):
+        from acquisition.orchestrator import AcquisitionOrchestrator
+        return AcquisitionOrchestrator._elect_execution_mode(code_files, plan)
+
+    def test_stdlib_safe_only_stays_in_process(self):
+        mode, allowed, pinned = self._elect(
+            {"handler.py": "import json\nimport re\nimport datetime\ndef run(p): return {}\n"}
+        )
+        assert mode == "in_process"
+        assert allowed == [] and pinned == []
+
+    def test_urllib_network_elects_isolation(self):
+        # The web_scraping_v1 regression: coder used stdlib urllib.request/error
+        # (network egress, not on the in_process safe-list). Must isolate, declare
+        # urllib, and need no pip pin (urllib is stdlib).
+        mode, allowed, pinned = self._elect(
+            {"handler.py": (
+                "from urllib.request import urlopen\n"
+                "from urllib.error import URLError\n"
+                "from html.parser import HTMLParser\n"
+                "import json\ndef run(p): return {}\n"
+            )}
+        )
+        assert mode == "isolated_subprocess"
+        assert allowed == ["urllib"]
+        assert pinned == []  # stdlib -> no install
+
+    def test_external_dep_resolves_pin_from_plan(self):
+        # feedparser is external (not stdlib) and not in any in_process tier.
+        import types
+        plan = types.SimpleNamespace(dependencies=["feedparser==6.0.11"])
+        mode, allowed, pinned = self._elect(
+            {"handler.py": "import feedparser\nimport json\ndef run(p): return {}\n"}, plan
+        )
+        assert mode == "isolated_subprocess"
+        assert allowed == ["feedparser"]
+        assert pinned == ["feedparser==6.0.11"]
+
+    def test_tier1_lib_stays_in_process(self):
+        # requests/bs4 are TIER1 — allowed in_process by the gate, so the election
+        # mirrors that (no isolation forced here; tightening TIER1-network libs to
+        # require isolation is a separate data-flow-firewall design decision).
+        mode, _allowed, _pinned = self._elect(
+            {"handler.py": "import requests\ndef run(p): return {}\n"}
+        )
+        assert mode == "in_process"
+
+    def test_forbidden_import_not_smuggled_into_isolation(self):
+        # socket is NEVER_ALLOWED. We must NOT declare it / isolate to slip it past
+        # the wall — it stays unlisted so quarantine still rejects it.
+        mode, allowed, _pinned = self._elect(
+            {"handler.py": "import socket\nimport json\ndef run(p): return {}\n"}
+        )
+        assert "socket" not in allowed
+
+    def test_relative_imports_stay_in_process(self):
+        mode, allowed, _pinned = self._elect(
+            {"__init__.py": "from .handler import run\nimport json\n"}
+        )
+        assert mode == "in_process"

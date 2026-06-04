@@ -13,11 +13,13 @@ Sacred guardrails:
 
 from __future__ import annotations
 
+import ast
 import concurrent.futures
 import hashlib
 import json
 import logging
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -1432,6 +1434,79 @@ class AcquisitionOrchestrator:
 
         return patterns[:8]
 
+    @staticmethod
+    def _elect_execution_mode(
+        code_files: dict[str, str], plan: AcquisitionPlan | None,
+    ) -> tuple[str, list[str], list[str]]:
+        """Decide in_process vs isolated_subprocess from the generated code's imports.
+
+        A plugin that imports only the in-process stdlib-safe allowlist runs
+        ``in_process`` (fast, no venv). Any import beyond that set — external
+        packages OR stdlib modules not on the in-process safe-list (e.g.
+        ``urllib.request`` for network egress) — runs in an ``isolated_subprocess``
+        with its own venv and no brain on ``PYTHONPATH``, with those imports
+        DECLARED in the manifest. This uses the existing isolation machinery
+        instead of widening the in-process allowlist (a safety boundary), and
+        keeps network-capable code out of the brain's own interpreter.
+
+        Mirrors ``PluginRegistry._check_imports`` top-level matching so the
+        election never drifts from the gate that will validate it. NEVER_ALLOWED
+        imports are left unlisted so the gate still rejects them — we never
+        isolate to smuggle a forbidden import past the wall.
+
+        Returns ``(execution_mode, allowed_imports, pinned_dependencies)``.
+        """
+        import sys as _sys
+        from tools.plugin_registry import (
+            ALWAYS_ALLOWED_IMPORTS, TIER1_IMPORTS, TIER2_IMPORTS,
+            NEVER_ALLOWED_IMPORTS,
+        )
+        in_process_safe = ALWAYS_ALLOWED_IMPORTS | TIER1_IMPORTS | TIER2_IMPORTS
+
+        top_level: set[str] = set()
+        for filename, src in code_files.items():
+            if not filename.endswith(".py"):
+                continue
+            try:
+                tree = ast.parse(src)
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        top_level.add(alias.name.split(".")[0])
+                elif isinstance(node, ast.ImportFrom):
+                    if node.level and node.level > 0:
+                        continue  # relative import — always allowed
+                    if node.module:
+                        top_level.add(node.module.split(".")[0])
+
+        undeclared = sorted(
+            m for m in top_level
+            if m and m not in in_process_safe and m not in NEVER_ALLOWED_IMPORTS
+        )
+        if not undeclared:
+            return "in_process", [], []
+
+        # External (pip) deps need an exact pin; resolve from the plan where given.
+        plan_pins: dict[str, str] = {}
+        for dep in (getattr(plan, "dependencies", None) or []):
+            if isinstance(dep, str) and "==" in dep:
+                name = dep.split("==")[0].strip().split(".")[0].lower()
+                plan_pins[name] = dep.strip()
+
+        pinned: list[str] = []
+        for m in undeclared:
+            if m in _sys.stdlib_module_names:
+                continue  # stdlib: already in the venv, no pip install needed
+            pin = plan_pins.get(m.lower())
+            if pin:
+                pinned.append(pin)
+            # else: external dep with no resolvable pin — declared as an allowed
+            # import so the gate permits it, but left unpinned (venv install is a
+            # known follow-up). The caller logs this case.
+        return "isolated_subprocess", undeclared, pinned
+
     def _build_code_bundle(
         self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan, result: dict,
     ) -> PluginCodeBundle | None:
@@ -1485,6 +1560,22 @@ class AcquisitionOrchestrator:
             plugin_name = f"{plugin_name}_{job.acquisition_id[-6:]}"
         intent_patterns = self._derive_intent_patterns(job, plan, code_files)
 
+        execution_mode, allowed_imports, pinned_dependencies = self._elect_execution_mode(
+            code_files, plan,
+        )
+        if execution_mode == "isolated_subprocess":
+            _pinned_names = {p.split("==")[0].strip().lower() for p in pinned_dependencies}
+            external_unpinned = [
+                m for m in allowed_imports
+                if m not in sys.stdlib_module_names and m.lower() not in _pinned_names
+            ]
+            logger.info(
+                "Acquisition %s: electing isolated_subprocess (own venv) — imports "
+                "beyond in_process safe-set declared=%s pinned=%s%s",
+                job.acquisition_id, allowed_imports, pinned_dependencies,
+                (f" UNPINNED_EXTERNAL={external_unpinned}" if external_unpinned else ""),
+            )
+
         from tools.plugin_registry import PluginManifest
         manifest = PluginManifest(
             name=plugin_name,
@@ -1493,6 +1584,9 @@ class AcquisitionOrchestrator:
             risk_tier=job.risk_tier,
             supervision_mode="shadow",
             intent_patterns=intent_patterns,
+            execution_mode=execution_mode,
+            allowed_imports=allowed_imports,
+            pinned_dependencies=pinned_dependencies,
         )
 
         bundle = PluginCodeBundle(
