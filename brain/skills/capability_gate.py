@@ -1033,19 +1033,27 @@ class CapabilityGate:
             label, label_meta = ClaimClassifierEncoder.encode_label(tag_clean)
 
             from hemisphere.distillation import distillation_collector
+            # record() signature is (teacher, signal_type, data, metadata, origin, fidelity).
+            # teacher names MUST match the claim_classifier spec in hemisphere/types.py:
+            #   feature_source="claim_features", teacher (label)="claim_verdict".
+            # The prior call omitted the required `teacher` arg and used a non-existent
+            # `source=` kwarg, so every record() raised TypeError and was swallowed below —
+            # claim_classifier never received a single signal. (fixed 2026-06-04)
             distillation_collector.record(
+                teacher="claim_features",
                 signal_type="claim_features",
                 data=features,
-                source="capability_gate",
-                fidelity=1.0,
                 metadata={"claim_id": claim_id},
+                origin="capability_gate",
+                fidelity=1.0,
             )
             distillation_collector.record(
+                teacher="claim_verdict",
                 signal_type="claim_verdict",
                 data=label,
-                source="capability_gate",
-                fidelity=1.0,
                 metadata={"claim_id": claim_id, **label_meta},
+                origin="capability_gate",
+                fidelity=1.0,
             )
         except Exception:
             logger.debug("Claim classifier signal recording failed", exc_info=True)
