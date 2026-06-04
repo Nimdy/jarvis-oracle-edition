@@ -1225,10 +1225,19 @@ class AcquisitionOrchestrator:
         if repair_feedback:
             prompt += self._format_repair_feedback(repair_feedback)
         prompt += (
+            "## Input Contract (MANDATORY — read exactly)\n"
+            "- Your `run(args)` callable receives a SINGLE dict. The user's input string is\n"
+            "  provided under THREE identical keys: `args['text']`, `args['input']`, and\n"
+            "  `args['request']`. Read it as: `user_input = args.get('text') or args.get('input') or args.get('request') or ''`.\n"
+            "- Do NOT invent other input keys (e.g. `user_text`, `query`, `url`) — they will be\n"
+            "  EMPTY and your plugin will fail every fixture with a 'missing input' error.\n"
+            "- Return a JSON-serializable dict whose fields exactly match the contract fixture's\n"
+            "  `expected` keys (e.g. for web scraping: `title`, `status_code`).\n"
             "## Validation Requirements\n"
-            "- The plugin must parse the fixture input shape and return JSON-serializable structured data.\n"
+            "- The plugin must parse the input shape above and return JSON-serializable structured data.\n"
             "- For CSV totals, return numeric sums as numbers, not prose.\n"
-            "- Do not write files, spawn processes, access credentials, or create network side effects.\n"
+            "- Do not write files, spawn processes, or access credentials. Network requests ARE\n"
+            "  permitted when the contract requires them (e.g. web scraping fetches a URL).\n"
             "- The code must be deterministic and stdlib-only unless dependencies were explicitly approved.\n"
         )
         system_prompt = (
@@ -1283,9 +1292,12 @@ class AcquisitionOrchestrator:
             for m in errors:
                 if isinstance(m, dict) and "expected" in m:
                     lines.append(
-                        f"- Fixture '{m.get('fixture')}': for input the contract expected "
-                        f"output containing {json.dumps(m.get('expected'))}, but your plugin "
-                        f"returned {json.dumps(m.get('actual'))}. Make the returned fields match.\n"
+                        f"- Fixture '{m.get('fixture')}': you were called as "
+                        f"run({{'text': {json.dumps(m.get('input'))}, 'input': {json.dumps(m.get('input'))}, "
+                        f"'request': {json.dumps(m.get('input'))}}}). The contract expected output "
+                        f"containing {json.dumps(m.get('expected'))}, but your plugin returned "
+                        f"{json.dumps(m.get('actual'))}. Read the input from args['text'] and make the "
+                        f"returned fields match the expected ones.\n"
                     )
                 else:
                     lines.append(f"- {json.dumps(m)}\n")
@@ -1354,8 +1366,10 @@ class AcquisitionOrchestrator:
             if passed or status in ("error", "missing_handler", "handler_import_unavailable", "missing_run_callable"):
                 return True, []  # pass, or harness/infra issue — don't repair on these
             results = shim.risk_assessment.get("skill_contract_results", []) or []
+            fixture_inputs = {f.name: f.input for f in contract.smoke_fixtures}
             mismatches = [
-                {"fixture": r.get("name"), "expected": r.get("expected"), "actual": r.get("actual")}
+                {"fixture": r.get("name"), "input": fixture_inputs.get(r.get("name")),
+                 "expected": r.get("expected"), "actual": r.get("actual")}
                 for r in results if not r.get("passed")
             ]
             return False, (mismatches or [{"status": status}])
@@ -1386,6 +1400,7 @@ class AcquisitionOrchestrator:
             repair_feedback: dict[str, Any] | None = None
             repair_log: list[dict[str, Any]] = []
 
+            last_bundle: PluginCodeBundle | None = None
             for attempt in range(1, self._MAX_CODEGEN_REPAIR_ATTEMPTS + 1):
                 result = self._codegen_generate_once(job, plan, codegen_service, repair_feedback)
 
@@ -1401,6 +1416,7 @@ class AcquisitionOrchestrator:
                     repair_log.append({"attempt": attempt, "stage": "bundle", "passed": False})
                     continue
 
+                last_bundle = bundle  # keep the most recent compilable candidate
                 ok, mismatches = self._run_contract_smoke_for_repair(job, bundle)
                 if ok:
                     self._store.save_code_bundle(bundle)
@@ -1420,13 +1436,37 @@ class AcquisitionOrchestrator:
                 repair_feedback = {"stage": "contract_smoke", "errors": mismatches}
                 repair_log.append({"attempt": attempt, "stage": "contract_smoke", "passed": False, "errors": mismatches})
 
-            # All repair rounds exhausted.
+            # Repair rounds exhausted. Fall back NON-REGRESSIVELY: if we built any
+            # compilable candidate, complete implementation with it and let the
+            # verification lane be the authoritative contract check (exactly the
+            # pre-repair single-shot behavior). The repair loop must NEVER fail
+            # earlier than single-shot did — it may only help, never regress.
+            # Only hard-fail if codegen never produced a usable bundle at all.
             self._record_codegen_repair_log(job, repair_log)
+            if last_bundle is not None:
+                self._store.save_code_bundle(last_bundle)
+                job.code_bundle_id = last_bundle.bundle_id
+                job.add_artifact_ref(last_bundle.bundle_id)
+                logger.warning(
+                    "Acquisition %s: repair loop did not converge in %d attempts; completing "
+                    "implementation with last candidate — verification is authoritative.",
+                    job.acquisition_id, self._MAX_CODEGEN_REPAIR_ATTEMPTS,
+                )
+                job.complete_lane("implementation")
+                self._emit_event("ACQUISITION_CODE_GENERATED", job, {
+                    "lane": "implementation", "codegen": True,
+                    "code_bundle_id": job.code_bundle_id,
+                    "validation_errors": [],
+                    "repair_attempts": self._MAX_CODEGEN_REPAIR_ATTEMPTS,
+                    "repair_converged": False,
+                })
+                return
+
             last_errors = (repair_feedback or {}).get("errors", ["repair loop exhausted"])
             summary = "; ".join(str(e) for e in (last_errors if isinstance(last_errors, list) else [last_errors]))
             job.fail_lane(
                 "implementation",
-                f"repair loop exhausted after {self._MAX_CODEGEN_REPAIR_ATTEMPTS} attempts: {summary[:300]}",
+                f"codegen produced no usable bundle after {self._MAX_CODEGEN_REPAIR_ATTEMPTS} attempts: {summary[:300]}",
             )
             self._record_skill_acquisition_feature(job, plan, stage="implementation_failed")
             self._record_skill_acquisition_label(job)
