@@ -2697,6 +2697,27 @@ def _create_app() -> FastAPI:
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
 
+    @app.get("/api/audio/barge-in")
+    async def api_barge_in_debug():
+        """Live barge-in tuning telemetry: the actual mic RMS seen WHILE JARVIS
+        is speaking (candidate interrupt audio), so the threshold can be tuned to
+        the operator's real mic levels instead of guessed. Read-only."""
+        a = getattr(_perc_orch, "audio_stream", None) if _perc_orch else None
+        if a is None:
+            return {"available": False}
+        return {
+            "available": True,
+            "enabled": getattr(a, "_barge_in_on_speech", None),
+            "threshold_rms": getattr(a, "_barge_in_energy_rms", None),
+            "hits_required": getattr(a, "_barge_in_hits_required", None),
+            "current_hits": getattr(a, "_barge_in_energy_hits", None),
+            "peak_rms_while_speaking": round(getattr(a, "_barge_in_peak_rms_speaking", 0.0), 1),
+            "last_rms_while_speaking": round(getattr(a, "_barge_in_last_rms_speaking", 0.0), 1),
+            "fired_count": getattr(a, "_barge_in_fired_count", 0),
+            "silence_duration_s": getattr(a, "_silence_duration_s", None),
+            "hint": "Talk over JARVIS, then read peak_rms_while_speaking. Set threshold_rms ~60-70% of that.",
+        }
+
     # -- speaker management --------------------------------------------------
 
     @app.get("/api/speakers")

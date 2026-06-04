@@ -80,6 +80,12 @@ class AudioStreamProcessor:
         self._barge_in_energy_rms = barge_in_energy_rms
         self._barge_in_hits_required = barge_in_hits_required
         self._barge_in_energy_hits = 0
+        # Telemetry to tune the threshold: peak/recent RMS seen WHILE speaking
+        # (i.e. candidate barge-in audio) + how many barge-ins fired. Surfaced so
+        # we can see the operator's actual mic levels instead of guessing.
+        self._barge_in_peak_rms_speaking = 0.0
+        self._barge_in_last_rms_speaking = 0.0
+        self._barge_in_fired_count = 0
 
         self._on_wake = on_wake
         self._on_speech_ready = on_speech_ready
@@ -322,9 +328,14 @@ class AudioStreamProcessor:
                 rms = float(np.sqrt(np.mean(audio_i16.astype(np.float32) ** 2)))
             except Exception:
                 rms = 0.0
+            # telemetry: track what mic levels actually look like during playback
+            self._barge_in_last_rms_speaking = rms
+            if rms > self._barge_in_peak_rms_speaking:
+                self._barge_in_peak_rms_speaking = rms
             if rms >= self._barge_in_energy_rms:
                 self._barge_in_energy_hits += 1
                 if self._barge_in_energy_hits >= self._barge_in_hits_required:
+                    self._barge_in_fired_count += 1
                     logger.info(
                         "Barge-in (speech energy): rms=%.0f >= %.0f [%d hits] — "
                         "interrupting + disregarding in-flight reply",

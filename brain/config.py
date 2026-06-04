@@ -172,7 +172,7 @@ class WakeWordConfig(BaseModel):
     # devices on this rig, so acoustic coupling is low). The wake-word barge-in
     # path still works too.
     barge_in_on_speech: bool = True
-    barge_in_energy_rms: float = 900.0     # int16 RMS floor for "user is talking"
+    barge_in_energy_rms: float = 600.0     # int16 RMS floor for "user is talking"
     barge_in_hits_required: int = 4        # ~consecutive frames above floor (~0.3s)
 
 
