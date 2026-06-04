@@ -495,11 +495,16 @@ SKILL_TEMPLATES: list[tuple[re.Pattern[str], SkillResolution]] = [
             default_phases=[
                 {"name": "assess", "exit_conditions": []},
                 {"name": "research", "exit_conditions": ["artifact:research_summary"]},
-                {"name": "integrate", "exit_conditions": ["artifact:plugin_quarantined"]},
+                # integrate produces the integration artifact (per SKILL_LEARNING_GUIDE
+                # flow: research -> integration artifact -> verify). plugin_quarantined
+                # does NOT exist until AFTER verify writes operational_handoff_required
+                # and the operator approves acquisition — so requiring it here deadlocked
+                # the job before it could ever reach verify (where the handoff fires).
+                {"name": "integrate", "exit_conditions": ["artifact:integration_test_passed"]},
                 {"name": "verify", "exit_conditions": ["evidence:test:scraper_returns_structured_data"]},
                 {"name": "register", "exit_conditions": ["skill_status:verified"]},
             ],
-            notes="Acquisition-eligible: may produce a plugin. Requires doc freshness check.",
+            notes="Acquisition-eligible: reaches verify, then requests operator approval to build a scraper plugin (Matrix/acquisition lane).",
         ),
     ),
 
@@ -561,11 +566,14 @@ SKILL_TEMPLATES: list[tuple[re.Pattern[str], SkillResolution]] = [
             default_phases=[
                 {"name": "assess", "exit_conditions": []},
                 {"name": "research", "exit_conditions": ["artifact:research_summary"]},
-                {"name": "integrate", "exit_conditions": ["artifact:plugin_quarantined"]},
+                # integration_test_passed (not plugin_quarantined) — see web_scraping
+                # fix above: plugin_quarantined only exists after verify->handoff->
+                # approval->acquisition, so requiring it at integrate deadlocked the job.
+                {"name": "integrate", "exit_conditions": ["artifact:integration_test_passed"]},
                 {"name": "verify", "exit_conditions": ["evidence:test:api_integration_smoke"]},
                 {"name": "register", "exit_conditions": ["skill_status:verified"]},
             ],
-            notes="Acquisition-eligible: may produce a plugin. Check API docs freshness.",
+            notes="Acquisition-eligible: reaches verify, then requests operator approval to build an API-integration plugin (Matrix/acquisition lane).",
         ),
     ),
 ]
