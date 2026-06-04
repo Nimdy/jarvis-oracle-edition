@@ -5607,7 +5607,14 @@ async def handle_transcription(
             except Exception:
                 pass
 
-    if episodes and routing.tool != ToolType.WEB_SEARCH:
+    if episodes and routing.tool != ToolType.WEB_SEARCH and not was_cancelled:
+        # Do NOT record an assistant turn that was barged-in / cancelled. The
+        # reply is partial and abandoned (e.g. "cooking corndogs requires..."
+        # cut off when the user interrupts), so writing it to conversation
+        # history would pollute the context the NEXT turn sees — the follow-up
+        # ("just tell me the oil temp") should thread off the user's questions,
+        # not a dangling half-spoken answer. The user's turn is still recorded
+        # above; only the abandoned assistant reply is skipped.
         _root_entry_id = _conv_ledger_id or _response_ledger_id
         episodes.add_assistant_turn(
             reply,
@@ -5619,6 +5626,9 @@ async def handle_transcription(
             response_entry_id=_response_ledger_id,
             root_entry_id=_root_entry_id,
         )
+    elif episodes and was_cancelled:
+        logger.info("Skipped recording barged-in/cancelled assistant reply (%d chars) — "
+                    "keeps follow-up context clean", len(reply))
 
     _STREAMED_TOOLS = {ToolType.NONE, ToolType.INTROSPECTION, ToolType.VISION,
                        ToolType.TIME, ToolType.SYSTEM_STATUS, ToolType.STATUS,
