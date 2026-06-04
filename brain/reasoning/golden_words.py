@@ -238,6 +238,23 @@ _COMMANDS: tuple[GoldenCommandDefinition, ...] = (
         expected_arguments=("intent_text",),
     ),
     GoldenCommandDefinition(
+        # Deterministic skill-learning trigger. The fuzzy router kept misrouting
+        # "create a skill for voice recognition" to capability_status (the word
+        # "skill"/"recognition" reads as a capability QUESTION); golden words
+        # bypass all of that at confidence 1.0. The trailing text after
+        # "LEARN SKILL" is the subject AND the rationale ("...so you can gate
+        # barge-in to my voice") — captured as intent_text and threaded into the
+        # skill's request so the design can reflect WHY it was asked for.
+        command_id="GW_LEARN_SKILL",
+        canonical_body="LEARN SKILL",
+        target_route="SKILL",
+        authority_class="privileged",
+        allows_side_effects=True,
+        allowed_subsystems=("skills",),
+        operation="learn_skill",
+        expected_arguments=("intent_text",),
+    ),
+    GoldenCommandDefinition(
         command_id="GW_ACQUISITION_STATUS",
         canonical_body="ACQUISITION STATUS",
         target_route="ACQUISITION",

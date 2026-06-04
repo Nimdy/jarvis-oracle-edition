@@ -4785,8 +4785,17 @@ async def handle_transcription(
         try:
             from tools.skill_tool import handle_skill_request_structured
             matrix_trigger = _is_matrix_trigger(text)
+            # If this came via the LEARN SKILL golden command, use the captured
+            # argument_text (subject + rationale, e.g. "speaker identification so
+            # you can gate barge-in to my voice") instead of the raw utterance —
+            # it's the clean intent the operator stated, including the WHY.
+            _skill_request_text = text
+            _gctx = getattr(routing, "golden_context", None)
+            if _gctx is not None and getattr(_gctx, "argument_text", ""):
+                _skill_request_text = _gctx.argument_text
+                logger.info("LEARN SKILL golden: intent_text=%r", _skill_request_text[:120])
             skill_struct = _guided_collect_struct or handle_skill_request_structured(
-                text,
+                _skill_request_text,
                 speaker=speaker,
                 matrix_trigger=matrix_trigger,
             )
