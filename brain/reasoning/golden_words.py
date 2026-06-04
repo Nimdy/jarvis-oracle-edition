@@ -46,6 +46,11 @@ class GoldenCommandDefinition:
     audit_level: str = "standard"
     operation: str = ""
     default_args: tuple[tuple[str, Any], ...] = ()
+    # Exact-match alternates for the SAME command — NOT fuzzy synonyms. These
+    # cover trivial article/plural variance that STT introduces (e.g. "learn a
+    # skill" / "learn skills" for "LEARN SKILL"). Each alias is still matched
+    # exactly; it just maps to this command. Keep these conservative.
+    aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -253,6 +258,9 @@ _COMMANDS: tuple[GoldenCommandDefinition, ...] = (
         allowed_subsystems=("skills",),
         operation="learn_skill",
         expected_arguments=("intent_text",),
+        # STT renders "learn skill X" several natural ways — accept them all.
+        aliases=("LEARN A SKILL", "LEARN SKILLS", "LEARN NEW SKILL",
+                 "LEARN A NEW SKILL", "START LEARNING SKILL", "START SKILL"),
     ),
     GoldenCommandDefinition(
         command_id="GW_ACQUISITION_STATUS",
@@ -264,10 +272,16 @@ _COMMANDS: tuple[GoldenCommandDefinition, ...] = (
     ),
 )
 
-_BY_CANONICAL_BODY = {
-    cmd.canonical_body: cmd
-    for cmd in _COMMANDS
-}
+def _build_canonical_index() -> dict[str, "GoldenCommandDefinition"]:
+    idx: dict[str, GoldenCommandDefinition] = {}
+    for cmd in _COMMANDS:
+        idx[cmd.canonical_body] = cmd
+        for alias in getattr(cmd, "aliases", ()):  # exact-match alternates
+            idx[alias] = cmd
+    return idx
+
+
+_BY_CANONICAL_BODY = _build_canonical_index()
 
 
 def _strip_boundary_punctuation(text: str) -> str:
@@ -332,13 +346,20 @@ def parse_golden_command(
     canonical_lookup = normalized_body.upper()
     command = _BY_CANONICAL_BODY.get(canonical_lookup)
 
-    # Prefix match for commands that expect trailing arguments (e.g. ACQUIRE <text>)
+    # Prefix match for commands that expect trailing arguments (e.g. ACQUIRE
+    # <text>, LEARN SKILL <text>). Check the canonical body AND any aliases so
+    # natural STT variants ("learn a skill X" / "learn skills X") still parse.
     argument_text = ""
     if command is None:
         for cmd in _COMMANDS:
-            if cmd.expected_arguments and canonical_lookup.startswith(cmd.canonical_body + " "):
-                command = cmd
-                argument_text = normalized_body[len(cmd.canonical_body):].strip()
+            if not cmd.expected_arguments:
+                continue
+            for body in (cmd.canonical_body, *getattr(cmd, "aliases", ())):
+                if canonical_lookup.startswith(body + " "):
+                    command = cmd
+                    argument_text = normalized_body[len(body):].strip()
+                    break
+            if command is not None:
                 break
 
     if command is None:
