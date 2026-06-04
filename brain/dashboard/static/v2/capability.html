@@ -60,6 +60,17 @@
     .reg:hover{background:rgba(0,200,255,.05);}
     .reg .rnm{color:var(--text);}
     .reg .rst{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;text-align:right;}
+    /* skill audit-packet drill-down (parity with old dashboard modal) */
+    .skl .aud-why{margin:6px 0;padding:5px 9px;border-left:2px solid var(--amber);background:rgba(20,14,3,.4);font-size:10px;color:var(--text);}
+    .skl .aud-sec{margin-top:7px;}
+    .skl .aud-h{font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;font-weight:600;}
+    .skl .aud-miss{font-size:9.5px;color:var(--red);line-height:1.5;}
+    .skl .aud-ec{display:flex;flex-wrap:wrap;gap:4px;}
+    .skl .ec-chip{font-size:8.5px;padding:1px 6px;border-radius:3px;}
+    .skl .ec-y{background:rgba(0,255,150,.12);color:var(--green);}
+    .skl .ec-n{background:rgba(120,130,150,.12);color:var(--muted);}
+    .skl .aud-tl{font-size:9px;color:var(--muted);line-height:1.6;font-family:var(--mono,monospace);}
+    .skl .aud-tl .aud-ts{color:var(--cyan);}
   </style>
 </head>
 <body>
@@ -387,29 +398,51 @@
         var job=JOBS[s.skill_id];           // may be undefined until detail fetch lands
         var jb=(job&&job.learning_job)||{};
         var sk=(job&&job.skill)||s;
-        var asked=(jb.requested_by||{});
-        var phase=jb.phase||'—';
-        var claim=jb.claimability_status||sk.claimability_status||'unverified';
+        var ap=(job&&job.audit_packet)||{};      // the rich audit packet (parity w/ old dashboard)
+        var asked=(jb.requested_by||(ap.request_context||{}))||{};
+        var phase=jb.phase||(ap.decision_summary||{}).current_phase||'—';
         var plan=jb.plan||{};
         var phases=plan.phases||[];
         var curExit='';
         phases.forEach(function(p){ if(String(p.name).toLowerCase()===String(phase).toLowerCase()) curExit=(p.exit_conditions||[]).join(', '); });
-        var vreq=(sk.verification_required||[]);
+        var ds=ap.decision_summary||{};
+        var missing=ap.missing_proof||[];
+        var ec=ap.evidence_classes||{};
+        var rc=ap.resolver_contract||{};
+        var tl=ap.timeline||[];
+        var ach=ap.acquisition_chain||{};
+        var oh=ap.operational_handoff||{};
+        var loading=(job===null||job===undefined);
         return '<div class="skl" onclick="_fillSkillId(\''+escH(s.skill_id)+'\')" title="click to load into operator actions">'+
           '<div class="sh"><span><span class="snm">'+escH(s.name||s.skill_id)+'</span> <span class="sid">'+escH(s.skill_id)+'</span></span>'+
-            '<span class="sbadge" style="background:rgba(255,176,0,.15);color:var(--amber)">'+escH(jb.status||'learning')+' · '+escH(phase)+'</span></div>'+
+            '<span class="sbadge" style="background:rgba(255,176,0,.15);color:var(--amber)">'+escH(jb.status||sk.status||'learning')+' · '+escH(phase)+'</span></div>'+
           (asked.user_text?('<div class="asked"><b>You asked:</b> “'+escH(asked.user_text)+'”'+(asked.speaker?(' <span style="color:var(--dim);font-style:normal">— '+escH(asked.speaker)+(asked.matrix_trigger?' · matrix':' · voice')+'</span>'):'')+'</div>'):'')+
           (plan.summary?('<div class="smeta" style="color:var(--text)">'+escH(plan.summary)+'</div>'):'')+
           _phaseLadder(phase)+
           (curExit?('<div class="smeta">current exit: <span class="rt">'+escH(curExit)+'</span></div>'):'')+
-          '<div class="smeta">'+
-            'claimable: <span class="'+(claim==='verified'?'claim-ver':'claim-unv')+'">'+escH(claim)+'</span>'+
-            ' · evidence: '+(sk.has_evidence?'<span style="color:var(--green)">present</span>':'<span style="color:var(--amber)">none yet</span>')+
-            ' · risk: '+escH(jb.risk_level||'—')+
-            (jb.job_id?(' · job <span class="rt">'+escH(jb.job_id)+'</span>'):'')+
-          '</div>'+
-          (vreq.length?('<div class="smeta">must prove: <span class="rt">'+vreq.map(escH).join(', ')+'</span></div>'):'')+
-          '<div class="smeta" style="color:var(--dim)">click row → loads id into Operator Actions below</div>'+
+          // --- decision summary / why not verified ---
+          (ds.message?('<div class="aud-why">'+escH(ds.message)+(ds.missing_count!=null?(' <b style="color:var(--amber)">('+ds.missing_count+' missing)</b>'):'')+'</div>'):'')+
+          // --- missing proof (the "why not verified yet" list) ---
+          (missing.length?('<div class="aud-sec"><div class="aud-h">Why not verified yet</div>'+
+            missing.map(function(m){return '<div class="aud-miss">✗ <span class="rt">'+escH(m.name)+'</span> <span style="color:var(--dim)">— '+escH(m.reason||'')+'</span></div>';}).join('')+'</div>'):'')+
+          // --- evidence classes (which proof families are satisfied) ---
+          (Object.keys(ec).length?('<div class="aud-sec"><div class="aud-h">Evidence classes</div><div class="aud-ec">'+
+            Object.keys(ec).map(function(k){var ok=ec[k];return '<span class="ec-chip '+(ok?'ec-y':'ec-n')+'">'+(ok?'✓':'✗')+' '+escH(k.replace(/_evidence$/,'').replace(/_/g,' '))+'</span>';}).join('')+'</div></div>'):'')+
+          // --- resolver contract (required evidence, executor, acquisition) ---
+          (Object.keys(rc).length?('<div class="aud-sec"><div class="aud-h">Contract</div><div class="smeta">'+
+            (rc.capability_type?('type <span class="rt">'+escH(rc.capability_type)+'</span> · '):'')+
+            (rc.required_executor?('executor <span class="rt">'+escH(rc.required_executor)+'</span> · '):'')+
+            ('acquisition '+ (rc.acquisition_eligible?'<span style="color:var(--amber)">eligible</span>':'no'))+
+            ((rc.required_evidence&&rc.required_evidence.length)?('<br>must prove: <span class="rt">'+rc.required_evidence.map(escH).join(', ')+'</span>'):'')+
+          '</div></div>'):'')+
+          // --- operational handoff / acquisition chain (if any) ---
+          ((oh&&oh.status)?('<div class="smeta">operational handoff: <b style="color:var(--amber)">'+escH(oh.status)+'</b></div>'):'')+
+          ((ach&&(ach.status||ach.acquisition_id))?('<div class="smeta">acquisition proof: <span class="rt">'+escH(ach.status||ach.acquisition_id)+'</span></div>'):'')+
+          // --- live timeline (the phase ladder progress over time) ---
+          (tl.length?('<div class="aud-sec"><div class="aud-h">Timeline</div>'+
+            tl.slice(-6).map(function(t){return '<div class="aud-tl"><span class="aud-ts">'+escH((t.ts||'').replace('T',' ').replace('Z',''))+'</span> '+escH(t.message||t.type||'')+'</div>';}).join('')+'</div>'):
+            (loading?'<div class="smeta" style="color:var(--dim)">loading audit detail…</div>':''))+
+          '<div class="smeta" style="color:var(--dim)">job '+escH(jb.job_id||'—')+' · click row → loads id into Operator Actions below</div>'+
         '</div>';
       }).join('');
       // lazily fetch full job detail for any learning skill we don't have yet
