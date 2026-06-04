@@ -1171,8 +1171,15 @@ class AcquisitionOrchestrator:
         self,
         job: CapabilityAcquisitionJob,
         plan: AcquisitionPlan,
+        repair_feedback: dict[str, Any] | None = None,
     ) -> tuple[list[dict[str, str]], str, list[dict[str, Any]]]:
-        """Build the Jarvis-authored prompt packet for acquisition codegen."""
+        """Build the Jarvis-authored prompt packet for acquisition codegen.
+
+        When ``repair_feedback`` is provided (a prior attempt failed code
+        validation or the contract smoke), the exact failure is appended so the
+        coder revises the specific problem instead of regenerating blind — the
+        same think→code→validate loop the self-improve path uses.
+        """
         docs = self._load_doc_evidence(job)
         doc_rows = [
             {
@@ -1215,6 +1222,8 @@ class AcquisitionOrchestrator:
         )
         if revision_context:
             prompt += f"{revision_context}\n"
+        if repair_feedback:
+            prompt += self._format_repair_feedback(repair_feedback)
         prompt += (
             "## Validation Requirements\n"
             "- The plugin must parse the fixture input shape and return JSON-serializable structured data.\n"
@@ -1253,8 +1262,110 @@ class AcquisitionOrchestrator:
             })
         return [{"role": "user", "content": prompt}], system_prompt, evidence_bundle
 
+    # Max code→validate→repair rounds in the implementation lane. Mirrors
+    # self_improve's MAX_ITERATIONS: one-shot-and-fail is the wrong bar for a
+    # system that builds its own tools — it should read the failure and revise.
+    _MAX_CODEGEN_REPAIR_ATTEMPTS = 3
+
+    @staticmethod
+    def _format_repair_feedback(rf: dict[str, Any]) -> str:
+        """Render a prior attempt's failure into a corrective prompt section."""
+        stage = rf.get("stage", "")
+        errors = rf.get("errors", [])
+        if not isinstance(errors, list):
+            errors = [errors]
+        lines = [
+            "## Previous Attempt FAILED — Fix These Exactly\n",
+            f"Your last generated plugin failed at stage '{stage}'. Keep what worked "
+            "and revise ONLY to fix the specific problems below:\n",
+        ]
+        if stage == "contract_smoke":
+            for m in errors:
+                if isinstance(m, dict) and "expected" in m:
+                    lines.append(
+                        f"- Fixture '{m.get('fixture')}': for input the contract expected "
+                        f"output containing {json.dumps(m.get('expected'))}, but your plugin "
+                        f"returned {json.dumps(m.get('actual'))}. Make the returned fields match.\n"
+                    )
+                else:
+                    lines.append(f"- {json.dumps(m)}\n")
+        else:
+            for e in errors:
+                lines.append(f"- {e}\n")
+        lines.append("\n")
+        return "".join(lines)
+
+    def _codegen_generate_once(
+        self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan,
+        codegen_service: Any, repair_feedback: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """One codegen round-trip: build packet (+optional repair feedback) → generate_and_validate."""
+        messages, system_prompt, evidence_bundle = self._build_acquisition_codegen_packet(
+            job, plan, repair_feedback=repair_feedback,
+        )
+        if hasattr(codegen_service, "set_consumer"):
+            codegen_service.set_consumer("acquisition")
+        import asyncio
+
+        def _call() -> dict[str, Any]:
+            return asyncio.run(codegen_service.generate_and_validate(
+                messages=messages,
+                system_prompt=system_prompt,
+                write_category="skill_plugin",
+                evidence_bundle=evidence_bundle,
+                risk_tier=job.risk_tier,
+            ))
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(_call).result(timeout=600)
+        return _call()
+
+    def _run_contract_smoke_for_repair(
+        self, job: CapabilityAcquisitionJob, code_bundle: PluginCodeBundle,
+    ) -> tuple[bool, list[dict[str, Any]]]:
+        """Run the linked skill contract smoke against a candidate bundle so the
+        repair loop can self-correct fixture mismatches.
+
+        Returns ``(ok, mismatches)``. ``ok=True`` when the smoke passes, when
+        there is no contract/fixture to check, or when the harness hit an
+        infrastructure/runtime ERROR (e.g. no network) — those are not the
+        generated code's fault, so they must not burn repair rounds; the normal
+        verification lane still owns the authoritative check. Only a genuine
+        expected-vs-actual MISMATCH returns ``ok=False`` with the diffs.
+        """
+        try:
+            skill_id = (job.requested_by or {}).get("skill_id", "")
+            if not skill_id:
+                return True, []
+            from skills.execution_contracts import get_contract
+            contract = get_contract(skill_id)
+            if contract is None or not contract.smoke_fixtures:
+                return True, []
+            import types as _types
+            shim = _types.SimpleNamespace(risk_assessment={})
+            passed = self._run_skill_contract_on_bundle(job, shim, code_bundle)
+            status = shim.risk_assessment.get("skill_contract_status")
+            if passed or status in ("error", "missing_handler", "handler_import_unavailable", "missing_run_callable"):
+                return True, []  # pass, or harness/infra issue — don't repair on these
+            results = shim.risk_assessment.get("skill_contract_results", []) or []
+            mismatches = [
+                {"fixture": r.get("name"), "expected": r.get("expected"), "actual": r.get("actual")}
+                for r in results if not r.get("passed")
+            ]
+            return False, (mismatches or [{"status": status}])
+        except Exception:
+            return True, []  # never block the build on the repair-smoke harness itself
+
     def _run_implementation(self, job: CapabilityAcquisitionJob) -> None:
-        """Implementation lane: generate code via CodeGenService → PluginCodeBundle."""
+        """Implementation lane: generate code via CodeGenService, repairing against
+        the contract smoke up to ``_MAX_CODEGEN_REPAIR_ATTEMPTS`` rounds."""
+        plan = None
         try:
             if not job.plan_id:
                 job.fail_lane("implementation", "No plan available for implementation")
@@ -1266,72 +1377,79 @@ class AcquisitionOrchestrator:
                 return
 
             codegen_service = getattr(self, "_codegen_service", None)
-
             if codegen_service is None or not codegen_service.coder_available:
                 job.fail_lane("implementation", "codegen_unavailable")
                 self._record_skill_acquisition_feature(job, plan, stage="implementation_failed")
                 self._record_skill_acquisition_label(job)
                 return
 
-            messages, system_prompt, evidence_bundle = self._build_acquisition_codegen_packet(job, plan)
-            if hasattr(codegen_service, "set_consumer"):
-                codegen_service.set_consumer("acquisition")
+            repair_feedback: dict[str, Any] | None = None
+            repair_log: list[dict[str, Any]] = []
 
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
+            for attempt in range(1, self._MAX_CODEGEN_REPAIR_ATTEMPTS + 1):
+                result = self._codegen_generate_once(job, plan, codegen_service, repair_feedback)
 
-            if loop and loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    result = pool.submit(
-                        lambda: asyncio.run(codegen_service.generate_and_validate(
-                            messages=messages,
-                            system_prompt=system_prompt,
-                            write_category="skill_plugin",
-                            evidence_bundle=evidence_bundle,
-                            risk_tier=job.risk_tier,
-                        ))
-                    ).result(timeout=600)
-            else:
-                result = asyncio.run(
-                    codegen_service.generate_and_validate(
-                        messages=messages,
-                        system_prompt=system_prompt,
-                        write_category="skill_plugin",
-                        evidence_bundle=evidence_bundle,
-                        risk_tier=job.risk_tier,
-                    )
-                )
+                if not result.get("success"):
+                    errors = result.get("validation_errors", ["Unknown error"])
+                    repair_feedback = {"stage": "code_validation", "errors": errors}
+                    repair_log.append({"attempt": attempt, "stage": "code_validation", "passed": False, "errors": errors})
+                    continue
 
-            if result.get("success"):
                 bundle = self._build_code_bundle(job, plan, result)
-                if bundle:
+                if not bundle:
+                    repair_feedback = {"stage": "bundle", "errors": ["code bundle could not be built from generated patch"]}
+                    repair_log.append({"attempt": attempt, "stage": "bundle", "passed": False})
+                    continue
+
+                ok, mismatches = self._run_contract_smoke_for_repair(job, bundle)
+                if ok:
                     self._store.save_code_bundle(bundle)
                     job.code_bundle_id = bundle.bundle_id
                     job.add_artifact_ref(bundle.bundle_id)
+                    repair_log.append({"attempt": attempt, "stage": "contract_smoke", "passed": True})
+                    self._record_codegen_repair_log(job, repair_log)
+                    job.complete_lane("implementation")
+                    self._emit_event("ACQUISITION_CODE_GENERATED", job, {
+                        "lane": "implementation", "codegen": True,
+                        "code_bundle_id": job.code_bundle_id,
+                        "validation_errors": [],
+                        "repair_attempts": attempt,
+                    })
+                    return
 
-                job.complete_lane("implementation")
-                self._emit_event("ACQUISITION_CODE_GENERATED", job, {
-                    "lane": "implementation", "codegen": True,
-                    "code_bundle_id": job.code_bundle_id,
-                    "validation_errors": [],
-                })
-            else:
-                errors = result.get("validation_errors", ["Unknown error"])
-                job.fail_lane("implementation", "; ".join(errors))
-                self._record_skill_acquisition_feature(job, plan, stage="implementation_failed")
-                self._record_skill_acquisition_label(job)
-                self._emit_event("ACQUISITION_FAILED", job, {
-                    "lane": "implementation",
-                    "validation_errors": errors,
-                })
+                repair_feedback = {"stage": "contract_smoke", "errors": mismatches}
+                repair_log.append({"attempt": attempt, "stage": "contract_smoke", "passed": False, "errors": mismatches})
+
+            # All repair rounds exhausted.
+            self._record_codegen_repair_log(job, repair_log)
+            last_errors = (repair_feedback or {}).get("errors", ["repair loop exhausted"])
+            summary = "; ".join(str(e) for e in (last_errors if isinstance(last_errors, list) else [last_errors]))
+            job.fail_lane(
+                "implementation",
+                f"repair loop exhausted after {self._MAX_CODEGEN_REPAIR_ATTEMPTS} attempts: {summary[:300]}",
+            )
+            self._record_skill_acquisition_feature(job, plan, stage="implementation_failed")
+            self._record_skill_acquisition_label(job)
+            self._emit_event("ACQUISITION_FAILED", job, {
+                "lane": "implementation",
+                "validation_errors": last_errors if isinstance(last_errors, list) else [last_errors],
+                "repair_attempts": self._MAX_CODEGEN_REPAIR_ATTEMPTS,
+            })
         except Exception as exc:
             job.fail_lane("implementation", str(exc))
-            self._record_skill_acquisition_feature(job, plan if "plan" in locals() else None, stage="implementation_error")
+            self._record_skill_acquisition_feature(job, plan, stage="implementation_error")
             self._record_skill_acquisition_label(job)
+
+    def _record_codegen_repair_log(self, job: CapabilityAcquisitionJob, repair_log: list[dict[str, Any]]) -> None:
+        """Surface the codegen think→code→validate back-and-forth on the job so it
+        is visible in the acquisition detail (the deliberation was previously invisible)."""
+        try:
+            diag = dict(getattr(job, "codegen_prompt_diagnostics", {}) or {})
+            diag["repair_log"] = repair_log
+            diag["repair_rounds"] = len(repair_log)
+            job.codegen_prompt_diagnostics = diag
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Plugin name + intent pattern derivation
