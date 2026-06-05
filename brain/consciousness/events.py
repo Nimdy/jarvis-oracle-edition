@@ -39,7 +39,8 @@ ProvenanceType = Literal[
     "user_claim",           # User stated (preferences, corrections, identity)
     "conversation",         # Emerged from conversation (LLM response, dialogue)
     "model_inference",      # LLM or NN inferred (reflection, dream insight)
-    "external_source",      # External research (web, academic, library study)
+    "external_source",      # Cited/verified external research (academic, DOI, peer-reviewed)
+    "web_scrap",            # Raw scraped web content — UNTRUSTED until cross-validated (data-flow firewall)
     "experiment_result",    # Self-improvement outcomes, learning job results
     "derived_pattern",      # Pattern recognition (clustering, association, analytics)
     "seed",                 # Birth/gestation seed memories
@@ -53,6 +54,7 @@ PROVENANCE_BOOST: dict[str, float] = {
     "user_claim": 0.04,
     "conversation": 0.02,
     "model_inference": 0.0,
+    "web_scrap": 0.0,        # untrusted scraped web data earns NO confidence boost
     "derived_pattern": 0.0,
     "seed": 0.0,
     "unknown": 0.0,
@@ -126,7 +128,7 @@ def resolve_provenance_boost(mem: Memory) -> float:
 PROVENANCE_ORDINAL: dict[str, int] = {
     "observed": 0, "user_claim": 1, "conversation": 2, "model_inference": 3,
     "external_source": 4, "experiment_result": 5, "derived_pattern": 6,
-    "seed": 7, "unknown": 8,
+    "seed": 7, "unknown": 8, "web_scrap": 9,
 }
 
 

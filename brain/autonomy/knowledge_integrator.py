@@ -607,6 +607,14 @@ class KnowledgeIntegrator:
                 mem_type = "contextual_insight"
                 weight = min(weight, 0.2)
 
+            # Data-flow firewall: only genuinely citable knowledge (factual_knowledge —
+            # academic / DOI / peer-reviewed) earns the trusted 'external_source'
+            # provenance (and its +0.10 confidence boost). Raw web / unverified findings
+            # (contextual_insight) are tagged 'web_scrap': untrusted, no boost, carries
+            # grounding tension until cross-validated against a peer-reviewed source.
+            finding_provenance = (
+                "external_source" if mem_type == "factual_knowledge" else "web_scrap"
+            )
             try:
                 from memory.core import CreateMemoryData
                 mem = self._engine_ref.remember(CreateMemoryData(
@@ -615,7 +623,7 @@ class KnowledgeIntegrator:
                     weight=weight,
                     tags=tags,
                     decay_rate=0.005,
-                    provenance="external_source",
+                    provenance=finding_provenance,
                 ))
                 if mem:
                     created += 1
@@ -650,7 +658,7 @@ class KnowledgeIntegrator:
                     payload=summary_payload,
                     weight=0.35,
                     tags=summary_tags,
-                    provenance="external_source",
+                    provenance="web_scrap",  # web-derived synthesis: untrusted until grounded
                 ))
             except Exception as exc:
                 logger.warning("Failed to create research summary memory: %s", exc)

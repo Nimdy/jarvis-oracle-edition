@@ -56,6 +56,12 @@ _EXTERNAL_KNOWLEDGE_PROVENANCE = frozenset({"external_source"})   # cited web/ac
 # Broad set (observation + external knowledge), retained for the _incl_external view.
 _GROUNDED_PROVENANCE = _OBSERVATION_PROVENANCE | _EXTERNAL_KNOWLEDGE_PROVENANCE
 _INFERRED_PROVENANCE = frozenset({"model_inference"})
+# Data-flow firewall: raw scraped web content. NOT grounded (a random website is not
+# evidence) and deliberately NOT folded into the keystone ratio here — whether
+# web_scrap should weight grounded/inferred is David's decision (open-question #1,
+# same discipline as external_source). Tracked as its own honest count so it is never
+# silently absorbed into either side.
+_UNTRUSTED_EXTERNAL_PROVENANCE = frozenset({"web_scrap"})
 
 # Cache TTL for the (potentially full-store) belief enumeration. The orchestrator
 # tick cadence is ~5s; a 30s cache keeps enumeration off the hot path, matching
@@ -88,6 +94,7 @@ class SparkMetrics:
     # Provenance / sample bookkeeping (honesty: where did the numbers come from)
     grounded_count: int = 0          # directly-grounded observation (narrow / keystone)
     external_knowledge_count: int = 0  # cited external_source (web/academic)
+    web_scrap_count: int = 0         # untrusted scraped web (firewall) — own tier, not grounded
     grounded_count_incl_external: int = 0  # observation + external knowledge (broad)
     memory_store_grounded_count: int = 0   # memory store: observed + user_claim
     memory_store_inferred_count: int = 0   # memory store: model_inference
@@ -108,6 +115,7 @@ class SparkMetrics:
             "avg_chain_length": round(self.avg_chain_length, 4),
             "grounded_count": self.grounded_count,
             "external_knowledge_count": self.external_knowledge_count,
+            "web_scrap_count": self.web_scrap_count,
             "grounded_count_incl_external": self.grounded_count_incl_external,
             "memory_store_grounded_count": self.memory_store_grounded_count,
             "memory_store_inferred_count": self.memory_store_inferred_count,
@@ -181,6 +189,7 @@ def compute_spark_metrics(engine: Any | None) -> SparkMetrics:
                 beliefs = beliefs[-_BELIEF_SAMPLE_CAP:]
             observation = 0   # directly-grounded: senses + operator (narrow)
             external = 0      # cited external knowledge (web/academic)
+            web_scrap = 0     # untrusted scraped web (firewall) — its own tier
             inferred = 0      # model_inference
             for b in beliefs:
                 prov = getattr(b, "provenance", "unknown")
@@ -188,11 +197,14 @@ def compute_spark_metrics(engine: Any | None) -> SparkMetrics:
                     observation += 1
                 elif prov in _EXTERNAL_KNOWLEDGE_PROVENANCE:
                     external += 1
+                elif prov in _UNTRUSTED_EXTERNAL_PROVENANCE:
+                    web_scrap += 1
                 if prov in _INFERRED_PROVENANCE:
                     inferred += 1
             broad = observation + external
             metrics.grounded_count = observation
             metrics.external_knowledge_count = external
+            metrics.web_scrap_count = web_scrap
             metrics.grounded_count_incl_external = broad
             metrics.inferred_count = inferred
             metrics.sampled_beliefs = len(beliefs)

@@ -37,6 +37,11 @@ logger = logging.getLogger(__name__)
 # observationally anchored; "inferred" = model produced it on its own.
 _GROUNDED_PROVENANCE = frozenset({"observed", "user_claim", "external_source"})
 _INFERRED_PROVENANCE = frozenset({"model_inference"})
+# Data-flow firewall: raw scraped web content is NOT grounded (a random website is
+# not evidence) and carries grounding tension like an inferred belief — it points
+# inward with nothing holding it up until an external validator confirms it against
+# a peer-reviewed source. Deliberately excluded from _GROUNDED_PROVENANCE.
+_UNTRUSTED_EXTERNAL_PROVENANCE = frozenset({"web_scrap"})
 
 # Edge types that count as *incoming evidential support* for a belief. ``refines``
 # is excluded (matches propagation.py — refines edges do not contribute to
@@ -342,9 +347,16 @@ class ProvenanceScorer:
           * pressure term — global quarantine composite (system-wide doubt).
         """
         provenance = getattr(belief, "provenance", "") or ""
-        is_inferred = provenance in _INFERRED_PROVENANCE
+        # Both model-inferred AND untrusted-scraped beliefs are "ungrounded until
+        # validated": they carry the inference term so the grounding ring is drawn
+        # to confirm them. (web_scrap is external in origin but unverified — a random
+        # website is not evidence, so it is not in _GROUNDED_PROVENANCE.)
+        is_inferred = (
+            provenance in _INFERRED_PROVENANCE
+            or provenance in _UNTRUSTED_EXTERNAL_PROVENANCE
+        )
 
-        # Inference term: only inferred beliefs carry it; scaled by how little
+        # Inference term: only ungrounded beliefs carry it; scaled by how little
         # effective confidence the graph assigns (1 - effective). A grounded
         # belief contributes 0 here (cannot-lie: no inferred-ness ⇒ no term).
         inference_term = (1.0 - effective_conf) if is_inferred else 0.0
