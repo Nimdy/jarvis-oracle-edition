@@ -97,6 +97,11 @@
     .acqd .gov-chip.g-warn{border-color:var(--amber);color:var(--amber);background:rgba(40,30,3,.4);}
     .acqd .gov-chip.g-bad{border-color:var(--red);color:var(--red);background:rgba(45,15,15,.5);}
     .acqd .gov-chip.g-dim{color:var(--muted);}
+    .acqd .improve{margin-top:4px;}
+    .acqd .impv-in{width:100%;box-sizing:border-box;background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:inherit;font-size:10px;padding:5px 7px;resize:vertical;}
+    .acqd .impv-in:focus{border-color:var(--cyan);outline:none;}
+    .acqd .impv-row{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap;}
+    .acqd .impv-note{font-size:8.5px;color:var(--dim);}
     .acqd .acqd-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;}
     .acqd .drill{margin-top:7px;font-size:9.5px;color:var(--muted);line-height:1.55;display:none;}
     .acqd .drill.open{display:block;}
@@ -566,6 +571,7 @@
       '<div class="acqd-hd" onclick="_acqDrill(\''+escH(id)+'\')">'+
         '<span class="acqd-ttl">'+escH(a.title||id)+'</span>'+_acqBadge(a.status)+
         '<span class="acqd-badge b-dim">T'+escH(a.risk_tier!=null?a.risk_tier:'?')+'</span>'+
+        ((a.revision_generation>0)?'<span class="acqd-badge b-wait" title="improvement of '+escH(String(a.revision_of||'').slice(-10))+'">↻ gen-'+escH(a.revision_generation)+'</span>':'')+
         (alive?'<span class="live">● live</span>':'')+
         '<span class="acqd-id">'+escH(String(id||'').slice(-10))+(open?' ▴':' ▾')+'</span>'+
       '</div>'+ladder+
@@ -586,8 +592,10 @@
     var lanes=a.lanes||{}, errs=[];
     ACQ_LANES.forEach(function(ln){ var v=lanes[ln]; if(v&&v.error) errs.push(ln+': '+v.error); });
     if(errs.length) h+='<div class="delib-h">Lane errors</div><pre>'+escH(errs.join('\n')).slice(0,1400)+'</pre>';
+    if(a.revision_feedback) h+='<div class="delib-h">Improvement request (this build)</div><pre>'+escH(a.revision_feedback)+'</pre>';
     h+=_acqGovHtml(full||a);
     h+=_acqPlanHtml(full||a);
+    if(!_isActive(a)) h+=_acqImproveBox(id);   // Pillar 3: feedback re-enters the pipeline
     return h||'<span class="note">no deliberation detail recorded for this build.</span>';
   }
   // Governance verdict (data-flow firewall) — the egress policy decided DURING planning.
@@ -606,6 +614,21 @@
     if(g.egress) h+='<div class="diag">egress: '+escH(g.egress)+(g.source?' &middot; '+escH(g.source):'')+'</div>';
     return h;
   }
+  // Pillar 3 — operator feedback re-enters the pipeline as a NEW governed build.
+  function _acqImproveBox(id){
+    return '<div class="delib-h">Improve this capability</div>'+
+      '<div class="improve">'+
+        '<textarea id="impv-'+escH(id)+'" class="impv-in" rows="2" placeholder="What should the next version do better? e.g. \'also handle JS sites\', \'summary extraction is weak\'"></textarea>'+
+        '<div class="impv-row"><button class="btn-act" onclick="_acqImprove(\''+escH(id)+'\')">↻ Improve → new build</button>'+
+        '<span class="impv-note">seeds a NEW governed build with your feedback as revision context · the prior build is preserved · trust is not inherited</span></div>'+
+      '</div>';
+  }
+  window._acqImprove=function(id){
+    var ta=el('impv-'+id), fb=ta?ta.value.trim():'';
+    if(!fb){ V2.toast('enter what to improve first', false); return; }
+    V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/improve',{feedback:fb}),'improvement build started')
+      .then(function(){ if(ta) ta.value=''; delete _acqOpen[id]; refresh(true); }).catch(function(){});
+  };
   function _acqPlanHtml(acq){
     var p=(acq&&(acq.plan||acq.plan_summary))||{}, h='';
     if(p.objective) h+='<div class="delib-h">Objective</div><pre>'+escH(p.objective)+'</pre>';

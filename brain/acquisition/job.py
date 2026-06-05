@@ -139,6 +139,14 @@ class CapabilityAcquisitionJob:
     approved_by: str = ""
     approval_timestamp: float = 0.0
 
+    # Iterative improvement (Pillar 3): an operator-driven re-entry of a prior
+    # (completed/failed) capability. The feedback rides as planning+codegen revision
+    # context; the new job goes through the SAME governed lifecycle — trust is never
+    # inherited from the prior version.
+    revision_of: str = ""              # prior acquisition_id this improves
+    revision_feedback: str = ""        # the operator's "do better" note
+    revision_generation: int = 0       # how many improvement rounds deep
+
     # Lifecycle
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
@@ -693,6 +701,9 @@ class AcquisitionStore:
                 "plugin_id": j.plugin_id,
                 "planning_diagnostics": j.planning_diagnostics or {},
                 "codegen_prompt_diagnostics": j.codegen_prompt_diagnostics or {},
+                "revision_of": getattr(j, "revision_of", "") or "",
+                "revision_feedback": getattr(j, "revision_feedback", "") or "",
+                "revision_generation": int(getattr(j, "revision_generation", 0) or 0),
             }
             for k, v in j.lanes.items():
                 entry["lanes"][k] = {

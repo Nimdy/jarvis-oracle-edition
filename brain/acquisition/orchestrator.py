@@ -155,12 +155,23 @@ class AcquisitionOrchestrator:
         user_text: str,
         requested_by: dict[str, Any] | None = None,
         context: dict[str, Any] | None = None,
+        revision_of: str = "",
+        revision_feedback: str = "",
+        revision_generation: int = 0,
     ) -> CapabilityAcquisitionJob:
-        """Create a new acquisition job from user intent."""
+        """Create a new acquisition job from user intent.
+
+        ``revision_*`` (Pillar 3) seed an operator-driven improvement of a prior
+        capability: the feedback becomes planning+codegen revision context. The new
+        job still runs the full governed lifecycle — trust is never inherited.
+        """
         job = CapabilityAcquisitionJob(
             title=user_text[:120],
             user_intent=user_text,
             requested_by=requested_by or {},
+            revision_of=revision_of or "",
+            revision_feedback=(revision_feedback or "").strip(),
+            revision_generation=int(revision_generation or 0),
         )
 
         # Classify
@@ -205,6 +216,48 @@ class AcquisitionOrchestrator:
             "Acquisition created: %s [%s] tier=%d lanes=%s",
             job.acquisition_id, job.outcome_class, job.risk_tier,
             ",".join(job.required_lanes),
+        )
+        return job
+
+    def improve_capability(
+        self,
+        prior_acquisition_id: str,
+        feedback: str,
+        requested_by: dict[str, Any] | None = None,
+    ) -> CapabilityAcquisitionJob:
+        """Pillar 3: re-enter the pipeline to improve a prior capability.
+
+        Seeds a NEW acquisition from the prior job's intent, carrying the operator's
+        feedback as revision context (planner + codegen both consume it via
+        ``_build_revision_context``, which also loads the prior plan so it revises
+        rather than restarts). The prior job's audit trail is untouched (Terminal
+        Acquisition Closure); the improved version runs the full governed lifecycle.
+        """
+        prior = self.get_job(prior_acquisition_id)
+        if prior is None:
+            raise ValueError(f"acquisition {prior_acquisition_id} not found")
+        feedback = (feedback or "").strip()
+        if not feedback:
+            raise ValueError("feedback is required to seed an improvement")
+
+        intent = (prior.user_intent or prior.title or "").strip()
+        if not intent:
+            raise ValueError("prior acquisition has no intent to revise")
+
+        gen = int(getattr(prior, "revision_generation", 0) or 0) + 1
+        job = self.create(
+            intent,
+            requested_by=requested_by or {"source": "operator_improvement"},
+            revision_of=prior_acquisition_id,
+            revision_feedback=feedback,
+            revision_generation=gen,
+        )
+        # Cross-link the prior attempt into the new job's audit trail.
+        job.add_artifact_ref(prior_acquisition_id)
+        self._store.save_job(job)
+        logger.info(
+            "Acquisition %s is improvement gen-%d of %s (feedback: %.80s)",
+            job.acquisition_id, gen, prior_acquisition_id, feedback,
         )
         return job
 
@@ -988,6 +1041,45 @@ class AcquisitionOrchestrator:
         job.planning_diagnostics = diag
 
     def _build_revision_context(
+        self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan
+    ) -> str:
+        """Build revision context from (a) an operator-requested post-completion
+        improvement (Pillar 3) and/or (b) prior plan-review rejections for this job."""
+        prefix = self._build_improvement_context(job)
+        rejection = self._build_rejection_context(job, plan)
+        return "\n".join(p for p in (prefix, rejection) if p)
+
+    def _build_improvement_context(self, job: CapabilityAcquisitionJob) -> str:
+        """Pillar 3: operator 'do better' feedback on a prior shipped capability,
+        plus the prior plan's approach so the planner revises rather than restarts."""
+        fb = (getattr(job, "revision_feedback", "") or "").strip()
+        if not fb:
+            return ""
+        gen = int(getattr(job, "revision_generation", 0) or 0)
+        lines = [
+            "## OPERATOR REQUESTED AN IMPROVEMENT",
+            f"A prior version of this capability already shipped (improvement round {gen}).",
+            "The operator reviewed it and asked for the following improvement. Address it",
+            "directly and concretely in your design — this is not a fresh request.",
+            "",
+            f"Operator feedback: {fb}",
+        ]
+        prior_id = (getattr(job, "revision_of", "") or "").strip()
+        if prior_id:
+            prior = self.get_job(prior_id)
+            if prior and prior.plan_id:
+                prior_plan = self._store.load_plan(prior.plan_id)
+                prev = (getattr(prior_plan, "technical_approach", "") or "").strip() if prior_plan else ""
+                if prev and "Technical design unavailable" not in prev:
+                    lines += [
+                        "",
+                        "## PREVIOUS VERSION (revise, do not start from scratch):",
+                        prev[:2000],
+                    ]
+        lines.append("")
+        return "\n".join(lines)
+
+    def _build_rejection_context(
         self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan
     ) -> str:
         """Build revision context from all prior rejection reviews for this job."""

@@ -3330,6 +3330,33 @@ def _create_app() -> FastAPI:
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
 
+    @app.post("/api/acquisition/{acquisition_id}/improve", dependencies=[Depends(_require_api_key)])
+    async def api_acquisition_improve(acquisition_id: str, request: Request):
+        """Pillar 3: re-enter the pipeline to improve a prior capability with operator
+        feedback. Seeds a NEW governed acquisition (trust never inherited)."""
+        body = await request.json() if await request.body() else {}
+        feedback = (body.get("feedback") or "").strip()
+        if not feedback:
+            return JSONResponse({"error": "feedback is required"}, status_code=400)
+        try:
+            orch = _get_acquisition_orchestrator()
+            if orch is None:
+                return JSONResponse({"error": "Acquisition pipeline not enabled"}, status_code=400)
+            job = orch.improve_capability(
+                acquisition_id, feedback,
+                requested_by={"source": "dashboard_api", "improves": acquisition_id},
+            )
+            return {
+                "status": "improvement_started",
+                "acquisition_id": job.acquisition_id,
+                "revision_of": acquisition_id,
+                "revision_generation": job.revision_generation,
+            }
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
     def _get_acquisition_orchestrator():
         try:
             if _engine:
