@@ -139,6 +139,7 @@ class PluginRecord:
     # skill_id), and the last-known-good version it displaced when promoted (the
     # floor to fall back to on demote). See docs/CAPABILITY_AUTHORITY_DESIGN.md.
     skill_id: str = ""
+    generation: int = 0                  # 0 = original; N = the Nth improvement (for plain labels)
     prior_authoritative: str = ""        # plugin name that was active before this one
     last_authoritative_at: float = 0.0   # last time THIS plugin was the active version
     code_hash: str = ""
@@ -518,12 +519,14 @@ class PluginRegistry:
 
     _SET_SKILL = "set_skill_id"  # noqa
 
-    def set_skill_id(self, plugin_name: str, skill_id: str) -> bool:
-        """Bind a plugin record to its skill (the version-grouping key)."""
+    def set_skill_id(self, plugin_name: str, skill_id: str, generation: int = 0) -> bool:
+        """Bind a plugin record to its skill (the version-grouping key) and its generation
+        (0 = original, N = the Nth improvement) for plain-language labels."""
         rec = self._records.get(plugin_name)
         if not rec:
             return False
         rec.skill_id = skill_id or ""
+        rec.generation = int(generation or 0)
         rec.updated_at = time.time()
         self._save_registry()
         return True
@@ -962,6 +965,7 @@ class PluginRegistry:
                 "acquisition_id": rec.acquisition_id,
                 # capability authority (version grouping + floor)
                 "skill_id": getattr(rec, "skill_id", ""),
+                "generation": getattr(rec, "generation", 0),
                 "prior_authoritative": getattr(rec, "prior_authoritative", ""),
                 "last_authoritative_at": getattr(rec, "last_authoritative_at", 0.0),
                 "execution_mode": rec.execution_mode,

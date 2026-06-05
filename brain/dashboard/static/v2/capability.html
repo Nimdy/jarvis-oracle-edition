@@ -97,14 +97,22 @@
     .acqd .gov-chip.g-warn{border-color:var(--amber);color:var(--amber);background:rgba(40,30,3,.4);}
     .acqd .gov-chip.g-bad{border-color:var(--red);color:var(--red);background:rgba(45,15,15,.5);}
     .acqd .gov-chip.g-dim{color:var(--muted);}
-    .capskill{border:1px solid var(--line);border-radius:6px;padding:8px 11px;margin:8px 0;background:rgba(255,255,255,.012);}
-    .capsk-h{font-weight:600;font-size:12px;color:var(--text);margin-bottom:5px;}
-    .capv{display:flex;align-items:center;gap:9px;padding:4px 0;border-top:1px solid rgba(255,255,255,.04);flex-wrap:wrap;}
+    .capskill{border:1px solid var(--line);border-radius:6px;padding:9px 12px;margin:9px 0;background:rgba(255,255,255,.012);}
+    .capskill.capdormant{border-color:rgba(200,140,20,.4);background:rgba(40,30,3,.06);}
+    .capsk-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:7px;flex-wrap:wrap;}
+    .capsk-name{font-weight:700;font-size:13px;color:var(--text);font-family:var(--mono,monospace);}
+    .capstd{font-size:8.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--line);border-radius:7px;padding:1px 6px;}
+    .capsk-live{font-size:11px;color:var(--muted);}
+    .capv{display:flex;align-items:center;gap:11px;padding:6px 4px;border-top:1px solid rgba(255,255,255,.05);flex-wrap:wrap;}
     .capv:first-of-type{border-top:none;}
-    .capv .acqd-badge{font-size:8.5px;padding:1px 7px;border-radius:9px;font-weight:700;text-transform:uppercase;}
-    .capv .b-ok{background:rgba(20,40,20,.7);color:var(--green);} .capv .b-wait{background:rgba(10,28,40,.7);color:var(--cyan);}
-    .capv .b-fail{background:rgba(45,15,15,.7);color:var(--red);} .capv .b-dim{background:rgba(255,255,255,.05);color:var(--muted);}
-    .capn{font-family:var(--mono,monospace);font-size:10px;color:var(--text);}
+    .capv.caplive{background:rgba(20,40,20,.10);border-radius:5px;}
+    .capdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+    .capdot.on{background:var(--green);box-shadow:0 0 6px rgba(40,200,90,.7);} .capdot.off{background:var(--muted);opacity:.5;}
+    .caplabel{font-weight:700;font-size:12px;color:var(--text);min-width:120px;}
+    .capstate{font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:1px 8px;border-radius:9px;}
+    .capstate.st-live{background:rgba(20,40,20,.7);color:var(--green);} .capstate.st-shadow{background:rgba(10,28,40,.7);color:var(--cyan);}
+    .caphealth{font-size:10px;color:var(--muted);}
+    .capid{font-size:9px;color:var(--dim);font-family:var(--mono,monospace);}
     .capacts{margin-left:auto;display:flex;gap:6px;}
     .acqd .improve{margin-top:4px;}
     .acqd .impv-in{width:100%;box-sizing:border-box;background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:inherit;font-size:10px;padding:5px 7px;resize:vertical;}
@@ -716,55 +724,81 @@
   };
 
   // ── Capability Authority (shadow-first, reversible) ─────────────
+  // A version's plain-English name: "Original" or "Improvement #N" (from generation,
+  // falling back to the plugin-name pattern) — never the cryptic machine name.
+  function _capLabel(v){
+    var g=v.generation;
+    if(typeof g==='number' && g>0) return 'Improvement #'+g;
+    var m=/improve[_-]gen[_-]?(\d+)/i.exec(String(v.name||''));
+    if(m) return 'Improvement #'+m[1];
+    return 'Original';
+  }
   function renderCapabilityAuthority(){
     var box=el('cap-authority'); if(!box) return;
     var plugins=((PLUG||{}).plugins)||[];
     var groups={};
     plugins.forEach(function(p){
-      if(p.state==='quarantined') return;            // not yet a live-or-shadow capability
-      var sk=p.skill_id||('· '+p.name+' (standalone)');
-      (groups[sk]=groups[sk]||[]).push(p);
+      if(p.state==='quarantined'||p.state==='disabled') return;   // only live-or-shadow
+      var key=p.skill_id||('__'+p.name);
+      (groups[key]=groups[key]||{name:(p.skill_id||p.name), standalone:!p.skill_id, vers:[]}).vers.push(p);
     });
-    var skills=Object.keys(groups).sort();
-    var cnt=el('cap-auth-count'); if(cnt) cnt.textContent=skills.length+' skill'+(skills.length===1?'':'s');
-    if(!skills.length){ box.innerHTML='<div class="note">No live or shadow capabilities yet &mdash; deploy a skill to activate authority control.</div>'; return; }
-    box.innerHTML=skills.map(function(sk){
-      var vers=groups[sk].slice().sort(function(a,b){ return (b.last_authoritative_at||0)-(a.last_authoritative_at||0); });
+    var keys=Object.keys(groups).sort();
+    var cnt=el('cap-auth-count'); if(cnt) cnt.textContent=keys.length+' skill'+(keys.length===1?'':'s');
+    if(!keys.length){ box.innerHTML='<div class="note">No live or shadow capabilities yet &mdash; deploy a skill to activate authority control.</div>'; return; }
+    box.innerHTML=keys.map(function(k){
+      var g=groups[k];
+      var vers=g.vers.slice().sort(function(a,b){
+        if((a.state==='active')!==(b.state==='active')) return a.state==='active'?-1:1;   // live first
+        return (b.last_authoritative_at||0)-(a.last_authoritative_at||0)||(b.generation||0)-(a.generation||0);
+      });
       var active=vers.filter(function(v){ return v.state==='active'; })[0];
-      var head='<div class="capsk-h">'+escH(sk)+' <span class="sid">'+(active?('live: '+escH(String(active.name).slice(-14))):'dormant — no active version')+'</span></div>';
+      var hasFloor=vers.some(function(v){ return v.state!=='active' && (v.last_authoritative_at||0)>0; });
+      var head='<div class="capsk-h"><span class="capsk-name">'+escH(g.name)+(g.standalone?' <span class="capstd">standalone</span>':'')+'</span>'+
+        '<span class="capsk-live">'+(active?('&#9654; serving: <b>'+escH(_capLabel(active))+'</b>'):'&#10073;&#10073; dormant &mdash; nothing live')+'</span></div>';
       var rows=vers.map(function(v){
-        var st=String(v.state||'');
-        var cls=st==='active'?'b-ok':st==='shadow'?'b-wait':st==='disabled'?'b-fail':'b-dim';
-        var acts=[];
-        if((st==='shadow'||st==='supervised')) acts.push('<button class="btn-act" onclick="_capActivate(\''+escH(v.name)+'\')">Make active</button>');
-        if(st==='active'||st==='supervised') acts.push('<button class="btn-danger" onclick="_capDemote(\''+escH(v.name)+'\')">Demote → shadow</button>');
-        var n=v.invocation_count||0, sr=n?(Math.round(100*(v.success_rate!=null?v.success_rate:0))+'% ok / '+n):'no calls';
-        var floor=v.prior_authoritative?(' · floor: '+escH(String(v.prior_authoritative).slice(-8))):'';
-        return '<div class="capv">'+
-          '<span class="acqd-badge '+cls+'">'+escH(st)+'</span>'+
-          '<span class="capn">'+escH(String(v.name).slice(-22))+'</span>'+
-          '<span class="sid">v'+escH(v.version||'?')+' · '+sr+floor+'</span>'+
-          '<span class="capacts">'+acts.join('')+'</span>'+
+        var live=v.state==='active';
+        var n=v.invocation_count||0;
+        var health=n?(Math.round(100*(v.success_rate!=null?v.success_rate:0))+'% ok · '+n+' call'+(n===1?'':'s')):'never used yet';
+        var btn;
+        if(!live){
+          btn='<button class="btn-act" onclick="_capActivate(\''+escH(v.name)+'\',\''+escH(_capLabel(v))+'\')">Make this live</button>';
+        } else if(hasFloor){
+          btn='<button class="btn-danger" onclick="_capDemote(\''+escH(v.name)+'\',true)">Roll back to previous</button>';
+        } else {
+          btn='<button class="btn-danger" onclick="_capDemote(\''+escH(v.name)+'\',false)">Take offline</button>';
+        }
+        return '<div class="capv'+(live?' caplive':'')+'">'+
+          '<span class="capdot '+(live?'on':'off')+'"></span>'+
+          '<span class="caplabel">'+escH(_capLabel(v))+'</span>'+
+          '<span class="capstate '+(live?'st-live':'st-shadow')+'">'+(live?'LIVE':'shadow &middot; candidate')+'</span>'+
+          '<span class="caphealth">'+escH(health)+'</span>'+
+          '<span class="capid" title="'+escH(v.name)+'">id&nbsp;'+escH(String(v.name).slice(-8))+'</span>'+
+          '<span class="capacts">'+btn+'</span>'+
         '</div>';
       }).join('');
-      return '<div class="capskill">'+head+rows+'</div>';
+      return '<div class="capskill'+(active?'':' capdormant')+'">'+head+rows+'</div>';
     }).join('');
   }
-  window._capActivate=function(n){
-    V2.confirm('Make this version live',
-      'Promote <b>'+escH(String(n).slice(-16))+'</b> to the ACTIVE (authoritative) version for its skill? The current live version drops to shadow and is kept as the floor. You can demote back anytime.',
+  window._capActivate=function(n, label){
+    V2.confirm('Make &ldquo;'+escH(label||'this version')+'&rdquo; the live version',
+      'This makes <b>'+escH(label||String(n).slice(-12))+'</b> the version that serves real requests. The current live version steps down to shadow and is kept as the fallback &mdash; you can roll back to it anytime. Nothing is deleted.',
       function(){ V2.post('/api/plugins/'+encodeURIComponent(n)+'/make-authoritative',{approved_by:'owner'})
-        .then(function(r){ V2.toast('now live'+((r&&r.floor)?' · floor: '+String(r.floor).slice(-8):''), true); refresh(true); })
+        .then(function(){ V2.toast('&ldquo;'+(label||'version')+'&rdquo; is now live', true); refresh(true); })
         .catch(function(e){ V2.toast('failed: '+((e&&e.message)||''), false); }); },
-      { yesLabel:'Make active' });
+      { yesLabel:'Make it live' });
   };
-  window._capDemote=function(n){
-    V2.post('/api/plugins/'+encodeURIComponent(n)+'/demote',{actor:'owner'})
-      .then(function(r){
-        var msg=(r&&r.fell_back_to)?('demoted · fell back to '+String(r.fell_back_to).slice(-12))
-              :((r&&r.dormant)?'demoted · skill now dormant (no active)':'demoted to shadow');
-        V2.toast(msg, true); refresh(true);
-      }).catch(function(e){ V2.toast('failed: '+((e&&e.message)||''), false); });
+  window._capDemote=function(n, hasFloor){
+    var msg = hasFloor
+      ? 'Step the live version back to shadow and <b>restore the previous version</b> as live? Reversible &mdash; you can make it live again anytime. Nothing is deleted.'
+      : 'Take the live version back to shadow? There is <b>no earlier version</b> to fall back to, so this skill will be <b>dormant</b> (nothing serving) until you make a version live.';
+    V2.confirm('Demote the live version', msg, function(){
+      V2.post('/api/plugins/'+encodeURIComponent(n)+'/demote',{actor:'owner'})
+        .then(function(r){
+          var m=(r&&r.fell_back_to)?'rolled back &mdash; previous version is live again'
+                :((r&&r.dormant)?'skill is now dormant (nothing live)':'demoted to shadow');
+          V2.toast(m, true); refresh(true);
+        }).catch(function(e){ V2.toast('failed: '+((e&&e.message)||''), false); });
+    }, { yesLabel: hasFloor?'Roll back':'Take offline' });
   };
 
   function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderAcqDeliberation(); renderCapabilityAuthority(); renderEscalation(); renderSkillLearning(); }

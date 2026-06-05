@@ -142,7 +142,7 @@ class AcquisitionOrchestrator:
                 job = self._store.load_job(rec.acquisition_id)
                 sk = (job.requested_by or {}).get("skill_id", "") if job else ""
                 if sk:
-                    reg.set_skill_id(rec.name, sk)
+                    reg.set_skill_id(rec.name, sk, int(getattr(job, "revision_generation", 0) or 0))
         except Exception as exc:
             logger.debug("plugin skill_id backfill skipped: %s", exc)
 
@@ -2144,7 +2144,10 @@ class AcquisitionOrchestrator:
                 try:
                     skill_id = (job.requested_by or {}).get("skill_id", "")
                     if skill_id:
-                        registry.set_skill_id(plugin_name, skill_id)
+                        registry.set_skill_id(
+                            plugin_name, skill_id,
+                            int(getattr(job, "revision_generation", 0) or 0),
+                        )
                 except Exception:
                     pass
                 job.plugin_id = plugin_name
