@@ -95,13 +95,25 @@
     .acqd .drill{margin-top:7px;font-size:9.5px;color:var(--muted);line-height:1.55;display:none;}
     .acqd .drill.open{display:block;}
     .acqd .drill pre{white-space:pre-wrap;word-break:break-word;font-size:9px;color:var(--text);background:rgba(0,0,0,.25);padding:6px 8px;border-radius:4px;margin:3px 0;max-height:220px;overflow:auto;}
+    .acqd.alive{border-color:rgba(40,200,90,.4);background:rgba(20,40,20,.07);}
+    .acqd .live{font-size:8px;color:var(--green);font-weight:700;letter-spacing:.04em;animation:pulse 1.8s ease-in-out infinite;}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    .acqd .acqd-hd:hover{background:rgba(255,255,255,.025);}
+    .grp-h{font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:12px 0 4px;font-weight:600;}
+    .grp-toggle{cursor:pointer;user-select:none;} .grp-toggle:hover{color:var(--text);}
+    #past-builds.collapsed{display:none;}
+    .pausebtn{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--muted);font-size:10px;padding:2px 9px;border-radius:11px;cursor:pointer;margin-right:8px;font-family:inherit;}
+    .pausebtn:hover{color:var(--text);border-color:var(--muted);}
+    .pausebtn.on{background:rgba(40,30,3,.7);border-color:var(--amber);color:var(--amber);font-weight:700;}
+    body.paused .acqd .acqd-hd{cursor:pointer;}
+    .acqd .acqd-act .btn-danger{background:rgba(45,15,15,.6);border-color:rgba(180,40,40,.5);color:var(--red);}
   </style>
 </head>
 <body>
   <header>
     <h1>JARVIS · CAPABILITY &amp; SELF-MODIFICATION</h1><span class="v2">dashboardV2</span>
     <span class="sub">Can JARVIS change itself? Self-improve runs at human-approval (stage 2); specialists train shadow-only; codegen is standby — nothing here auto-executes without a human in the loop.</span>
-    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+    <span class="right"><button id="pausebtn" class="pausebtn" onclick="_togglePause()" title="Pause auto-refresh so open panels stay open while you read / act">⏸ Pause</button><span id="mode">—</span><span id="clock">—</span></span>
   </header>
   <nav id="v2nav"></nav>
 
@@ -499,8 +511,13 @@
   // ── Capability Deliberation (acquisition lane) ──────────────────
   var ACQ_LANES=['evidence_grounding','doc_resolution','planning','plan_review','implementation','environment_setup','plugin_quarantine','verification','plugin_activation','deployment','truth'];
   var ACQ_LANE_ABBR={evidence_grounding:'evid',doc_resolution:'docs',planning:'plan',plan_review:'review',implementation:'code',environment_setup:'venv',plugin_quarantine:'quar',verification:'verify',plugin_activation:'activ',deployment:'deploy',truth:'truth'};
-  var ACQDETAIL={};
+  var ACQ_TERMINAL_ST=['completed','failed','cancelled','deployed'];  // everything else is alive
+  var ACQDETAIL={};   // id -> full /api/acquisition/{id} (lazy)
+  var ACQREC={};      // id -> recent[] summary (lanes, repair_log) — survives re-render
+  var _acqOpen={};    // id -> true: open drill-downs, preserved across auto-refresh
+  var _pastOpen=null; // null=auto (expand when few); else manual bool
   function _laneCls(st){ st=String(st||''); return st==='completed'?'l-ok':st==='running'?'l-run':st==='failed'?'l-fail':'l-pend'; }
+  function _isActive(a){ return ACQ_TERMINAL_ST.indexOf(String((a||{}).status||'').toLowerCase())<0; }
   function _acqBadge(status){
     var s=String(status||'').toLowerCase();
     var c=(s==='deployed'||s==='completed')?'b-ok':(s==='failed'||s==='cancelled')?'b-fail':(s.indexOf('await')>=0)?'b-wait':(s==='executing'||s==='planning')?'b-run':'b-dim';
@@ -524,65 +541,118 @@
     });
     return h;
   }
+  // Row-level actions: approve gates while alive; Remove ONLY when terminal (never an alive build).
   function _acqActions(a){
     var s=String(a.status||'').toLowerCase(), id=a.acquisition_id, b=[];
     if(s==='awaiting_plan_review') b.push('<button class="btn-act" onclick="_acqApprovePlan(\''+id+'\')">Approve plan</button>');
     if(s==='awaiting_approval') b.push('<button class="btn-act" onclick="_acqApproveDeploy(\''+id+'\')">Approve deploy</button>');
-    if(s==='failed') b.push('<button class="btn-act" onclick="_acqCancel(\''+id+'\')">Remove</button>');
+    if(!_isActive(a)) b.push('<button class="btn-danger" onclick="_acqRemove(\''+id+'\')">Remove</button>');
     return b.length?'<div class="acqd-act">'+b.join('')+'</div>':'';
+  }
+  // One compact row: header + badges + lane ladder + actions; the heavy deliberation lives in the drill.
+  function _rowHtml(a){
+    var id=a.acquisition_id, alive=_isActive(a), open=_acqOpen[id]===true, lanes=a.lanes||{};
+    var ladder='<div class="lanes">'+ACQ_LANES.map(function(ln){
+      var v=lanes[ln], st=(v&&v.status)||v||'';
+      return '<div class="lane '+_laneCls(st)+'" title="'+escH(ln+': '+st)+'">'+escH(ACQ_LANE_ABBR[ln]||ln)+'</div>';
+    }).join('')+'</div>';
+    return '<div class="acqd'+(alive?' alive':'')+'">'+
+      '<div class="acqd-hd" onclick="_acqDrill(\''+escH(id)+'\')">'+
+        '<span class="acqd-ttl">'+escH(a.title||id)+'</span>'+_acqBadge(a.status)+
+        '<span class="acqd-badge b-dim">T'+escH(a.risk_tier!=null?a.risk_tier:'?')+'</span>'+
+        (alive?'<span class="live">● live</span>':'')+
+        '<span class="acqd-id">'+escH(String(id||'').slice(-10))+(open?' ▴':' ▾')+'</span>'+
+      '</div>'+ladder+
+      _acqActions(a)+
+      '<div class="drill'+(open?' open':'')+'" id="drill-'+escH(id)+'">'+(open?_drillHtml(id):'')+'</div>'+
+    '</div>';
+  }
+  // The "in the sand" detail: repair rounds, per-stage diagnostics, lane errors, plan.
+  function _drillHtml(id){
+    var a=ACQREC[id]||{}, full=ACQDETAIL[id];
+    var diag=a.codegen_prompt_diagnostics||{}, pdiag=a.planning_diagnostics||{}, h='';
+    h+=_repairRounds(diag);
+    var diagLine='';
+    if(pdiag.failure_reason) diagLine+='planning: '+escH(pdiag.failure_reason)+' &middot; ';
+    if(diag.repair_rounds!=null) diagLine+='repair_rounds: '+escH(diag.repair_rounds)+' &middot; ';
+    if(diag.prompt_version) diagLine+='prompt: '+escH(diag.prompt_version);
+    if(diagLine) h+='<div class="diag">'+diagLine+'</div>';
+    var lanes=a.lanes||{}, errs=[];
+    ACQ_LANES.forEach(function(ln){ var v=lanes[ln]; if(v&&v.error) errs.push(ln+': '+v.error); });
+    if(errs.length) h+='<div class="delib-h">Lane errors</div><pre>'+escH(errs.join('\n')).slice(0,1400)+'</pre>';
+    h+=_acqPlanHtml(full||a);
+    return h||'<span class="note">no deliberation detail recorded for this build.</span>';
+  }
+  function _acqPlanHtml(acq){
+    var p=(acq&&(acq.plan||acq.plan_summary))||{}, h='';
+    if(p.objective) h+='<div class="delib-h">Objective</div><pre>'+escH(p.objective)+'</pre>';
+    if(p.technical_approach) h+='<div class="delib-h">Technical approach</div><pre>'+escH(p.technical_approach)+'</pre>';
+    if(p.implementation_sketch) h+='<div class="delib-h">Implementation sketch</div><pre>'+escH(p.implementation_sketch)+'</pre>';
+    if(Array.isArray(p.test_cases)&&p.test_cases.length) h+='<div class="delib-h">Test cases</div><pre>'+escH(p.test_cases.join('\n'))+'</pre>';
+    return h;
   }
   function renderAcqDeliberation(){
     var box=el('acq-deliberation'); if(!box) return;
     var rec=((ACQ||{}).recent)||[];
     var cnt=el('acqd-count'); if(cnt) cnt.textContent=rec.length+' build'+(rec.length===1?'':'s');
     if(!rec.length){ box.innerHTML='<div class="note">No capability builds in flight or recent &mdash; idle background state, not failure.</div>'; return; }
-    box.innerHTML=rec.map(function(a){
-      var lanes=a.lanes||{};
-      var ladder='<div class="lanes">'+ACQ_LANES.map(function(ln){
-        var v=lanes[ln], st=(v&&v.status)||v||'';
-        return '<div class="lane '+_laneCls(st)+'" title="'+escH(ln+': '+st)+'">'+escH(ACQ_LANE_ABBR[ln]||ln)+'</div>';
-      }).join('')+'</div>';
-      var diag=a.codegen_prompt_diagnostics||{}, pdiag=a.planning_diagnostics||{};
-      var rounds=_repairRounds(diag), diagLine='';
-      if(pdiag.failure_reason) diagLine+='planning: '+escH(pdiag.failure_reason)+' &middot; ';
-      if(diag.repair_rounds!=null) diagLine+='repair_rounds: '+escH(diag.repair_rounds)+' &middot; ';
-      if(diag.prompt_version) diagLine+='prompt: '+escH(diag.prompt_version);
-      return '<div class="acqd">'+
-        '<div class="acqd-hd" onclick="_acqDrill(\''+escH(a.acquisition_id)+'\')">'+
-          '<span class="acqd-ttl">'+escH(a.title||a.acquisition_id)+'</span>'+_acqBadge(a.status)+
-          '<span class="acqd-badge b-dim">T'+escH(a.risk_tier!=null?a.risk_tier:'?')+'</span>'+
-          '<span class="acqd-id">'+escH(String(a.acquisition_id||'').slice(-10))+' ▾</span>'+
-        '</div>'+ladder+
-        (rounds?'<div class="delib">'+rounds+'</div>':'')+
-        (diagLine?'<div class="diag">'+diagLine+'</div>':'')+
-        _acqActions(a)+
-        '<div class="drill" id="drill-'+escH(a.acquisition_id)+'"></div>'+
-      '</div>';
-    }).join('');
+    // cache each summary by id so open drills survive auto-refresh re-renders
+    ACQREC={}; rec.forEach(function(a){ if(a&&a.acquisition_id) ACQREC[a.acquisition_id]=a; });
+    var active=rec.filter(_isActive), past=rec.filter(function(a){ return !_isActive(a); });
+    var showPast=(_pastOpen===null)?(past.length<=6):_pastOpen;
+    var h='';
+    if(active.length){ h+='<div class="grp-h">Active &middot; '+active.length+'</div>'+active.map(_rowHtml).join(''); }
+    else { h+='<div class="note">No active builds &mdash; nothing in flight right now.</div>'; }
+    if(past.length){
+      h+='<div class="grp-h grp-toggle" onclick="_togglePast()">'+(showPast?'▾':'▸')+' Past &middot; '+past.length+' (failed / cancelled / done)</div>'+
+         '<div id="past-builds"'+(showPast?'':' class="collapsed"')+'>'+past.map(_rowHtml).join('')+'</div>';
+    }
+    box.innerHTML=h;
   }
-  function _acqPlanHtml(acq){
-    var p=(acq&&acq.plan)||{}, h='';
-    if(p.objective) h+='<div class="delib-h">Objective</div><pre>'+escH(p.objective)+'</pre>';
-    if(p.technical_approach) h+='<div class="delib-h">Technical approach</div><pre>'+escH(p.technical_approach)+'</pre>';
-    if(p.implementation_sketch) h+='<div class="delib-h">Implementation sketch</div><pre>'+escH(p.implementation_sketch)+'</pre>';
-    if(Array.isArray(p.test_cases)&&p.test_cases.length) h+='<div class="delib-h">Test cases</div><pre>'+escH(p.test_cases.join('\n'))+'</pre>';
-    return h||'<span class="note">no plan detail recorded for this build.</span>';
-  }
-  window._acqDrill=function(id){
-    var d=el('drill-'+id); if(!d) return;
-    if(d.classList.contains('open')){ d.classList.remove('open'); return; }
-    d.classList.add('open');
-    if(ACQDETAIL[id]){ d.innerHTML=_acqPlanHtml(ACQDETAIL[id]); return; }
-    d.innerHTML='<span class="note">loading plan…</span>';
-    fetchJSON('/api/acquisition/'+encodeURIComponent(id)).then(function(r){ var acq=(r&&r.acquisition)||r||{}; ACQDETAIL[id]=acq; d.innerHTML=_acqPlanHtml(acq); }).catch(function(){ d.innerHTML='<span class="note">plan unavailable</span>'; });
+  window._togglePast=function(){
+    var past=(((ACQ||{}).recent)||[]).filter(function(a){ return !_isActive(a); });
+    var cur=(_pastOpen===null)?(past.length<=6):_pastOpen;
+    _pastOpen=!cur; renderAcqDeliberation();
   };
-  window._acqApprovePlan=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan',{verdict:'approved'}),'plan approved').then(refresh).catch(function(){}); };
-  window._acqApproveDeploy=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-deploy',{approved:true}),'deploy approved').then(refresh).catch(function(){}); };
-  window._acqCancel=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/cancel',{reason:'operator_removed'}),'removed').then(refresh).catch(function(){}); };
+  window._acqDrill=function(id){
+    var open=!(_acqOpen[id]===true);
+    if(open){ _acqOpen[id]=true; } else { delete _acqOpen[id]; }
+    var d=el('drill-'+id); if(!d) return;
+    if(!open){ d.classList.remove('open'); d.innerHTML=''; return; }
+    d.classList.add('open'); d.innerHTML=_drillHtml(id);
+    // lazily enrich once with full detail (complete plan + verification artifacts)
+    if(ACQDETAIL[id]===undefined){
+      ACQDETAIL[id]=null;
+      fetchJSON('/api/acquisition/'+encodeURIComponent(id)).then(function(r){
+        ACQDETAIL[id]=(r&&r.acquisition)||r||{};
+        if(_acqOpen[id]){ var dd=el('drill-'+id); if(dd) dd.innerHTML=_drillHtml(id); }
+      }).catch(function(){});
+    }
+  };
+  window._acqApprovePlan=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan',{verdict:'approved'}),'plan approved').then(function(){ refresh(true); }).catch(function(){}); };
+  window._acqApproveDeploy=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-deploy',{approved:true}),'deploy approved').then(function(){ refresh(true); }).catch(function(){}); };
+  // Remove is gated twice: refuse if still alive, then a typed-free confirm. The store keeps the audit trail.
+  window._acqRemove=function(id){
+    var a=ACQREC[id]||{};
+    if(_isActive(a)){ V2.toast('refusing to remove an active build', false); return; }
+    V2.confirm('Remove this build from the list',
+      'Build <b>'+escH(String(id).slice(-10))+'</b> is terminal (<b>'+escH(a.status||'?')+'</b>). Remove it from the acquisition list? Its audit trail stays in the store &mdash; this only clears it from view.',
+      function(){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/cancel',{reason:'operator_removed'}),'build removed').then(function(){ refresh(true); }).catch(function(){}); },
+      { yesLabel:'Remove' });
+  };
 
   function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderAcqDeliberation(); renderEscalation(); renderSkillLearning(); }
 
-  function refresh(){
+  var _paused=false;
+  window._togglePause=function(){
+    _paused=!_paused;
+    var b=el('pausebtn');
+    if(b){ b.textContent=_paused?'▶ Resume':'⏸ Pause'; b.classList.toggle('on',_paused); }
+    document.body.classList.toggle('paused',_paused);
+    if(!_paused) refresh(true);   // catch up immediately on resume
+  };
+  function refresh(force){
+    if(_paused && !force) return;   // paused: skip the poll so open panels/interactions persist
     Promise.allSettled([
       fetchJSON('/api/self-improve'),
       fetchJSON('/api/self-improve/scanner'),
@@ -726,7 +796,7 @@
   }
   wireOps();
 
-  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+  refresh(); setInterval(function(){ refresh(); }, 5000); tick(); setInterval(tick, 1000);
 })();
 </script>
 </body>
