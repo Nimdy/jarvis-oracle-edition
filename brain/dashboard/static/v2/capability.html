@@ -97,6 +97,15 @@
     .acqd .gov-chip.g-warn{border-color:var(--amber);color:var(--amber);background:rgba(40,30,3,.4);}
     .acqd .gov-chip.g-bad{border-color:var(--red);color:var(--red);background:rgba(45,15,15,.5);}
     .acqd .gov-chip.g-dim{color:var(--muted);}
+    .capskill{border:1px solid var(--line);border-radius:6px;padding:8px 11px;margin:8px 0;background:rgba(255,255,255,.012);}
+    .capsk-h{font-weight:600;font-size:12px;color:var(--text);margin-bottom:5px;}
+    .capv{display:flex;align-items:center;gap:9px;padding:4px 0;border-top:1px solid rgba(255,255,255,.04);flex-wrap:wrap;}
+    .capv:first-of-type{border-top:none;}
+    .capv .acqd-badge{font-size:8.5px;padding:1px 7px;border-radius:9px;font-weight:700;text-transform:uppercase;}
+    .capv .b-ok{background:rgba(20,40,20,.7);color:var(--green);} .capv .b-wait{background:rgba(10,28,40,.7);color:var(--cyan);}
+    .capv .b-fail{background:rgba(45,15,15,.7);color:var(--red);} .capv .b-dim{background:rgba(255,255,255,.05);color:var(--muted);}
+    .capn{font-family:var(--mono,monospace);font-size:10px;color:var(--text);}
+    .capacts{margin-left:auto;display:flex;gap:6px;}
     .acqd .improve{margin-top:4px;}
     .acqd .impv-in{width:100%;box-sizing:border-box;background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:inherit;font-size:10px;padding:5px 7px;resize:vertical;}
     .acqd .impv-in:focus{border-color:var(--cyan);outline:none;}
@@ -167,6 +176,12 @@
       <h2>Capability Deliberation <span id="acqd-count" class="floorpill"></span></h2>
       <div class="note">The internal think&rarr;code&rarr;validate of each plugin build, inline (no pivoting): the lane ladder, the codegen <b>repair rounds</b> (including what it caught and rejected), per-stage diagnostics, and the gate it's waiting on. Click a build to drill into its full plan.</div>
       <div id="acq-deliberation"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Capability Authority <span id="cap-auth-count" class="floorpill"></span></h2>
+      <div class="note">Every acquired skill is born in <b>shadow</b>. Promotion to <b>active</b> is yours; demotion back to shadow is a reversible circuit breaker you &mdash; or JARVIS &mdash; can pull. The prior good version is kept as the <b>floor</b>: demoting the live version falls back to it. At most one version is authoritative per skill.</div>
+      <div id="cap-authority"></div>
     </section>
 
     <section class="card col12">
@@ -700,7 +715,59 @@
       { yesLabel:'Remove' });
   };
 
-  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderAcqDeliberation(); renderEscalation(); renderSkillLearning(); }
+  // ── Capability Authority (shadow-first, reversible) ─────────────
+  function renderCapabilityAuthority(){
+    var box=el('cap-authority'); if(!box) return;
+    var plugins=((PLUG||{}).plugins)||[];
+    var groups={};
+    plugins.forEach(function(p){
+      if(p.state==='quarantined') return;            // not yet a live-or-shadow capability
+      var sk=p.skill_id||('· '+p.name+' (standalone)');
+      (groups[sk]=groups[sk]||[]).push(p);
+    });
+    var skills=Object.keys(groups).sort();
+    var cnt=el('cap-auth-count'); if(cnt) cnt.textContent=skills.length+' skill'+(skills.length===1?'':'s');
+    if(!skills.length){ box.innerHTML='<div class="note">No live or shadow capabilities yet &mdash; deploy a skill to activate authority control.</div>'; return; }
+    box.innerHTML=skills.map(function(sk){
+      var vers=groups[sk].slice().sort(function(a,b){ return (b.last_authoritative_at||0)-(a.last_authoritative_at||0); });
+      var active=vers.filter(function(v){ return v.state==='active'; })[0];
+      var head='<div class="capsk-h">'+escH(sk)+' <span class="sid">'+(active?('live: '+escH(String(active.name).slice(-14))):'dormant — no active version')+'</span></div>';
+      var rows=vers.map(function(v){
+        var st=String(v.state||'');
+        var cls=st==='active'?'b-ok':st==='shadow'?'b-wait':st==='disabled'?'b-fail':'b-dim';
+        var acts=[];
+        if((st==='shadow'||st==='supervised')) acts.push('<button class="btn-act" onclick="_capActivate(\''+escH(v.name)+'\')">Make active</button>');
+        if(st==='active'||st==='supervised') acts.push('<button class="btn-danger" onclick="_capDemote(\''+escH(v.name)+'\')">Demote → shadow</button>');
+        var n=v.invocation_count||0, sr=n?(Math.round(100*(v.success_rate!=null?v.success_rate:0))+'% ok / '+n):'no calls';
+        var floor=v.prior_authoritative?(' · floor: '+escH(String(v.prior_authoritative).slice(-8))):'';
+        return '<div class="capv">'+
+          '<span class="acqd-badge '+cls+'">'+escH(st)+'</span>'+
+          '<span class="capn">'+escH(String(v.name).slice(-22))+'</span>'+
+          '<span class="sid">v'+escH(v.version||'?')+' · '+sr+floor+'</span>'+
+          '<span class="capacts">'+acts.join('')+'</span>'+
+        '</div>';
+      }).join('');
+      return '<div class="capskill">'+head+rows+'</div>';
+    }).join('');
+  }
+  window._capActivate=function(n){
+    V2.confirm('Make this version live',
+      'Promote <b>'+escH(String(n).slice(-16))+'</b> to the ACTIVE (authoritative) version for its skill? The current live version drops to shadow and is kept as the floor. You can demote back anytime.',
+      function(){ V2.post('/api/plugins/'+encodeURIComponent(n)+'/make-authoritative',{approved_by:'owner'})
+        .then(function(r){ V2.toast('now live'+((r&&r.floor)?' · floor: '+String(r.floor).slice(-8):''), true); refresh(true); })
+        .catch(function(e){ V2.toast('failed: '+((e&&e.message)||''), false); }); },
+      { yesLabel:'Make active' });
+  };
+  window._capDemote=function(n){
+    V2.post('/api/plugins/'+encodeURIComponent(n)+'/demote',{actor:'owner'})
+      .then(function(r){
+        var msg=(r&&r.fell_back_to)?('demoted · fell back to '+String(r.fell_back_to).slice(-12))
+              :((r&&r.dormant)?'demoted · skill now dormant (no active)':'demoted to shadow');
+        V2.toast(msg, true); refresh(true);
+      }).catch(function(e){ V2.toast('failed: '+((e&&e.message)||''), false); });
+  };
+
+  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderAcqDeliberation(); renderCapabilityAuthority(); renderEscalation(); renderSkillLearning(); }
 
   var _paused=false;
   window._togglePause=function(){

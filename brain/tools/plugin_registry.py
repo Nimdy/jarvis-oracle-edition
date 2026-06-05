@@ -955,10 +955,15 @@ class PluginRegistry:
                 "version": rec.version,
                 "risk_tier": rec.risk_tier,
                 "invocation_count": rec.invocation_count,
+                "success_count": rec.success_count,
                 "success_rate": round(rec.success_count / max(rec.invocation_count, 1), 3),
                 "avg_latency_ms": round(rec.avg_latency_ms, 1),
                 "supervision_mode": rec.supervision_mode,
                 "acquisition_id": rec.acquisition_id,
+                # capability authority (version grouping + floor)
+                "skill_id": getattr(rec, "skill_id", ""),
+                "prior_authoritative": getattr(rec, "prior_authoritative", ""),
+                "last_authoritative_at": getattr(rec, "last_authoritative_at", 0.0),
                 "execution_mode": rec.execution_mode,
                 "venv_ready": rec.venv_ready,
             }
