@@ -135,4 +135,16 @@ a live build; audit trail preserved). Static — browser refresh only.
   tension and zero boost, so the spark/grounding ring (P1 shadow) is the mechanism that will
   eventually confirm/refute them against external truth.
 
-**Pillar 3 — Iterative: not started.**
+**Pillar 3 — Iterative: plugin lane SHIPPED.** An operator can give "do better" feedback on any
+terminal build and it **re-enters the pipeline as a new governed acquisition**
+(`orchestrator.improve_capability` → `create(revision_*)`). The feedback rides as
+planning+codegen **revision context** (`_build_improvement_context`, which also loads the prior
+plan so it revises rather than restarts); the prior job's audit trail is preserved and cross-linked
+(Terminal Acquisition Closure); the improved version runs the **same** governed lifecycle —
+classify → plan (with governance) → codegen+repair → quarantine → verify → human-approved deploy —
+so trust is never inherited. `POST /api/acquisition/{id}/improve`; the v2 dashboard exposes an
+"Improve this capability" box on terminal builds + a `gen-N` lineage badge.
+
+*Still to do (Pillar 3):* the **Matrix specialist** lane (feedback → re-training pass) and the
+**self-improve patch** lane (feedback → new patch attempt) — same re-entry pattern, different
+pipeline.
