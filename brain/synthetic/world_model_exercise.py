@@ -556,7 +556,10 @@ def run_world_model_exercise(
                 if rid not in fired_ids:
                     stats.rules_missed[rid] += 1
 
-            validated = engine.validate_predictions(after)
+            # Synthetic exercise: tag outcomes accordingly. (engine is a throwaway
+            # instance today, so this never reaches the live brain — but the tag is the
+            # honest source of truth and guards against a future shared-engine refactor.)
+            validated = engine.validate_predictions(after, origin="synthetic")
             stats.predictions_validated += len(validated)
 
             for v in validated:

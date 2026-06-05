@@ -386,6 +386,13 @@ class CausalEngine:
         self._predictions: deque[CausalPrediction] = deque(maxlen=MAX_PREDICTION_LOG)
         self._rule_hits: dict[str, int] = {}
         self._rule_misses: dict[str, int] = {}
+        # Lived-only mirror (Weight-Room lived-before-synthetic): outcomes
+        # validated OUTSIDE a synthetic session. Pooled _rule_hits/_misses count
+        # every validation regardless of origin (kept for oracle_benchmark back-
+        # compat); these two count ONLY live reps so the eval scoreboard's
+        # epistemic_integrity can never be inflated by synthetic training.
+        self._rule_hits_live: dict[str, int] = {}
+        self._rule_misses_live: dict[str, int] = {}
         self._total_validated: int = 0
 
     # -- Public API ---------------------------------------------------------
@@ -470,10 +477,19 @@ class CausalEngine:
 
         return fired
 
-    def validate_predictions(self, world_state: WorldState) -> list[CausalPrediction]:
-        """Check expired predictions against actual state.  Returns newly validated."""
+    def validate_predictions(
+        self, world_state: WorldState, origin: str = "live",
+    ) -> list[CausalPrediction]:
+        """Check expired predictions against actual state.  Returns newly validated.
+
+        ``origin`` ("live" | "synthetic") tags each validated outcome by the
+        session it was observed in. Outcomes always feed the pooled
+        _rule_hits/_misses; only ``origin == "live"`` reps additionally feed the
+        lived-only mirror that get_accuracy exposes as predictive_accuracy_live.
+        """
         now = time.time()
         validated: list[CausalPrediction] = []
+        is_live = origin == "live"
 
         for pred in self._predictions:
             if pred.outcome != "pending":
@@ -485,6 +501,8 @@ class CausalEngine:
                 pred.outcome = "hit"
                 pred.validated_at = now
                 self._rule_hits[pred.rule_id] = self._rule_hits.get(pred.rule_id, 0) + 1
+                if is_live:
+                    self._rule_hits_live[pred.rule_id] = self._rule_hits_live.get(pred.rule_id, 0) + 1
                 self._total_validated += 1
                 validated.append(pred)
                 continue
@@ -503,9 +521,13 @@ class CausalEngine:
             if total > 0 and hits >= total * 0.5:
                 pred.outcome = "hit"
                 self._rule_hits[pred.rule_id] = self._rule_hits.get(pred.rule_id, 0) + 1
+                if is_live:
+                    self._rule_hits_live[pred.rule_id] = self._rule_hits_live.get(pred.rule_id, 0) + 1
             else:
                 pred.outcome = "miss"
                 self._rule_misses[pred.rule_id] = self._rule_misses.get(pred.rule_id, 0) + 1
+                if is_live:
+                    self._rule_misses_live[pred.rule_id] = self._rule_misses_live.get(pred.rule_id, 0) + 1
 
             pred.validated_at = now
             self._total_validated += 1
@@ -551,10 +573,25 @@ class CausalEngine:
 
         p_total = p_hits + p_miss
         d_total = d_hits + d_miss
+
+        # Lived-only foresight: same persistence/predictive split, but over the
+        # live mirror only. The eval scoreboard's epistemic_integrity reads these
+        # so synthetic training reps can never inflate the honesty score. Additive
+        # — predictive_accuracy above is unchanged (oracle_benchmark back-compat).
+        dl_hits = dl_miss = 0
+        for rid in set(self._rule_hits_live) | set(self._rule_misses_live):
+            if rid in _PERSISTENCE_RULE_IDS:
+                continue
+            dl_hits += self._rule_hits_live.get(rid, 0)
+            dl_miss += self._rule_misses_live.get(rid, 0)
+        dl_total = dl_hits + dl_miss
+
         return {
             "overall_accuracy": round(overall, 3),
             "predictive_accuracy": round(d_hits / d_total, 3) if d_total > 0 else 0.0,
             "predictive_total": d_total,
+            "predictive_accuracy_live": round(dl_hits / dl_total, 3) if dl_total > 0 else 0.0,
+            "predictive_total_live": dl_total,
             "persistence_accuracy": round(p_hits / p_total, 3) if p_total > 0 else 0.0,
             "persistence_total": p_total,
             "total_validated": self._total_validated,

@@ -60,8 +60,9 @@ def _harvest_external_eval_scores(
     a self-grade dressed up as measurement.
 
     Wired:
-      * epistemic_integrity <- world-model predictive_accuracy (the world judged whether the
-        model's predictions of CHANGE were right; predictive_total = sample size).
+      * epistemic_integrity <- world-model predictive_accuracy_LIVE (the world judged whether
+        the model's predictions of CHANGE were right; lived-only so synthetic training reps
+        can't inflate it; predictive_total_live = sample size).
       * self_report_honesty <- PVL process contracts (did the contracted process actually
         fire in the event stream — claim vs behavior; applicable_contracts = sample size).
     Next: capability <- skill-contract expected-vs-actual proofs; grounding <- external
@@ -69,9 +70,13 @@ def _harvest_external_eval_scores(
     """
     scores: list[EvalScore] = []
 
+    # Lived-before-synthetic: read the LIVE-ONLY foresight, never the pooled number. If every
+    # rep so far landed inside a synthetic session, predictive_total_live == 0 and the category
+    # stays visibly empty rather than reporting a synthetic-contaminated grade. The lived
+    # counters start at 0 on (re)start and rebuild from real world-model ticks.
     wmc = latest_by_source.get("world_model_causal", {}) or {}
-    pa = wmc.get("predictive_accuracy")
-    pt = int(wmc.get("predictive_total", 0) or 0)
+    pa = wmc.get("predictive_accuracy_live")
+    pt = int(wmc.get("predictive_total_live", 0) or 0)
     if pa is not None and pt > 0:
         scores.append(EvalScore(
             category="epistemic_integrity",
@@ -79,11 +84,13 @@ def _harvest_external_eval_scores(
             sample_size=pt,
             scoring_version=SCORING_VERSION,
             raw_metrics={
-                "predictive_accuracy": pa, "predictive_total": pt,
-                "total_hits": wmc.get("total_hits"), "total_misses": wmc.get("total_misses"),
-                "comparator": "world_model_causal.predictive_accuracy",
+                "predictive_accuracy_live": pa, "predictive_total_live": pt,
+                # pooled numbers kept for context only — NOT the score (may include synthetic)
+                "predictive_accuracy_pooled": wmc.get("predictive_accuracy"),
+                "predictive_total_pooled": wmc.get("predictive_total"),
+                "comparator": "world_model_causal.predictive_accuracy_live",
             },
-            notes="world-model prediction of CHANGE vs actual outcome (external ground truth)",
+            notes="world-model prediction of CHANGE vs actual outcome, LIVE sessions only (external ground truth, synthetic-firewalled)",
             run_id=run_id,
         ))
 

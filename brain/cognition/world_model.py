@@ -190,7 +190,7 @@ class WorldModel:
             _origin = "synthetic" if _mg.synthetic_session_active() else "live"
         except Exception:
             _origin = "live"
-        validated = self._causal.validate_predictions(self._current)
+        validated = self._causal.validate_predictions(self._current, origin=_origin)
         for v in validated:
             self._promotion.record_outcome(v.outcome == "hit", origin=_origin)
             try:
@@ -205,7 +205,7 @@ class WorldModel:
                 pass
 
         # Phase 3: validate simulator predictions against real state
-        sim_validated = self._sim_causal.validate_predictions(self._current)
+        sim_validated = self._sim_causal.validate_predictions(self._current, origin=_origin)
         for sv in sim_validated:
             self._sim_promotion.record_outcome(sv.outcome == "hit", origin=_origin)
 
