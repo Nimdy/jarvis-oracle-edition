@@ -188,11 +188,7 @@ class AcquisitionOrchestrator:
                 sk = getattr(rec, "skill_id", "")
                 if not sk or rec.state in ("quarantined", "disabled"):
                     continue
-                if reg._compiled_patterns.get(rec.name):
-                    continue
-                pats = self._default_trigger_patterns(sk)
-                if pats:
-                    reg.set_intent_patterns(rec.name, pats)
+                self._ensure_plugin_trigger(reg, rec.name, sk)
         except Exception as exc:
             logger.debug("plugin authority reconcile skipped: %s", exc)
 
@@ -2208,6 +2204,8 @@ class AcquisitionOrchestrator:
                             plugin_name, skill_id,
                             int(getattr(job, "revision_generation", 0) or 0),
                         )
+                        # born summonable: ensure a trigger now (not only on reboot)
+                        self._ensure_plugin_trigger(registry, plugin_name, skill_id)
                 except Exception:
                     pass
                 job.plugin_id = plugin_name
@@ -2772,6 +2770,21 @@ class AcquisitionOrchestrator:
         self._store.save_job(job)
         return True
 
+    def _ensure_plugin_trigger(self, reg: Any, plugin_name: str, skill_id: str) -> None:
+        """Guarantee a plugin is summonable: if it has no compiled trigger patterns, give it
+        the skill-derived trigger. The LIVE version must always be reachable by voice — a
+        newly-built/deployed plugin can't wait for a reboot to get its trigger."""
+        if not skill_id:
+            return
+        try:
+            if reg._compiled_patterns.get(plugin_name):
+                return
+            pats = self._default_trigger_patterns(skill_id)
+            if pats:
+                reg.set_intent_patterns(plugin_name, pats)
+        except Exception:
+            pass
+
     def _make_plugin_authoritative(
         self, job: CapabilityAcquisitionJob, approved_by: str, reason: str
     ) -> None:
@@ -2783,8 +2796,11 @@ class AcquisitionOrchestrator:
             return
         try:
             from tools.plugin_registry import get_plugin_registry
-            get_plugin_registry().make_authoritative(
-                plugin_name, approved_by=approved_by, reason=reason)
+            reg = get_plugin_registry()
+            reg.make_authoritative(plugin_name, approved_by=approved_by, reason=reason)
+            # The version going live MUST be summonable — give it a trigger now if the
+            # build didn't produce one (don't make the owner reboot to invoke it).
+            self._ensure_plugin_trigger(reg, plugin_name, (job.requested_by or {}).get("skill_id", ""))
         except Exception as exc:
             logger.warning("make_authoritative failed for %s: %s", plugin_name, exc)
 
