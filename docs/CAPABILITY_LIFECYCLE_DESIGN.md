@@ -92,3 +92,47 @@ artifact is a living thing that can be told "do better" and will.
    acquisition retry + repair loop), then Matrix + self-improve.
 
 Each ships shadow-first / human-gated and is verified before it claims anything.
+
+---
+
+## Build status (2026-06-05)
+
+**Pillar 1 — Visible: SHIPPED** (commits on `thespark`). The v2 `capability.html` surfaces the
+acquisition deliberation high-level + granular: compact rows with a lane ladder; a click-to-open
+drill (repair rounds, per-stage diagnostics, lane errors, plan, **governance verdict**); inline
+approve/remove; a **pause** toggle so open panels don't collapse on auto-refresh; **active vs
+past** split with a collapsible past group; and **terminal-only safe removal** (refuses to remove
+a live build; audit trail preserved). Static — browser refresh only.
+
+**Pillar 2 — Governed: SHIPPED (the structural firewall), with two earned/decision items left.**
+- *Planned, not post-hoc (2A):* every plugin plan now carries a `governance` section decided
+  DURING planning — a **deterministic floor** (`AcquisitionOrchestrator._derive_governance`) infers
+  `reads_external / egress / may_touch_memory / provenance_tag / requires_save_consent` from the
+  intent/approach so the firewall KNOWS rather than trusting the LLM. The planner prompt also
+  reasons about it (a `GOVERNANCE:` section) and that statement is merged in but **can only raise
+  caution, never weaken the floor** (`may_touch_memory` stays False; external readers stay
+  `web_scrap` + consent-required — unit-verified).
+- *Epistemic teeth (2B):* a new low-trust provenance **`web_scrap`**. Before this, scraped web
+  findings were written as `external_source`, which earns the **highest** confidence boost (+0.10)
+  and counts as *grounded* — so a random website was trusted more than JARVIS's own eyes. Now web /
+  unverified findings (and research summaries) are tagged `web_scrap` (no boost; carries grounding
+  tension so the grounding ring is drawn to cross-validate it against a peer-reviewed source);
+  genuinely citable knowledge (`factual_knowledge` — academic/DOI/peer-reviewed) keeps
+  `external_source`. Forward-only: zero existing beliefs reclassified.
+- *Surfaced (2C):* the dashboard drill renders the governance verdict as chips.
+
+  **DECISION FOR DAVID (open-question #1 discipline):** `web_scrap` is tracked as its own tier in
+  `spark_metrics` and **deliberately NOT folded into the keystone grounded:inferred ratio** —
+  whether scraped data should weight grounded/inferred (like the same open question for
+  `external_source`) is yours to decide, not a silent default.
+
+  **EARNED / NOT YET BUILT — the ask-to-save consent turn.** Points 1–4 of Pillar 2 are now
+  structurally enforced *if* scraped data ever reaches memory (it has no auto path; the one explicit
+  path — `KnowledgeIntegrator.integrate`, the research pipeline — now tags `web_scrap`). But the
+  conversational "is this useful — should I save it?" turn lives in the companion-cognition loop and
+  is **not yet wired**; building it as theater (a fake prompt) would violate the north star, so it's
+  flagged as the next real piece. Cross-validation already has its home: `web_scrap` beliefs carry
+  tension and zero boost, so the spark/grounding ring (P1 shadow) is the mechanism that will
+  eventually confirm/refute them against external truth.
+
+**Pillar 3 — Iterative: not started.**
