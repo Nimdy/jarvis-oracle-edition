@@ -531,6 +531,40 @@ class PluginRegistry:
         self._save_registry()
         return True
 
+    def set_intent_patterns(self, plugin_name: str, patterns: list[str]) -> bool:
+        """Set/replace a plugin's intent trigger patterns (the data-owned trigger) and
+        recompile them live. Anchored to the skill via the record; self-cleaning on removal."""
+        rec = self._records.get(plugin_name)
+        if not rec:
+            return False
+        valid: list[str] = []
+        for p in patterns or []:
+            if not isinstance(p, str) or not p or len(p) > 200:
+                continue
+            try:
+                re.compile(p, re.I)
+                valid.append(p)
+            except re.error:
+                pass
+        if not valid:
+            return False
+        self._compiled_patterns[plugin_name] = [re.compile(p, re.I) for p in valid]
+        # persist into the stored manifest so it survives restart
+        try:
+            mdir = self._plugins_dir / plugin_name
+            mpath = mdir / "manifest.json"
+            if mpath.exists():
+                m = json.loads(mpath.read_text())
+                m["intent_patterns"] = valid
+                from memory.persistence import atomic_write_json
+                atomic_write_json(mpath, m)
+        except Exception:
+            pass
+        rec.updated_at = time.time()
+        self._save_registry()
+        self._audit_log(plugin_name, {"action": "intent_patterns_set", "count": len(valid)})
+        return True
+
     def versions_for_skill(self, skill_id: str) -> list[PluginRecord]:
         """All plugin versions bound to a skill, newest-activated first."""
         if not skill_id:

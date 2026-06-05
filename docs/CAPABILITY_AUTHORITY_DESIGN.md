@@ -49,6 +49,44 @@ actions, "shadow" must mean **dry-run / mocked** until promoted. The governance/
 verdict (`reads_external`, and a future `writes_external`/`actuates`) is the right signal to
 drive this. Flagged for when JARVIS controls anything physical in a home.
 
+## Pipeline integration (the acquisition lanes obey the invariants)
+
+The acquisition pipeline must not have its own back-door to `active`. Per Invariants 1 & 2:
+
+- **Activation lane** promotes only `quarantined → shadow → supervised` (born in shadow,
+  observed). It NEVER promotes to `active`.
+- **Deployment** is the single path to `active`, and it goes through `make_authoritative`
+  (atomic per skill, records the floor): for tier ≥ 2 it runs on the owner's
+  `approve_deployment`; for tier < 2 (low blast radius) the deployment lane runs it
+  automatically. So nothing is authoritative without passing the deployment gate, and the
+  one-active-per-skill invariant holds by construction.
+- **Boot reconcile** re-asserts the invariant on restart: backfill `skill_id`/`generation`,
+  and if any skill has >1 `active` (a pre-fix leak), keep the earliest-generation active and
+  demote the rest to shadow — self-healing.
+
+## Triggers: how a capability is summoned (anchored, not hardcoded)
+
+A skill nobody can invoke is dead weight, but a hardcoded trigger dangles when the skill
+changes. Resolution: **the trigger is data the skill owns, not routing logic.**
+
+- Each acquired skill declares an **intent trigger** (e.g. `scrape`, `scrape <url>`) stored
+  on its plugin record (the registry already compiles `manifest.intent_patterns` and
+  `match()` routes on them — dynamic, per-skill, self-cleaning).
+- The trigger is **anchored to `skill_id`, not the plugin version** — so improve/demote/
+  rollback changes the live *version* but never the user's command; "scrape" always means
+  the skill, and the authority layer picks which version serves.
+- **Owner-blessed at the deploy gate**: adding a trigger is adding a command to the
+  household vocabulary, so the owner confirms it when approving the deploy (and collisions
+  are caught there). Golden commands and acquired-skill triggers become one model.
+- **Self-cleaning**: remove the skill → its trigger goes with it; a user saying the verb
+  gets a graceful "I don't have that anymore" (the audit trail knows it existed). No
+  dangling hardcode. This is NOT verb-hacking — verb-hacking is burying keyword maps in the
+  router; a skill declaring its own trigger as data is self-description.
+- The full loop must close: say → route on the trigger → invoke the active version → the
+  real result is piped back into the reply (the return half already exists in
+  `conversation_handler`). A capability isn't real until it does the thing and comes back
+  with the information. Correctness over speed; a 3-second real fetch is a win.
+
 ## Build increments
 
 1. **Registry core (this commit):** `skill_id` / `prior_authoritative` / `last_authoritative_at`

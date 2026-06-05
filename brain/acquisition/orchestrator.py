@@ -127,24 +127,74 @@ class AcquisitionOrchestrator:
         self._lane_futures: dict[tuple[str, str], concurrent.futures.Future] = {}
 
         self._load_active_jobs()
-        self._backfill_plugin_skill_ids()
+        self._reconcile_plugin_authority()
 
-    def _backfill_plugin_skill_ids(self) -> None:
-        """One-time: bind existing plugin records to their skill (the authority grouping
-        key) by reverse-looking-up acquisition_id -> job.requested_by.skill_id. Cheap no-op
-        once every record has a skill_id; the orchestrator owns the acquisition<->registry link."""
+    @staticmethod
+    def _default_trigger_patterns(skill_id: str) -> list[str]:
+        r"""Derive a capability's intent trigger from its OWN identity (not hand-hacked
+        verbs): the skill_id, version-stripped, as a phrase + stemmed token patterns.
+        e.g. 'web_scraping_v1' -> [r'\bweb\s+scraping\b', r'\bscrap\w*\b']."""
+        base = re.sub(r"[_\-]v?\d+$", "", skill_id or "")
+        tokens = [t for t in re.split(r"[_\-\s]+", base) if t]
+        if not tokens:
+            return []
+        pats = [r"\b" + r"\s+".join(re.escape(t) for t in tokens) + r"\b"]
+        for t in tokens:
+            if len(t) < 4:
+                continue
+            stem = re.sub(r"(?:ing|ers|er|s)$", "", t)
+            if len(stem) >= 3:
+                pats.append(r"\b" + re.escape(stem) + r"\w*\b")
+        seen: set[str] = set()
+        return [p for p in pats if not (p in seen or seen.add(p))][:6]
+
+    def _reconcile_plugin_authority(self) -> None:
+        """Boot reconcile (self-healing, cheap once consistent):
+          1. backfill skill_id/generation from each plugin's acquisition,
+          2. enforce ONE active per skill — keep earliest generation, demote pre-fix leaks,
+          3. backfill a skill-derived trigger for skill-bound plugins that have none.
+        The orchestrator owns the acquisition<->registry link, so this lives here."""
         try:
             from tools.plugin_registry import get_plugin_registry
             reg = get_plugin_registry()
-            for rec in list(getattr(reg, "_records", {}).values()):
+
+            # (1) bind skill_id + generation
+            for rec in list(reg._records.values()):
                 if getattr(rec, "skill_id", "") or not getattr(rec, "acquisition_id", ""):
                     continue
                 job = self._store.load_job(rec.acquisition_id)
                 sk = (job.requested_by or {}).get("skill_id", "") if job else ""
                 if sk:
                     reg.set_skill_id(rec.name, sk, int(getattr(job, "revision_generation", 0) or 0))
+
+            # (2) one active per skill: keep earliest generation/activation, demote the rest
+            by_skill: dict[str, list[Any]] = {}
+            for rec in reg._records.values():
+                sk = getattr(rec, "skill_id", "")
+                if sk and rec.state == "active":
+                    by_skill.setdefault(sk, []).append(rec)
+            for sk, actives in by_skill.items():
+                if len(actives) <= 1:
+                    continue
+                actives.sort(key=lambda r: (getattr(r, "generation", 0), r.activated_at or 0.0))
+                for extra in actives[1:]:
+                    reg.demote(extra.name, reason="boot_reconcile_one_active_per_skill",
+                               actor="auto:reconcile")
+                logger.info("Authority reconcile: skill '%s' kept %s, demoted %d leak(s)",
+                            sk, actives[0].name, len(actives) - 1)
+
+            # (3) backfill a skill-derived trigger where missing (so the skill is summonable)
+            for rec in reg._records.values():
+                sk = getattr(rec, "skill_id", "")
+                if not sk or rec.state in ("quarantined", "disabled"):
+                    continue
+                if reg._compiled_patterns.get(rec.name):
+                    continue
+                pats = self._default_trigger_patterns(sk)
+                if pats:
+                    reg.set_intent_patterns(rec.name, pats)
         except Exception as exc:
-            logger.debug("plugin skill_id backfill skipped: %s", exc)
+            logger.debug("plugin authority reconcile skipped: %s", exc)
 
     def set_codegen_service(self, service: Any) -> None:
         """Wire the CodeGenService for plan enrichment and implementation."""
@@ -629,6 +679,16 @@ class AcquisitionOrchestrator:
         # ── Plugin activation (promote from quarantine) ─────────────
         if lane_name == "plugin_activation":
             self._run_plugin_activation(job)
+            return
+
+        # ── Deployment ───────────────────────────────────────────────
+        # tier >= 2 is held at the human gate above and completed by approve_deployment;
+        # tier < 2 (low blast radius) auto-deploys here — still via make_authoritative so
+        # the one-active-per-skill invariant holds for every path.
+        if lane_name == "deployment":
+            self._make_plugin_authoritative(job, "auto:low_risk", "low-risk auto-deployment")
+            job.complete_lane("deployment", child_id=job.plugin_id)
+            job.set_status("deployed")
             return
 
         # ── Unimplemented lanes: fail-fast with clear message ─────
@@ -2582,12 +2642,12 @@ class AcquisitionOrchestrator:
                     )
                     return  # re-check on next tick
 
-                # Promote through remaining tiers
+                # Promote to SUPERVISED only — never `active` here. Per the capability-
+                # authority doctrine (Invariants 1 & 2), the owner-approved DEPLOYMENT is the
+                # single path to active, via make_authoritative (one active per skill). The
+                # activation lane only earns observation, never authority.
                 if rec.state == "shadow":
                     registry.promote(plugin_name)  # shadow → supervised
-                    rec = registry.get_record(plugin_name)
-                if rec and rec.state == "supervised":
-                    registry.promote(plugin_name)  # supervised → active
                     rec = registry.get_record(plugin_name)
 
             final_state = rec.state if rec else "unknown"
@@ -2712,6 +2772,22 @@ class AcquisitionOrchestrator:
         self._store.save_job(job)
         return True
 
+    def _make_plugin_authoritative(
+        self, job: CapabilityAcquisitionJob, approved_by: str, reason: str
+    ) -> None:
+        """Promote the job's plugin to the SINGLE active version for its skill — the only
+        path to `active` (the owner-approved deploy gate). Atomic per skill via the
+        capability-authority layer; no-op if there's no plugin or the registry is down."""
+        plugin_name = getattr(job, "plugin_id", "") or ""
+        if not plugin_name:
+            return
+        try:
+            from tools.plugin_registry import get_plugin_registry
+            get_plugin_registry().make_authoritative(
+                plugin_name, approved_by=approved_by, reason=reason)
+        except Exception as exc:
+            logger.warning("make_authoritative failed for %s: %s", plugin_name, exc)
+
     def approve_deployment(self, acquisition_id: str, approved: bool,
                            approved_by: str = "human") -> bool:
         """Handle human deployment approval decision."""
@@ -2723,6 +2799,9 @@ class AcquisitionOrchestrator:
             job.approval_status = "approved"
             job.approved_by = approved_by
             job.approval_timestamp = time.time()
+            # The ONLY path to `active`: owner-approved deploy -> make_authoritative
+            # (atomic per skill, demotes the prior live version to shadow as the floor).
+            self._make_plugin_authoritative(job, approved_by, "owner-approved deployment")
             deployment_lane = job.lanes.get("deployment")
             if deployment_lane:
                 deployment_lane.status = "completed"

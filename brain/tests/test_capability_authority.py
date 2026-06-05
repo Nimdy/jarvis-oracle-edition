@@ -102,6 +102,23 @@ def test_shadow_crasher_still_disabled():
     print("  PASS: shadow repeat-crasher still disabled")
 
 
+def test_trigger_makes_skill_routable():
+    """Setting an intent trigger makes the active version routable via match() — the front
+    half of the say->do->return loop."""
+    pr, reg = _fresh_registry()
+    _add(reg, pr, "scraper_v1", "web_scraping_v1", state="active")
+    # before: no patterns -> not routable
+    assert reg.match("scrape google.com") is None
+    # set a skill-derived trigger
+    assert reg.set_intent_patterns("scraper_v1", [r"\bscrap\w*\b", r"\bweb\s+scraping\b"])
+    # now it routes (match only returns active/supervised)
+    assert reg.match("please scrape google.com") == "scraper_v1"
+    # a shadow version is NOT routed
+    reg.demote("scraper_v1", actor="owner")  # -> shadow (no floor -> dormant)
+    assert reg.match("scrape google.com") is None
+    print("  PASS: trigger makes the active version routable; shadow is not")
+
+
 if __name__ == "__main__":
     for fn in [v for k, v in sorted(globals().items()) if k.startswith("test_")]:
         fn()
