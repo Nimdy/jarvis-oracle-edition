@@ -422,6 +422,9 @@ class WorldModel:
                 "overall_accuracy": causal.get("overall_accuracy", 0.0),
                 "predictive_accuracy": causal.get("predictive_accuracy", 0.0),
                 "predictive_total": causal.get("predictive_total", 0),
+                # lived-only foresight (synthetic-firewalled) — what the eval scoreboard reads
+                "predictive_accuracy_live": causal.get("predictive_accuracy_live", 0.0),
+                "predictive_total_live": causal.get("predictive_total_live", 0),
                 "persistence_accuracy": causal.get("persistence_accuracy", 0.0),
                 "persistence_total": causal.get("persistence_total", 0),
                 "total_hits": causal.get("total_hits", 0),
