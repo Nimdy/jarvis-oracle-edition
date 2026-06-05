@@ -71,6 +71,30 @@
     .skl .ec-n{background:rgba(120,130,150,.12);color:var(--muted);}
     .skl .aud-tl{font-size:9px;color:var(--muted);line-height:1.6;font-family:var(--mono,monospace);}
     .skl .aud-tl .aud-ts{color:var(--cyan);}
+    /* Capability Deliberation (acquisition lane) */
+    .acqd{border:1px solid var(--line);border-radius:6px;padding:9px 11px;margin:8px 0;background:rgba(255,255,255,.012);}
+    .acqd .acqd-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;}
+    .acqd .acqd-ttl{font-weight:600;font-size:12px;color:var(--text);}
+    .acqd .acqd-id{font-size:9px;color:var(--dim);font-family:var(--mono,monospace);}
+    .acqd .acqd-badge{font-size:8.5px;padding:1px 7px;border-radius:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;}
+    .acqd .b-ok{background:rgba(20,40,20,.7);color:var(--green);} .acqd .b-run{background:rgba(40,30,3,.7);color:var(--amber);}
+    .acqd .b-fail{background:rgba(45,15,15,.7);color:var(--red);} .acqd .b-wait{background:rgba(10,28,40,.7);color:var(--cyan);} .acqd .b-dim{background:rgba(255,255,255,.05);color:var(--muted);}
+    .acqd .lanes{display:flex;gap:3px;margin:8px 0 4px;flex-wrap:wrap;}
+    .acqd .lane{flex:1 1 auto;min-width:58px;border:1px solid var(--line);border-radius:3px;padding:3px 4px;font-size:8px;text-align:center;color:var(--muted);}
+    .acqd .lane.l-ok{border-color:var(--green);color:var(--green);} .acqd .lane.l-run{border-color:var(--amber);color:var(--amber);background:rgba(20,14,3,.4);font-weight:700;}
+    .acqd .lane.l-fail{border-color:var(--red);color:var(--red);background:rgba(20,6,6,.4);} .acqd .lane.l-pend{opacity:.55;}
+    .acqd .delib{margin-top:8px;}
+    .acqd .delib-h{font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:7px 0 4px;font-weight:600;}
+    .acqd .round{border-left:2px solid var(--line);padding:3px 0 3px 8px;margin:3px 0;font-size:10px;}
+    .acqd .round.r-ok{border-color:var(--green);} .acqd .round.r-fail{border-color:var(--red);}
+    .acqd .round .r-hd{color:var(--text);font-weight:600;font-size:9.5px;}
+    .acqd .round .r-mm{font-size:9px;color:var(--muted);font-family:var(--mono,monospace);line-height:1.5;margin-top:2px;}
+    .acqd .round .r-mm .ex{color:var(--green);} .acqd .round .r-mm .ac{color:var(--red);}
+    .acqd .diag{font-size:9px;color:var(--muted);font-family:var(--mono,monospace);margin-top:6px;line-height:1.5;}
+    .acqd .acqd-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;}
+    .acqd .drill{margin-top:7px;font-size:9.5px;color:var(--muted);line-height:1.55;display:none;}
+    .acqd .drill.open{display:block;}
+    .acqd .drill pre{white-space:pre-wrap;word-break:break-word;font-size:9px;color:var(--text);background:rgba(0,0,0,.25);padding:6px 8px;border-radius:4px;margin:3px 0;max-height:220px;overflow:auto;}
   </style>
 </head>
 <body>
@@ -114,6 +138,12 @@
       <div class="statline" id="acq-stats"></div>
       <div class="barwrap" id="acq-bars"></div>
       <div class="contrast" id="acq-contrast"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Capability Deliberation <span id="acqd-count" class="floorpill"></span></h2>
+      <div class="note">The internal think&rarr;code&rarr;validate of each plugin build, inline (no pivoting): the lane ladder, the codegen <b>repair rounds</b> (including what it caught and rejected), per-stage diagnostics, and the gate it's waiting on. Click a build to drill into its full plan.</div>
+      <div id="acq-deliberation"></div>
     </section>
 
     <section class="card col12">
@@ -466,7 +496,91 @@
       }).join('');
   }
 
-  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderEscalation(); renderSkillLearning(); }
+  // ── Capability Deliberation (acquisition lane) ──────────────────
+  var ACQ_LANES=['evidence_grounding','doc_resolution','planning','plan_review','implementation','environment_setup','plugin_quarantine','verification','plugin_activation','deployment','truth'];
+  var ACQ_LANE_ABBR={evidence_grounding:'evid',doc_resolution:'docs',planning:'plan',plan_review:'review',implementation:'code',environment_setup:'venv',plugin_quarantine:'quar',verification:'verify',plugin_activation:'activ',deployment:'deploy',truth:'truth'};
+  var ACQDETAIL={};
+  function _laneCls(st){ st=String(st||''); return st==='completed'?'l-ok':st==='running'?'l-run':st==='failed'?'l-fail':'l-pend'; }
+  function _acqBadge(status){
+    var s=String(status||'').toLowerCase();
+    var c=(s==='deployed'||s==='completed')?'b-ok':(s==='failed'||s==='cancelled')?'b-fail':(s.indexOf('await')>=0)?'b-wait':(s==='executing'||s==='planning')?'b-run':'b-dim';
+    return '<span class="acqd-badge '+c+'">'+escH(status||'—')+'</span>';
+  }
+  function _repairRounds(diag){
+    var rl=(diag||{}).repair_log;
+    if(!Array.isArray(rl)||!rl.length) return '';
+    var h='<div class="delib-h">Codegen repair rounds ('+rl.length+')</div>';
+    rl.forEach(function(r){
+      var ok=r.passed===true;
+      h+='<div class="round '+(ok?'r-ok':'r-fail')+'"><div class="r-hd">Round '+escH(r.attempt)+' &middot; '+escH(r.stage)+' &middot; '+(ok?'✓ passed':'✗ failed')+'</div>';
+      if(!ok && Array.isArray(r.errors)){
+        r.errors.slice(0,3).forEach(function(m){
+          if(m && m.expected!==undefined){
+            h+='<div class="r-mm">'+escH(m.fixture||'fixture')+': expected <span class="ex">'+escH(JSON.stringify(m.expected))+'</span> &rarr; got <span class="ac">'+escH(JSON.stringify(m.actual))+'</span></div>';
+          } else { h+='<div class="r-mm">'+escH(JSON.stringify(m)).slice(0,160)+'</div>'; }
+        });
+      }
+      h+='</div>';
+    });
+    return h;
+  }
+  function _acqActions(a){
+    var s=String(a.status||'').toLowerCase(), id=a.acquisition_id, b=[];
+    if(s==='awaiting_plan_review') b.push('<button class="btn-act" onclick="_acqApprovePlan(\''+id+'\')">Approve plan</button>');
+    if(s==='awaiting_approval') b.push('<button class="btn-act" onclick="_acqApproveDeploy(\''+id+'\')">Approve deploy</button>');
+    if(s==='failed') b.push('<button class="btn-act" onclick="_acqCancel(\''+id+'\')">Remove</button>');
+    return b.length?'<div class="acqd-act">'+b.join('')+'</div>':'';
+  }
+  function renderAcqDeliberation(){
+    var box=el('acq-deliberation'); if(!box) return;
+    var rec=((ACQ||{}).recent)||[];
+    var cnt=el('acqd-count'); if(cnt) cnt.textContent=rec.length+' build'+(rec.length===1?'':'s');
+    if(!rec.length){ box.innerHTML='<div class="note">No capability builds in flight or recent &mdash; idle background state, not failure.</div>'; return; }
+    box.innerHTML=rec.map(function(a){
+      var lanes=a.lanes||{};
+      var ladder='<div class="lanes">'+ACQ_LANES.map(function(ln){
+        var v=lanes[ln], st=(v&&v.status)||v||'';
+        return '<div class="lane '+_laneCls(st)+'" title="'+escH(ln+': '+st)+'">'+escH(ACQ_LANE_ABBR[ln]||ln)+'</div>';
+      }).join('')+'</div>';
+      var diag=a.codegen_prompt_diagnostics||{}, pdiag=a.planning_diagnostics||{};
+      var rounds=_repairRounds(diag), diagLine='';
+      if(pdiag.failure_reason) diagLine+='planning: '+escH(pdiag.failure_reason)+' &middot; ';
+      if(diag.repair_rounds!=null) diagLine+='repair_rounds: '+escH(diag.repair_rounds)+' &middot; ';
+      if(diag.prompt_version) diagLine+='prompt: '+escH(diag.prompt_version);
+      return '<div class="acqd">'+
+        '<div class="acqd-hd" onclick="_acqDrill(\''+escH(a.acquisition_id)+'\')">'+
+          '<span class="acqd-ttl">'+escH(a.title||a.acquisition_id)+'</span>'+_acqBadge(a.status)+
+          '<span class="acqd-badge b-dim">T'+escH(a.risk_tier!=null?a.risk_tier:'?')+'</span>'+
+          '<span class="acqd-id">'+escH(String(a.acquisition_id||'').slice(-10))+' ▾</span>'+
+        '</div>'+ladder+
+        (rounds?'<div class="delib">'+rounds+'</div>':'')+
+        (diagLine?'<div class="diag">'+diagLine+'</div>':'')+
+        _acqActions(a)+
+        '<div class="drill" id="drill-'+escH(a.acquisition_id)+'"></div>'+
+      '</div>';
+    }).join('');
+  }
+  function _acqPlanHtml(acq){
+    var p=(acq&&acq.plan)||{}, h='';
+    if(p.objective) h+='<div class="delib-h">Objective</div><pre>'+escH(p.objective)+'</pre>';
+    if(p.technical_approach) h+='<div class="delib-h">Technical approach</div><pre>'+escH(p.technical_approach)+'</pre>';
+    if(p.implementation_sketch) h+='<div class="delib-h">Implementation sketch</div><pre>'+escH(p.implementation_sketch)+'</pre>';
+    if(Array.isArray(p.test_cases)&&p.test_cases.length) h+='<div class="delib-h">Test cases</div><pre>'+escH(p.test_cases.join('\n'))+'</pre>';
+    return h||'<span class="note">no plan detail recorded for this build.</span>';
+  }
+  window._acqDrill=function(id){
+    var d=el('drill-'+id); if(!d) return;
+    if(d.classList.contains('open')){ d.classList.remove('open'); return; }
+    d.classList.add('open');
+    if(ACQDETAIL[id]){ d.innerHTML=_acqPlanHtml(ACQDETAIL[id]); return; }
+    d.innerHTML='<span class="note">loading plan…</span>';
+    fetchJSON('/api/acquisition/'+encodeURIComponent(id)).then(function(r){ var acq=(r&&r.acquisition)||r||{}; ACQDETAIL[id]=acq; d.innerHTML=_acqPlanHtml(acq); }).catch(function(){ d.innerHTML='<span class="note">plan unavailable</span>'; });
+  };
+  window._acqApprovePlan=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan',{verdict:'approved'}),'plan approved').then(refresh).catch(function(){}); };
+  window._acqApproveDeploy=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-deploy',{approved:true}),'deploy approved').then(refresh).catch(function(){}); };
+  window._acqCancel=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/cancel',{reason:'operator_removed'}),'removed').then(refresh).catch(function(){}); };
+
+  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderAcqDeliberation(); renderEscalation(); renderSkillLearning(); }
 
   function refresh(){
     Promise.allSettled([
