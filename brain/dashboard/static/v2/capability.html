@@ -91,6 +91,12 @@
     .acqd .round .r-mm{font-size:9px;color:var(--muted);font-family:var(--mono,monospace);line-height:1.5;margin-top:2px;}
     .acqd .round .r-mm .ex{color:var(--green);} .acqd .round .r-mm .ac{color:var(--red);}
     .acqd .diag{font-size:9px;color:var(--muted);font-family:var(--mono,monospace);margin-top:6px;line-height:1.5;}
+    .acqd .gov{display:flex;gap:5px;flex-wrap:wrap;margin:3px 0 2px;}
+    .acqd .gov-chip{font-size:8.5px;padding:2px 8px;border-radius:9px;border:1px solid var(--line);font-weight:600;letter-spacing:.02em;}
+    .acqd .gov-chip.g-ok{border-color:var(--green);color:var(--green);background:rgba(20,40,20,.4);}
+    .acqd .gov-chip.g-warn{border-color:var(--amber);color:var(--amber);background:rgba(40,30,3,.4);}
+    .acqd .gov-chip.g-bad{border-color:var(--red);color:var(--red);background:rgba(45,15,15,.5);}
+    .acqd .gov-chip.g-dim{color:var(--muted);}
     .acqd .acqd-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;}
     .acqd .drill{margin-top:7px;font-size:9.5px;color:var(--muted);line-height:1.55;display:none;}
     .acqd .drill.open{display:block;}
@@ -580,8 +586,25 @@
     var lanes=a.lanes||{}, errs=[];
     ACQ_LANES.forEach(function(ln){ var v=lanes[ln]; if(v&&v.error) errs.push(ln+': '+v.error); });
     if(errs.length) h+='<div class="delib-h">Lane errors</div><pre>'+escH(errs.join('\n')).slice(0,1400)+'</pre>';
+    h+=_acqGovHtml(full||a);
     h+=_acqPlanHtml(full||a);
     return h||'<span class="note">no deliberation detail recorded for this build.</span>';
+  }
+  // Governance verdict (data-flow firewall) — the egress policy decided DURING planning.
+  function _acqGovHtml(acq){
+    var p=(acq&&(acq.plan||acq.plan_summary))||{}, g=p.governance||{};
+    var hasG=(g.reads_external!==undefined)||g.egress||(g.provenance_tag!==undefined);
+    if(!hasG) return '';
+    var ext=!!g.reads_external, ptag=String(g.provenance_tag||'none'), scrap=(ptag==='web_scrap');
+    var mem=!!g.may_touch_memory, consent=!!g.requires_save_consent;
+    var chips=''
+      +'<span class="gov-chip '+(ext?'g-warn':'g-dim')+'">reads external: '+(ext?'yes':'no')+'</span>'
+      +'<span class="gov-chip '+(scrap?'g-warn':'g-dim')+'">provenance: '+escH(ptag)+(scrap?' · untrusted':'')+'</span>'
+      +'<span class="gov-chip '+(mem?'g-bad':'g-ok')+'">memory: '+(mem?'ALLOWED':'blocked · human-only')+'</span>'
+      +'<span class="gov-chip '+(consent?'g-warn':'g-dim')+'">save consent: '+(consent?'required':'n/a')+'</span>';
+    var h='<div class="delib-h">Governance — data-flow firewall</div><div class="gov">'+chips+'</div>';
+    if(g.egress) h+='<div class="diag">egress: '+escH(g.egress)+(g.source?' &middot; '+escH(g.source):'')+'</div>';
+    return h;
   }
   function _acqPlanHtml(acq){
     var p=(acq&&(acq.plan||acq.plan_summary))||{}, h='';
