@@ -38,6 +38,12 @@ class BeliefGraph:
     _instance: BeliefGraph | None = None
 
     PROPAGATION_CADENCE_S: float = 600.0
+    # Maintenance orphan-fill OUTSIDE dream mode: the dream-only filler (<=30/cycle) can't
+    # drain a large orphan backlog, so a small throttled pass runs on the tick. Genuine
+    # shared-subject edges only (same gated path as the dream filler) — never spurious links
+    # to game orphan_rate. See docs/CAPABILITY_AUTHORITY_DESIGN.md honesty rule / FIDELITY #10.
+    ORPHAN_FILL_CADENCE_S: float = 600.0
+    ORPHAN_FILL_BUDGET: int = 15
 
     def __init__(self) -> None:
         from epistemic.belief_graph.edges import EdgeStore
@@ -51,6 +57,7 @@ class BeliefGraph:
         self._tick_count: int = 0
         self._last_compaction: float = 0.0
         self._last_propagation_run: float = 0.0
+        self._last_orphan_fill: float = 0.0
         self._propagation_ran_once: bool = False
 
     @classmethod
@@ -129,6 +136,17 @@ class BeliefGraph:
                     event_bus.emit(BELIEF_GRAPH_PROPAGATION_COMPLETE, **prop_result)
                 except Exception:
                     pass
+
+        # Throttled maintenance orphan-fill outside dream mode (drains the backlog the
+        # dream-only filler can't keep up with). Same gated path -> genuine edges only.
+        if self._bridge and now - self._last_orphan_fill >= self.ORPHAN_FILL_CADENCE_S:
+            self._last_orphan_fill = now
+            try:
+                filled = self._bridge.fill_orphan_edges(max_per_cycle=self.ORPHAN_FILL_BUDGET)
+                if filled:
+                    logger.info("BeliefGraph maintenance: filled %d orphan edges (non-dream)", filled)
+            except Exception:
+                logger.exception("BeliefGraph maintenance orphan-fill error")
 
         state = self.get_state()
 
