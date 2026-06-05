@@ -598,6 +598,30 @@ class AcquisitionStore:
         result.sort(key=lambda j: j.created_at, reverse=True)
         return result
 
+    def delete_job(self, acquisition_id: str) -> bool:
+        """Hard-delete a job's JSON record. Returns True if a file was removed."""
+        p = self._path("jobs", acquisition_id)
+        try:
+            if p.exists():
+                p.unlink()
+                return True
+        except Exception as exc:
+            logger.warning("delete_job failed for %s: %s", acquisition_id, exc)
+        return False
+
+    def delete_artifact(self, category: str, obj_id: str) -> bool:
+        """Hard-delete one artifact JSON (plan/review/code_bundle/…). Safe no-op if absent."""
+        if not obj_id or category not in _SUBDIRS:
+            return False
+        p = self._path(category, obj_id)
+        try:
+            if p.exists():
+                p.unlink()
+                return True
+        except Exception as exc:
+            logger.warning("delete_artifact failed for %s/%s: %s", category, obj_id, exc)
+        return False
+
     # ── plan CRUD ──────────────────────────────────────────────────────
 
     def save_plan(self, plan: AcquisitionPlan) -> None:

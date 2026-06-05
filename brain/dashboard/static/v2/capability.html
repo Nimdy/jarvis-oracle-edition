@@ -677,13 +677,26 @@
   };
   window._acqApprovePlan=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan',{verdict:'approved'}),'plan approved').then(function(){ refresh(true); }).catch(function(){}); };
   window._acqApproveDeploy=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-deploy',{approved:true}),'deploy approved').then(function(){ refresh(true); }).catch(function(){}); };
-  // Remove is gated twice: refuse if still alive, then a typed-free confirm. The store keeps the audit trail.
+  // Remove is gated twice: refuse if still alive, then a typed-free confirm. Deletes this
+  // build's OWN record + artifacts; the shared plugin venv/dir are kept if a live plugin
+  // (or another build) still needs them. The toast reports exactly what was cleaned/kept.
   window._acqRemove=function(id){
     var a=ACQREC[id]||{};
     if(_isActive(a)){ V2.toast('refusing to remove an active build', false); return; }
-    V2.confirm('Remove this build from the list',
-      'Build <b>'+escH(String(id).slice(-10))+'</b> is terminal (<b>'+escH(a.status||'?')+'</b>). Remove it from the acquisition list? Its audit trail stays in the store &mdash; this only clears it from view.',
-      function(){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/cancel',{reason:'operator_removed'}),'build removed').then(function(){ refresh(true); }).catch(function(){}); },
+    V2.confirm('Remove this build',
+      'Delete build <b>'+escH(String(id).slice(-10))+'</b> ('+escH(a.status||'?')+')? This removes its record and its own artifacts (plan, code bundle, verification). The plugin\'s shared venv &amp; folder are kept if a live plugin or another build still uses them.',
+      function(){
+        V2.post('/api/acquisition/'+encodeURIComponent(id)+'/cancel',{reason:'operator_removed'})
+          .then(function(r){
+            var c=(r&&r.cleanup)||{};
+            var n=((c.artifacts_deleted)||[]).length;
+            var sh=c.shared||{}, rm=[]; if(sh.venv==='deleted')rm.push('venv'); if(sh.plugin_dir==='deleted')rm.push('dir');
+            var prot=((c.protected)||[]).length?' · plugin kept (live/shared)':'';
+            V2.toast('removed · '+n+' artifact'+(n===1?'':'s')+' cleaned'+(rm.length?' · '+rm.join('+')+' removed':'')+prot, true);
+            delete _acqOpen[id]; refresh(true);
+          })
+          .catch(function(e){ V2.toast('remove failed: '+((e&&e.message)||''), false); });
+      },
       { yesLabel:'Remove' });
   };
 

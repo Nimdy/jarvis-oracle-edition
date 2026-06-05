@@ -2679,15 +2679,125 @@ class AcquisitionOrchestrator:
         return True
 
     def cancel_job(self, acquisition_id: str, reason: str = "operator_cancelled") -> bool:
-        """Cancel and remove a job from the active set (any state)."""
-        job = self._active_jobs.get(acquisition_id)
-        if not job:
-            return False
-        job.set_status("cancelled")
-        self._store.save_job(job)
-        del self._active_jobs[acquisition_id]
-        logger.info("Acquisition %s cancelled and removed: %s", acquisition_id, reason)
-        return True
+        """Back-compat shim: cancel/remove a job (active OR store-only) + safe cleanup."""
+        ok, _ = self.remove_job(acquisition_id, reason=reason)
+        return ok
+
+    def remove_job(
+        self, acquisition_id: str, reason: str = "operator_removed"
+    ) -> tuple[bool, dict[str, Any]]:
+        """Remove a job from the active set AND the store, cleaning up its OWN artifacts.
+
+        The earlier ``cancel_job`` only looked in ``_active_jobs``, so terminal jobs
+        (failed/cancelled — not restored on boot) could never be removed. This loads
+        from the store too. SHARED resources (the per-plugin venv at
+        ``~/.jarvis/plugin_venvs/<name>`` and the plugin dir ``tools/plugins/<name>``)
+        are deleted ONLY when no live plugin and no sibling job still needs them —
+        otherwise they are PROTECTED. Every filesystem delete is base-guarded.
+        """
+        job = self._active_jobs.get(acquisition_id) or self._store.load_job(acquisition_id)
+        if job is None:
+            return False, {"error": "not_found"}
+        try:
+            job.set_status("cancelled")
+        except Exception:
+            pass
+        self._active_jobs.pop(acquisition_id, None)
+        report = self._cleanup_job_artifacts(job)
+        report["job_deleted"] = self._store.delete_job(acquisition_id)
+        logger.info("Acquisition %s removed (%s): %s", acquisition_id, reason, report)
+        return True, report
+
+    def _cleanup_job_artifacts(self, job: CapabilityAcquisitionJob) -> dict[str, Any]:
+        """Delete this job's OWN artifact records; clean shared venv/plugin dir only if orphaned."""
+        report: dict[str, Any] = {"artifacts_deleted": [], "shared": {}, "protected": []}
+        # (a) per-job artifacts — each has a job-unique id, never shared between jobs
+        for cat, oid in (
+            ("plans", job.plan_id),
+            ("reviews", job.plan_review_id),
+            ("code_bundles", job.code_bundle_id),
+            ("environment_setups", job.environment_setup_id),
+            ("verifications", job.verification_id),
+        ):
+            if oid and self._store.delete_artifact(cat, oid):
+                report["artifacts_deleted"].append(f"{cat}/{oid}")
+
+        # (b) shared resources (per-plugin venv + plugin dir) — GUARDED
+        plugin_name = self._job_plugin_name(job)
+        if plugin_name:
+            if self._plugin_name_protected(plugin_name, exclude=job.acquisition_id):
+                report["protected"].append(
+                    f"plugin '{plugin_name}' is live or shared by another build — venv & dir kept"
+                )
+            else:
+                venv_base = Path.home() / ".jarvis" / "plugin_venvs"
+                plug_base = Path(__file__).parent.parent / "tools" / "plugins"
+                report["shared"]["venv"] = self._safe_rmtree(venv_base / plugin_name, venv_base)
+                report["shared"]["plugin_dir"] = self._safe_rmtree(plug_base / plugin_name, plug_base)
+        return report
+
+    def _job_plugin_name(self, job: CapabilityAcquisitionJob) -> str:
+        """Best-effort plugin_name for shared-resource cleanup (env-setup artifact > bundle manifest)."""
+        try:
+            if job.environment_setup_id:
+                es = self._store.load_environment_setup(job.environment_setup_id)
+                if es and getattr(es, "plugin_name", ""):
+                    return es.plugin_name
+        except Exception:
+            pass
+        try:
+            if job.code_bundle_id:
+                b = self._store.load_code_bundle(job.code_bundle_id)
+                nm = (b.manifest_candidate or {}).get("name") if b else ""
+                if nm:
+                    return str(nm)
+        except Exception:
+            pass
+        return str(getattr(job, "plugin_id", "") or "")
+
+    def _plugin_name_protected(self, plugin_name: str, exclude: str = "") -> bool:
+        """True if the plugin is live in the registry OR another job still references it.
+
+        Defaults to PROTECT (True) on any uncertainty — never the cause of a wrong delete.
+        """
+        if not plugin_name:
+            return True
+        try:
+            from tools.plugin_registry import get_plugin_registry
+            if get_plugin_registry().get_record(plugin_name) is not None:
+                return True
+        except Exception:
+            return True  # can't confirm the registry → protect
+        try:
+            for j in self._store.list_jobs():
+                if j.acquisition_id == exclude:
+                    continue
+                if self._job_plugin_name(j) == plugin_name:
+                    return True
+        except Exception:
+            return True  # can't confirm siblings → protect
+        return False
+
+    @staticmethod
+    def _safe_rmtree(path: Path, expect_base: Path) -> str:
+        """rmtree only if ``path`` is a real directory STRICTLY under ``expect_base``.
+
+        Never deletes the base itself; refuses anything outside it. This is the guard
+        against deleting the wrong folder if a plugin_name were ever malformed.
+        """
+        import shutil
+        try:
+            if not path.exists() or not path.is_dir():
+                return "absent"
+            rp, rb = path.resolve(), expect_base.resolve()
+            if rp == rb or rb not in rp.parents:
+                logger.warning("refusing unsafe rmtree: %s not strictly under %s", rp, rb)
+                return "refused_out_of_base"
+            shutil.rmtree(rp)
+            return "deleted"
+        except Exception as exc:
+            logger.warning("rmtree failed for %s: %s", path, exc)
+            return f"error:{type(exc).__name__}"
 
     # ── query ──────────────────────────────────────────────────────────
 

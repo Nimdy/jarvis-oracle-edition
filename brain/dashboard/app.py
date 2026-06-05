@@ -3316,16 +3316,19 @@ def _create_app() -> FastAPI:
 
     @app.post("/api/acquisition/{acquisition_id}/cancel", dependencies=[Depends(_require_api_key)])
     async def api_acquisition_cancel(acquisition_id: str, request: Request):
-        """Cancel and remove an acquisition job (any state)."""
+        """Remove an acquisition job (active OR terminal) with safe artifact cleanup.
+
+        Returns a cleanup report: which per-job artifacts were deleted and whether the
+        shared per-plugin venv/dir were cleaned or PROTECTED (live / shared by a sibling)."""
         body = await request.json() if await request.body() else {}
-        reason = body.get("reason", "operator_cancelled")
+        reason = body.get("reason", "operator_removed")
         try:
             orch = _get_acquisition_orchestrator()
             if orch is None:
                 return JSONResponse({"error": "Acquisition pipeline not enabled"}, status_code=400)
-            ok = orch.cancel_job(acquisition_id, reason=reason)
+            ok, report = orch.remove_job(acquisition_id, reason=reason)
             if ok:
-                return {"status": "cancelled", "acquisition_id": acquisition_id}
+                return {"status": "removed", "acquisition_id": acquisition_id, "cleanup": report}
             return JSONResponse({"error": "Job not found"}, status_code=404)
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
