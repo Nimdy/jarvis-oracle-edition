@@ -296,6 +296,16 @@ class AcquisitionPlan:
     test_cases: list[str] = field(default_factory=list)
     risk_analysis: str = ""
 
+    # Data-flow firewall (Pillar 2): the capability's governed egress policy,
+    # reasoned about DURING planning (not post-hoc). Keys:
+    #   reads_external (bool)        — fetches data from outside the system
+    #   egress (str)                 — one phrase naming what the plugin outputs
+    #   may_touch_memory (bool)      — may its output be written to memory/beliefs (default False)
+    #   provenance_tag (str)         — "web_scrap" for untrusted external data, else "none"
+    #   requires_save_consent (bool) — Jarvis must ask the operator before persisting output
+    #   source (str)                 — "deterministic_floor" | "planner_stated" | "merged"
+    governance: dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -701,6 +711,7 @@ class AcquisitionStore:
                         "dependencies": plan.dependencies or [],
                         "test_cases": plan.test_cases or [],
                         "implementation_sketch": plan.implementation_sketch or "",
+                        "governance": getattr(plan, "governance", {}) or {},
                     }
             if j.code_bundle_id:
                 bundle = self.load_code_bundle(j.code_bundle_id)

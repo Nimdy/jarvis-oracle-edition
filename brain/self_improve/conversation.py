@@ -185,7 +185,16 @@ TEST CASES:
 <Numbered list of 3-5 specific test scenarios with expected behavior>
 
 RISK ANALYSIS:
-<What could go wrong. Edge cases. Failure modes. Security considerations.>"""
+<What could go wrong. Edge cases. Failure modes. Security considerations.>
+
+GOVERNANCE:
+<Data-flow firewall. Reason about how this capability's output must be governed so it
+cannot silently pollute Jarvis's memory or beliefs. Answer each on its own line:
+READS_EXTERNAL: yes/no — does it fetch data from outside the system (web, http, scraping, an API)?
+EGRESS: <one short phrase naming what the plugin outputs, e.g. "structured scraped web content">
+MAY_TOUCH_MEMORY: no — plugin output must NOT be written to long-term memory/beliefs without explicit human consent. Answer no.
+PROVENANCE_TAG: web_scrap if it produces external/scraped data (untrusted until cross-validated against peer-reviewed sources), otherwise none
+REQUIRES_SAVE_CONSENT: yes/no — must Jarvis ask the operator before persisting any of its output? Default yes for anything external.>"""
 
 CODER_SYSTEM_PROMPT = """You are Jarvis's code generation engine. You receive:
 1. A plan describing what to change

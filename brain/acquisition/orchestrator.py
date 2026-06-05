@@ -826,6 +826,7 @@ class AcquisitionOrchestrator:
                 "coder_available": False,
                 "updated_at": time.time(),
             }
+            plan.governance = self._derive_governance(job, plan)
             logger.info("Planning %s: coder not available, skipping technical design", job.acquisition_id)
             return
 
@@ -909,6 +910,11 @@ class AcquisitionOrchestrator:
                 "updated_at": time.time(),
             }
             logger.warning("Planning %s: technical design failed: %s", job.acquisition_id, err_msg)
+
+        # Data-flow firewall: decide the governed egress policy DURING planning. The
+        # deterministic floor is authoritative on safety; a planner-stated section (if
+        # any) is merged in but can only raise caution, never weaken the floor.
+        plan.governance = self._derive_governance(job, plan)
 
         self._record_plan_features_signal(job, plan, getattr(plan, "version", 1))
 
@@ -1028,6 +1034,100 @@ class AcquisitionOrchestrator:
 
         return "\n".join(lines)
 
+    # ── Data-flow firewall (Pillar 2): governed egress policy, decided in planning ──
+    _GOV_EXTERNAL_MARKERS = (
+        "scrape", "scraping", "scraper", "crawl", "http://", "https://", " http",
+        "url", "fetch", "urllib", "requests", "website", "web page", "webpage",
+        " html", "download", " api", "endpoint", "socket", " ftp", "network request",
+    )
+
+    @staticmethod
+    def _normalize_stated_governance(raw: Any) -> dict[str, Any]:
+        """Normalize planner-stated governance (a JSON dict OR a 'KEY: value' text block)
+        into the floor's key set. Returns {} when nothing usable was stated."""
+        def _b(v: Any) -> bool:
+            return str(v).strip().lower() in ("yes", "true", "1", "y")
+        out: dict[str, Any] = {}
+        if isinstance(raw, dict):
+            if "reads_external" in raw:
+                out["reads_external"] = _b(raw.get("reads_external"))
+            if str(raw.get("egress", "")).strip():
+                out["egress"] = str(raw.get("egress")).strip()[:160]
+            if "may_touch_memory" in raw:
+                out["may_touch_memory"] = _b(raw.get("may_touch_memory"))
+            if str(raw.get("provenance_tag", "")).strip():
+                out["provenance_tag"] = str(raw.get("provenance_tag")).strip()[:40]
+            if "requires_save_consent" in raw:
+                out["requires_save_consent"] = _b(raw.get("requires_save_consent"))
+            return out
+        for line in str(raw or "").split("\n"):
+            if ":" not in line:
+                continue
+            k, _, v = line.partition(":")
+            k = k.strip().lower().replace(" ", "_")
+            v = v.strip()
+            if not v:
+                continue
+            if k in ("reads_external", "may_touch_memory", "requires_save_consent"):
+                out[k] = _b(v)
+            elif k == "egress":
+                out["egress"] = v[:160]
+            elif k == "provenance_tag":
+                out["provenance_tag"] = v.split()[0][:40] if v else "none"
+        return out
+
+    @classmethod
+    def _derive_governance(
+        cls, job: CapabilityAcquisitionJob, plan: AcquisitionPlan
+    ) -> dict[str, Any]:
+        """Infer a CONSERVATIVE governed egress policy from the plan (the firewall must
+        KNOW, not trust the LLM to remember), then merge in any planner-stated governance
+        WITHOUT letting the model weaken the safety floor.
+
+        Safety invariants the planner can never relax:
+          * may_touch_memory stays False (only a human approval may ever flip it).
+          * anything that reads external data is tagged ``web_scrap`` (untrusted) and
+            requires save-consent. The planner may only RAISE caution or add an egress
+            phrase, never lower the bar.
+        """
+        blob = " ".join([
+            str(getattr(job, "user_intent", "") or ""),
+            str(getattr(job, "outcome_class", "") or ""),
+            str(getattr(plan, "technical_approach", "") or ""),
+            str(getattr(plan, "implementation_sketch", "") or ""),
+            " ".join(getattr(plan, "required_capabilities", []) or []),
+            " ".join(getattr(plan, "dependencies", []) or []),
+        ]).lower()
+        reads_external = any(m in blob for m in cls._GOV_EXTERNAL_MARKERS)
+
+        floor: dict[str, Any] = {
+            "reads_external": reads_external,
+            "egress": "external web/network content" if reads_external else "local computation result",
+            "may_touch_memory": False,                       # never auto-true
+            "provenance_tag": "web_scrap" if reads_external else "none",
+            "requires_save_consent": bool(reads_external),
+            "source": "deterministic_floor",
+        }
+
+        stated = cls._normalize_stated_governance(getattr(plan, "governance", {}) or {})
+        # A floor-shaped dict left over from a prior derive isn't a planner statement.
+        if not stated or (getattr(plan, "governance", {}) or {}).get("source"):
+            return floor
+
+        merged = dict(floor)
+        if stated.get("egress"):
+            merged["egress"] = stated["egress"]
+        merged["reads_external"] = bool(floor["reads_external"] or stated.get("reads_external"))
+        merged["requires_save_consent"] = bool(
+            floor["requires_save_consent"] or stated.get("requires_save_consent")
+        )
+        if merged["reads_external"]:
+            merged["provenance_tag"] = "web_scrap"
+            merged["requires_save_consent"] = True
+        merged["may_touch_memory"] = False                   # invariant: human-only
+        merged["source"] = "merged"
+        return merged
+
     @staticmethod
     def _parse_technical_design(plan: AcquisitionPlan, raw: str) -> None:
         """Parse the coder LLM's structured technical design into plan fields."""
@@ -1043,6 +1143,7 @@ class AcquisitionOrchestrator:
                 tests = data.get("test_cases", [])
                 plan.dependencies = [str(d).strip() for d in (deps if isinstance(deps, list) else str(deps).split(",")) if str(d).strip()]
                 plan.test_cases = [str(t).strip() for t in (tests if isinstance(tests, list) else str(tests).split("\n")) if str(t).strip()]
+                plan.governance = AcquisitionOrchestrator._normalize_stated_governance(data.get("governance", {}))
                 return
         except Exception:
             pass
@@ -1054,6 +1155,7 @@ class AcquisitionOrchestrator:
             "DEPENDENCIES:": "_dependencies_raw",
             "TEST CASES:": "_test_cases_raw",
             "RISK ANALYSIS:": "risk_analysis",
+            "GOVERNANCE:": "_governance_raw",
         }
 
         current_field = None
@@ -1062,7 +1164,7 @@ class AcquisitionOrchestrator:
 
         header_re = re.compile(
             r"^\s*(?:#{1,6}\s*)?(?:\d+[.)]\s*)?(?:[*_]{1,3})?"
-            r"(USER STORY|TECHNICAL APPROACH|IMPLEMENTATION SKETCH|DEPENDENCIES|TEST CASES|RISK ANALYSIS)"
+            r"(USER STORY|TECHNICAL APPROACH|IMPLEMENTATION SKETCH|DEPENDENCIES|TEST CASES|RISK ANALYSIS|GOVERNANCE)"
             r"(?:[*_]{1,3})?\s*:?\s*(.*)$",
             re.IGNORECASE,
         )
@@ -1099,6 +1201,10 @@ class AcquisitionOrchestrator:
         tests_raw = parsed.get("_test_cases_raw", "")
         if tests_raw:
             plan.test_cases = [t.strip() for t in tests_raw.split("\n") if t.strip()]
+
+        gov_raw = parsed.get("_governance_raw", "")
+        if gov_raw:
+            plan.governance = AcquisitionOrchestrator._normalize_stated_governance(gov_raw)
 
     def _run_truth_recording(self, job: CapabilityAcquisitionJob) -> None:
         """Truth lane: record outcome in attribution ledger + memory."""
@@ -2654,6 +2760,7 @@ class AcquisitionOrchestrator:
                         "dependencies": plan.dependencies or [],
                         "test_cases": plan.test_cases or [],
                         "implementation_sketch": plan.implementation_sketch or "",
+                        "governance": getattr(plan, "governance", {}) or {},
                         "doc_count": len(plan.doc_artifact_ids or []),
                         "version": plan.version,
                     }
