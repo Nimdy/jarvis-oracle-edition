@@ -3372,7 +3372,7 @@ class ConsciousnessSystem:
                     fidelity=0.6,
                 )
         except Exception:
-            logger.debug("Failed to record diagnostic feature vector", exc_info=True)
+            logger.warning("Failed to record diagnostic feature vector", exc_info=True)
 
         return opportunities
 
@@ -3451,7 +3451,7 @@ class ConsciousnessSystem:
                         fidelity=min(1.0, self._si_sustained_counts.get(eo["type"], 1) / 3.0),
                     )
             except Exception:
-                logger.debug("Failed to record diagnostic label signals", exc_info=True)
+                logger.warning("Failed to record diagnostic label signals", exc_info=True)
 
         if not eligible:
             logger.info("Self-improvement scan #%d: %d raw, 0 eligible (sustained=%s)",
