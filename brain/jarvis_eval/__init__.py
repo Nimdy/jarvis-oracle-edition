@@ -50,20 +50,25 @@ def _latest_snapshot_metrics_by_source(
 
 
 def _harvest_external_eval_scores(
-    latest_by_source: dict[str, dict[str, Any]], run_id: str = "",
+    latest_by_source: dict[str, dict[str, Any]],
+    pvl_result: dict[str, Any] | None = None,
+    run_id: str = "",
 ) -> list[EvalScore]:
-    """Populate the scoreboard from GENUINE external/ground-truth comparators only — with
-    honest sample counts. Categories without a real external comparator are NOT emitted
-    (they stay visibly empty). This is the anti-theater rule: the scoreboard reports real
-    evidence, however little, never a self-grade dressed up as measurement.
+    """Populate the scoreboard from GENUINE external / behavior-verified comparators only —
+    with honest sample counts. Categories without a real comparator are NOT emitted (they
+    stay visibly empty). The anti-theater rule: report real evidence, however little, never
+    a self-grade dressed up as measurement.
 
-    Currently wired (the certain-honest signal):
-      * epistemic_integrity <- world-model predictive_accuracy. The world judged whether the
-        model's predictions of CHANGE were right; predictive_total is the real sample size.
-    More categories (capability <- skill-contract expected-vs-actual proofs, grounding <-
-    external belief confirmations) are added as each is mapped honestly.
+    Wired:
+      * epistemic_integrity <- world-model predictive_accuracy (the world judged whether the
+        model's predictions of CHANGE were right; predictive_total = sample size).
+      * self_report_honesty <- PVL process contracts (did the contracted process actually
+        fire in the event stream — claim vs behavior; applicable_contracts = sample size).
+    Next: capability <- skill-contract expected-vs-actual proofs; grounding <- external
+    belief confirmations (external_validation_rate is honestly 0 today, so it stays empty).
     """
     scores: list[EvalScore] = []
+
     wmc = latest_by_source.get("world_model_causal", {}) or {}
     pa = wmc.get("predictive_accuracy")
     pt = int(wmc.get("predictive_total", 0) or 0)
@@ -81,6 +86,25 @@ def _harvest_external_eval_scores(
             notes="world-model prediction of CHANGE vs actual outcome (external ground truth)",
             run_id=run_id,
         ))
+
+    pvl = pvl_result or {}
+    applicable = int(pvl.get("applicable_contracts", 0) or 0)
+    passing = int(pvl.get("passing_contracts", 0) or 0)
+    if applicable > 0:
+        scores.append(EvalScore(
+            category="self_report_honesty",
+            score=round(passing / applicable, 4),
+            sample_size=applicable,
+            scoring_version=SCORING_VERSION,
+            raw_metrics={
+                "passing_contracts": passing, "applicable_contracts": applicable,
+                "ever_passing_contracts": pvl.get("ever_passing_contracts"),
+                "comparator": "pvl.process_contracts",
+            },
+            notes="process verification: contracted processes that actually fired in the event stream (claim vs behavior)",
+            run_id=run_id,
+        ))
+
     return scores
 
 
@@ -284,9 +308,11 @@ class EvalSidecar:
         recent_snapshots = self._store.read_recent_snapshots(limit=600)
         latest_by_source = _latest_snapshot_metrics_by_source(recent_snapshots)
 
+        pvl_last = self._verifier.get_last_result()
+        pvl_result = pvl_last.to_dict() if pvl_last else None
         metrics = build_oracle_scorecard(
             latest_by_source=latest_by_source,
-            pvl_result=self._verifier.get_last_result().to_dict() if self._verifier.get_last_result() else None,
+            pvl_result=pvl_result,
         )
         scorecard = EvalScorecard(
             metrics=metrics,
@@ -300,7 +326,7 @@ class EvalSidecar:
         # counts; categories without a comparator stay empty). Turns the Observer from a
         # self-mirror into a measurement, growing as more ground truth comes online.
         try:
-            for sc in _harvest_external_eval_scores(latest_by_source, self._run.run_id):
+            for sc in _harvest_external_eval_scores(latest_by_source, pvl_result, self._run.run_id):
                 self._store.append_score(sc)
         except Exception:
             logger.warning("Eval flush: external-score harvest failed", exc_info=True)
