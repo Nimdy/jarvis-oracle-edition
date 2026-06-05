@@ -1084,6 +1084,36 @@ def _create_app() -> FastAPI:
             return JSONResponse(result, status_code=400)
         return {"status": "retried", "skill_id": skill_id, "job_id": job_id, **result}
 
+    @app.post("/api/skills/{skill_id}/recover", dependencies=[Depends(_require_api_key)])
+    async def api_skill_recover(skill_id: str, request: Request):
+        """Recover a blocked/failed learning job so it re-runs (e.g. after a
+        contract/fixture fix). Resets the job to active/assess; idempotent phases
+        re-advance and verify re-checks against any now-active plugin. Operator
+        action — needed because a blocked job is otherwise only restartable by
+        re-issuing the (voice-only) learn command."""
+        try:
+            from skills.registry import skill_registry
+            rec = skill_registry.get(skill_id)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+        if rec is None:
+            return JSONResponse({"error": f"Skill '{skill_id}' not found"}, status_code=404)
+        body = {}
+        try:
+            body = await request.json() if await request.body() else {}
+        except Exception:
+            body = {}
+        job_id = (body.get("job_id") or rec.learning_job_id or "").strip()
+        if not job_id:
+            return JSONResponse({"error": "No learning job linked to this skill"}, status_code=404)
+        orch = _engine._learning_job_orchestrator if _engine and hasattr(_engine, '_learning_job_orchestrator') else None
+        if orch is None:
+            return JSONResponse({"error": "Learning job orchestrator not available"}, status_code=503)
+        ok = orch.recover_blocked_job(job_id)
+        if not ok:
+            return JSONResponse({"error": "Job not blocked/failed, or not found"}, status_code=400)
+        return {"status": "recovered", "skill_id": skill_id, "job_id": job_id}
+
     @app.delete("/api/skills/{skill_id}", dependencies=[Depends(_require_api_key)])
     async def api_skill_remove(skill_id: str, confirm_default: bool = False):
         """Remove a skill record from the registry.
