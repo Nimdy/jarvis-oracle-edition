@@ -227,11 +227,15 @@ class AcquisitionOrchestrator:
     ) -> CapabilityAcquisitionJob:
         """Pillar 3: re-enter the pipeline to improve a prior capability.
 
-        Seeds a NEW acquisition from the prior job's intent, carrying the operator's
-        feedback as revision context (planner + codegen both consume it via
-        ``_build_revision_context``, which also loads the prior plan so it revises
-        rather than restarts). The prior job's audit trail is untouched (Terminal
-        Acquisition Closure); the improved version runs the full governed lifecycle.
+        An improvement must INHERIT the prior build's structural grounding — its
+        skill/contract binding, classification, risk tier, and doc evidence — not just
+        its intent string. Otherwise a tier>=1 improvement reaches codegen with no
+        evidence (no contract artifact, no docs) and fails the evidence gate
+        ("tier N requires meaningful documentation evidence"). We therefore CLONE the
+        prior's grounding here rather than re-classifying a bare intent. The feedback
+        rides as planning+codegen revision context; the prior job's audit trail is
+        untouched (Terminal Acquisition Closure); trust is NEVER inherited — the
+        improved version still runs the full governed lifecycle and is re-verified.
         """
         prior = self.get_job(prior_acquisition_id)
         if prior is None:
@@ -245,19 +249,50 @@ class AcquisitionOrchestrator:
             raise ValueError("prior acquisition has no intent to revise")
 
         gen = int(getattr(prior, "revision_generation", 0) or 0) + 1
-        job = self.create(
-            intent,
-            requested_by=requested_by or {"source": "operator_improvement"},
+
+        # Carry the skill/contract binding forward so the contract evidence (and smoke
+        # fixtures) are reconstructed for the improvement — this is what makes the
+        # evidence gate pass for ANY skill-bound capability, not just this one.
+        prior_req = dict(prior.requested_by or {})
+        new_req: dict[str, Any] = {"source": "operator_improvement", "improves": prior_acquisition_id}
+        for k in ("skill_id", "learning_job_id", "contract_id", "required_executor_kind"):
+            if prior_req.get(k):
+                new_req[k] = prior_req[k]
+        if requested_by:
+            new_req.update(requested_by)
+
+        job = CapabilityAcquisitionJob(
+            title=f"[improve gen-{gen}] {prior.title or intent[:80]}",
+            user_intent=intent,
+            requested_by=new_req,
             revision_of=prior_acquisition_id,
             revision_feedback=feedback,
             revision_generation=gen,
         )
-        # Cross-link the prior attempt into the new job's audit trail.
+        # Clone the prior's classification + structure (skip heuristic re-classification:
+        # we already know what this capability is) and INHERIT its doc evidence floor.
+        job.outcome_class = prior.outcome_class or "plugin_creation"
+        job.classification_confidence = 1.0
+        job.classified_at = time.time()
+        job.required_lanes = list(prior.required_lanes or _LANE_MAP.get(job.outcome_class, []))
+        job.risk_tier = int(getattr(prior, "risk_tier", 0) or 0)
+        job.learning_job_id = getattr(prior, "learning_job_id", "") or ""
+        job.doc_artifact_ids = list(prior.doc_artifact_ids or [])
+
+        self._apply_risk_tier(job)
+        for lane_name in job.required_lanes:
+            job.init_lane(lane_name)
+        self._record_ledger_entry(job, "acquisition:created")
+        job.set_status("planning" if "planning" in job.required_lanes else "executing")
         job.add_artifact_ref(prior_acquisition_id)
+
         self._store.save_job(job)
+        self._active_jobs[job.acquisition_id] = job
+        self._total_created += 1
         logger.info(
-            "Acquisition %s is improvement gen-%d of %s (feedback: %.80s)",
-            job.acquisition_id, gen, prior_acquisition_id, feedback,
+            "Acquisition %s is improvement gen-%d of %s (skill=%s docs=%d tier=%d): %.80s",
+            job.acquisition_id, gen, prior_acquisition_id,
+            new_req.get("skill_id", ""), len(job.doc_artifact_ids), job.risk_tier, feedback,
         )
         return job
 
