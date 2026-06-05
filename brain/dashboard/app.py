@@ -3482,6 +3482,43 @@ def _create_app() -> FastAPI:
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
 
+    @app.post("/api/plugins/{name}/make-authoritative", dependencies=[Depends(_require_api_key)])
+    async def api_plugin_make_authoritative(name: str, request: Request):
+        """Capability authority (owner-gated): make this version the ACTIVE one for its
+        skill. Atomic — demotes the current active to shadow and records it as the floor."""
+        body = await request.json() if await request.body() else {}
+        try:
+            from tools.plugin_registry import get_plugin_registry
+            reg = get_plugin_registry()
+            ok = reg.make_authoritative(
+                name, approved_by=body.get("approved_by", "owner"),
+                reason=body.get("reason", "made authoritative via dashboard"),
+            )
+            if ok:
+                rec = reg.get_record(name)
+                return {"status": "active", "name": name,
+                        "skill_id": getattr(rec, "skill_id", "") if rec else "",
+                        "floor": getattr(rec, "prior_authoritative", "") if rec else ""}
+            return JSONResponse({"error": "Cannot make authoritative (must be shadow/supervised/active)"}, status_code=400)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.post("/api/plugins/{name}/demote", dependencies=[Depends(_require_api_key)])
+    async def api_plugin_demote(name: str, request: Request):
+        """Capability authority: demote a live capability active/supervised -> shadow
+        (reversible circuit breaker). Restores the known-good floor, or goes dormant."""
+        body = await request.json() if await request.body() else {}
+        try:
+            from tools.plugin_registry import get_plugin_registry
+            reg = get_plugin_registry()
+            report = reg.demote(name, reason=body.get("reason", "demoted via dashboard"),
+                                 actor=body.get("actor", "owner"))
+            if report.get("ok"):
+                return {"status": "demoted", "name": name, **report}
+            return JSONResponse({"error": report.get("error", "cannot demote")}, status_code=400)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
     @app.post("/api/plugins/{name}/disable", dependencies=[Depends(_require_api_key)])
     async def api_plugin_disable(name: str):
         """Disable a plugin."""

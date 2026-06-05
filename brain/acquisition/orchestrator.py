@@ -127,6 +127,24 @@ class AcquisitionOrchestrator:
         self._lane_futures: dict[tuple[str, str], concurrent.futures.Future] = {}
 
         self._load_active_jobs()
+        self._backfill_plugin_skill_ids()
+
+    def _backfill_plugin_skill_ids(self) -> None:
+        """One-time: bind existing plugin records to their skill (the authority grouping
+        key) by reverse-looking-up acquisition_id -> job.requested_by.skill_id. Cheap no-op
+        once every record has a skill_id; the orchestrator owns the acquisition<->registry link."""
+        try:
+            from tools.plugin_registry import get_plugin_registry
+            reg = get_plugin_registry()
+            for rec in list(getattr(reg, "_records", {}).values()):
+                if getattr(rec, "skill_id", "") or not getattr(rec, "acquisition_id", ""):
+                    continue
+                job = self._store.load_job(rec.acquisition_id)
+                sk = (job.requested_by or {}).get("skill_id", "") if job else ""
+                if sk:
+                    reg.set_skill_id(rec.name, sk)
+        except Exception as exc:
+            logger.debug("plugin skill_id backfill skipped: %s", exc)
 
     def set_codegen_service(self, service: Any) -> None:
         """Wire the CodeGenService for plan enrichment and implementation."""
@@ -2121,6 +2139,14 @@ class AcquisitionOrchestrator:
 
             ok, errors = registry.quarantine(plugin_name, code_files, manifest, job.acquisition_id)
             if ok:
+                # Bind the record to its skill (the capability-authority grouping key) so
+                # all versions of a skill are known to the registry — at most one active.
+                try:
+                    skill_id = (job.requested_by or {}).get("skill_id", "")
+                    if skill_id:
+                        registry.set_skill_id(plugin_name, skill_id)
+                except Exception:
+                    pass
                 job.plugin_id = plugin_name
                 job.complete_lane("plugin_quarantine", child_id=plugin_name)
                 self._emit_event("ACQUISITION_PLUGIN_DEPLOYED", job, {
