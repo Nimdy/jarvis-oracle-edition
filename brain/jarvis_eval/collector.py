@@ -105,6 +105,7 @@ class EvalCollector:
         readers.append(("study_telemetry", self._read_study_telemetry))
         readers.append(("experience_buffer", self._read_experience_buffer))
         readers.append(("world_model_promotion", self._read_world_model_promotion))
+        readers.append(("world_model_causal", self._read_world_model_causal))
         readers.append(("simulator_promotion", self._read_simulator_promotion))
         readers.append(("scene", self._read_scene))
         readers.append(("speakers", self._read_speakers))
@@ -355,6 +356,22 @@ class EvalCollector:
             return {}
         result = promo.get_status()
         return result if isinstance(result, dict) else {}
+
+    def _read_world_model_causal(self) -> dict[str, Any]:
+        """Capture the causal engine's GROUND-TRUTH accuracy: the world judged whether the
+        model's predictions of CHANGE were right. predictive_accuracy is reported separately
+        from persistence (it can't masquerade as foresight) — a genuine external comparator
+        for the scoreboard, with predictive_total as the honest sample size."""
+        cs = getattr(self._engine, "consciousness", None)
+        wm = getattr(cs, "_world_model", None) if cs else None
+        causal = getattr(wm, "_causal", None) if wm else None
+        if causal is None:
+            return {}
+        try:
+            acc = causal.get_accuracy()
+            return acc if isinstance(acc, dict) else {}
+        except Exception:
+            return {}
 
     def _read_simulator_promotion(self) -> dict[str, Any]:
         cs = getattr(self._engine, "consciousness", None)

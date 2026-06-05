@@ -23,7 +23,7 @@ from jarvis_eval.config import (
     FLUSH_INTERVAL_S, SCORING_VERSION, SCENARIO_PACK_VERSION,
     ORACLE_SCORECARD_INTERVAL_S, PVL_VERIFY_EVERY_N_FLUSHES, PVL_EVENT_WINDOW,
 )
-from jarvis_eval.contracts import EvalRun, EvalScorecard
+from jarvis_eval.contracts import EvalRun, EvalScore, EvalScorecard
 from jarvis_eval.dashboard_adapter import build_dashboard_snapshot
 from jarvis_eval.event_tap import EvalEventTap
 from jarvis_eval.process_verifier import ProcessVerifier
@@ -47,6 +47,42 @@ def _latest_snapshot_metrics_by_source(
         if prev is None or ts >= prev[0]:
             latest[src] = (ts, metrics if isinstance(metrics, dict) else {})
     return {src: metrics for src, (_ts, metrics) in latest.items()}
+
+
+def _harvest_external_eval_scores(
+    latest_by_source: dict[str, dict[str, Any]], run_id: str = "",
+) -> list[EvalScore]:
+    """Populate the scoreboard from GENUINE external/ground-truth comparators only — with
+    honest sample counts. Categories without a real external comparator are NOT emitted
+    (they stay visibly empty). This is the anti-theater rule: the scoreboard reports real
+    evidence, however little, never a self-grade dressed up as measurement.
+
+    Currently wired (the certain-honest signal):
+      * epistemic_integrity <- world-model predictive_accuracy. The world judged whether the
+        model's predictions of CHANGE were right; predictive_total is the real sample size.
+    More categories (capability <- skill-contract expected-vs-actual proofs, grounding <-
+    external belief confirmations) are added as each is mapped honestly.
+    """
+    scores: list[EvalScore] = []
+    wmc = latest_by_source.get("world_model_causal", {}) or {}
+    pa = wmc.get("predictive_accuracy")
+    pt = int(wmc.get("predictive_total", 0) or 0)
+    if pa is not None and pt > 0:
+        scores.append(EvalScore(
+            category="epistemic_integrity",
+            score=round(float(pa), 4),
+            sample_size=pt,
+            scoring_version=SCORING_VERSION,
+            raw_metrics={
+                "predictive_accuracy": pa, "predictive_total": pt,
+                "total_hits": wmc.get("total_hits"), "total_misses": wmc.get("total_misses"),
+                "comparator": "world_model_causal.predictive_accuracy",
+            },
+            notes="world-model prediction of CHANGE vs actual outcome (external ground truth)",
+            run_id=run_id,
+        ))
+    return scores
+
 
 __all__ = ["EvalSidecar"]
 
@@ -259,6 +295,15 @@ class EvalSidecar:
         )
         self._store.append_scorecard(scorecard)
         self._last_scorecard_ts = scorecard.timestamp
+
+        # Populate the rigorous scoreboard from REAL external comparators (honest sample
+        # counts; categories without a comparator stay empty). Turns the Observer from a
+        # self-mirror into a measurement, growing as more ground truth comes online.
+        try:
+            for sc in _harvest_external_eval_scores(latest_by_source, self._run.run_id):
+                self._store.append_score(sc)
+        except Exception:
+            logger.warning("Eval flush: external-score harvest failed", exc_info=True)
 
     def get_dashboard_snapshot(self, main_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
         """Build dashboard-ready dict from current data."""

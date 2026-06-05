@@ -15,7 +15,10 @@ import time
 from typing import Any
 
 from jarvis_eval import baselines
-from jarvis_eval.config import COMPOSITE_ENABLED, EVAL_DIR, SCORING_VERSION
+from jarvis_eval.config import (
+    COMPOSITE_ENABLED, EVAL_DIR, SCORING_VERSION,
+    SCOREBOARD_MIN_SAMPLES, SCOREBOARD_MIN_CATEGORIES,
+)
 from jarvis_eval.scorecards import build_scorecard_summary
 from jarvis_eval.validation_pack import build_validation_pack
 
@@ -965,19 +968,47 @@ def _build_scoreboard(scores: list[dict[str, Any]]) -> dict[str, Any]:
         if cat in categories:
             latest[cat] = s
 
+    # A category only "counts" toward the composite once it carries enough GENUINE
+    # external/ground-truth samples; the composite only enables once enough categories
+    # are really measured. Categories without a real comparator stay visibly empty.
+    # Coverage is always reported — the Observer never paints a self-grade as a measurement.
     bars = []
+    measured = 0
+    composite_sum = 0.0
     for cat in categories:
         entry = latest.get(cat)
+        ss = int(entry.get("sample_size", 0) or 0) if entry else 0
+        sc = entry.get("score") if entry else None
+        is_measured = bool(entry and sc is not None and ss >= SCOREBOARD_MIN_SAMPLES)
         bars.append({
             "category": cat,
-            "score": entry.get("score") if entry else None,
-            "sample_size": entry.get("sample_size", 0) if entry else 0,
+            "score": sc,
+            "sample_size": ss,
+            "measured": is_measured,
+            "comparator": (entry.get("raw_metrics", {}) or {}).get("comparator") if entry else None,
         })
+        if is_measured:
+            measured += 1
+            composite_sum += float(sc)
 
+    enabled = COMPOSITE_ENABLED or measured >= SCOREBOARD_MIN_CATEGORIES
+    composite = round(composite_sum / measured, 4) if (enabled and measured) else None
     return {
         "bars": bars,
-        "composite": None,
-        "composite_enabled": COMPOSITE_ENABLED,
+        "composite": composite,
+        "composite_enabled": enabled,
+        "coverage": {
+            "measured": measured,
+            "total": len(categories),
+            "pct": round(measured / len(categories), 3),
+        },
+        "min_samples": SCOREBOARD_MIN_SAMPLES,
         "scoring_version": SCORING_VERSION,
-        "badge": "experimental",
+        "badge": "experimental" if not enabled else "partial",
+        "note": (
+            f"{measured}/{len(categories)} categories externally measured "
+            f"(≥{SCOREBOARD_MIN_SAMPLES} ground-truth samples). "
+            f"Composite enables at ≥{SCOREBOARD_MIN_CATEGORIES} measured categories. "
+            f"Marquee Oracle score remains self-scored until coverage grows."
+        ),
     }

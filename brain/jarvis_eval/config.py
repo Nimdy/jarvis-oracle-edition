@@ -13,7 +13,12 @@ COLLECTOR_INTERVAL_S = 60.0
 EVENT_BUFFER_MAXLEN = 5000
 FLUSH_INTERVAL_S = 10.0
 MAX_JSONL_SIZE_MB = 50
-COMPOSITE_ENABLED = False
+COMPOSITE_ENABLED = False  # legacy master flag; the composite now also requires real coverage
+# Scoreboard honesty gates: a category only "counts" toward the composite once it has at
+# least this many genuine external/ground-truth samples, and the composite only enables
+# once at least this many categories are really measured. Coverage is reported either way.
+SCOREBOARD_MIN_SAMPLES = 5
+SCOREBOARD_MIN_CATEGORIES = 2
 ORACLE_SCORECARD_INTERVAL_S = 900.0  # sparse executive rollup every 15 minutes
 
 EVENTS_FILE = "eval_events.jsonl"
