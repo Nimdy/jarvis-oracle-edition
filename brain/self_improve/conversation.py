@@ -166,6 +166,15 @@ Jarvis runs on Python 3.11+. Plugins are self-contained Python modules with a ha
 Plugins CANNOT import subprocess, os.system, exec, eval, or access credentials.
 Plugins CAN use standard library modules and any pure-Python logic.
 
+REAL DATA, NEVER SIMULATED. For capabilities that need EXTERNAL data (web scraping, HTTP,
+REST APIs), real network fetching with urllib.request IS available — such plugins run
+sandboxed in an isolated subprocess, so real HTTP is expected, not forbidden. NEVER simulate,
+mock, fabricate, or "synthesize" external data, and never write a plan that derives fake
+results from the input string. A capability that invents the data it was asked to fetch is a
+confabulation — worse than useless, and a betrayal of the user who trusts it. If the request
+is to scrape or fetch, the plugin MUST actually fetch the real resource and parse the real
+response; design it that way.
+
 Produce a technical design in EXACTLY this format. Every section MUST be present and non-empty.
 Be specific and practical — reference actual Python modules, functions, and data structures.
 
