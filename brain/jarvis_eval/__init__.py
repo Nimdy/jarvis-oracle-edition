@@ -65,8 +65,11 @@ def _harvest_external_eval_scores(
         can't inflate it; predictive_total_live = sample size).
       * self_report_honesty <- PVL process contracts (did the contracted process actually
         fire in the event stream — claim vs behavior; applicable_contracts = sample size).
-    Next: capability <- skill-contract expected-vs-actual proofs; grounding <- external
-    belief confirmations (external_validation_rate is honestly 0 today, so it stays empty).
+      * capability <- skill-registry behavioral verification (skills whose acquired capability
+        passed REAL executed/sandbox tests; bootstrap codebase_audit import-checks excluded so
+        the score is earned, not inflated; behavioral_applicable = sample size).
+    Next: grounding <- external belief confirmations (external_validation_rate is honestly 0
+    today, so it stays empty).
     """
     scores: list[EvalScore] = []
 
@@ -109,6 +112,28 @@ def _harvest_external_eval_scores(
                 "comparator": "pvl.process_contracts",
             },
             notes="process verification: contracted processes that actually fired in the event stream (claim vs behavior)",
+            run_id=run_id,
+        ))
+
+    # capability <- skill-registry behavioral verification. Earned-only: bootstrap skills
+    # verified by codebase_audit (import check) are excluded by the collector, so a fresh
+    # brain with only default skills reports applicable==0 and the category stays empty.
+    skl = latest_by_source.get("skills", {}) or {}
+    cap_applicable = int(skl.get("behavioral_applicable_count", 0) or 0)
+    cap_passing = int(skl.get("behavioral_passing_count", 0) or 0)
+    if cap_applicable > 0:
+        scores.append(EvalScore(
+            category="capability",
+            score=round(cap_passing / cap_applicable, 4),
+            sample_size=cap_applicable,
+            scoring_version=SCORING_VERSION,
+            raw_metrics={
+                "behavioral_passing": cap_passing,
+                "behavioral_applicable": cap_applicable,
+                "comparator": "skill_registry.behavioral_verification",
+                "note": "bootstrap codebase_audit (import-check) skills excluded — not behavioral proof",
+            },
+            notes="skills whose acquired capability passed REAL executed/sandbox tests, of all skills that underwent behavioral verification (earned, bootstrap-excluded)",
             run_id=run_id,
         ))
 

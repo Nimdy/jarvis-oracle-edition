@@ -399,3 +399,56 @@ class TestDashboardAdapter:
         assert all(b["score"] is None for b in sb["bars"])
         assert sb["composite"] is None
         assert sb["badge"] == "experimental"
+
+
+# ── Capability comparator: earned behavioral proof, bootstrap-excluded ───────
+
+from jarvis_eval import _harvest_external_eval_scores
+
+
+class TestCapabilityHarvest:
+    def test_capability_emitted_from_behavioral_proof(self):
+        scores = _harvest_external_eval_scores(
+            {"skills": {"behavioral_applicable_count": 4, "behavioral_passing_count": 3}},
+            pvl_result={}, run_id="r",
+        )
+        cap = [s for s in scores if s.category == "capability"]
+        assert len(cap) == 1
+        assert cap[0].score == 0.75
+        assert cap[0].sample_size == 4
+
+    def test_capability_stays_empty_when_only_bootstrap(self):
+        # applicable==0 (bootstrap-only brain) -> category stays visibly empty, no fake grade
+        scores = _harvest_external_eval_scores(
+            {"skills": {"behavioral_applicable_count": 0, "behavioral_passing_count": 0}},
+            pvl_result={}, run_id="r",
+        )
+        assert [s for s in scores if s.category == "capability"] == []
+
+
+class TestSkillsBehavioralReader:
+    def test_codebase_audit_skills_excluded_from_capability(self):
+        # A registry with one real behavioral skill (passed sandbox tests) and two
+        # bootstrap codebase_audit skills. Only the behavioral one counts.
+        snapshot = {
+            "total": 3,
+            "by_status": {"verified": 3},
+            "skills": [
+                {"skill_id": "web_scraping_v1", "evidence_summary": {
+                    "verification_method": "learning_job_procedural",
+                    "result": "pass", "tests_count": 2}},
+                {"skill_id": "speech_output", "evidence_summary": {
+                    "verification_method": "codebase_audit",
+                    "result": "pass", "tests_count": 0}},
+                {"skill_id": "vision_caption", "evidence_summary": {
+                    "verification_method": "codebase_audit",
+                    "result": "pass", "tests_count": 0}},
+            ],
+        }
+        with patch("skills.registry.skill_registry") as reg:
+            reg.get_status_snapshot.return_value = snapshot
+            collector = EvalCollector(MagicMock())
+            out = collector._read_skills()
+        assert out["behavioral_applicable_count"] == 1
+        assert out["behavioral_passing_count"] == 1
+        assert out["verified_count"] == 3  # the raw by_status is unchanged

@@ -610,12 +610,40 @@ class EvalCollector:
             by_status = snapshot.get("by_status", {})
             if not isinstance(by_status, dict):
                 by_status = {}
+
+            # Honest capability evidence (the eval scoreboard's `capability` comparator):
+            # count ONLY skills whose latest evidence is a REAL behavioral proof — a test
+            # that actually executed. Bootstrap skills verified by `codebase_audit` (an
+            # import/AST check proving the code path merely *exists*) are NOT behavioral
+            # proof and are excluded from the denominator; counting them would inflate
+            # capability to ~100% with no earned signal. Empty (applicable==0) when the
+            # brain has only bootstrap skills — that stays visibly empty, not a fake grade.
+            behavioral_applicable = 0
+            behavioral_passing = 0
+            for s in (snapshot.get("skills", []) or []):
+                if not isinstance(s, dict):
+                    continue
+                es = s.get("evidence_summary")
+                if not isinstance(es, dict):
+                    continue
+                method = es.get("verification_method", "") or ""
+                tests_count = int(es.get("tests_count", 0) or 0)
+                is_behavioral = method not in ("", "codebase_audit") and tests_count > 0
+                if not is_behavioral:
+                    continue
+                behavioral_applicable += 1
+                if es.get("result") == "pass":
+                    behavioral_passing += 1
+
             return {
                 "total": int(snapshot.get("total", 0) or 0),
                 "verified_count": int(by_status.get("verified", 0) or 0),
                 "learning_count": int(by_status.get("learning", 0) or 0),
                 "blocked_count": int(by_status.get("blocked", 0) or 0),
                 "degraded_count": int(by_status.get("degraded", 0) or 0),
+                # behavioral-proof counts feed the scoreboard `capability` category
+                "behavioral_applicable_count": behavioral_applicable,
+                "behavioral_passing_count": behavioral_passing,
             }
         except Exception:
             return {}
