@@ -32,11 +32,13 @@ logger = logging.getLogger("jarvis.senses.captioner")
 # ~/hailo-genai copy, which is a different build that fails VLM creation.
 DEFAULT_HEF = "/usr/local/hailo/resources/models/hailo10h/Qwen2-VL-2B-Instruct.hef"
 
-# Terse, factual, negation-aware prompt — keeps generation short (lower latency =
-# smaller Hailo-contention window) and matches the brain's honest-parse expectations.
-_PROMPT = ("Describe the scene in one short sentence. List only the people and objects "
-           "that are actually visible. Do not mention anything that is not present.")
-_SYSTEM = "You describe scenes factually and briefly."
+# This only ever runs on an IDLE scene (no person present — the Pi gates on sustained
+# absence), so the prompt focuses on the ROOM + objects, not people. Terse keeps
+# generation short (smaller Hailo-contention window). The brain additionally strips any
+# residual person hallucination, since the idle-gate guarantees nobody is there.
+_PROMPT = ("List the furniture, devices, and objects visible in this room in one short "
+           "sentence (e.g. desk, monitors, keyboard, lamp). Be factual and concise.")
+_SYSTEM = "You describe an empty room's furniture and objects factually and briefly."
 
 
 class SceneCaptioner:

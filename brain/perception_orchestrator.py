@@ -1355,6 +1355,14 @@ class PerceptionOrchestrator:
         text = (text or "").strip()
         if not text or "can't see" in text.lower():
             return
+        # The edge caption is, BY CONSTRUCTION, of an IDLE scene (the Pi only captions
+        # after sustained absence). The VLM still tends to narrate an occupied-LOOKING
+        # workspace as "a person is working…" — a hallucination. The idle-gate is ground
+        # truth (nobody is there), so drop any person-asserting clause before storing or
+        # extracting, so a phantom person can never seed object memory / the tracker.
+        text = self._strip_person_clauses(text)
+        if not text:
+            return
         self._last_scene_description = text
         self._last_edge_caption_ts = time.time()
         logger.info("Edge scene caption (%s, %sms): %s", model, latency_ms, text[:120])
@@ -1363,6 +1371,19 @@ class PerceptionOrchestrator:
             self._feed_vlm_to_tracker(text)
         except Exception:
             logger.debug("edge caption tracker-feed failed", exc_info=True)
+
+    _PERSON_NOUN_RE = re.compile(
+        r"\b(person|people|man|woman|men|women|someone|somebody|individual|worker|"
+        r"guy|lady|figure|human)s?\b", re.IGNORECASE)
+
+    def _strip_person_clauses(self, text: str) -> str:
+        """Drop clauses that assert a person (idle-gate guarantees none). Clause-level
+        so object clauses survive intact: 'A person is working on a computer, with two
+        monitors, a keyboard' -> 'with two monitors, a keyboard'."""
+        clauses = re.split(r"(?<=[.,;])\s+", text)
+        kept = [c for c in clauses if not self._PERSON_NOUN_RE.search(c)]
+        cleaned = " ".join(kept).strip(" ,.;")
+        return cleaned
 
     # ------------------------------------------------------------------
     # Spatial Intelligence Pipeline
