@@ -34,6 +34,7 @@ AuditCategory = Literal[
     "memory_hygiene",
     "ingestion_health",
     "spatial_integrity",
+    "missed_opportunity",  # Phase 10 (#17): counterfactual "what we should have done"
 ]
 
 AuditSeverity = Literal["info", "warning", "critical"]
@@ -116,6 +117,7 @@ class ReflectiveAuditEngine:
             self._scan_memory_hygiene,
             self._scan_ingestion_health,
             self._scan_spatial_integrity,
+            self._scan_missed_opportunities,
         ]
 
         for scanner in scanners:
@@ -668,6 +670,51 @@ class ReflectiveAuditEngine:
                     ))
         except Exception:
             logger.debug("Spatial integrity scan failed", exc_info=True)
+        return findings
+
+    # ------------------------------------------------------------------
+    # Dimension 9: Missed Opportunities (Phase 10 / #17 — counterfactual)
+    # ------------------------------------------------------------------
+
+    def _scan_missed_opportunities(self) -> list[AuditFinding]:
+        """Run the counterfactual engine and surface 'missed opportunity' findings.
+
+        The engine is read-only + data-gated (200+ lived outcomes, 500+ decisions
+        evaluated). While dormant it returns nothing here — that is by design, not
+        a failure. Counterfactual regret is SYNTHETIC, so these findings are
+        advisory observability only; they never drive live policy reward.
+        """
+        findings: list[AuditFinding] = []
+        try:
+            from epistemic.counterfactual import get_counterfactual_engine, WARNING_REGRET
+            engine = get_counterfactual_engine()
+            for cf in engine.evaluate():
+                severity: AuditSeverity = "warning" if cf.regret >= WARNING_REGRET else "info"
+                tags = list(cf.topic_tags)[:3]
+                findings.append(AuditFinding(
+                    category="missed_opportunity",
+                    severity=severity,
+                    description=(
+                        f"For {tags}, tool '{cf.alternative_tool}' historically yields "
+                        f"{cf.alternative_estimated_delta:+.3f} vs '{cf.actual_tool}' which "
+                        f"yielded {cf.actual_delta:+.3f} (regret {cf.regret:.3f}, "
+                        f"conf {cf.confidence:.2f})"
+                    ),
+                    evidence={
+                        "intent_type": cf.decision_intent_type,
+                        "actual_tool": cf.actual_tool,
+                        "alternative_tool": cf.alternative_tool,
+                        "regret": round(cf.regret, 4),
+                        "confidence": round(cf.confidence, 3),
+                    },
+                    recommendation=(
+                        f"Advisory (shadow): prefer '{cf.alternative_tool}' for {tags} "
+                        f"situations. Counterfactual is synthetic — not applied to policy."
+                    ),
+                    related_ids=(cf.decision_intent_id,),
+                ))
+        except Exception:
+            logger.debug("Missed-opportunity scan failed", exc_info=True)
         return findings
 
     # ------------------------------------------------------------------
