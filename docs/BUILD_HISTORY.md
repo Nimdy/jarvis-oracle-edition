@@ -5,6 +5,57 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
+## Cognition Growth: CognitivePlanner + Counterfactual Engine (2026-06-06, branch `thespark`)
+
+Two new cognition subsystems landed — both **shadow-first, read-only, no-LLM, and
+data-gated**. Like the rest of the growth ladder they ship **dormant** and earn
+activation against a measured gate; neither grants behavior authority.
+
+### #16 — CognitivePlanner (Phase 8) — SHIPPED, dormant by gate
+
+`brain/cognition/planner.py`. Multi-step **path search** over the Mental Simulator:
+chains the simulator across an action sequence (each step's projected state feeds
+the next), scores whole paths, proposes the best + alternatives. Read-only,
+deterministic, no-LLM, bounded (beam=3, horizon=3, candidate-cap=4). Wired into the
+world-model shadow tick and surfaced at `get_state()["cognitive_planner"]`.
+
+- **Gate:** `MIN_VERIFIED_SIMULATIONS=100` mirrors `SimulatorPromotion.SIM_MIN_SIMULATIONS`;
+  runs only once the simulator is advisory (level ≥ 1). Dormant until then.
+- Commit `02d5ae2`. Tests: 16 new + 246 regression green. Verified live + dormant.
+
+### #17 — Counterfactual Evaluation Engine (Phase 10) — SHIPPED, dormant by gate
+
+`brain/epistemic/counterfactual/`. After autonomy decisions, evaluates the
+alternatives NOT taken: estimates the best historically-known tool for the
+decision's topic (from measured policy-history `net_delta`) and flags a
+**"missed opportunity"** when an alternative would have beaten the choice made.
+Surfaced via a new Layer-9 reflective-audit scanner (`missed_opportunity` category)
+that runs only in dream/sleep — i.e. "during dream cycles."
+
+- **Discipline:** counterfactual regret is SYNTHETIC, so it never writes live policy
+  reward — `live_influence=False` (shadow only). Promoting to live policy influence
+  is an earned + explicitly-enabled authority step.
+- **Gate:** `MIN_OUTCOMES=200` lived outcomes AND `MIN_BUFFER=500` distinct decisions
+  evaluated (the spec's "200+ outcomes, buffer >500"). Persisted dedup watermark →
+  each decision evaluated once, ever; restart-safe.
+- Commits `df31e08` (+ `faf20fb` test-isolation conftest). Tests: 15 new + 24
+  reflective-audit + 509 audit/policy regression green. Verified live + dormant.
+
+### Also this session
+
+- **First earned skill — `web_scraping_v1` VERIFIED end-to-end** through the live
+  learning-job pipeline (the other 13 verified skills are bootstrap re-registrations).
+  The growth loop closed for real: research → integrate → verify → register, with real
+  evidence (scraped Example Domain / HTTP 200) and the repair loop catching 4 fake
+  scrapers before one passed. `SKILL_LEARNING_COMPLETED` fired (recorded in the
+  attribution ledger). Honest scope: evidentiary, not a maturation-gate flip.
+- **Edge VLM** (Qwen2-VL-2B on Hailo, Pi-side, idle-gated, person-free room captions)
+  and **Fidelity hardening** (#8/#11/#12/#13: self-improve health-gate fail-closed,
+  silent-`except` sweep on epistemic emit paths, event/route count reconcile) landed
+  earlier in the session.
+
+---
+
 ## The Spark Branch — Grounding Ring + Weight-Room Discipline + Companion-Cognition P0 (2026-05-31, branch `thespark`)
 
 This branch is an **observability-and-honesty landing, not a behavior-authority landing**.
