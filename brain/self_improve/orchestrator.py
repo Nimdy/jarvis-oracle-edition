@@ -1649,9 +1649,17 @@ class SelfImprovementOrchestrator:
         try:
             from epistemic.soul_integrity.index import SoulIntegrityIndex
             si = SoulIntegrityIndex.get_instance()
-            idx = si.get_current_index()
+            state = si.get_state()
+            idx = state.get("current_index")
             result["soul_integrity_index"] = round(idx, 3) if idx is not None else None
             result["soul_integrity_ok"] = idx is None or idx >= SOUL_INTEGRITY_GATE_THRESHOLD
+            # Surface the FLOOR, not just the mean: the index is a weighted average that
+            # can hide a critically-low sub-dimension (e.g. truth_calibration 0.62 sitting
+            # under a 0.82 mean). Show the weakest so the average never conceals it.
+            # (Fidelity #11; gate threshold itself is unchanged.)
+            result["soul_integrity_weakest_dimension"] = state.get("weakest_dimension") or ""
+            ws = state.get("weakest_score")
+            result["soul_integrity_weakest_score"] = round(ws, 3) if isinstance(ws, (int, float)) else None
         except Exception:
             pass
         return result

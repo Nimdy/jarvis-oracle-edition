@@ -1199,7 +1199,11 @@
     var qOk = hasGates ? _tri(gates.quarantine_ok) : null;
     var sOk = hasGates ? _tri(gates.soul_integrity_ok) : null;
     updateGate('gateQuarantine', qOk, 'Quarantine '+(qOk===null?'UNKNOWN':qOk?'OK':'HIGH')+(gates.quarantine_composite!=null?' ('+pct(gates.quarantine_composite)+')':''));
-    updateGate('gateSoulIntegrity', sOk, 'Soul '+(sOk===null?'UNKNOWN':sOk?'OK':'LOW')+(gates.soul_integrity_index!=null?' ('+gates.soul_integrity_index.toFixed(2)+')':''));
+    // Surface the FLOOR, not just the mean — the weighted index can hide a low
+    // sub-dimension (truth_calibration etc.). (Fidelity #11.)
+    var soulWeak = (gates.soul_integrity_weakest_dimension && gates.soul_integrity_weakest_score!=null)
+      ? ' · weakest '+gates.soul_integrity_weakest_dimension+' '+gates.soul_integrity_weakest_score.toFixed(2) : '';
+    updateGate('gateSoulIntegrity', sOk, 'Soul '+(sOk===null?'UNKNOWN':sOk?'OK':'LOW')+(gates.soul_integrity_index!=null?' ('+gates.soul_integrity_index.toFixed(2)+')':'')+soulWeak);
     el('acqBadge').textContent = 'Acq: '+(acq.active_count||0)+' active / '+(acq.total_count||0);
     el('pluginBadge').textContent = 'Plugins: '+(plugs.total_plugins||0);
     el('statAcqActive').textContent = acq.active_count || 0;
