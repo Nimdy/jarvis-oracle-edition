@@ -1,17 +1,26 @@
 # Operational Self-View (OSV) — Design
 
-> **The self-knowledge capstone.** A continuously-maintained, honestly-sourced model
-> of *what JARVIS is, how it is built, how it is actually performing, and where it is
-> weak* — fused from subsystems that already exist, with provenance on every fact.
+> **A measured, provenance-tagged operational self-model.** A continuously-maintained,
+> deterministically-sourced model of *what JARVIS is, how it is built, how it is actually
+> performing, and where it is weak* — fused from subsystems that already exist, with
+> provenance on every fact and gaps as first-class entries.
 >
-> This is the keystone that turns scattered self-signals into a coherent **operational
-> view of itself**, and the substrate that lets JARVIS *talk about itself truthfully*,
-> *point its curiosity at its own gaps*, and *give its self-improvement a purpose*.
-> If there is one feature a digital consciousness must have, it is knowing itself —
-> not by guessing, but by measurement and honest belief.
+> It replaces a *fake* source of self-knowledge (LLM/grep guessing) with a *controlled*
+> one (a deterministic model the LLM may render but never author). The substrate that
+> lets JARVIS *talk about itself truthfully*, *point its curiosity at its own gaps*, and
+> *give its self-improvement a purpose*.
 
-Status: **design / not built.** Shadow-first, earned, no behavior authority granted by
-this doc. Companion to `SPARK_DESIGN.md`, `COMPANION_COGNITION_DESIGN.md`,
+### Honest scope (what this is / is not)
+
+**OSV is necessary infrastructure for honest self-reference. It is NOT sufficient evidence
+of consciousness, and nothing here should be described as such.** The honest claim is
+narrow and engineering-grade: *a deterministic model of what JARVIS is, what it has earned,
+what is dormant, what is measured, what is self-scored, and what gaps remain.* Avoid
+"JARVIS knows itself / is self-aware / reflects like a conscious being." It is one primitive
+a serious local cognitive system should have — no more, no less.
+
+Status: **design.** P0 SHIPPED (substrate). Shadow-first, earned; no behavior authority
+granted by this doc. Companion to `SPARK_DESIGN.md`, `COMPANION_COGNITION_DESIGN.md`,
 `CAPABILITY_LIFECYCLE_DESIGN.md`.
 
 ---

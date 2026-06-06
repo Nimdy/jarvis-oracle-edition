@@ -11,9 +11,42 @@ belief extraction) are intentionally left out → they surface as honest gaps, n
 from __future__ import annotations
 
 import logging
+import time
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("jarvis.self_view")
+
+# Only skills genuinely changed within this window count as "recent" — prevents
+# months-old bootstrap skills from masquerading as new (a P1 honesty fix).
+RECENT_SKILL_WINDOW_S = 30 * 86400
+
+
+def _latest_build_history() -> dict[str, Any] | None:
+    """Best-effort: the most-recent BUILD_HISTORY section = recent CODE-level changes.
+
+    This is how the OSV sees capability additions that are code, not skills (e.g. the
+    CognitivePlanner). Read-only; returns None (-> honest gap) if unreadable.
+    """
+    try:
+        path = Path(__file__).resolve().parents[3] / "docs" / "BUILD_HISTORY.md"
+        if not path.exists():
+            return None
+        title: str | None = None
+        subs: list[str] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("## "):
+                if title is None:
+                    title = line[3:].strip()
+                    continue
+                break  # reached the next (older) section
+            if title is not None and line.startswith("### "):
+                subs.append(line[4:].strip())
+        if title:
+            return {"name": title, "kind": "code_changeset", "items": subs[:5]}
+    except Exception:
+        logger.debug("self_view: BUILD_HISTORY read failed", exc_info=True)
+    return None
 
 
 def gather_live_sources(
@@ -33,13 +66,20 @@ def gather_live_sources(
     if isinstance(skills_summary, dict):
         sources["skills"] = skills_summary
         try:
+            now = time.time()
             sk = [x for x in (skills_summary.get("skills") or []) if isinstance(x, dict)]
             sk.sort(key=lambda x: x.get("updated_at") or 0, reverse=True)
-            recent = [
-                {"name": x.get("skill_id"), "kind": "skill",
-                 "status": x.get("status"), "when": x.get("updated_at")}
-                for x in sk[:3]
-            ]
+            recent: list[dict[str, Any]] = []
+            # GENUINELY-recent skills only (don't list months-old bootstrap as "new")
+            for x in sk:
+                when = x.get("updated_at") or 0
+                if when and (now - when) <= RECENT_SKILL_WINDOW_S:
+                    recent.append({"name": x.get("skill_id"), "kind": "skill",
+                                   "status": x.get("status"), "when": when})
+            # code-level changes the skill registry can't see (e.g. CognitivePlanner)
+            bh = _latest_build_history()
+            if bh:
+                recent.append(bh)
             if recent:
                 sources["recent_changes"] = recent
         except Exception:
