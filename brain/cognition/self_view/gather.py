@@ -70,10 +70,12 @@ def gather_live_sources(
             sk = [x for x in (skills_summary.get("skills") or []) if isinstance(x, dict)]
             sk.sort(key=lambda x: x.get("updated_at") or 0, reverse=True)
             recent: list[dict[str, Any]] = []
-            # GENUINELY-recent skills only (don't list months-old bootstrap as "new")
+            # Only EARNED skills (acquired via the learning pipeline) count as recent
+            # changes — bootstrap skills carry a post-reset re-registration timestamp and
+            # are seeded, not new capabilities; listing them as "new" is misleading.
             for x in sk:
                 when = x.get("updated_at") or 0
-                if when and (now - when) <= RECENT_SKILL_WINDOW_S:
+                if x.get("learning_job_id") and when and (now - when) <= RECENT_SKILL_WINDOW_S:
                     recent.append({"name": x.get("skill_id"), "kind": "skill",
                                    "status": x.get("status"), "when": when})
             # code-level changes the skill registry can't see (e.g. CognitivePlanner)
