@@ -1579,6 +1579,13 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         except Exception:
             _cr["theory_of_mind"] = {}
         try:
+            # Companion P3 — read->behavior ADVISORY (shadow, narrate-only): what
+            # JARVIS "would have" adjusted, person-aware. Applies nothing.
+            from consciousness.behavior_advisory import behavior_advisory_engine as _adv
+            _cr["behavior_advisory"] = _adv.get_status()
+        except Exception:
+            _cr["behavior_advisory"] = {}
+        try:
             # Environmental memory-of-normal — the "be there for the room" half (shadow).
             from consciousness.environmental_normal import environmental_normal_engine as _env
             _cr["environmental_normal"] = _env.get_status()

@@ -5812,6 +5812,11 @@ async def handle_transcription(
         # hypotheses only, gates nothing, never persisted to identity).
         if _read is not None:
             from consciousness.theory_of_mind import theory_of_mind_engine as _tom
-            _tom.observe(speaker, _read)
+            _person_model = _tom.observe(speaker, _read)
+            # Companion P3: join the read + learned person-model into a narrate-only
+            # behavior advisory ("would have softened / wrapped up / asked"). SHADOW —
+            # applies nothing; only logged for operator review + the P3->P4 earn-gate.
+            from consciousness.behavior_advisory import behavior_advisory_engine as _adv
+            _adv.propose(_read, _person_model)
     except Exception:
-        logger.debug("Situational read / theory-of-mind (companion P0/P1) failed", exc_info=True)
+        logger.debug("Situational read / theory-of-mind / advisory (companion P0/P1/P3) failed", exc_info=True)
