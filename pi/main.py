@@ -77,6 +77,13 @@ class SensesService:
         self._last_scene_detect_ts: float = 0.0
         self._scene_detect_interval: float = 3.0
         self._was_person_present = False
+        # Edge VLM captioner (opt-in; see _init_vision). _last_vision_frame caches the
+        # most recent RGB frame for the captioner; _vision_frame_count lets the caption
+        # task measure detection fps DURING a caption (the Hailo-contention check).
+        self._captioner = None
+        self._last_vision_frame = None
+        self._vision_frame_count: int = 0
+        self._caption_low_fps_streak: int = 0
 
         # Audio (mic capture + playback only)
         self._audio = AudioManager(
@@ -244,6 +251,7 @@ class SensesService:
         last_heartbeat = time.time()
         last_health_report = time.time()
         last_stream_check = time.time()
+        last_caption = time.time()
         last_cb_count = 0
         loop = asyncio.get_event_loop()
 
@@ -256,6 +264,16 @@ class SensesService:
                 await loop.run_in_executor(None, self._process_vision_frame)
 
             now = time.time()
+
+            # Edge VLM caption (opt-in, low-cadence). Runs in its own daemon thread so
+            # the 8.8s generation never blocks the senses loop; the Hailo is time-sliced
+            # with detection (ROUND_ROBIN). Stage 1 = LOG ONLY (caption + det-fps impact);
+            # the brain does not consume it yet.
+            if (self._captioner is not None and self._captioner.ready
+                    and now - last_caption >= self._config.vision.edge_caption_interval_s):
+                last_caption = now
+                threading.Thread(target=self._run_edge_caption,
+                                 name="edge-caption", daemon=True).start()
 
             # Mic stream health check
             if now - last_stream_check >= 3.0:
@@ -336,9 +354,28 @@ class SensesService:
             width=vc.width,
             height=vc.height,
             fps=vc.fps,
+            shared_group=vc.edge_caption_enabled,  # SHARED VDevice so the VLM can co-reside
         )
         self._tracker = PersonTracker()
         self._detector.start()
+
+        # Edge VLM scene captioner (Qwen2-VL-2B on the Hailo) — OPT-IN, shadow/log-only
+        # in this stage: it captions at low cadence sharing the detector's VDevice and
+        # LOGS the caption + the detection-fps impact, so we can prove it's safe before
+        # the brain consumes it. Lazy ~76s load in a background thread.
+        if vc.edge_caption_enabled and self._detector.vdevice is not None:
+            try:
+                from senses.vision.scene_captioner import SceneCaptioner
+                self._captioner = SceneCaptioner(
+                    self._detector.vdevice,
+                    hef_path=vc.edge_caption_hef,
+                    max_tokens=vc.edge_caption_max_tokens,
+                )
+                self._captioner.start_load_async()
+                logger.info("Edge VLM captioner enabled (loading in background, ~76s)")
+            except Exception:
+                logger.exception("Edge VLM captioner init failed — continuing without it")
+                self._captioner = None
 
         if vc.enable_expressions:
             self._expression = ExpressionAnalyzer(
@@ -395,11 +432,43 @@ class SensesService:
             ))
         return heads
 
+    def _run_edge_caption(self) -> None:
+        """Stage 1 (log-only): caption the latest frame on the Hailo VLM and MEASURE
+        the detection-fps impact during the caption (the device-contention check).
+        Auto-disables the captioner if detection degrades on consecutive captions."""
+        cap = self._captioner
+        frame = self._last_vision_frame
+        if cap is None or not cap.ready or frame is None:
+            return
+        fc0 = self._vision_frame_count
+        t0 = time.time()
+        text, latency_ms = cap.caption(frame)
+        dt = max(1e-3, time.time() - t0)
+        det_fps = (self._vision_frame_count - fc0) / dt
+        if text is None:
+            return
+        logger.info("Edge caption (%dms, detection ran %.1f fps during): %s",
+                    latency_ms, det_fps, text)
+        min_fps = self._config.vision.edge_caption_min_det_fps
+        if det_fps < min_fps:
+            self._caption_low_fps_streak += 1
+            logger.warning("Edge caption degraded detection to %.1f fps (< %.1f) — streak %d",
+                           det_fps, min_fps, self._caption_low_fps_streak)
+            if self._caption_low_fps_streak >= 2:
+                cap.disable("detection fps degraded during captioning")
+        else:
+            self._caption_low_fps_streak = 0
+
     def _process_vision_frame(self) -> None:
         assert self._detector and self._tracker
         frame = self._detector.capture_frame()
         if frame is None:
             return
+        # Cache the latest RGB frame + count frames so the edge captioner can reuse a
+        # frame without re-grabbing the camera, and measure detection fps during a caption.
+        if self._captioner is not None:
+            self._last_vision_frame = frame
+            self._vision_frame_count += 1
 
         detections = self._detector.detect(frame)
         tracks = self._tracker.update(detections)
