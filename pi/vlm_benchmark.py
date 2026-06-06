@@ -69,10 +69,16 @@ def main() -> int:
         print(f"[FAIL] HEF not found: {args.hef}")
         return 2
 
-    print(f"[1/4] acquiring Hailo VDevice (exclusive) ...")
+    print(f"[1/4] acquiring Hailo VDevice (SHARED group — required by genai) ...")
     t0 = time.time()
     try:
-        vdevice = VDevice()
+        # Hailo genai models REQUIRE a VDevice created with the "SHARED" group_id
+        # (the proven simple_llm_chat pattern). A bare VDevice() fails VLM creation
+        # with HAILO_INVALID_OPERATION. The detection path uses the same SHARED group,
+        # which is what lets detection + VLM coexist in one process.
+        params = VDevice.create_params()
+        params.group_id = "SHARED"
+        vdevice = VDevice(params)
     except Exception as exc:
         print(f"[FAIL] could not acquire the Hailo device: {exc}")
         print("       -> the senses (main.py) are probably still running and holding it.")
