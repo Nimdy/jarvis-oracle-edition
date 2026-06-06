@@ -25,7 +25,9 @@ import sys
 import time
 from pathlib import Path
 
-DEFAULT_HEF = str(Path.home() / "hailo-genai" / "hefs" / "Qwen2-VL-2B-Instruct.hef")
+# Use the STACK-INSTALLED HEF (compatible with the live hailort), NOT the older
+# ~/hailo-genai copy (different build -> HAILO_INVALID_OPERATION on VLM create).
+DEFAULT_HEF = "/usr/local/hailo/resources/models/hailo10h/Qwen2-VL-2B-Instruct.hef"
 DEFAULT_PROMPT = ("Describe what you see briefly. List any people, objects, or "
                   "activities. Be factual; if something is not present, do not mention it.")
 
@@ -99,25 +101,27 @@ def main() -> int:
         except Exception as exc:
             print(f"      (frame-format introspection n/a: {exc})")
 
-        print(f"[3/4] preparing a frame ...")
-        frame = _capture_frame()
-        shape = None
-        try:
-            shape = tuple(vlm.input_frame_shape)  # typically (H, W, C)
-        except Exception:
-            shape = (336, 336, 3)
+        print(f"[3/4] preparing a frame (336x336 RGB, per the working recipe) ...")
+        frame = _capture_frame()  # already RGB, or None
         if frame is None:
-            frame = (np.random.rand(*shape) * 255).astype(np.uint8)
+            frame = (np.random.rand(336, 336, 3) * 255).astype(np.uint8)
             print(f"      using synthetic frame {frame.shape} (caption content not meaningful)")
         else:
             try:
                 import cv2
-                h, w = shape[0], shape[1]
-                frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_AREA)
+                frame = cv2.resize(frame, (336, 336), interpolation=cv2.INTER_LINEAR)
             except Exception as exc:
                 print(f"      [warn] resize failed ({exc}); sending raw frame")
-            print(f"      real camera frame {frame.shape}")
+            print(f"      real camera frame -> {frame.shape}")
         frame = np.ascontiguousarray(frame.astype(np.uint8))
+
+        # Structured chat prompt (mirrors simple_vlm_chat.py exactly).
+        prompt = [
+            {"role": "system",
+             "content": [{"type": "text", "text": "You are a helpful assistant that describes scenes factually."}]},
+            {"role": "user",
+             "content": [{"type": "image"}, {"type": "text", "text": args.prompt}]},
+        ]
 
         print(f"[4/4] running {args.runs} generation(s) (max_tokens={args.max_tokens}) ...")
         for i in range(args.runs):
@@ -127,14 +131,16 @@ def main() -> int:
                 pass
             t0 = time.time()
             try:
-                out = vlm.generate(args.prompt, [frame], max_generated_tokens=args.max_tokens)
+                out = vlm.generate_all(prompt=prompt, frames=[frame], temperature=0.1,
+                                       seed=42, max_generated_tokens=args.max_tokens)
                 text = out if isinstance(out, str) else "".join(list(out))
+                text = text.split(". [{'type'")[0].split("<|im_end|>")[0]
             except Exception as exc:
-                print(f"      [FAIL] generate() errored: {exc!r}")
+                print(f"      [FAIL] generate_all() errored: {exc!r}")
                 return 4
             dt = time.time() - t0
             tag = "warmup" if i == 0 else "steady"
-            print(f"      run {i+1} ({tag}): {dt:.2f}s  -> {text.strip()[:240]!r}")
+            print(f"      run {i+1} ({tag}): {dt:.2f}s  -> {text.strip()[:280]!r}")
 
         print("\n[RESULT] VLM loads + captions on the Hailo-10H. "
               "Use the steady-run latency to judge the in-process integration.")
