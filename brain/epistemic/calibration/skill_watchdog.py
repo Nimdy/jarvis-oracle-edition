@@ -85,7 +85,10 @@ class SkillWatchdog:
             from consciousness.events import event_bus, SKILL_DEGRADATION_DETECTED
             event_bus.emit(SKILL_DEGRADATION_DETECTED, **alert)
         except Exception:
-            pass
+            # #11: never silently swallow a degradation alert — a lost alert means a
+            # real skill regression goes unnoticed. Surface it.
+            logger.warning("Failed to emit SKILL_DEGRADATION_DETECTED — degradation "
+                           "alert LOST: %s", alert, exc_info=True)
 
     def get_stats(self) -> dict:
         return {

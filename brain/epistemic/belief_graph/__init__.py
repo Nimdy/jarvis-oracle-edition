@@ -135,7 +135,7 @@ class BeliefGraph:
                     from consciousness.events import event_bus, BELIEF_GRAPH_PROPAGATION_COMPLETE
                     event_bus.emit(BELIEF_GRAPH_PROPAGATION_COMPLETE, **prop_result)
                 except Exception:
-                    pass
+                    logger.debug("BELIEF_GRAPH_PROPAGATION_COMPLETE emit failed", exc_info=True)  # #11: surfaced, not swallowed
 
         # Throttled maintenance orphan-fill outside dream mode (drains the backlog the
         # dream-only filler can't keep up with). Same gated path -> genuine edges only.
@@ -155,7 +155,7 @@ class BeliefGraph:
                 from consciousness.events import event_bus, BELIEF_GRAPH_INTEGRITY_CHECK
                 event_bus.emit(BELIEF_GRAPH_INTEGRITY_CHECK, **state["integrity"])
             except Exception:
-                pass
+                logger.debug("BELIEF_GRAPH_INTEGRITY_CHECK emit failed", exc_info=True)  # #11: surfaced, not swallowed
 
         return state
 
