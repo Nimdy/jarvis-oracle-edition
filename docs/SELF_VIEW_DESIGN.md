@@ -102,6 +102,21 @@ A periodically-synthesized, persisted **self-model object** with five knowledge 
 
 ---
 
+### 1.7 Sourcing note — reuse the existing aggregator, do not re-gather piecemeal
+
+**Verified (2026-06-06):** `dashboard/snapshot.py::build_cache(SnapshotContext)` already calls
+`get_status()/get_state()` across **80+ subsystems** and flattens them into the dashboard
+`_cache` (keys: `consciousness`, `policy`, `hemisphere`, `autonomy`, `evolution`,
+`world_model`, `simulator`, `epistemic`, `belief_graph`, `truth_calibration`,
+`reflective_audit`, `quarantine`, `soul_integrity`, `memory_*`, `observer`, `skills`,
+`grounding_ring`, `companion_read`, `emergence_evidence`, `trust_state`, …). Live spot-checks
+confirm the major learning/NN subsystems are real and populated (e.g. `consciousness`:
+stage/awareness/transcendence; `policy`: 46 fields incl. `nn_win_rate` shadow). **The OSV
+gather (P0.5) should source from this snapshot, not the ~7 hand-picked readouts P0 started
+with** — otherwise "what can you do?" reports a fraction of the real system. Caveat: a full
+per-subsystem liveness audit is its own task; the OSV must reflect each subsystem's *actual*
+state (active/measured/shadow/dormant/gated), not assume "working."
+
 ## 2. Sourcing & honesty discipline (non-negotiable)
 
 1. **Provenance on every fact.** Reuses the #9 schema (`is_measurement`, `kind`, `note`).
