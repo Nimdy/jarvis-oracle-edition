@@ -998,7 +998,11 @@ class SelfImprovementOrchestrator:
                 pass
 
             if pre_p95 <= 0:
-                return True
+                # FAIL-CLOSED (#13): no pre-apply baseline = we cannot prove this
+                # self-modification is healthy. Roll back rather than hand-wave "OK".
+                logger.warning("Post-apply health: no pre-apply p95 baseline — "
+                               "FAIL-CLOSED, rolling back (cannot verify health).")
+                return False
 
             for _ in range(HEALTH_MONITOR_TICKS):
                 await asyncio.sleep(0.15)
@@ -1011,7 +1015,12 @@ class SelfImprovementOrchestrator:
                     pass
 
             if len(tick_times) < 10:
-                return True
+                # FAIL-CLOSED (#13): too few post-apply samples to judge a regression.
+                # An unverifiable self-modification is rolled back, not assumed OK.
+                logger.warning("Post-apply health: only %d/%d ticks sampled — "
+                               "FAIL-CLOSED, rolling back (sample too thin to verify).",
+                               len(tick_times), HEALTH_MONITOR_TICKS)
+                return False
 
             tick_times.sort()
             idx = int(len(tick_times) * 0.95)
@@ -1028,8 +1037,11 @@ class SelfImprovementOrchestrator:
             return True
 
         except Exception:
-            logger.exception("Health check failed, assuming OK")
-            return True
+            # FAIL-CLOSED (#13): the health check itself errored. The rollback signal
+            # must be REAL — an errored check cannot certify health, so roll back.
+            logger.exception("Post-apply health check errored — FAIL-CLOSED, rolling back "
+                             "(not assuming OK)")
+            return False
 
     def _prepare_restart_verify(
         self,
