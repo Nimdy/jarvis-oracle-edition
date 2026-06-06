@@ -30,6 +30,7 @@ class SelfModel:
     maturity: dict[str, Any]
     belief: dict[str, Any]
     change: dict[str, Any]
+    subsystems: dict[str, Any]
     gaps: list[dict[str, Any]]
     coverage: dict[str, Any]
 
@@ -42,6 +43,7 @@ class SelfModel:
             "maturity": _facts_to_dict(self.maturity),
             "belief": _facts_to_dict(self.belief),
             "change": _facts_to_dict(self.change),
+            "subsystems": _facts_to_dict(self.subsystems),
             "gaps": self.gaps,
             "coverage": self.coverage,
         }
@@ -80,8 +82,9 @@ class SelfViewSynthesizer:
         maturity = self._maturity(sources)
         belief = self._belief(sources)
         change = self._change(sources)
+        subsystems = self._subsystems(sources)
         gaps = self._gaps(sources, performance, belief)
-        coverage = self._coverage(performance, gaps)
+        coverage = self._coverage(performance, subsystems, gaps)
         return SelfModel(
             generated_at=now,
             schema_version=SCHEMA_VERSION,
@@ -90,9 +93,19 @@ class SelfViewSynthesizer:
             maturity=maturity,
             belief=belief,
             change=change,
+            subsystems=subsystems,
             gaps=gaps,
             coverage=coverage,
         )
+
+    # -- Subsystems: the live subsystem surface (P0.5, from build_cache) ----
+
+    def _subsystems(self, s: dict[str, Any]) -> dict[str, Any]:
+        inv = s.get("subsystems")
+        if not isinstance(inv, dict) or not inv:
+            return {"_meta": gap("no subsystem inventory (dashboard snapshot unavailable)")}
+        # inv is {name: Fact}; pass through (to_dict renders facts honestly)
+        return dict(inv)
 
     # -- Structural: "how I'm built" ---------------------------------------
 
@@ -278,13 +291,22 @@ class SelfViewSynthesizer:
 
         return gaps
 
-    def _coverage(self, performance: dict[str, Any],
+    def _coverage(self, performance: dict[str, Any], subsystems: dict[str, Any],
                   gaps: list[dict[str, Any]]) -> dict[str, Any]:
         measured = sum(1 for f in performance.values()
                        if isinstance(f, Fact) and f.is_measurement)
-        total_perf = len(performance)
+        # subsystem inventory tally by provenance/lifecycle — the honest "what can you do"
+        by_prov: dict[str, int] = {}
+        sub_count = 0
+        for name, f in subsystems.items():
+            if name.startswith("_") or not isinstance(f, Fact):
+                continue
+            sub_count += 1
+            by_prov[f.provenance] = by_prov.get(f.provenance, 0) + 1
         return {
             "measured_performance_facts": measured,
-            "total_performance_facts": total_perf,
+            "total_performance_facts": len(performance),
+            "subsystem_count": sub_count,
+            "subsystems_by_provenance": by_prov,
             "gap_count": len(gaps),
         }

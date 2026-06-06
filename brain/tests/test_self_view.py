@@ -55,8 +55,29 @@ def _full_sources():
     }
 
 
+def _fake_snapshot():
+    """Mimics the dashboard build_cache output (verified shapes)."""
+    return {
+        "consciousness": {"stage": "integrative", "awareness_level": 0.98,
+                          "transcendence_level": 10.0},
+        "evolution": {"stage": "integrative", "transcendence_level": 10.0},
+        "policy": {"mode": "shadow", "nn_win_rate": 0.009},
+        "self_improve": {"active": True, "stage": 2, "effective_dry_run": True},
+        "world_model": {"level": 2, "level_name": "active", "total_validated": 111465},
+        "simulator": {"level": 0, "level_name": "shadow", "total_validated": 12236},
+        "observer": {"awareness_level": 0.98, "observation_count": 40},
+        "mutations": {"count": 5, "rollback_count": 0},
+        "memory": {"opaque": "shape"},          # unknown lifecycle -> present/unknown
+        "quarantine": {},                        # CURATED + empty -> gap (first-class)
+        "summary": {"skip": "me"},               # must be skipped
+        "_internal": {"skip": "me"},             # must be skipped
+        "empty_thing": {},                       # non-curated + empty -> omitted
+    }
+
+
 def _all_facts(model: SelfModel):
-    for dim in (model.structural, model.performance, model.maturity, model.belief, model.change):
+    for dim in (model.structural, model.performance, model.maturity, model.belief,
+                model.change, model.subsystems):
         for v in dim.values():
             if isinstance(v, Fact):
                 yield v
@@ -168,7 +189,7 @@ class TestSchema:
         d = SelfViewSynthesizer().synthesize(_full_sources(), now=1.0).to_dict()
         assert set(d.keys()) == {
             "schema_version", "generated_at", "structural", "performance",
-            "maturity", "belief", "change", "gaps", "coverage",
+            "maturity", "belief", "change", "subsystems", "gaps", "coverage",
         }
         assert d["schema_version"] == SCHEMA_VERSION
 
@@ -209,3 +230,74 @@ class TestBuildAndPersist:
         assert p.exists()
         loaded = sv.load_self_view()
         assert loaded["schema_version"] == SCHEMA_VERSION
+
+
+# ---------------------------------------------------------------------------
+# P0.5: subsystem inventory sourced from the build_cache snapshot
+# ---------------------------------------------------------------------------
+
+class TestSubsystemInventory:
+    def _model(self):
+        return sv.build_self_view(engine=None, eval_snapshot={}, skills_summary={},
+                                  snapshot=_fake_snapshot(), now=1.0)
+
+    def test_consciousness_is_self_scored_not_measurement(self):
+        sub = self._model()["subsystems"]["consciousness"]
+        assert sub["provenance"] == Provenance.SELF_SCORED
+        assert sub["is_measurement"] is False
+        assert "awareness_level" in sub["value"]  # self-reported value carried, not as proof
+
+    def test_policy_is_shadow_only(self):
+        sub = self._model()["subsystems"]["policy"]
+        assert sub["provenance"] == Provenance.SHADOW_ONLY
+        assert sub["is_measurement"] is False
+        assert "nn_win_rate" in sub["note"]
+
+    def test_promotion_levels_render_by_real_level(self):
+        subs = self._model()["subsystems"]
+        assert subs["world_model"]["value"] == "active"
+        assert subs["world_model"]["provenance"] == Provenance.MEASURED
+        assert subs["simulator"]["value"] == "shadow"
+        assert subs["simulator"]["provenance"] == Provenance.SHADOW_ONLY
+
+    def test_self_improve_active_gated(self):
+        sub = self._model()["subsystems"]["self_improve"]
+        assert sub["value"].startswith("active")
+        assert sub["provenance"] == Provenance.MEASURED
+
+    def test_unknown_shape_degrades_to_present_not_fake(self):
+        sub = self._model()["subsystems"]["memory"]
+        assert sub["value"] == "present"
+        assert sub["provenance"] == Provenance.UNKNOWN
+
+    def test_curated_empty_subsystem_is_gap(self):
+        sub = self._model()["subsystems"]["quarantine"]  # curated + empty -> gap
+        assert sub["provenance"] == Provenance.GAP
+
+    def test_noncurated_empty_subsystem_omitted(self):
+        subs = self._model()["subsystems"]
+        assert "empty_thing" not in subs  # non-curated + empty -> not tracked
+
+    def test_meta_keys_skipped(self):
+        subs = self._model()["subsystems"]
+        assert "summary" not in subs
+        assert "_internal" not in subs
+
+    def test_no_measurement_leak_in_subsystems(self):
+        subs = self._model()["subsystems"]
+        for name, f in subs.items():
+            if isinstance(f, dict) and f.get("provenance") not in (Provenance.MEASURED,):
+                assert f.get("is_measurement") is False
+
+    def test_coverage_tallies_subsystems(self):
+        cov = self._model()["coverage"]
+        assert cov["subsystem_count"] >= 6
+        bp = cov["subsystems_by_provenance"]
+        assert bp.get(Provenance.SELF_SCORED, 0) >= 1
+        assert bp.get(Provenance.SHADOW_ONLY, 0) >= 1
+
+    def test_no_snapshot_degrades_to_gap(self):
+        m = sv.build_self_view(engine=None, eval_snapshot={}, skills_summary={},
+                               snapshot=None, now=1.0)
+        assert "_meta" in m["subsystems"]
+        assert m["subsystems"]["_meta"]["provenance"] == Provenance.GAP

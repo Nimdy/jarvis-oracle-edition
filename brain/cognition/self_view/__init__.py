@@ -36,11 +36,16 @@ __all__ = [
 
 def build_self_view(engine: Any = None, eval_snapshot: dict[str, Any] | None = None,
                     skills_summary: dict[str, Any] | None = None,
+                    snapshot: dict[str, Any] | None = None,
                     now: float | None = None) -> dict[str, Any]:
-    """Gather live sources, synthesize the model, and return its dict form (read-only)."""
+    """Gather live sources, synthesize the model, and return its dict form (read-only).
+
+    ``snapshot`` is the dashboard build_cache output (the 80+ subsystem aggregator) — the
+    OSV's broad source of truth. Read-only; never mutated.
+    """
     import time as _t
     ts = now if now is not None else _t.time()
-    sources = gather_live_sources(engine, eval_snapshot, skills_summary)
+    sources = gather_live_sources(engine, eval_snapshot, skills_summary, snapshot)
     model = SelfViewSynthesizer().synthesize(sources, ts)
     return model.to_dict()
 

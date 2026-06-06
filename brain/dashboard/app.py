@@ -599,6 +599,7 @@ def _create_app() -> FastAPI:
                 engine=_engine,
                 eval_snapshot=_cache.get("eval", {}),
                 skills_summary=_cache.get("skills", {}),
+                snapshot=_cache,
             )
             save_self_view(model)
             return model
