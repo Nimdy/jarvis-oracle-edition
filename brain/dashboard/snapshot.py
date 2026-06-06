@@ -1489,6 +1489,17 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
             _gr["tension_thought_promotion"] = TensionThoughtPromotion.get_instance().get_status()
         except Exception:
             _gr["tension_thought_promotion"] = {}
+        # SPARK §8 P3 teacher-signal health: the external-only THOUGHT_VALIDATION_OUTCOME
+        # flow that the tension_thought_promotion selector earns on. Surfaces whether the
+        # loop is actually emitting outcomes (validation_outcomes_emitted) or is quietly
+        # input-starved (0 = no tension-seeded research has completed yet — expected in
+        # shadow, NOT a fault). Read-only; lets us SEE when P3 is genuinely earning.
+        try:
+            _ao_b = getattr(getattr(ctx, "engine", None), "_autonomy_orchestrator", None)
+            _bridge = getattr(_ao_b, "_bridge", None)
+            _gr["teacher_signal"] = _bridge.get_stats() if _bridge is not None else {}
+        except Exception:
+            _gr["teacher_signal"] = {}
         try:
             from consciousness.affect_promotion import affect_promotion as _ap
             _gr["affect_promotion"] = _ap.get_status()
