@@ -3130,6 +3130,21 @@ def _create_app() -> FastAPI:
             correct = sum(1 for s in resolved if s.get("correct") is True)
             accuracy = correct / len(resolved) if resolved else 0.0
 
+            # Weight-Room P1 (lived-before-synthetic): the HONEST live-shadow accuracy
+            # counts ONLY predictions made in a live session — a synthetic-session
+            # prediction is telemetry, never a lived rep a promotion gate could read.
+            # And it stays None until min-N lived samples accrue (no fake 0% off 1-2).
+            # The pooled `shadow_accuracy` above is kept for context but is NOT the
+            # gate-relevant number. (Old artifacts lack `origin` -> default "live".)
+            from hemisphere.distillation import live_shadow_accuracy as _lsa
+            resolved_live = [
+                s for s in resolved
+                if not str(s.get("origin", "live")).lower().startswith("synthetic")
+            ]
+            live_correct = sum(1 for s in resolved_live if s.get("correct") is True)
+            live_shadow = _lsa(live_correct, len(resolved_live))
+            synthetic_resolved = len(resolved) - len(resolved_live)
+
             # maturity bands based on resolved sample count
             n_resolved = len(resolved)
             if n_resolved < 15:
@@ -3183,8 +3198,20 @@ def _create_app() -> FastAPI:
                 "sample_count": sample_count,
                 "shadow_predictions_total": total,
                 "shadow_predictions_resolved": n_resolved,
-                "shadow_accuracy": round(accuracy, 4),
+                "shadow_accuracy": round(accuracy, 4),  # pooled (context only — NOT gate-relevant)
                 "correct_count": correct,
+                # Weight-Room P1 — the honest, synthetic-firewalled, min-N-gated number
+                # (None until 10 lived samples). This is the live-shadow accuracy a
+                # promotion gate would read; the pooled shadow_accuracy above is not.
+                "live_shadow_accuracy": live_shadow["live_shadow_accuracy"],
+                "live_shadow_resolved": live_shadow["live_shadow_total"],
+                "live_shadow_correct": live_shadow["live_shadow_correct"],
+                "live_shadow_sufficient_data": live_shadow["sufficient_data"],
+                "live_accuracy_status": (
+                    "measured" if live_shadow["live_shadow_accuracy"] is not None
+                    else "unmeasured_insufficient_live_samples"
+                ),
+                "synthetic_resolved_excluded": synthetic_resolved,
                 "verdict_distribution": verdict_dist,
                 "accuracy_by_risk_tier": by_risk_tier,
                 "accuracy_by_outcome_class": by_outcome_class,

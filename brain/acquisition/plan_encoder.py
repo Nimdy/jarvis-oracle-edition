@@ -91,6 +91,12 @@ class ShadowPredictionArtifact:
     model_version: str = ""     # hemisphere registry version id of specialist used
     risk_tier: int = 0          # from the job, for per-tier accuracy analysis
     outcome_class: str = ""     # from the job, for per-class accuracy analysis
+    # Weight-Room P1 (lived-before-synthetic): the session a prediction was made in.
+    # "live" feeds live_shadow_accuracy; "synthetic" is telemetry-only and NEVER
+    # counts toward the lived number a promotion gate would read. Old artifacts with
+    # no field default to "live" (the conservative lived default, mirrors
+    # distillation._is_synthetic_origin).
+    origin: str = "live"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

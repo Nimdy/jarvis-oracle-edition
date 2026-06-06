@@ -3382,6 +3382,15 @@ class AcquisitionOrchestrator:
                 model_ver = getattr(meta, "id", "") if meta else ""
             except Exception:
                 pass
+            # Weight-Room P1 (lived-before-synthetic): tag the session this prediction
+            # was made in. A prediction made DURING a synthetic session is telemetry
+            # only and must never count toward the lived live_shadow_accuracy a
+            # promotion gate would read — same firewall world_model.py applies.
+            try:
+                from memory.gate import memory_gate as _mg
+                _origin = "synthetic" if _mg.synthetic_session_active() else "live"
+            except Exception:
+                _origin = "live"
             artifact = ShadowPredictionArtifact(
                 acquisition_id=job.acquisition_id,
                 plan_id=getattr(plan, "plan_id", ""),
@@ -3392,6 +3401,7 @@ class AcquisitionOrchestrator:
                 model_version=model_ver,
                 risk_tier=job.risk_tier,
                 outcome_class=job.outcome_class,
+                origin=_origin,
             )
             self._store_shadow_prediction(artifact)
             logger.info(
