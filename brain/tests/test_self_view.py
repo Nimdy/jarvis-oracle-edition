@@ -56,28 +56,36 @@ def _full_sources():
 
 
 def _fake_snapshot():
-    """Mimics the dashboard build_cache output (verified shapes)."""
+    """Mimics the dashboard build_cache output (verified adapter shapes)."""
     return {
         "consciousness": {"stage": "integrative", "awareness_level": 0.98,
                           "transcendence_level": 10.0},
         "evolution": {"stage": "integrative", "transcendence_level": 10.0},
-        "policy": {"mode": "shadow", "nn_win_rate": 0.009},
-        "self_improve": {"active": True, "stage": 2, "effective_dry_run": True},
-        "world_model": {"level": 2, "level_name": "active", "total_validated": 111465},
-        "simulator": {"level": 0, "level_name": "shadow", "total_validated": 12236},
+        "policy": {"mode": "shadow", "nn_win_rate": 0.009, "eligible_for_control": False},
+        "self_improve": {"active": True, "stage": 2, "effective_dry_run": True,
+                         "total_improvements": 3},
+        "world_model": {
+            "promotion": {"level_name": "active", "total_validated": 111465},
+            "causal": {"predictive_total": 10, "predictive_accuracy": 0.8,
+                       "persistence_accuracy": 0.9},
+            "simulator_promotion": {"level_name": "shadow", "total_validated": 12236},
+            "simulator": {"avg_confidence": 0.55},
+        },
         "observer": {"awareness_level": 0.98, "observation_count": 40},
-        "mutations": {"count": 5, "rollback_count": 0},
-        "memory": {"opaque": "shape"},          # unknown lifecycle -> present/unknown
-        "quarantine": {},                        # CURATED + empty -> gap (first-class)
-        "summary": {"skip": "me"},               # must be skipped
-        "_internal": {"skip": "me"},             # must be skipped
-        "empty_thing": {},                       # non-curated + empty -> omitted
+        "hemisphere": {"enabled": True, "matrix_specialists": [1, 2, 3]},
+        "belief_graph": {"initialized": True, "belief_count": 580, "edge_count": 100},
+        "soul_integrity": {"current_index": 0.8, "critical": False},
+        "memory": {"opaque": "shape"},       # read_memory: no totals -> unknown
+        "quarantine": {},                     # curated + empty -> gap
+        "summary": {"skip": "me"},            # not in ADAPTERS -> skipped
+        "_internal": {"skip": "me"},          # skipped
+        "empty_thing": {},                    # non-curated + empty -> omitted
     }
 
 
 def _all_facts(model: SelfModel):
     for dim in (model.structural, model.performance, model.maturity, model.belief,
-                model.change, model.subsystems):
+                model.change):
         for v in dim.values():
             if isinstance(v, Fact):
                 yield v
@@ -85,6 +93,12 @@ def _all_facts(model: SelfModel):
                 for x in v:
                     if isinstance(x, Fact):
                         yield x
+    # subsystems are nested {name: {field: Fact}}
+    for entry in model.subsystems.values():
+        if isinstance(entry, dict):
+            for f in entry.values():
+                if isinstance(f, Fact):
+                    yield f
 
 
 # ---------------------------------------------------------------------------
@@ -237,67 +251,81 @@ class TestBuildAndPersist:
 # ---------------------------------------------------------------------------
 
 class TestSubsystemInventory:
-    def _model(self):
+    """P0.6: bespoke adapters classify each subsystem (nested {name:{field:Fact}})."""
+
+    def _subs(self):
         return sv.build_self_view(engine=None, eval_snapshot={}, skills_summary={},
-                                  snapshot=_fake_snapshot(), now=1.0)
+                                  snapshot=_fake_snapshot(), now=1.0)["subsystems"]
 
-    def test_consciousness_is_self_scored_not_measurement(self):
-        sub = self._model()["subsystems"]["consciousness"]
-        assert sub["provenance"] == Provenance.SELF_SCORED
-        assert sub["is_measurement"] is False
-        assert "awareness_level" in sub["value"]  # self-reported value carried, not as proof
+    def test_consciousness_self_scored(self):
+        life = self._subs()["consciousness"]["lifecycle"]
+        assert life["provenance"] == Provenance.SELF_SCORED
+        assert life["is_measurement"] is False
+        assert "awareness_level" in life["value"]  # carried, never as proof
 
-    def test_policy_is_shadow_only(self):
-        sub = self._model()["subsystems"]["policy"]
-        assert sub["provenance"] == Provenance.SHADOW_ONLY
-        assert sub["is_measurement"] is False
-        assert "nn_win_rate" in sub["note"]
+    def test_policy_shadow_only(self):
+        subs = self._subs()
+        assert subs["policy"]["lifecycle"]["provenance"] == Provenance.SHADOW_ONLY
+        assert subs["policy"]["nn_win_rate"]["provenance"] == Provenance.SHADOW_ONLY
+        assert subs["policy"]["nn_win_rate"]["is_measurement"] is False
 
-    def test_promotion_levels_render_by_real_level(self):
-        subs = self._model()["subsystems"]
-        assert subs["world_model"]["value"] == "active"
-        assert subs["world_model"]["provenance"] == Provenance.MEASURED
-        assert subs["simulator"]["value"] == "shadow"
-        assert subs["simulator"]["provenance"] == Provenance.SHADOW_ONLY
+    def test_world_model_promotion_and_accuracy_split(self):
+        wm = self._subs()["world_model"]
+        assert wm["lifecycle"]["value"] == "active"
+        assert wm["lifecycle"]["provenance"] == Provenance.MEASURED
+        assert wm["predictive_accuracy"]["is_measurement"] is True       # validated foresight
+        assert wm["persistence_accuracy"]["provenance"] == Provenance.INTERNALLY_SCORED
+
+    def test_simulator_shadow_from_nested(self):
+        sim = self._subs()["simulator"]
+        assert sim["lifecycle"]["value"] == "shadow"
+        assert sim["lifecycle"]["provenance"] == Provenance.SHADOW_ONLY
 
     def test_self_improve_active_gated(self):
-        sub = self._model()["subsystems"]["self_improve"]
-        assert sub["value"].startswith("active")
-        assert sub["provenance"] == Provenance.MEASURED
+        life = self._subs()["self_improve"]["lifecycle"]
+        assert life["value"].startswith("active")
+        assert life["provenance"] == Provenance.MEASURED
 
-    def test_unknown_shape_degrades_to_present_not_fake(self):
-        sub = self._model()["subsystems"]["memory"]
-        assert sub["value"] == "present"
-        assert sub["provenance"] == Provenance.UNKNOWN
+    def test_hemisphere_enabled_with_specialists(self):
+        h = self._subs()["hemisphere"]
+        assert h["lifecycle"]["provenance"] == Provenance.MEASURED
+        assert h["specialists"]["value"] == 3
 
-    def test_curated_empty_subsystem_is_gap(self):
-        sub = self._model()["subsystems"]["quarantine"]  # curated + empty -> gap
-        assert sub["provenance"] == Provenance.GAP
+    def test_soul_integrity_index_is_self_scored(self):
+        s = self._subs()["soul_integrity"]
+        assert s["current_index"]["provenance"] == Provenance.SELF_SCORED
+        assert s["current_index"]["is_measurement"] is False
 
-    def test_noncurated_empty_subsystem_omitted(self):
-        subs = self._model()["subsystems"]
-        assert "empty_thing" not in subs  # non-curated + empty -> not tracked
+    def test_unknown_shape_is_unknown_not_fake(self):
+        assert self._subs()["memory"]["lifecycle"]["provenance"] == Provenance.UNKNOWN
 
-    def test_meta_keys_skipped(self):
-        subs = self._model()["subsystems"]
+    def test_curated_empty_is_gap(self):
+        assert self._subs()["quarantine"]["lifecycle"]["provenance"] == Provenance.GAP
+
+    def test_noncurated_and_meta_keys_omitted(self):
+        subs = self._subs()
+        assert "empty_thing" not in subs
         assert "summary" not in subs
         assert "_internal" not in subs
 
     def test_no_measurement_leak_in_subsystems(self):
-        subs = self._model()["subsystems"]
-        for name, f in subs.items():
-            if isinstance(f, dict) and f.get("provenance") not in (Provenance.MEASURED,):
-                assert f.get("is_measurement") is False
+        for entry in self._subs().values():
+            if not isinstance(entry, dict):
+                continue
+            for f in entry.values():
+                if isinstance(f, dict) and f.get("provenance") != Provenance.MEASURED:
+                    assert f.get("is_measurement") is False
 
-    def test_coverage_tallies_subsystems(self):
-        cov = self._model()["coverage"]
-        assert cov["subsystem_count"] >= 6
+    def test_coverage_tally_meets_threshold(self):
+        cov = sv.build_self_view(engine=None, eval_snapshot={}, skills_summary={},
+                                 snapshot=_fake_snapshot(), now=1.0)["coverage"]
+        assert cov["subsystem_count"] >= 8  # most curated subsystems classified
         bp = cov["subsystems_by_provenance"]
         assert bp.get(Provenance.SELF_SCORED, 0) >= 1
         assert bp.get(Provenance.SHADOW_ONLY, 0) >= 1
+        assert bp.get(Provenance.MEASURED, 0) >= 1
 
     def test_no_snapshot_degrades_to_gap(self):
         m = sv.build_self_view(engine=None, eval_snapshot={}, skills_summary={},
                                snapshot=None, now=1.0)
-        assert "_meta" in m["subsystems"]
-        assert m["subsystems"]["_meta"]["provenance"] == Provenance.GAP
+        assert m["subsystems"]["_meta"]["lifecycle"]["provenance"] == Provenance.GAP

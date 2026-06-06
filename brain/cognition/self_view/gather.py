@@ -1,12 +1,14 @@
-"""Live source-gathering for the Operational Self-View (P0).
+"""Live source-gathering for the Operational Self-View.
 
 Reads existing subsystem readouts into the plain ``sources`` dict the
 :class:`SelfViewSynthesizer` consumes. STRICTLY READ-ONLY: every block is defensive —
-on any failure or missing subsystem the key is simply omitted, and the synthesizer
-degrades it to a first-class GAP (never a fabricated default). No writes, no LLM.
+on any failure or missing subsystem the key is omitted or degraded to a first-class gap,
+never a fabricated default. No writes, no LLM.
 
-Sources that are not yet cleanly extractable in P0 (policy win-rate, self-referential
-belief extraction) are intentionally left out → they surface as honest gaps, not guesses.
+P0.6: the subsystem inventory is sourced from the dashboard ``build_cache`` snapshot
+(``_cache``) via small, bespoke, read-only adapters (``adapters.py``) — one per subsystem,
+each refusing to guess when its fields are missing. We read the snapshot OUTPUT, never
+dashboard UI formatting.
 """
 from __future__ import annotations
 
@@ -15,128 +17,51 @@ import time
 from pathlib import Path
 from typing import Any
 
-from cognition.self_view.provenance import Fact, Provenance, gap, unknown
+from cognition.self_view.provenance import Fact, gap, unknown
+from cognition.self_view.adapters import ADAPTERS, read_simulator
 
 logger = logging.getLogger("jarvis.self_view")
 
-# ── P0.5: subsystem inventory sourced from the dashboard build_cache snapshot ──
-# Curated set of snapshot keys the OSV reports as subsystems. Each is classified into a
-# lifecycle Fact (provenance-honest). Keys NOT listed but present in the snapshot are still
-# surfaced generically (present/unknown) so the OSV reflects the real surface; keys listed
-# but ABSENT degrade to a gap. We read the snapshot's OUTPUT, never dashboard UI formatting.
-
-# Subsystems whose headline values are SELF-REPORTED (the system grading itself) — these can
-# never be measurements/proof. Honesty-critical: consciousness "awareness/transcendence".
-_SELF_SCORED_KEYS = {"consciousness", "evolution"}
-
-# Display names for the curated surface (others still surface by raw key).
-_SUBSYSTEM_LABELS = {
-    "consciousness": "Consciousness (self-report)",
-    "evolution": "Consciousness evolution (self-report)",
-    "observer": "Observer (self-monitoring)",
-    "policy": "Policy NN",
-    "self_improve": "Self-improvement pipeline",
-    "world_model": "World model",
-    "simulator": "Mental simulator",
-    "mutations": "Kernel mutations",
-    "language": "Language corpus",
-    "kernel": "Kernel performance",
-    "memory": "Memory / QSFS",
-    "hemisphere": "Hemisphere specialists (NN)",
-    "autonomy": "Autonomy / drives",
-    "grounding_ring": "Spark / grounding ring",
-    "companion_read": "Companion cognition",
-    "belief_graph": "Belief graph",
-    "truth_calibration": "Truth calibration",
-    "reflective_audit": "Reflective audit (Layer-9)",
-    "quarantine": "Quarantine pressure",
-    "soul_integrity": "Soul integrity index",
-    "skills": "Skills / capabilities",
-    "self_view": "Operational self-view",
-}
-
-
-def _headline(blob: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
-    return {f: blob.get(f) for f in fields if f in blob}
-
-
-def _classify_subsystem(key: str, blob: Any) -> Fact:
-    """Map a snapshot subsystem blob to a provenance-honest lifecycle Fact.
-
-    Generic lifecycle detection (shadow / advisory / active / dormant) over the common
-    fields, with explicit overrides for self-reported subsystems. Unknown shapes degrade
-    to 'present' (provenance unknown) — honest, not a fabricated state.
-    """
-    if not isinstance(blob, dict) or not blob:
-        return gap("subsystem present in snapshot but empty/unreadable", source=f"snapshot.{key}")
-
-    # Override: self-reported subsystems (awareness/transcendence/stage are self-scored)
-    if key in _SELF_SCORED_KEYS:
-        return Fact(_headline(blob, ("stage", "awareness_level", "transcendence_level",
-                                     "reasoning_quality", "confidence_avg")),
-                    Provenance.SELF_SCORED,
-                    note="self-reported by the system — NOT a measurement or proof",
-                    source=f"snapshot.{key}")
-
-    level_name = blob.get("level_name")
-    mode = blob.get("mode")
-    active = blob.get("active")
-    shadow_only = blob.get("shadow_only")
-
-    shadow = (level_name == "shadow") or (mode in ("shadow", "canary")) or (shadow_only is True)
-    advisory = (level_name == "advisory") or (mode == "advisory")
-    is_active = (level_name == "active") or (mode in ("live", "active")) or (active is True)
-
-    if shadow:
-        return Fact("shadow", Provenance.SHADOW_ONLY,
-                    note=_shadow_note(key, blob), source=f"snapshot.{key}")
-    if advisory:
-        return Fact("advisory", Provenance.ADVISORY,
-                    note=f"advisory tier ({blob.get('total_validated', '?')} validated)",
-                    source=f"snapshot.{key}")
-    if active is False:
-        return Fact("dormant", Provenance.DORMANT,
-                    note=str(blob.get("reason") or "active=false"), source=f"snapshot.{key}")
-    if is_active:
-        return Fact("active", Provenance.MEASURED,
-                    note=_active_note(key, blob), source=f"snapshot.{key}")
-
-    # Present but no recognizable lifecycle signal — honest 'present/unknown'.
-    return Fact("present", Provenance.UNKNOWN,
-                note="present in snapshot; no curated lifecycle reader", source=f"snapshot.{key}")
-
-
-def _shadow_note(key: str, blob: dict[str, Any]) -> str:
-    if key == "policy":
-        return f"nn_win_rate={blob.get('nn_win_rate')} (shadow NN-vs-kernel; advisory/non-authoritative)"
-    lv = blob.get("total_validated")
-    return f"shadow, not yet advisory" + (f" ({lv} validated)" if lv is not None else "")
-
-
-def _active_note(key: str, blob: dict[str, Any]) -> str:
-    if key == "self_improve":
-        return f"active stage={blob.get('stage')} dry_run={blob.get('effective_dry_run')} (gated pipeline)"
-    lv = blob.get("total_validated")
-    return "active" + (f" ({lv} validated)" if lv is not None else "")
+# Only skills genuinely changed within this window count as "recent" — prevents
+# months-old bootstrap skills from masquerading as new.
+RECENT_SKILL_WINDOW_S = 30 * 86400
 
 
 def subsystems_from_cache(snapshot: dict[str, Any] | None) -> dict[str, Any]:
-    """Build the subsystem inventory from the build_cache snapshot. Read-only."""
-    if not isinstance(snapshot, dict) or not snapshot:
-        return {"_meta": gap("dashboard snapshot unavailable", "dashboard.build_cache")}
-    inventory: dict[str, Any] = {}
-    # Only CURATED real subsystems — do not sweep every snapshot section (scene, sensors,
-    # traits, etc. are not subsystems; labeling them "unknown subsystem" would be inflated
-    # and misleading). Curated-present -> classify; curated-absent -> omit (not every build
-    # carries every key). Richer per-subsystem readers are added incrementally.
-    for key in _SUBSYSTEM_LABELS:
-        if key in snapshot:
-            inventory[key] = _classify_subsystem(key, snapshot.get(key))
-    return inventory
+    """Build the subsystem inventory from the build_cache snapshot via bespoke adapters.
 
-# Only skills genuinely changed within this window count as "recent" — prevents
-# months-old bootstrap skills from masquerading as new (a P1 honesty fix).
-RECENT_SKILL_WINDOW_S = 30 * 86400
+    Returns {name: {field: Fact}} — each subsystem classified by its own adapter. Curated
+    subsystems present in the snapshot are read; absent ones are omitted; present-but-empty
+    degrade to a gap; adapter errors degrade to unknown. Read-only.
+    """
+    if not isinstance(snapshot, dict) or not snapshot:
+        return {"_meta": {"lifecycle": gap("dashboard snapshot unavailable", "dashboard.build_cache")}}
+
+    inventory: dict[str, Any] = {}
+    for key, adapter in ADAPTERS.items():
+        if key not in snapshot:
+            continue  # not in this build — omit (no fake gap spam)
+        blob = snapshot.get(key)
+        if not isinstance(blob, dict) or not blob:
+            inventory[key] = {"lifecycle": gap("present but empty/unreadable",
+                                               source=f"snapshot.{key}")}
+            continue
+        try:
+            inventory[key] = adapter(blob)
+        except Exception:
+            logger.debug("self_view: adapter %s failed", key, exc_info=True)
+            inventory[key] = {"lifecycle": unknown("adapter error", source=f"snapshot.{key}")}
+
+    # simulator state is nested inside the world_model blob
+    wm = snapshot.get("world_model")
+    if isinstance(wm, dict) and wm:
+        try:
+            inventory["simulator"] = read_simulator(wm)
+        except Exception:
+            logger.debug("self_view: simulator adapter failed", exc_info=True)
+            inventory["simulator"] = {"lifecycle": unknown("simulator adapter error")}
+
+    return inventory
 
 
 def _latest_build_history() -> dict[str, Any] | None:
@@ -174,9 +99,7 @@ def gather_live_sources(
 ) -> dict[str, Any]:
     sources: dict[str, Any] = {}
 
-    # --- P0.5: broad subsystem inventory from the dashboard build_cache snapshot ---
-    # This is the OSV's view of the REAL live subsystem surface (80+), classified into
-    # provenance-honest lifecycle facts — not the ~7 hand-picked readouts.
+    # --- broad subsystem inventory from the dashboard build_cache snapshot (P0.6) ---
     sources["subsystems"] = subsystems_from_cache(snapshot)
 
     # --- scoreboard (#9 honest composite) from the eval snapshot ---
@@ -193,16 +116,15 @@ def gather_live_sources(
             sk = [x for x in (skills_summary.get("skills") or []) if isinstance(x, dict)]
             sk.sort(key=lambda x: x.get("updated_at") or 0, reverse=True)
             recent: list[dict[str, Any]] = []
-            # Only EARNED skills (acquired via the learning pipeline) count as recent
-            # changes — bootstrap skills carry a post-reset re-registration timestamp and
-            # are seeded, not new capabilities; listing them as "new" is misleading.
+            # Only EARNED skills (acquired via the learning pipeline) count as recent —
+            # bootstrap skills carry a post-reset re-registration timestamp; listing them
+            # as "new" is misleading.
             for x in sk:
                 when = x.get("updated_at") or 0
                 if x.get("learning_job_id") and when and (now - when) <= RECENT_SKILL_WINDOW_S:
                     recent.append({"name": x.get("skill_id"), "kind": "skill",
                                    "status": x.get("status"), "when": when})
-            # code-level changes the skill registry can't see (e.g. CognitivePlanner)
-            bh = _latest_build_history()
+            bh = _latest_build_history()  # code-level changes the registry can't see
             if bh:
                 recent.append(bh)
             if recent:

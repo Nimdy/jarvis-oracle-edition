@@ -103,8 +103,8 @@ class SelfViewSynthesizer:
     def _subsystems(self, s: dict[str, Any]) -> dict[str, Any]:
         inv = s.get("subsystems")
         if not isinstance(inv, dict) or not inv:
-            return {"_meta": gap("no subsystem inventory (dashboard snapshot unavailable)")}
-        # inv is {name: Fact}; pass through (to_dict renders facts honestly)
+            return {"_meta": {"lifecycle": gap("no subsystem inventory (snapshot unavailable)")}}
+        # inv is {name: {field: Fact}} from the bespoke adapters; pass through.
         return dict(inv)
 
     # -- Structural: "how I'm built" ---------------------------------------
@@ -295,14 +295,17 @@ class SelfViewSynthesizer:
                   gaps: list[dict[str, Any]]) -> dict[str, Any]:
         measured = sum(1 for f in performance.values()
                        if isinstance(f, Fact) and f.is_measurement)
-        # subsystem inventory tally by provenance/lifecycle — the honest "what can you do"
+        # subsystem inventory tally by lifecycle provenance — the honest "what can you do"
         by_prov: dict[str, int] = {}
         sub_count = 0
-        for name, f in subsystems.items():
-            if name.startswith("_") or not isinstance(f, Fact):
+        for name, entry in subsystems.items():
+            if name.startswith("_") or not isinstance(entry, dict):
+                continue
+            life = entry.get("lifecycle")
+            if not isinstance(life, Fact):
                 continue
             sub_count += 1
-            by_prov[f.provenance] = by_prov.get(f.provenance, 0) + 1
+            by_prov[life.provenance] = by_prov.get(life.provenance, 0) + 1
         return {
             "measured_performance_facts": measured,
             "total_performance_facts": len(performance),
