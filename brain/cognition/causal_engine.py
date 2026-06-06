@@ -36,13 +36,16 @@ _PERSISTENCE_RULE_IDS = frozenset({
     "healthy_system_stays_healthy",
     "absent_room_stays_quiet",
     "passive_mode_persists",
-    "idle_user_no_conversation",
     "active_conversation_persists",
-    "stable_scene_persists",
-    "display_zone_mode_stable",
     "workspace_person_stays",
-    "multi_entity_scene_stable",
 })
+# #9.2: dropped 4 near-duplicate user.present persistence rules — idle_user_no_conversation
+# (duplicated quiet_desk_stays_quiet), stable_scene_persists / display_zone_mode_stable /
+# multi_entity_scene_stable (all bare {user.present: True} under different stable-scene
+# conditions). They were redundant tautological persistence; present_user_stays remains the
+# canonical presence-persistence rule. Removal does NOT change predictive_accuracy (these
+# never counted toward it — they were persistence-classified); it only de-pads the
+# persistence side so it can't be mistaken for prediction throughput.
 
 
 # ---------------------------------------------------------------------------
@@ -267,22 +270,6 @@ def _build_default_rules() -> list[CausalRule]:
     ))
 
     rules.append(CausalRule(
-        rule_id="idle_user_no_conversation",
-        label="idle_stays_idle",
-        category="user",
-        priority=20,
-        condition=lambda ws, ds: (
-            ws.user.present
-            and not ws.conversation.active
-            and ws.user.seconds_since_last_interaction > 30.0
-            and ws.user.seconds_since_last_interaction < 120.0
-        ),
-        predicted_delta={"user.present": True, "conversation.active": False},
-        confidence=0.80,
-        horizon_s=30.0,
-    ))
-
-    rules.append(CausalRule(
         rule_id="active_conversation_persists",
         label="conversation_stays_active",
         category="conversation",
@@ -301,37 +288,6 @@ def _build_default_rules() -> list[CausalRule]:
     # into legacy WorldState fields for benchmark scoring compatibility.
 
     rules.append(CausalRule(
-        rule_id="stable_scene_persists",
-        label="scene_layout_stable",
-        category="physical",
-        priority=25,
-        condition=lambda ws, ds: (
-            ws.physical.stable_count >= 2
-            and ws.physical.visible_count >= 2
-            and len(ws.physical.region_visibility) >= 2
-        ),
-        predicted_delta={"user.present": True},
-        confidence=0.80,
-        horizon_s=45.0,
-    ))
-
-    rules.append(CausalRule(
-        rule_id="display_zone_mode_stable",
-        label="display_implies_mode_stable",
-        category="system",
-        priority=20,
-        condition=lambda ws, ds: (
-            ws.user.present
-            and len(ws.physical.display_surfaces) >= 1
-            and ws.system.mode in ("passive", "conversational", "reflective")
-            and ws.system.health_score >= 0.7
-        ),
-        predicted_delta={"user.present": True},
-        confidence=0.85,
-        horizon_s=45.0,
-    ))
-
-    rules.append(CausalRule(
         rule_id="workspace_person_stays",
         label="person_at_workspace_stays",
         category="user",
@@ -347,22 +303,39 @@ def _build_default_rules() -> list[CausalRule]:
         horizon_s=45.0,
     ))
 
+    # --- Genuinely predictive transition rules (#9.2) ---
+    # Event-triggered (fire on a transition delta, not steady-state), each predicts a
+    # measurable CHANGE/continuation. NOT in _PERSISTENCE_RULE_IDS, so they count toward
+    # predictive_accuracy and must earn it honestly against real outcomes.
+
     rules.append(CausalRule(
-        rule_id="multi_entity_scene_stable",
-        label="rich_scene_persists",
-        category="physical",
-        priority=20,
+        rule_id="mode_changed_to_sleep_absence",
+        label="sleep_transition_implies_absence",
+        category="system",
+        priority=50,
+        condition=lambda ws, ds: _has_delta_with(ds, "mode_changed", "to", "sleep"),
+        predicted_delta={"user.present": False},
+        confidence=0.7,
+        horizon_s=60.0,
+    ))
+
+    rules.append(CausalRule(
+        rule_id="topic_changed_conversation_continues",
+        label="topic_shift_sustains_conversation",
+        category="conversation",
+        priority=40,
         condition=lambda ws, ds: (
-            ws.physical.entity_count >= 3
-            and ws.physical.stable_count >= 2
-            and ws.user.present
+            _has_delta(ds, "topic_changed") and ws.conversation.active
         ),
-        predicted_delta={"user.present": True},
-        confidence=0.85,
-        horizon_s=45.0,
+        predicted_delta={"conversation.active": True},
+        confidence=0.75,
+        horizon_s=30.0,
     ))
 
     # --- PRUNED RULES (removed with justification) ---
+    # idle_user_no_conversation: #9.2 — duplicated quiet_desk_stays_quiet's prediction
+    # stable_scene_persists / display_zone_mode_stable / multi_entity_scene_stable: #9.2 —
+    #   near-duplicate {user.present: True} persistence rules; redundant with present_user_stays
     # object_appeared: predicted person_count=1 on any entity appearance — semantically wrong
     # object_disappeared: empty predicted_delta → auto-hit, inflates accuracy
     # multiple_barge_ins: empty predicted_delta → auto-hit, inflates accuracy

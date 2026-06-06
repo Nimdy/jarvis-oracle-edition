@@ -255,24 +255,7 @@ def _build_scenarios() -> list[dict[str, Any]]:
         ),
     })
 
-    # 13. idle_user_no_conversation
-    scenarios.append({
-        "name": "idle_user_stays_idle",
-        "rule_ids": ["idle_user_no_conversation"],
-        "before": WorldState(
-            user=UserState(present=True, seconds_since_last_interaction=60.0),
-            conversation=ConversationState(active=False),
-            timestamp=now,
-        ),
-        "deltas": [],
-        "after": WorldState(
-            user=UserState(present=True),
-            conversation=ConversationState(active=False),
-            timestamp=now + 31,
-        ),
-    })
-
-    # 14. active_conversation_persists
+    # 13. active_conversation_persists
     scenarios.append({
         "name": "active_conversation_continues",
         "rule_ids": ["active_conversation_persists"],
@@ -287,45 +270,7 @@ def _build_scenarios() -> list[dict[str, Any]]:
         ),
     })
 
-    # 15. stable_scene_persists
-    scenarios.append({
-        "name": "stable_scene_layout",
-        "rule_ids": ["stable_scene_persists"],
-        "before": WorldState(
-            user=UserState(present=True),
-            physical=PhysicalState(
-                stable_count=3, visible_count=3,
-                region_visibility={"desk_left": 0.9, "monitor_zone": 0.8},
-            ),
-            timestamp=now,
-        ),
-        "deltas": [],
-        "after": WorldState(
-            user=UserState(present=True),
-            physical=PhysicalState(stable_count=3, visible_count=3),
-            timestamp=now + 46,
-        ),
-    })
-
-    # 16. display_zone_mode_stable
-    scenarios.append({
-        "name": "display_implies_stability",
-        "rule_ids": ["display_zone_mode_stable"],
-        "before": WorldState(
-            user=UserState(present=True),
-            physical=PhysicalState(display_surfaces=({"id": "monitor1"},)),
-            system=SystemState(health_score=0.9, mode="passive"),
-            timestamp=now,
-        ),
-        "deltas": [],
-        "after": WorldState(
-            user=UserState(present=True),
-            system=SystemState(health_score=0.9, mode="passive"),
-            timestamp=now + 46,
-        ),
-    })
-
-    # 17. workspace_person_stays
+    # 14. workspace_person_stays
     scenarios.append({
         "name": "person_at_workspace",
         "rule_ids": ["workspace_person_stays"],
@@ -342,20 +287,37 @@ def _build_scenarios() -> list[dict[str, Any]]:
         ),
     })
 
-    # 18. multi_entity_scene_stable
+    # 15. mode_changed_to_sleep_absence (#9.2 predictive transition rule)
     scenarios.append({
-        "name": "rich_scene_stable",
-        "rule_ids": ["multi_entity_scene_stable"],
+        "name": "sleep_transition_implies_absence",
+        "rule_ids": ["mode_changed_to_sleep_absence"],
         "before": WorldState(
             user=UserState(present=True),
-            physical=PhysicalState(entity_count=4, stable_count=3),
+            system=SystemState(mode="passive"),
             timestamp=now,
         ),
-        "deltas": [],
+        "deltas": [WorldDelta(facet="system", event="mode_changed",
+                              details={"to": "sleep"}, timestamp=now)],
         "after": WorldState(
-            user=UserState(present=True),
-            physical=PhysicalState(entity_count=4, stable_count=3),
-            timestamp=now + 46,
+            user=UserState(present=False),
+            system=SystemState(mode="sleep"),
+            timestamp=now + 61,
+        ),
+    })
+
+    # 16. topic_changed_conversation_continues (#9.2 predictive transition rule)
+    scenarios.append({
+        "name": "topic_shift_sustains_conversation",
+        "rule_ids": ["topic_changed_conversation_continues"],
+        "before": WorldState(
+            conversation=ConversationState(active=True, topic="weather", turn_count=3),
+            timestamp=now,
+        ),
+        "deltas": [WorldDelta(facet="conversation", event="topic_changed",
+                              details={"to": "work"}, timestamp=now)],
+        "after": WorldState(
+            conversation=ConversationState(active=True, topic="work", turn_count=4),
+            timestamp=now + 31,
         ),
     })
 
