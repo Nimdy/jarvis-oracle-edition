@@ -586,6 +586,29 @@ def _create_app() -> FastAPI:
             return cs._world_model.get_diagnostics()
         return {"error": "World model not available"}
 
+    @app.get("/api/self-view")
+    async def api_self_view():
+        """Operational Self-View (OSV P0) — read-only, provenance-honest self-model.
+
+        Shadow/observability: synthesizes a fused self-model from existing readouts and
+        persists the snapshot. No canonical writes, no LLM, no behavior change.
+        """
+        from cognition.self_view import build_self_view, save_self_view, load_self_view
+        try:
+            model = build_self_view(
+                engine=_engine,
+                eval_snapshot=_cache.get("eval", {}),
+                skills_summary=_cache.get("skills", {}),
+            )
+            save_self_view(model)
+            return model
+        except Exception as exc:  # honest degradation to last snapshot
+            last = load_self_view()
+            if last is not None:
+                last["_stale"] = True
+                return last
+            return {"error": "self-view unavailable", "detail": str(exc)}
+
     @app.get("/api/spatial/diagnostics")
     async def api_spatial_diagnostics():
         """Spatial intelligence diagnostics — calibration, tracks, anchors, validation."""
