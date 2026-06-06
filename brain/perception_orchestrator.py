@@ -286,6 +286,8 @@ class PerceptionOrchestrator:
         self._object_memory: dict[str, dict] = {}
         self._last_scene_description: str = ""
         self._last_edge_caption_ts: float = 0.0  # when the Pi edge VLM last supplied a caption
+        self._last_scene_source: str = ""        # "edge_vlm" (Pi Hailo) | "desktop_gpu" (qwen2.5vl)
+        self._last_scene_ts: float = 0.0         # when _last_scene_description was last set (either path)
         self._scene_analysis_in_progress: bool = False
         self._gestation_active: bool = False
 
@@ -1365,12 +1367,27 @@ class PerceptionOrchestrator:
             return
         self._last_scene_description = text
         self._last_edge_caption_ts = time.time()
+        self._last_scene_source = "edge_vlm"
+        self._last_scene_ts = self._last_edge_caption_ts
         logger.info("Edge scene caption (%s, %sms): %s", model, latency_ms, text[:120])
         try:
             self._update_object_memory(text)
             self._feed_vlm_to_tracker(text)
         except Exception:
             logger.debug("edge caption tracker-feed failed", exc_info=True)
+
+    def get_scene_caption_state(self) -> dict[str, Any]:
+        """Dashboard visibility: the latest scene description + which path produced it
+        (edge VLM on the Pi Hailo vs the desktop GPU) + its age. Read-only."""
+        age = (time.time() - self._last_scene_ts) if self._last_scene_ts else None
+        return {
+            "text": self._last_scene_description or "",
+            "source": self._last_scene_source or "none",
+            "age_s": round(age, 1) if age is not None else None,
+            # edge is "active" if it supplied a caption recently (matches the GPU-defer window)
+            "edge_active": bool(self._last_edge_caption_ts
+                                and (time.time() - self._last_edge_caption_ts) < 150.0),
+        }
 
     _PERSON_NOUN_RE = re.compile(
         r"\b(person|people|man|woman|men|women|someone|somebody|individual|worker|"
@@ -2566,6 +2583,8 @@ class PerceptionOrchestrator:
         if not description or "can't see" in description.lower():
             return
         self._last_scene_description = description
+        self._last_scene_source = "desktop_gpu"
+        self._last_scene_ts = time.time()
         logger.info("Scene analysis: %s", description[:100])
 
         self._update_object_memory(description)

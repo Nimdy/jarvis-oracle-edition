@@ -1333,6 +1333,13 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         logger.warning("Snapshot: scene continuity failed", exc_info=True)
         snapshot["scene"] = {}
 
+    # What JARVIS "sees" — latest scene caption + which path produced it (edge VLM on
+    # the Pi Hailo vs desktop GPU). Lets the operator watch the edge-VLM room reads.
+    try:
+        snapshot["scene_caption"] = ctx.perc_orch.get_scene_caption_state() if ctx.perc_orch else {}
+    except Exception:
+        snapshot["scene_caption"] = {}
+
     try:
         if cs and cs._world_model:
             snapshot["world_model"] = cs._world_model.get_state()
