@@ -284,11 +284,27 @@ def build_dashboard_snapshot(
         oracle_benchmark = {"version": "1.0.0", "credible": False, "credibility_status": "error",
                             "hard_fail_reasons": ["benchmark_computation_failed"], "composite_score": 0}
 
+    # #9 keystone: the MEASURED scoreboard (real external comparators, >=5 genuine
+    # samples per category) is the authoritative maturity signal. Compute it once,
+    # route it into the banner headline, and explicitly label the oracle benchmark
+    # (a self-grade) so it can never be read as a measurement.
+    scoreboard = _build_scoreboard(recent_scores)
+    if isinstance(oracle_benchmark, dict):
+        oracle_benchmark = {**oracle_benchmark, "self_scored": True, "is_measurement": False}
+
     return {
         "banner": {
             "mode": "shadow",
             "scoring_version": SCORING_VERSION,
-            "composite_enabled": COMPOSITE_ENABLED,
+            # #9 keystone: route maturity reporting onto the MEASURED composite, not the
+            # legacy COMPOSITE_ENABLED flag (which is always off). The legacy flag is kept,
+            # clearly named, for back-compat. Coverage is always shown so a partial composite
+            # (e.g. 2-of-7 measured) is never mistaken for a full grade.
+            "composite_enabled": bool(scoreboard.get("composite_enabled")),
+            "composite": scoreboard.get("composite"),
+            "composite_coverage": scoreboard.get("coverage"),
+            "composite_source": "scoreboard_measured",
+            "legacy_composite_flag": COMPOSITE_ENABLED,
             "data_freshness_s": round(data_freshness_s, 1) if data_freshness_s is not None else None,
             "uptime_s": round(now - store_meta.get("created_at", now), 1),
             "pvl_enabled": True,
@@ -307,7 +323,7 @@ def build_dashboard_snapshot(
         "scorecards": scorecards,
         "self_report_honesty": {"status": "awaiting_scenario_data", "phase": "B"},
         "emotional_independence": {"status": "not_instrumented", "phase": "B"},
-        "scoreboard": _build_scoreboard(recent_scores),
+        "scoreboard": scoreboard,
         "oracle_benchmark": oracle_benchmark,
         "_main_snapshot": {
             "truth_calibration": (main_snapshot or {}).get("truth_calibration", {}),
