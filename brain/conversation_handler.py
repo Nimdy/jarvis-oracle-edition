@@ -806,6 +806,38 @@ def _log_introspection_grounding(
     return grounded
 
 
+# A memory PREVIEW must never leak raw record fields (type=, source_id=,
+# chunk_ids=[...], claim_type=) or id hashes into a SPOKEN reply: they corrupt the
+# answer AND choke the phonemizer (a hash token like 'chk_dbbf80d2...' becomes
+# minutes of garbled audio). Scrub them defensively on every path to TTS.
+_RECORD_CLAIM_RE = re.compile(r"\bclaim\s*=\s*(.+?)(?=\s*,\s*[a-z_]+\s*=|$)", re.IGNORECASE)
+_RECORD_FIELD_RE = re.compile(
+    r"\b(?:type|source_id|chunk_ids?|claim_type|memory_id|mem_id|provenance|score"
+    r"|episode_id|acquisition_id|skill_id|conv(?:ersation)?_id)\s*=\s*"
+    r"(?:\[[^\]]*\]|'[^']*'|\"[^\"]*\"|[^,]*)",
+    re.IGNORECASE,
+)
+_ID_HASH_RE = re.compile(r"\b(?:src|chk|chunk|mem|source|id)_[0-9a-f]{6,}\b", re.IGNORECASE)
+
+
+def _scrub_record_artifacts(text: str) -> str:
+    """Strip raw record metadata + id hashes from a string bound for TTS.
+
+    If a human-readable ``claim=`` is present, keep ONLY that. Then drop any
+    residual ``key=value`` record fields and bare id hashes. Defense-in-depth:
+    no spoken reply should ever contain ``chunk_ids=[...]`` / ``source_id=…``.
+    """
+    s = str(text or "")
+    m = _RECORD_CLAIM_RE.search(s)
+    if m:
+        s = m.group(1)
+    s = _RECORD_FIELD_RE.sub(" ", s)
+    s = _ID_HASH_RE.sub(" ", s)
+    s = re.sub(r"[\[\]{}]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip(" -|,;")
+    return s
+
+
 def _format_grounded_fallback(title: str, body: str, max_lines: int = 12, max_chars: int = 900) -> str:
     """Turn grounded tool data into a spoken-word-friendly fallback reply.
 
@@ -816,6 +848,9 @@ def _format_grounded_fallback(title: str, body: str, max_lines: int = 12, max_ch
     cleaned: list[str] = []
     for raw_line in body.splitlines():
         line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            continue
+        line = _scrub_record_artifacts(line)  # never speak raw record fields / id hashes
         if not line:
             continue
         cleaned.append(line)
@@ -900,6 +935,7 @@ def _to_speakable_memory_sentence(preview: str, max_chars: int = 170) -> str:
     if not text:
         return ""
     text = _MEMORY_SPEAKER_PREFIX_RE.sub("", text).strip(" -|,")
+    text = _scrub_record_artifacts(text)  # never speak raw record fields / id hashes
     if not text:
         return ""
     text = text.replace(" | ", ". ")
