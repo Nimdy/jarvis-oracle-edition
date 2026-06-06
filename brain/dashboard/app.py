@@ -303,6 +303,18 @@ def _build_cache() -> dict[str, Any]:
         _cache = snapshot
         _cache_hash = new_hash
         _cache_time = time.time()
+        # Keep the Operational Self-View snapshot fresh on the cache timer (read-only),
+        # so the conversation handler can answer self-questions from it without rebuilding.
+        try:
+            from cognition.self_view import build_self_view, save_self_view
+            save_self_view(build_self_view(
+                engine=_engine,
+                eval_snapshot=snapshot.get("eval", {}),
+                skills_summary=snapshot.get("skills", {}),
+                snapshot=snapshot,
+            ))
+        except Exception:
+            logger.debug("self-view snapshot refresh failed", exc_info=True)
     return snapshot
 
 

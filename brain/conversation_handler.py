@@ -2960,6 +2960,22 @@ async def handle_transcription(
                         )
             except Exception:
                 logger.debug("Strict learning-job-status route probe failed", exc_info=True)
+            # OSV P1: self-referential questions answer from the Operational Self-View
+            # (deterministic), never the codebase symbol search. classify returns None for
+            # explicit code questions, so "search your code for X" still routes to CODEBASE.
+            try:
+                if not routing.golden_context:
+                    from cognition.self_view.articulate import classify_self_question
+                    _sv_kind = classify_self_question(text)
+                    if _sv_kind:
+                        routing = RoutingResult(
+                            tool=ToolType.INTROSPECTION,
+                            confidence=0.95,
+                            extracted_args={"self_view_kind": _sv_kind},
+                        )
+                        logger.info("Routing override: self-view introspection (kind=%s)", _sv_kind)
+            except Exception:
+                logger.debug("self-view route probe failed", exc_info=True)
     _is_golden_route = routing.golden_context is not None
     try:
         _po = getattr(engine, "_perception_orchestrator", None)
@@ -3248,6 +3264,28 @@ async def handle_transcription(
 
     if _golden_short_circuit:
         pass
+    elif routing.extracted_args and routing.extracted_args.get("self_view_kind"):
+        # OSV P1: deterministic self-introspection from the Operational Self-View.
+        # No LLM authors the self-facts; we render the persisted self-model (kept fresh by
+        # the dashboard cache timer). Sanitized by the capability gate as a final firewall.
+        from cognition.self_view import load_self_view
+        from cognition.self_view.articulate import articulate_self_view
+        from skills.capability_gate import capability_gate as _sv_gate
+        engine.set_phase("PROCESSING")
+        tone = engine.get_state()["tone"]
+        _sv_kind = routing.extracted_args.get("self_view_kind")
+        _sv_model = load_self_view()
+        if _sv_model:
+            reply = articulate_self_view(_sv_model, _sv_kind)
+        else:
+            reply = ("My operational self-view isn't available yet — I can't read that part "
+                     "of myself right now.")
+        try:
+            reply = _sv_gate.sanitize_self_report_reply(reply)
+        except Exception:
+            logger.debug("self-view sanitize failed", exc_info=True)
+        await _broadcast_chunk_sync(reply, tone)
+        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
     elif routing.tool == ToolType.STATUS:
         from tools.introspection_tool import get_structured_status
         from skills.capability_gate import capability_gate as _status_gate
