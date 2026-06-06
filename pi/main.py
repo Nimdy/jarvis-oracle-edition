@@ -84,6 +84,10 @@ class SensesService:
         self._last_vision_frame = None
         self._vision_frame_count: int = 0
         self._caption_low_fps_streak: int = 0
+        # Last wall-clock a person was present (tracker-confirmed). The edge captioner
+        # only fires after SUSTAINED absence (now - this >= buffer), so a brief low-light
+        # detection flicker can't open the idle-gate while someone is actually there.
+        self._last_person_seen_ts: float = 0.0
 
         # Audio (mic capture + playback only)
         self._audio = AudioManager(
@@ -270,7 +274,10 @@ class SensesService:
             # with detection (ROUND_ROBIN). Stage 1 = LOG ONLY (caption + det-fps impact);
             # the brain does not consume it yet.
             if (self._captioner is not None and self._captioner.ready
-                    and not self._was_person_present  # idle-gate: only caption an empty scene
+                    # idle-gate: only caption after SUSTAINED absence (flicker-proof) —
+                    # no person seen for the buffer AND not present this instant.
+                    and not self._was_person_present
+                    and (now - self._last_person_seen_ts) >= self._config.vision.edge_caption_sustained_idle_s
                     and now - last_caption >= self._config.vision.edge_caption_interval_s):
                 last_caption = now
                 threading.Thread(target=self._run_edge_caption,
@@ -478,6 +485,8 @@ class SensesService:
         detections = self._detector.detect(frame)
         tracks = self._tracker.update(detections)
         is_present = self._tracker.active_count > 0
+        if is_present:
+            self._last_person_seen_ts = time.time()  # edge-caption sustained-idle anchor
 
         if is_present and not self._was_person_present:
             best = max(tracks, key=lambda t: t.confidence_avg) if tracks else None

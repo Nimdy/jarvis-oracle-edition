@@ -47,7 +47,8 @@ class VisionConfig(BaseModel):
     edge_caption_interval_s: float = float(os.getenv("EDGE_CAPTION_INTERVAL_S", "60"))
     edge_caption_hef: str = "/usr/local/hailo/resources/models/hailo10h/Qwen2-VL-2B-Instruct.hef"
     edge_caption_max_tokens: int = 48
-    edge_caption_min_det_fps: float = 6.0  # auto-disable if detection fps falls below this during a caption
+    edge_caption_min_det_fps: float = 6.0  # (legacy) detection-fps observability floor
+    edge_caption_sustained_idle_s: float = 12.0  # require this many seconds of continuous absence before captioning (flicker-proof)
 
 
 class AudioConfig(BaseModel):
