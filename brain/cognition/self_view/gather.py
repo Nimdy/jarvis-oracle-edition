@@ -125,19 +125,13 @@ def subsystems_from_cache(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(snapshot, dict) or not snapshot:
         return {"_meta": gap("dashboard snapshot unavailable", "dashboard.build_cache")}
     inventory: dict[str, Any] = {}
-    # curated subsystems first (stable ordering + labels), then any extra present keys
-    seen = set()
+    # Only CURATED real subsystems — do not sweep every snapshot section (scene, sensors,
+    # traits, etc. are not subsystems; labeling them "unknown subsystem" would be inflated
+    # and misleading). Curated-present -> classify; curated-absent -> omit (not every build
+    # carries every key). Richer per-subsystem readers are added incrementally.
     for key in _SUBSYSTEM_LABELS:
         if key in snapshot:
             inventory[key] = _classify_subsystem(key, snapshot.get(key))
-            seen.add(key)
-        # listed-but-absent: omit (not every key exists in every build) — no fake gap spam
-    # surface additional snapshot subsystems generically (so OSV reflects the REAL surface)
-    for key, blob in snapshot.items():
-        if key in seen or key.startswith("_") or key in ("summary", "banner", "store_meta"):
-            continue
-        if isinstance(blob, dict) and blob:
-            inventory[key] = _classify_subsystem(key, blob)
     return inventory
 
 # Only skills genuinely changed within this window count as "recent" — prevents
