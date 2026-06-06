@@ -345,4 +345,17 @@ class PolicyEvaluator:
             "noop_rate": round(report.noop_rate, 3),
             "win_margin_ema": round(self._win_margin_ema, 4),
             "tie_margin_threshold": TIE_MARGIN,
+            # #9 labeling sweep: the policy NN win-rates are SHADOW comparisons (NN vs the
+            # live kernel), scored internally — not external measurements, and advisory /
+            # non-authoritative until the NN earns control via promotion. Labels only.
+            "provenance": {
+                "nn_win_rate": {
+                    "is_measurement": False, "kind": "shadow_only",
+                    "note": "shadow NN-vs-kernel comparison, internally scored; advisory/"
+                            "non-authoritative until promotion"},
+                "nn_decisive_win_rate": {
+                    "is_measurement": False, "kind": "shadow_only",
+                    "note": "shadow NN-vs-kernel comparison, internally scored; advisory/"
+                            "non-authoritative until promotion"},
+            },
         }

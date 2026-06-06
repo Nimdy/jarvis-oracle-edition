@@ -577,6 +577,22 @@ class CausalEngine:
             "last_skipped_condition": getattr(self, "_last_infer_skipped_condition", 0),
             "last_skipped_conflict": getattr(self, "_last_infer_skipped_conflict", 0),
             "per_rule": per_rule,
+            # #9 labeling sweep: explicit provenance so a marquee accuracy can never be
+            # read as something it isn't. No scores changed — labels only.
+            "provenance": {
+                "predictive_accuracy": {
+                    "is_measurement": True, "kind": "measured",
+                    "note": "validated against reality — genuine foresight (event-triggered transitions)"},
+                "predictive_accuracy_live": {
+                    "is_measurement": True, "kind": "measured",
+                    "note": "live-only foresight, synthetic-firewalled"},
+                "persistence_accuracy": {
+                    "is_measurement": False, "kind": "internally_scored",
+                    "note": "near-tautological steady-state continuation — NOT foresight"},
+                "overall_accuracy": {
+                    "is_measurement": False, "kind": "pooled_internally_scored",
+                    "note": "pools persistence + predictive; back-compat only — not a clean foresight measurement"},
+            },
         }
 
     def get_pending_predictions(self) -> list[dict[str, Any]]:
