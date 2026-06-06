@@ -364,6 +364,12 @@ class PerceptionServer:
                                frame_size=event.data.get("frame_size", [640, 480]),
                                scene_change_score=event.data.get("scene_change_score", 0.0),
                                person_bboxes=event.data.get("person_bboxes", []))
+            case "scene_caption":
+                from consciousness.events import PERCEPTION_SCENE_CAPTION
+                event_bus.emit(PERCEPTION_SCENE_CAPTION,
+                               text=event.data.get("text", ""),
+                               latency_ms=event.data.get("latency_ms", 0),
+                               model=event.data.get("model", "edge_vlm"))
             case "sensor_health":
                 health_data = {
                     "cpu_temp_c": event.data.get("cpu_temp_c", 0),

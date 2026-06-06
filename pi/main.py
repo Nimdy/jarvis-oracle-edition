@@ -26,7 +26,7 @@ from transport.ws_client import TransportClient
 from transport.event_schema import (
     BrainMessage, PerceptionEvent, person_detected, person_lost,
     gesture_detected, face_expression, pose_detected, sensor_status,
-    face_crop_event, scene_summary, sensor_health,
+    face_crop_event, scene_summary, sensor_health, scene_caption,
 )
 from senses.vision.detector import Detector
 from senses.vision.tracker import PersonTracker
@@ -270,6 +270,7 @@ class SensesService:
             # with detection (ROUND_ROBIN). Stage 1 = LOG ONLY (caption + det-fps impact);
             # the brain does not consume it yet.
             if (self._captioner is not None and self._captioner.ready
+                    and not self._was_person_present  # idle-gate: only caption an empty scene
                     and now - last_caption >= self._config.vision.edge_caption_interval_s):
                 last_caption = now
                 threading.Thread(target=self._run_edge_caption,
@@ -433,12 +434,18 @@ class SensesService:
         return heads
 
     def _run_edge_caption(self) -> None:
-        """Stage 1 (log-only): caption the latest frame on the Hailo VLM and MEASURE
-        the detection-fps impact during the caption (the device-contention check).
-        Auto-disables the captioner if detection degrades on consecutive captions."""
+        """Idle-gated edge caption: only runs when no person is present, so the VLM's
+        ~3-7s detection blackout (one Hailo can't do detection + generation at once)
+        costs nothing — there is no person to miss. Logs the caption + det-fps (the
+        blackout is expected/observed, not a fault here) and sends it to the brain.
+
+        Race guard: a person can appear DURING the caption; if so the result is
+        DROPPED, so an empty-room caption is never attributed to a person-present moment.
+        Safety = the idle-gate + the EDGE_CAPTION kill-switch (no fps auto-disable: the
+        blackout is intentional on an empty scene)."""
         cap = self._captioner
         frame = self._last_vision_frame
-        if cap is None or not cap.ready or frame is None:
+        if cap is None or not cap.ready or frame is None or self._was_person_present:
             return
         fc0 = self._vision_frame_count
         t0 = time.time()
@@ -447,17 +454,15 @@ class SensesService:
         det_fps = (self._vision_frame_count - fc0) / dt
         if text is None:
             return
-        logger.info("Edge caption (%dms, detection ran %.1f fps during): %s",
+        if self._was_person_present:
+            logger.info("Edge caption discarded — a person appeared during it (%dms)", latency_ms)
+            return
+        logger.info("Edge caption (%dms, det %.1f fps during, idle scene): %s",
                     latency_ms, det_fps, text)
-        min_fps = self._config.vision.edge_caption_min_det_fps
-        if det_fps < min_fps:
-            self._caption_low_fps_streak += 1
-            logger.warning("Edge caption degraded detection to %.1f fps (< %.1f) — streak %d",
-                           det_fps, min_fps, self._caption_low_fps_streak)
-            if self._caption_low_fps_streak >= 2:
-                cap.disable("detection fps degraded during captioning")
-        else:
-            self._caption_low_fps_streak = 0
+        try:
+            self._transport.send_event(scene_caption(text, latency_ms=latency_ms))
+        except Exception:
+            logger.debug("scene_caption send failed", exc_info=True)
 
     def _process_vision_frame(self) -> None:
         assert self._detector and self._tracker

@@ -98,6 +98,16 @@ def scene_summary(detections: list[dict], frame_size: tuple[int, int],
               "person_bboxes": person_bboxes or []})
 
 
+def scene_caption(text: str, latency_ms: int = 0) -> PerceptionEvent:
+    """Edge VLM scene caption (Qwen2-VL-2B on the Pi Hailo). A compact natural-language
+    description of an IDLE scene (no person present), produced locally instead of
+    shipping a frame to the desktop GPU. The brain treats it like the periodic
+    vision-tool description (negation-aware object parse), tagged source='edge_vlm'."""
+    return PerceptionEvent(
+        source="vision", type="scene_caption",
+        data={"text": text, "latency_ms": int(latency_ms), "model": "qwen2-vl-2b-hailo"})
+
+
 # --- System event factories ---
 
 def sensor_status(

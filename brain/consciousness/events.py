@@ -204,6 +204,7 @@ PERCEPTION_USER_EMOTION = "perception:user_emotion"
 PERCEPTION_POSE_DETECTED = "perception:pose_detected"
 PERCEPTION_FACE_IDENTIFIED = "perception:face_identified"
 PERCEPTION_SCENE_SUMMARY = "perception:scene_summary"
+PERCEPTION_SCENE_CAPTION = "perception:scene_caption"  # edge VLM (Pi Hailo) idle-scene caption
 PERCEPTION_PARTIAL_TRANSCRIPTION = "perception:partial_transcription"  # reserved
 PERCEPTION_BARGE_IN = "perception:barge_in"
 PERCEPTION_PLAYBACK_COMPLETE = "perception:playback_complete"

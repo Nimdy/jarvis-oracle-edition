@@ -20,6 +20,7 @@ from consciousness.events import (
     PERCEPTION_TRANSCRIPTION,
     PERCEPTION_RAW_AUDIO,
     PERCEPTION_SCENE_SUMMARY,
+    PERCEPTION_SCENE_CAPTION,
     PERCEPTION_USER_PRESENT_STABLE,
     CONVERSATION_RESPONSE,
     PERCEPTION_PLAYBACK_COMPLETE,
@@ -284,6 +285,7 @@ class PerceptionOrchestrator:
         self._scene_interval_present: float = 1800.0
         self._object_memory: dict[str, dict] = {}
         self._last_scene_description: str = ""
+        self._last_edge_caption_ts: float = 0.0  # when the Pi edge VLM last supplied a caption
         self._scene_analysis_in_progress: bool = False
         self._gestation_active: bool = False
 
@@ -344,6 +346,7 @@ class PerceptionOrchestrator:
         event_bus.on(PERCEPTION_FACE_IDENTIFIED, self._on_face_id)
         event_bus.on(IDENTITY_RESOLVED, self._on_identity_resolved)
         event_bus.on(PERCEPTION_SCENE_SUMMARY, self._on_scene_summary)
+        event_bus.on(PERCEPTION_SCENE_CAPTION, self._on_scene_caption)
         self.identity_fusion.start()
 
         try:
@@ -1341,6 +1344,25 @@ class PerceptionOrchestrator:
         )
 
         self._process_spatial(snapshot)
+
+    def _on_scene_caption(self, text="", latency_ms=0, model="edge_vlm", **_):
+        """Handle an edge VLM scene caption from the Pi (Qwen2-VL-2B on the Hailo).
+
+        The Pi produced this locally for an IDLE scene instead of us round-tripping a
+        frame to the desktop GPU. Treat it exactly like the periodic vision-tool
+        description: store it + feed the negation-aware object parse. Records the
+        timestamp so the desktop GPU scene-analysis can defer while edge captions flow."""
+        text = (text or "").strip()
+        if not text or "can't see" in text.lower():
+            return
+        self._last_scene_description = text
+        self._last_edge_caption_ts = time.time()
+        logger.info("Edge scene caption (%s, %sms): %s", model, latency_ms, text[:120])
+        try:
+            self._update_object_memory(text)
+            self._feed_vlm_to_tracker(text)
+        except Exception:
+            logger.debug("edge caption tracker-feed failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Spatial Intelligence Pipeline
@@ -2491,6 +2513,13 @@ class PerceptionOrchestrator:
 
     async def _analyze_scene(self) -> None:
         if not self._pi_snapshot_url or not self._ollama:
+            return
+        # Defer to the Pi's edge VLM when it's actively supplying captions: if a fresh
+        # edge caption arrived recently, skip the desktop-GPU round-trip entirely (no
+        # frame fetch, no qwen2.5vl load/unload). The edge path captions idle scenes;
+        # the GPU path resumes if the edge stream goes quiet (>150s stale).
+        if self._last_edge_caption_ts and (time.time() - self._last_edge_caption_ts) < 150.0:
+            logger.debug("Scene analysis: deferring to fresh edge VLM caption (skipping GPU path)")
             return
         with self._conv_lock:
             conv_active = self._active_conversation.get("id") and not self._active_conversation.get("cancelled")
