@@ -43,10 +43,13 @@ EXEMPT_SPECIALISTS = frozenset({
     "perception_fusion", "voice_intent", "speaker_diarize",
 })
 
-# Rare-event hybrid floor: lived ground truth is scarce for these, so a uniform high
-# floor would never be met. Hybrid = "enough synthetic coverage AND a few real reps".
-_HYBRID_MIN_SYNTHETIC = 50
-_HYBRID_MIN_LIVED = 3
+# Rare-event lived baseline (docs §3: "low floors 3-20 OR hybrid synthetic>=50 AND
+# live>=3"). The OR is load-bearing — requiring synthetic FALSE-BLOCKS a specialist
+# that already has a solid LIVED baseline and simply never ran the synthetic gym
+# (caught live: skill_acquisition_outcome lived=24, syn=0 must ALLOW, not block).
+_LIVED_ALONE_FLOOR = 10        # lived alone >= this == baseline (no synthetic needed)
+_HYBRID_MIN_SYNTHETIC = 50     # OR: enough synthetic practice...
+_HYBRID_MIN_LIVED = 3          # ...PLUS at least a few real reps (synthetic alone never suffices)
 # Standard lived floor for specialists with a routine live signal.
 _LIVED_MIN = 10
 
@@ -69,15 +72,19 @@ def classify(teacher: str) -> dict[str, Any]:
     if t.startswith("code_quality"):
         return {"mode": MODE_BLOCKED_BY_DESIGN,
                 "reason": "no live code-quality outcome signal wired"}
-    # rare-event hybrid: scarce lived ground truth -> low/hybrid floor
-    if (t.startswith("skill_acquisition") or t.startswith("plan")
-            or t.startswith("claim_classifier") or t.startswith("diagnostic")):
-        return {"mode": MODE_HYBRID, "min_synthetic": _HYBRID_MIN_SYNTHETIC, "min_lived": _HYBRID_MIN_LIVED}
+    # rare-event hybrid: scarce lived ground truth -> low-lived-OR-hybrid floor.
+    # Substrings cover the collector's actual source names (acquisition_planner,
+    # skill_acquisition_*, plan_features, claim_features, claim_classifier, diagnostic).
+    if (t.startswith("skill_acquisition") or t.startswith("acquisition")
+            or t.startswith("plan") or t.startswith("claim") or t.startswith("diagnostic")):
+        return {"mode": MODE_HYBRID, "min_synthetic": _HYBRID_MIN_SYNTHETIC,
+                "min_lived": _HYBRID_MIN_LIVED, "lived_alone": _LIVED_ALONE_FLOOR}
     # routine lived signal available
     if t.startswith("dream"):
         return {"mode": MODE_LIVED, "min_lived": _LIVED_MIN}
     return {"mode": MODE_NOT_YET_GATABLE,
-            "reason": "no origin instrumentation for this specialist — wire component (1) first"}
+            "reason": "unmapped teacher signal — not yet linked to a gated specialist "
+                      "(likely a Tier-1 feature feed); instrument/map before gating"}
 
 
 class WeightRoomGate:
@@ -113,11 +120,18 @@ class WeightRoomGate:
 
         if mode == MODE_HYBRID:
             s_min, l_min = reg["min_synthetic"], reg["min_lived"]
-            met = synthetic >= s_min and lived >= l_min
-            reason = (f"hybrid floor met (synthetic {synthetic}>={s_min} AND lived {lived}>={l_min})"
-                      if met else
-                      f"lived baseline NOT met (need synthetic>={s_min} AND lived>={l_min}; "
-                      f"have synthetic={synthetic}, lived={lived})")
+            l_alone = reg["lived_alone"]
+            # OR: a solid lived baseline alone, OR enough synthetic practice + a few real reps.
+            lived_alone_ok = lived >= l_alone
+            hybrid_ok = synthetic >= s_min and lived >= l_min
+            met = lived_alone_ok or hybrid_ok
+            if lived_alone_ok:
+                reason = f"lived baseline met (lived {lived}>={l_alone}, no synthetic needed)"
+            elif hybrid_ok:
+                reason = f"hybrid floor met (synthetic {synthetic}>={s_min} AND lived {lived}>={l_min})"
+            else:
+                reason = (f"lived baseline NOT met (need lived>={l_alone}, OR synthetic>={s_min} "
+                          f"AND lived>={l_min}; have lived={lived}, synthetic={synthetic})")
         else:  # MODE_LIVED
             l_min = reg["min_lived"]
             met = lived >= l_min
