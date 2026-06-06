@@ -24,7 +24,7 @@ from consciousness.events import (
     event_bus,
 )
 from cognition.causal_engine import CausalEngine
-from cognition.planner import WorldPlanner
+from cognition.planner import WorldPlanner, CognitivePlanner
 from cognition.promotion import WorldModelPromotion, SimulatorPromotion
 from cognition.simulator import MentalSimulator
 from cognition.world_state import (
@@ -89,6 +89,9 @@ class WorldModel:
         self._simulator = MentalSimulator(self._sim_causal)
         self._sim_promotion = SimulatorPromotion()
         self._planner = WorldPlanner()
+        # Phase 8 (#16): multi-step path planner. Read-only, data-gated on the
+        # simulator reaching advisory (100+ verified live sims) — dormant until then.
+        self._cognitive_planner = CognitivePlanner()
 
         # Canonical substrate (runs in parallel with legacy WorldState)
         self._canonical_projector = CanonicalWorldProjector()
@@ -324,6 +327,7 @@ class WorldModel:
             "simulator": self._simulator.get_stats(),
             "simulator_promotion": self._sim_promotion.get_status(),
             "planner": self._planner.get_state(),
+            "cognitive_planner": self._cognitive_planner.get_state(),
             "recent_simulations": self._simulator.get_recent_traces(5),
             "recent_deltas": [
                 {
@@ -448,6 +452,7 @@ class WorldModel:
             "simulator": self._simulator.get_stats(),
             "simulator_promotion": self._sim_promotion.get_status(),
             "planner": self._planner.get_state(),
+            "cognitive_planner": self._cognitive_planner.get_state(),
         }
 
     def get_deltas(self, recent_n: int = 20) -> list[WorldDelta]:
@@ -515,6 +520,21 @@ class WorldModel:
             )
         except Exception:
             logger.debug("Shadow planner tick failed", exc_info=True)
+
+        # Phase 8 (#16): multi-step path planner, same shadow tick. Dormant until
+        # the simulator earns advisory (100+ verified live sims).
+        try:
+            self._cognitive_planner.evaluate(
+                world_state=self._current,
+                deltas=deltas,
+                simulator=self._simulator,
+                simulator_promotion_level=self._sim_promotion.level,
+                verified_simulations=self._sim_promotion.get_status().get(
+                    "total_validated", 0),
+                goal_title=self._current.system.active_goal_title,
+            )
+        except Exception:
+            logger.debug("Cognitive planner tick failed", exc_info=True)
 
     # -- Facet readers ------------------------------------------------------
 
