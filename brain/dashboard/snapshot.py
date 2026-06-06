@@ -1037,6 +1037,13 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         else:
             snapshot["learning_jobs"] = {"active_count": 0, "total_count": 0}
         snapshot["skill_acquisition_specialist"] = _build_skill_acquisition_specialist_cache(ctx.engine)
+        # Weight-Room P2 (shadow): per-specialist lived-baseline would-block decisions.
+        # Logged + surfaced, enforces nothing. See docs/WEIGHT_ROOM_DESIGN.md §6 P2.
+        try:
+            from hemisphere.weight_room_gate import weight_room_gate
+            snapshot["weight_room_gate"] = weight_room_gate.get_status()
+        except Exception:
+            snapshot["weight_room_gate"] = {}
         try:
             from synthetic.skill_acquisition_dashboard import get_skill_acquisition_weight_room_status
             snapshot["skill_acquisition_weight_room"] = get_skill_acquisition_weight_room_status(
