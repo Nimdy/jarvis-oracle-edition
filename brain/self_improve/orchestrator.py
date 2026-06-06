@@ -990,12 +990,20 @@ class SelfImprovementOrchestrator:
             pre_p95 = 0.0
             tick_times: list[float] = []
 
+            # #13: the running kernel is on the engine. (The old `from consciousness.kernel
+            # import kernel_loop` was a DEAD import — that symbol does not exist, so this
+            # check used to ImportError every time and silently "assume OK". Use the real
+            # accessor, the same one _prepare_restart_verify uses, so it actually measures.)
+            kernel = getattr(self._engine, "_kernel", None)
+            if kernel is None:
+                logger.warning("Post-apply health: no kernel handle — FAIL-CLOSED, "
+                               "rolling back (cannot verify health).")
+                return False
+
             try:
-                from consciousness.kernel import kernel_loop
-                perf = kernel_loop.get_performance()
-                pre_p95 = perf.get("p95_tick_ms", 0.0)
+                pre_p95 = kernel.get_performance().get("p95_tick_ms", 0.0)
             except Exception:
-                pass
+                pre_p95 = 0.0
 
             if pre_p95 <= 0:
                 # FAIL-CLOSED (#13): no pre-apply baseline = we cannot prove this
@@ -1007,8 +1015,7 @@ class SelfImprovementOrchestrator:
             for _ in range(HEALTH_MONITOR_TICKS):
                 await asyncio.sleep(0.15)
                 try:
-                    perf = kernel_loop.get_performance()
-                    tick_ms = perf.get("last_tick_ms", 0.0)
+                    tick_ms = kernel.get_performance().get("last_tick_ms", 0.0)
                     if tick_ms > 0:
                         tick_times.append(tick_ms)
                 except Exception:
@@ -1605,8 +1612,12 @@ class SelfImprovementOrchestrator:
     def _capture_health_snapshot(self) -> dict[str, Any] | None:
         """Lightweight health snapshot for delayed outcome comparison."""
         try:
-            from consciousness.kernel import kernel_loop
-            perf = kernel_loop.get_performance()
+            # #13: use the real kernel accessor (the old kernel_loop import was dead,
+            # so this snapshot always returned None — delayed outcome comparison was blind).
+            kernel = getattr(self._engine, "_kernel", None)
+            if kernel is None:
+                return None
+            perf = kernel.get_performance()
             return {
                 "tick_p95_ms": perf.get("p95_tick_ms", 0.0),
                 "error_count": perf.get("error_count", 0),
