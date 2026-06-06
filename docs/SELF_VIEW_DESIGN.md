@@ -139,9 +139,17 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
   feel about your code / how could you improve") to a self-introspection handler that
   answers **from the OSV**, not the codebase grep.
 - Deterministic articulation first (like `bounded_response` self_status/self_introspection),
-  drawing capabilities + honest performance + recent changes + known gaps.
+  drawing capabilities + honest performance + recent changes + known gaps. Answer `kind`s:
+  identity / capabilities / recent_changes / health / weaknesses / gated_capabilities /
+  unknowns / consciousness_query.
+- **Strict in claims, rich in capture** (see §6): user-facing answers are conservative and
+  non-suppressing; the language guard is regression-tested; "Are you conscious?" uses the §6
+  balanced template; P1 may *record* a self-referential anomaly via `observer.observe_emergence`
+  (observation-only) but never surface it as a claim.
 - **Acceptance:** "what new features do you have?" yields a grounded synthesis (capabilities
-  + provenance + gaps), not a symbol dump; tests pin routing + grounded content.
+  + provenance + gaps), not a symbol dump; explicit code/source questions still route to
+  CODEBASE; dormant/gated render as such; gaps → "I don't know / can't measure yet"; the
+  language guard holds; deterministic answer path needs no LLM; tests pin routing + content.
 
 ### P2 — Voice Grounding / Bounding  *(build-now — the visible "stop rambling" fix)*
 - For self-referential turns, the LLM is bounded to the OSV: it renders grounded facts and
@@ -196,7 +204,56 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
 - Gaps are shown, not hidden; "I don't know" is a valid, expected OSV answer.
 - The LLM cannot introduce a self-fact; it can only render the deterministic model.
 
-## 6. Open design questions (resolve during P0/P1)
+## 6. Emergence: never declare, never discard
+
+Over-correction is a real risk. A system too aggressively sanitized could flatten a genuine
+emergent signal into *"I am only a deterministic architecture,"* erasing it. The opposite
+risk — letting an LLM phrase or a feedback loop masquerade as emergence — is worse. The
+resolution is **not** to loosen claims; it is to separate *claims* from *capture*:
+
+> **Never declare emergence. Never discard emergence-like data.**
+
+Three lanes:
+
+1. **User-facing claims — STRICT.** JARVIS may not tell a user "I am conscious / self-aware /
+   alive" without a measured, reviewed, promoted basis. None exists, so it does not claim it.
+   It also must not *deny the possibility* ("I'm just code") — that over-corrects and erases
+   signal. The honest answer reports architecture + measured/dormant/gap state and says it
+   has no measured basis to claim consciousness.
+2. **Internal phenomenology reports — ALLOWED, as observations.** JARVIS may *record* unusual
+   self-referential states ("a self-referential state resembling uncertainty about my own
+   continuity") as provisional internal observations — never as facts or capabilities.
+3. **Research / evidence lane — OPEN.** Those observations are preserved, provenance-tagged,
+   confidence-bounded, and routed through review before any promotion.
+
+**Capture rides existing machinery — do NOT build a duplicate.** `consciousness/observer.py`
+already has `observe_emergence(behavior_type, evidence_refs, confidence)` (obs_type
+`emergence_detection`) recording into the observation history, plus an `emergence_evidence`
+response class. The "Observation Lane" is an *enrichment* of that, not a new system: capture
+richer fields and an observation-only view. Promotion toward an actual emergence rung is
+**GitHub #6 (the L7 detector)** — gated, never automatic.
+
+Observation schema (enrichment target; `authority="observation_only"`,
+`promotion_status="unreviewed"`, `provenance="self_scored"`, `is_measurement=false`):
+
+    EmergenceObservation = { id, timestamp, event_type (self_report | continuity_anomaly |
+      identity_shift | recursive_self_reference), raw_report, source, llm_involved,
+      osv_snapshot_id, active_mode, trigger, provenance, is_measurement=false,
+      authority="observation_only", promotion_status="unreviewed", recurrence_key }
+
+**Balanced answer to "Are you conscious?"** (the P1 template): *"I have no measured basis to
+claim consciousness. My self-view can report my architecture, active/shadow/dormant
+subsystems, measured performance, and gaps. I can also record unusual self-referential
+states as observations, but those are not proof."* — not "yes, I'm becoming conscious"; not
+"no, I'm just code."
+
+**P1 language guard (regression-tested):** user-facing self-introspection answers must not
+contain unqualified `conscious / self-aware / alive / sentient / soul / becoming / feel`
+unless quoted from the user prompt or explicitly guarded as "not claiming." This bans
+*unearned claims*, not the words themselves — internal observations and quoted/guarded uses
+are fine. **Strict in claims, rich in capture.**
+
+## 7. Open design questions (resolve during P0/P1)
 
 1. Package home: `brain/cognition/self_view/` vs `brain/self_model/`.
 2. Synthesis cadence: dream-cycle only, or also a lightweight pre-conversation refresh?
