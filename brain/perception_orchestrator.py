@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import threading
 import time
 from collections import deque
@@ -61,6 +62,40 @@ from reasoning.tts import BrainTTS
 from reasoning.voice_policy import OracleVoicePolicy, VoicePolicyConfig
 
 logger = logging.getLogger("jarvis.perception")
+
+
+# Negation / absence markers. If one appears in the same CLAUSE as an object, the VLM
+# is reporting that object's ABSENCE — crediting it as present would be a perception
+# confabulation that corrupts the world model ("no laptop visible" -> phantom laptop).
+_VLM_ABSENCE_MARKERS = frozenset({
+    "no", "not", "without", "cannot", "cant", "none", "never", "dont", "doesnt",
+    "didnt", "isnt", "arent", "wasnt", "werent", "lacks", "lacking", "missing",
+    "absent", "nothing", "gone", "removed", "empty",
+})
+# Clause boundaries: a negation in one clause must not suppress an object in another
+# ("no people, but a laptop" -> the laptop is genuinely present).
+_VLM_CLAUSE_SPLIT_RE = re.compile(r"[,;.]|\b(?:but|however|though|although|while|whereas)\b")
+
+
+def _object_present_in_description(obj: str, desc_lower: str) -> bool:
+    """True only if ``obj`` is mentioned as PRESENT in a VLM scene description.
+
+    Replaces a raw ``obj in desc`` substring test, which produced two confabulations
+    that fed phantom detections into the scene tracker + object memory:
+      - partial-word matches ("cat" in "category", "cup" in "cupboard", "mouse" in
+        "mousepad") — fixed by whole-token matching;
+      - NEGATED mentions ("there is no laptop", "I don't see a phone") — fixed by
+        scanning the clause containing the object for an absence marker.
+    """
+    desc = desc_lower.replace("'", "").replace("’", "")
+    for clause in _VLM_CLAUSE_SPLIT_RE.split(desc):
+        tokens = re.findall(r"[a-z]+", clause)
+        if obj not in tokens:               # whole-token match (not substring)
+            continue
+        if any(tok in _VLM_ABSENCE_MARKERS for tok in tokens):
+            continue                        # object is negated in this clause -> absent
+        return True                         # an affirmative, present mention
+    return False
 
 
 # Bounded scalar keys allowed in the consciousness-feed `scene` block.
@@ -2501,7 +2536,7 @@ class PerceptionOrchestrator:
         now = time.time()
         desc_lower = description.lower()
         for obj in common_objects:
-            if obj in desc_lower:
+            if _object_present_in_description(obj, desc_lower):
                 if obj in self._object_memory:
                     self._object_memory[obj]["last_seen"] = now
                     self._object_memory[obj]["count"] += 1
@@ -2518,7 +2553,9 @@ class PerceptionOrchestrator:
         desc_lower = description.lower()
         enrichments: list[SceneDetection] = []
         for obj in vlm_objects:
-            if obj in desc_lower:
+            if _object_present_in_description(obj, desc_lower):
+                # confidence is a FIXED prior for unverified VLM enrichment (not a
+                # measurement) — the scene tracker treats it as a low-trust hint.
                 enrichments.append(SceneDetection(
                     label=obj, confidence=0.5, bbox=None, source="vlm",
                 ))
