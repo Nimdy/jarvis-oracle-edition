@@ -1010,6 +1010,63 @@ def _create_app() -> FastAPI:
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
 
+    @app.post("/api/domains", dependencies=[Depends(_require_api_key)])
+    async def api_domains_create(request: Request):
+        """Create an isolated Capability Domain. Governed write (API key)."""
+        try:
+            body = await request.json()
+            name = (body.get("name") or "").strip()
+            if not name:
+                return JSONResponse({"error": "name is required"}, status_code=400)
+            kind = body.get("kind", "document")
+            from cognition.capability_domains import get_capability_domain_registry
+            dom = get_capability_domain_registry().create(name, kind=kind)
+            return {"created": True, "domain": dom.public_view()}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.post("/api/domains/{domain_id}/ingest", dependencies=[Depends(_require_api_key)])
+    async def api_domains_ingest(domain_id: str, request: Request):
+        """Ingest knowledge into a domain's isolated store (text or a folder path).
+
+        Body: {"title","content"} for inline text, or {"folder": "/path"} to ingest
+        a directory. Tagged provenance=ingested ("know about", never "can do").
+        """
+        try:
+            body = await request.json()
+            from cognition.capability_domains import (
+                get_capability_domain_registry, ingest_text, ingest_folder,
+            )
+            reg = get_capability_domain_registry()
+            dom = reg.get(domain_id)
+            if dom is None:
+                return JSONResponse({"error": "unknown domain"}, status_code=404)
+            if body.get("folder"):
+                summary = ingest_folder(reg, dom, str(body["folder"]))
+            else:
+                content = body.get("content") or ""
+                if not content.strip():
+                    return JSONResponse({"error": "content or folder required"}, status_code=400)
+                n = ingest_text(reg, dom, body.get("title", "source"), content)
+                summary = {"chunks": n, "domain_id": domain_id}
+            return {"ingested": True, "summary": summary,
+                    "domain": reg.get(domain_id).public_view()}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.delete("/api/domains/{domain_id}", dependencies=[Depends(_require_api_key)])
+    async def api_domains_delete(domain_id: str):
+        """Clean ablation: delete a domain (its isolated store/memory/NN) with zero
+        residue elsewhere. Governed write (API key)."""
+        try:
+            from cognition.capability_domains import get_capability_domain_registry
+            ok = get_capability_domain_registry().delete(domain_id)
+            if not ok:
+                return JSONResponse({"error": "unknown domain"}, status_code=404)
+            return {"deleted": True, "domain_id": domain_id}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
     @app.get("/api/skills")
     async def api_skills():
         return {
