@@ -2995,6 +2995,29 @@ async def handle_transcription(
                         logger.info("Routing override: self-view introspection (kind=%s)", _sv_kind)
             except Exception:
                 logger.debug("self-view route probe failed", exc_info=True)
+
+            # Matrix v2: topic-triggered Capability Domain recall. If the query is
+            # clearly ABOUT a learned domain, answer from that domain's ISOLATED store
+            # ("I know about X"), grounded — never confabulated, never "I can do X".
+            # Only fires on a clear topic match; otherwise normal routing continues.
+            try:
+                if (not routing.golden_context
+                        and not (routing.extracted_args
+                                 and routing.extracted_args.get("self_view_kind"))):
+                    from cognition.capability_domains import (
+                        get_capability_domain_registry, recall_answer,
+                    )
+                    _dr = recall_answer(get_capability_domain_registry(), text)
+                    if _dr:
+                        routing = RoutingResult(
+                            tool=ToolType.INTROSPECTION,
+                            confidence=0.9,
+                            extracted_args={"domain_recall": _dr},
+                        )
+                        logger.info("Routing override: capability-domain recall (%s)",
+                                    _dr.get("domain_id"))
+            except Exception:
+                logger.debug("domain recall route probe failed", exc_info=True)
     _is_golden_route = routing.golden_context is not None
     try:
         _po = getattr(engine, "_perception_orchestrator", None)
@@ -3283,6 +3306,24 @@ async def handle_transcription(
 
     if _golden_short_circuit:
         pass
+    elif routing.extracted_args and routing.extracted_args.get("domain_recall"):
+        # Matrix v2 Phase 2: deterministic, domain-scoped knowledge recall. We render
+        # ONLY the matched domain's isolated chunks — grounded "I know about X", never
+        # the LLM free-narrating (no confabulation), never "I can do X".
+        engine.set_phase("PROCESSING")
+        tone = engine.get_state()["tone"]
+        _dr = routing.extracted_args.get("domain_recall")
+        _chunks = _dr.get("chunks", [])[:3]
+        if _chunks:
+            _lead = f"Here's what I know about {_dr.get('domain_name', 'that')} (a domain I learned)."
+            _body = " ".join(c.get("text", "").strip() for c in _chunks)
+            reply = f"{_lead} {_body[:600]}".strip()
+        else:
+            reply = (f"I have a domain about {_dr.get('domain_name', 'that')}, but nothing "
+                     "specific matched your question.")
+        await _broadcast_chunk_sync(reply, tone)
+        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+        print(f"  [Brain] Capability-domain recall reply ({len(reply)} chars, domain={_dr.get('domain_id')})")
     elif routing.extracted_args and routing.extracted_args.get("self_view_kind"):
         # OSV P1: deterministic self-introspection from the Operational Self-View.
         # No LLM authors the self-facts; we render the persisted self-model (kept fresh by
