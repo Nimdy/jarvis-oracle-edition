@@ -6,6 +6,7 @@ from tools.memory_tool import (
     _is_system_self_memory,
     _keyword_search,
     _semantic_search,
+    search_memory,
 )
 
 
@@ -67,7 +68,7 @@ def test_semantic_search_filters_jarvis_self_memories_for_personal_activity(
     )
 
     fake_module = SimpleNamespace(
-        semantic_search=lambda *args, **kwargs: [jarvis_mem, user_mem],
+        semantic_search_scored=lambda *args, **kwargs: [(0.55, jarvis_mem), (0.41, user_mem)],
     )
     monkeypatch.setitem(sys.modules, "memory.search", fake_module)
 
@@ -80,6 +81,78 @@ def test_semantic_search_filters_jarvis_self_memories_for_personal_activity(
     assert len(results) == 1
     assert "[conversation]" in results[0][1]
     assert "Jarvis observed" not in results[0][1]
+
+
+def test_semantic_search_scores_by_similarity_not_weight(monkeypatch) -> None:
+    """Regression: the recall bug keyed results by m.weight, so high-weight
+    boilerplate buried the topical match. Relevance must be query similarity."""
+    # High intrinsic weight, but OFF-topic (low similarity to the query).
+    boilerplate = SimpleNamespace(
+        type="conversation",
+        payload={"response": "User's name is David."},
+        weight=0.90,
+        identity_subject="david", identity_subject_type="person",
+        identity_owner_type="person", tags=(),
+    )
+    # Low intrinsic weight, but ON-topic (high similarity) — the real answer.
+    topical = SimpleNamespace(
+        type="conversation",
+        payload={"response": "Skyler is your dog, a border collie."},
+        weight=0.55,
+        identity_subject="david", identity_subject_type="person",
+        identity_owner_type="person", tags=(),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [(0.62, topical), (0.24, boilerplate)],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+
+    results = _semantic_search("what do you remember about Skylar", limit=5, speaker="David")
+
+    # The score carried through is the SIMILARITY, not the weight.
+    assert results[0][0] == 0.62 and "Skyler is your dog" in results[0][1]
+    assert results[1][0] == 0.24 and "User's name is David" in results[1][1]
+    # weights (0.90 / 0.55) must NOT appear as the relevance scores
+    assert results[0][0] != 0.90
+
+
+def test_search_memory_leads_with_topical_match_and_labels_similarity(monkeypatch) -> None:
+    """End-to-end: the formatted recall string leads with the highest-similarity
+    memory and labels relevance with the true similarity (not weight)."""
+    boilerplate = SimpleNamespace(
+        type="conversation", payload={"response": "User's name is David."},
+        weight=0.90, identity_subject="david", identity_subject_type="person",
+        identity_owner_type="person", tags=(),
+    )
+    topical = SimpleNamespace(
+        type="conversation", payload={"response": "Skyler is your dog, a border collie."},
+        weight=0.55, identity_subject="david", identity_subject_type="person",
+        identity_owner_type="person", tags=(),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [(0.62, topical), (0.24, boilerplate)],
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+
+    out = search_memory("what do you remember about Skylar", speaker="David")
+    lines = [ln for ln in out.splitlines() if "relevance=" in ln]
+    assert lines, out
+    # first rendered memory is the topical one, labeled with its similarity
+    assert "Skyler is your dog" in lines[0]
+    assert "relevance=0.62" in lines[0]
+
+
+def test_search_memory_empty_returns_no_memories_sentinel(monkeypatch) -> None:
+    """No relevant memory -> the honest sentinel the route uses to avoid
+    confabulating (the 'first time you heard my voice' fake-date case)."""
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [],
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    out = search_memory("when was the first time you heard my voice", speaker="David")
+    assert out.lower().startswith("no memories found")
 
 
 def test_keyword_search_normalizes_punctuation_for_temporal_query(monkeypatch) -> None:

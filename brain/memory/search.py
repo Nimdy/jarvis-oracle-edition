@@ -119,11 +119,19 @@ def _heuristic_score(
 def _hybrid_search(query: str, top_k: int = 20, speaker: str = "",
                    conversation_id: str = "",
                    identity_context: object | None = None,
-                   referenced_entities: set[str] | None = None) -> list[Memory]:
+                   referenced_entities: set[str] | None = None,
+                   return_scored: bool = False):
     """Vector search -> identity pre-filter -> ranker rerank -> top-k.
 
     Identity boundary filtering runs *before* top-k selection (Layer 3
     invariant) so cross-subject memories never consume ranking slots.
+
+    Returns ``list[Memory]`` in ranker order. When ``return_scored`` is True,
+    returns ``list[tuple[float, Memory]]`` where the float is the raw vector
+    *similarity* (cosine 0..1) of each selected memory — the honest "how close
+    is this memory to the query" signal, distinct from intrinsic memory weight.
+    The ORDER is still the ranker's (learned relevance); the attached score is
+    the absolute similarity so callers can label and floor it truthfully.
     """
     global _last_retrieval_event_id
 
@@ -223,10 +231,12 @@ def _hybrid_search(query: str, top_k: int = 20, speaker: str = "",
 
     selected_id_set: set[str] = set()
     results: list[Memory] = []
+    scored_results: list[tuple[float, Memory]] = []
     for _, pair in selected_pairs:
         rec, mem = pair
         selected_id_set.add(rec.memory_id)
         results.append(mem)
+        scored_results.append((float(rec.similarity), mem))
 
     all_records: list[CandidateRecord] = []
     for rec, mem in candidates:
@@ -252,7 +262,7 @@ def _hybrid_search(query: str, top_k: int = 20, speaker: str = "",
     except Exception as exc:
         logger.debug("Retrieval logging failed: %s", exc)
 
-    return results
+    return scored_results if return_scored else results
 
 
 def _check_identity_boundary(
@@ -293,6 +303,27 @@ def semantic_search(query: str, top_k: int = 5, speaker: str = "",
                              identity_context=identity_context,
                              referenced_entities=referenced_entities)
     return results
+
+
+def semantic_search_scored(query: str, top_k: int = 5, speaker: str = "",
+                           conversation_id: str = "",
+                           identity_context: object | None = None,
+                           referenced_entities: set[str] | None = None,
+                           ) -> list[tuple[float, Memory]]:
+    """Like :func:`semantic_search` but returns ``(similarity, Memory)`` pairs.
+
+    The float is the raw vector similarity (cosine 0..1), NOT memory weight.
+    Lets callers rank/label/floor by genuine query relevance instead of
+    intrinsic importance. Order is the ranker's; the score is absolute.
+    """
+    if not _vector_store or not _vector_store.available:
+        return []
+
+    return _hybrid_search(query, top_k=top_k, speaker=speaker,
+                          conversation_id=conversation_id,
+                          identity_context=identity_context,
+                          referenced_entities=referenced_entities,
+                          return_scored=True)
 
 
 def keyword_search(query: str, limit: int = 20, speaker: str = "",

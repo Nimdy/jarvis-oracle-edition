@@ -3413,6 +3413,24 @@ async def handle_transcription(
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                 print(f"  [Brain] Memory deterministic grounded recall reply ({len(reply)} chars)")
+            elif memory_mode == "search":
+                # Explicit recall ran but found nothing relevant. KNOW-not-guess:
+                # say so deterministically. Do NOT hand empty context to the LLM —
+                # that is exactly how "when was the first time you heard my voice?"
+                # confabulated a precise date ("2026-04-05") with zero memories
+                # retrieved. For a companion to the vulnerable, an invented memory
+                # is a betrayal; an honest "I don't have that recorded" is not.
+                _memory_native_used = True
+                _memory_provenance = "grounded_memory_context_native"
+                _memory_confidence = 0.9
+                _memory_safety_flags.append("deterministic_no_memory_failclosed")
+                reply = (
+                    "I don't have a specific memory recorded about that. "
+                    "I'd rather tell you that than make something up."
+                )
+                await _broadcast_chunk_sync(reply, tone)
+                _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                print("  [Brain] Memory recall found nothing — honest no-memory reply")
             elif not ollama:
                 reply = _format_grounded_fallback("Memory recall", memory_ctx or "No memory data available.")
                 await _broadcast_chunk_sync(reply, tone)
