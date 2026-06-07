@@ -235,6 +235,29 @@ def test_birth_skipped_when_specialist_exists_or_capped():
     assert HemisphereFocus.SPEAKER_PROFILE not in born2
 
 
+def test_matrix_training_set_onehot_and_distinct():
+    from hemisphere.orchestrator import HemisphereOrchestrator as H
+    samples = [
+        ([0.1, 0.2], 0),
+        ([0.3, 0.4], 2),
+        ([0.5, 0.6], 0),
+        ([0.7, 0.8], 9),    # out-of-range regime -> dropped
+    ]
+    X, Y, n_distinct = H._matrix_training_set(samples)
+    assert len(X) == 3 and len(Y) == 3            # the out-of-range sample dropped
+    assert Y[0] == [1.0, 0.0, 0.0, 0.0]           # label 0 one-hot
+    assert Y[1] == [0.0, 0.0, 1.0, 0.0]           # label 2 one-hot
+    assert n_distinct == 2                          # labels {0, 2}
+
+
+def test_matrix_training_set_constant_is_single_distinct():
+    """Honesty guard input: an all-same-label buffer reports 1 distinct -> won't train."""
+    from hemisphere.orchestrator import HemisphereOrchestrator as H
+    samples = [([0.0, 0.0], 0)] * 25
+    X, Y, n_distinct = H._matrix_training_set(samples)
+    assert len(X) == 25 and n_distinct == 1  # below MATRIX_TRAIN_MIN_DISTINCT_LABELS
+
+
 def test_observe_accumulates_samples_via_stub():
     from types import SimpleNamespace
     from hemisphere.orchestrator import HemisphereOrchestrator as H

@@ -93,6 +93,16 @@ EXPANDED_SLOT_COUNT = 6
 MATRIX_BIRTH_MIN_SAMPLES = 30
 MATRIX_SIGNAL_BUFFER_MAX = 500
 
+# Phase M2 — self-supervised training of a born Tier-2 specialist: the NN learns
+# to predict its encoder's regime (4-class) from the encoder's features. This is
+# honest distillation — accuracy means "the NN learned its own encoder," not a
+# faked number. An honesty guard refuses to "train" on a constant label (no signal
+# variation = nothing learned), so a specialist can't advance on a degenerate fit.
+MATRIX_TRAIN_MIN_SAMPLES = 20
+MATRIX_TRAIN_EPOCHS = 20
+MATRIX_TRAIN_OUTPUT_CLASSES = 4
+MATRIX_TRAIN_MIN_DISTINCT_LABELS = 2
+
 _TIER1_FOCUSES = frozenset({
     HemisphereFocus.EMOTION_DEPTH,
     HemisphereFocus.SPEAKER_REPR,
@@ -297,6 +307,9 @@ class HemisphereOrchestrator:
         # Phase 0.2: Matrix Protocol (Phase M) — accumulate Tier-2 signal + autonomous birth
         self._observe_matrix_signals()
         self._check_matrix_births()
+
+        # Phase 0.22: Matrix Protocol (Phase M2) — train born specialists toward the gates
+        self._train_matrix_specialists()
 
         # Phase 0.25: check specialist promotion ladder
         self._check_specialist_promotions()
@@ -820,6 +833,99 @@ class HemisphereOrchestrator:
                 )
             if self.count_probationary_specialists() >= MAX_PROBATIONARY_SPECIALISTS:
                 break
+
+    @staticmethod
+    def _matrix_training_set(samples):
+        """Pure: turn buffered (features, label) samples into (X, Y_onehot, n_distinct).
+
+        X is list[list[float]] (N x 16); Y_onehot is list[list[float]] (N x 4);
+        n_distinct is the number of distinct regime labels present (the honesty
+        guard reads this — a single-label set has nothing to learn).
+        """
+        X, Y, labels_seen = [], [], set()
+        for feat, label in samples:
+            lab = int(label)
+            if lab < 0 or lab >= MATRIX_TRAIN_OUTPUT_CLASSES:
+                continue
+            onehot = [0.0] * MATRIX_TRAIN_OUTPUT_CLASSES
+            onehot[lab] = 1.0
+            X.append([float(x) for x in feat])
+            Y.append(onehot)
+            labels_seen.add(lab)
+        return X, Y, len(labels_seen)
+
+    def _matrix_train_topology(self):
+        """4-class regime-classifier topology (16 -> 16 relu -> 4 softmax)."""
+        from hemisphere.types import NetworkTopology, LayerDefinition
+        return NetworkTopology(
+            input_size=16,
+            layers=(
+                LayerDefinition(id="h1", layer_type="hidden", node_count=16,
+                                activation="relu", dropout=0.0),
+                LayerDefinition(id="out", layer_type="output",
+                                node_count=MATRIX_TRAIN_OUTPUT_CLASSES, activation="softmax"),
+            ),
+            output_size=MATRIX_TRAIN_OUTPUT_CLASSES,
+            total_parameters=16 * 16 + 16 + MATRIX_TRAIN_OUTPUT_CLASSES * 16 + MATRIX_TRAIN_OUTPUT_CLASSES,
+            activation_functions=("relu", "softmax"),
+        )
+
+    def _train_matrix_specialists(self) -> None:
+        """Phase M2: train each born-but-unverified Tier-2 specialist on its
+        accumulated signal so it can clear the lifecycle gates honestly.
+
+        Self-supervised distillation: the NN learns to predict the encoder's
+        regime label from the encoder's features. On success this sets
+        performance.accuracy (PROBATIONARY->VERIFIED gate) and advances
+        training_progress.current_epoch (CANDIDATE_BIRTH->PROBATIONARY gate,
+        which train_distillation does NOT set on its own).
+        """
+        from hemisphere.types import (
+            MATRIX_ELIGIBLE_FOCUSES, SpecialistLifecycleStage as S,
+        )
+        with self._networks_lock:
+            trainees = [
+                n for n in self._networks.values()
+                if n.focus in MATRIX_ELIGIBLE_FOCUSES
+                and n.specialist_lifecycle in (
+                    S.CANDIDATE_BIRTH, S.PROBATIONARY_TRAINING,
+                )
+            ]
+        for net in trainees:
+            try:
+                buf = self._matrix_signal_buffers.get(net.focus.value)
+                if not buf or len(buf) < MATRIX_TRAIN_MIN_SAMPLES:
+                    continue
+                X, Y, n_distinct = self._matrix_training_set(list(buf))
+                if len(X) < MATRIX_TRAIN_MIN_SAMPLES:
+                    continue
+                # Honesty guard: a single-regime buffer teaches nothing real.
+                if n_distinct < MATRIX_TRAIN_MIN_DISTINCT_LABELS:
+                    continue
+
+                # Ensure a 4-class model is built + registered for this specialist.
+                if net.id not in self._engine._active_models or net.topology.output_size != MATRIX_TRAIN_OUTPUT_CLASSES:
+                    topo = self._matrix_train_topology()
+                    model = self._engine.build_model(topo)
+                    self._engine._active_models[net.id] = model
+                    net.topology = topo
+
+                import torch
+                feats = torch.tensor(X, dtype=torch.float32)
+                labels = torch.tensor(Y, dtype=torch.float32)
+                self._engine.train_distillation(
+                    net, feats, labels, loss_name="mse", epochs=MATRIX_TRAIN_EPOCHS,
+                )
+                # train_distillation updates accuracy but NOT current_epoch — the
+                # birth->probationary gate reads current_epoch, so set it here.
+                net.training_progress.current_epoch += MATRIX_TRAIN_EPOCHS
+                logger.info(
+                    "Matrix train %s: acc=%.3f epoch=%d (samples=%d, distinct=%d)",
+                    net.focus.value, net.performance.accuracy,
+                    net.training_progress.current_epoch, len(X), n_distinct,
+                )
+            except Exception:
+                logger.debug("matrix train failed for %s", net.focus.value, exc_info=True)
 
     def matrix_report(self) -> dict[str, Any]:
         """Tier-2 Matrix Protocol observability — live, read-only lifecycle view.
