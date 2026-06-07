@@ -12,6 +12,18 @@ from cognition.capability_domains.registry import (
     CapabilityDomainRegistry,
     get_capability_domain_registry,
 )
+from cognition.capability_domains.ingest import (
+    ingest_text,
+    ingest_file,
+    ingest_folder,
+    chunk_text,
+)
+from cognition.capability_domains.recall import (
+    recall,
+    recall_answer,
+    best_domain_for,
+    domain_match_score,
+)
 
 __all__ = [
     "CapabilityDomain",
@@ -19,4 +31,12 @@ __all__ = [
     "PROVENANCE_KINDS",
     "CapabilityDomainRegistry",
     "get_capability_domain_registry",
+    "ingest_text",
+    "ingest_file",
+    "ingest_folder",
+    "chunk_text",
+    "recall",
+    "recall_answer",
+    "best_domain_for",
+    "domain_match_score",
 ]
