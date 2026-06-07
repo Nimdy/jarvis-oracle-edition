@@ -188,23 +188,31 @@ def test_autonomous_birth_gate_via_stub():
     from hemisphere.types import HemisphereFocus
 
     births = []
-    sample = ([0.0] * 4, 0)
+    # speaker_profile: enough samples AND label variation (regimes 0 and 1) -> births
+    varied = collections.deque(
+        [([0.0] * 4, i % 2) for i in range(MATRIX_BIRTH_MIN_SAMPLES)]
+    )
+    # skill_transfer: enough samples but CONSTANT label -> variation gate blocks it
+    constant = collections.deque([([0.0] * 4, 0)] * MATRIX_BIRTH_MIN_SAMPLES)
     stub = SimpleNamespace(
         _networks={}, _networks_lock=threading.Lock(),
         _matrix_signal_buffers={
-            "speaker_profile": collections.deque([sample] * MATRIX_BIRTH_MIN_SAMPLES),
-            "positive_memory": collections.deque([sample] * (MATRIX_BIRTH_MIN_SAMPLES - 1)),
+            "speaker_profile": varied,
+            "skill_transfer": constant,
+            "positive_memory": collections.deque([([0.0] * 4, 0)] * (MATRIX_BIRTH_MIN_SAMPLES - 1)),
         },
+        _matrix_training_set=H._matrix_training_set,
         count_probationary_specialists=lambda: len(births),
         create_probationary_specialist=(
             lambda focus, job_id="": (births.append(focus) or SimpleNamespace(focus=focus))
         ),
     )
     H._check_matrix_births(stub)
-    # at-threshold focus births; under-threshold + never-observed focuses do not
+    # varied + at-threshold births; constant-signal + under-threshold + absent do not
     assert HemisphereFocus.SPEAKER_PROFILE in births
-    assert HemisphereFocus.POSITIVE_MEMORY not in births
-    assert HemisphereFocus.NEGATIVE_MEMORY not in births  # no buffer at all
+    assert HemisphereFocus.SKILL_TRANSFER not in births     # variation gate (1 regime)
+    assert HemisphereFocus.POSITIVE_MEMORY not in births     # under threshold
+    assert HemisphereFocus.NEGATIVE_MEMORY not in births     # no buffer at all
 
 
 def test_birth_skipped_when_specialist_exists_or_capped():

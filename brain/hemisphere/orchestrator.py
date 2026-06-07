@@ -844,11 +844,18 @@ class HemisphereOrchestrator:
             buf = self._matrix_signal_buffers.get(focus.value)
             if not buf or len(buf) < MATRIX_BIRTH_MIN_SAMPLES:
                 continue
+            # Birth-variation gate: only birth a focus whose accumulated signal
+            # shows >=2 regimes — i.e. it has something to LEARN. Births on a
+            # constant signal would just sit untrainable (honesty guard blocks
+            # their training) and hog the cap, starving focuses that can train.
+            _, _, n_distinct = self._matrix_training_set(list(buf))
+            if n_distinct < MATRIX_TRAIN_MIN_DISTINCT_LABELS:
+                continue
             arch = self.create_probationary_specialist(focus, job_id="autonomous_birth")
             if arch is not None:
                 logger.info(
-                    "Matrix autonomous birth: %s -> CANDIDATE_BIRTH (%d signal samples)",
-                    focus.value, len(buf),
+                    "Matrix autonomous birth: %s -> CANDIDATE_BIRTH (%d samples, %d regimes)",
+                    focus.value, len(buf), n_distinct,
                 )
             if self.count_probationary_specialists() >= MAX_PROBATIONARY_SPECIALISTS:
                 break
@@ -1048,11 +1055,21 @@ class HemisphereOrchestrator:
         for s in specialists:
             by_stage[s["lifecycle"]] = by_stage.get(s["lifecycle"], 0) + 1
         # Phase M: signal accumulation toward autonomous birth (visible per focus).
+        # ready_to_birth needs BOTH enough samples AND signal variation (>=2 regimes),
+        # matching the birth-variation gate — so a constant-signal focus reads as
+        # "accumulating but nothing to learn yet", not falsely "ready".
+        def _distinct(fv):
+            buf = self._matrix_signal_buffers.get(fv)
+            if not buf:
+                return 0
+            return self._matrix_training_set(list(buf))[2]
         signal_accumulation = {
             f.value: {
                 "samples": len(self._matrix_signal_buffers.get(f.value, ())),
                 "birth_at": MATRIX_BIRTH_MIN_SAMPLES,
-                "ready_to_birth": len(self._matrix_signal_buffers.get(f.value, ())) >= MATRIX_BIRTH_MIN_SAMPLES,
+                "distinct_labels": _distinct(f.value),
+                "ready_to_birth": (len(self._matrix_signal_buffers.get(f.value, ())) >= MATRIX_BIRTH_MIN_SAMPLES
+                                   and _distinct(f.value) >= MATRIX_TRAIN_MIN_DISTINCT_LABELS),
             }
             for f in MATRIX_ELIGIBLE_FOCUSES
         }
