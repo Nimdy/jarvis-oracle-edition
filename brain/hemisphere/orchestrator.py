@@ -23,6 +23,7 @@ from hemisphere.types import (
     DynamicFocus,
     HemisphereFocus,
     HemisphereState,
+    MAX_PROBATIONARY_SPECIALISTS,
     NetworkArchitecture,
     NetworkStatus,
 )
@@ -83,6 +84,14 @@ EXPANSION_MIN_PROMOTED = 2
 EXPANSION_MIN_IMPACT = 0.05
 EXPANSION_STABILITY_DAYS = 7
 EXPANDED_SLOT_COUNT = 6
+
+# Matrix Protocol Phase M — autonomous Tier-2 birth from accumulated signal.
+# A focus must accumulate this many real signal observations (encoder output over
+# live cycles) before a specialist is birthed — the "enough internal signal" gate.
+# The buffered (features, label) samples double as the self-supervised training set
+# (Phase M2). Buffer is bounded + pruned to keep the latest signal.
+MATRIX_BIRTH_MIN_SAMPLES = 30
+MATRIX_SIGNAL_BUFFER_MAX = 500
 
 _TIER1_FOCUSES = frozenset({
     HemisphereFocus.EMOTION_DEPTH,
@@ -151,6 +160,9 @@ class HemisphereOrchestrator:
         self._outcome_buffer: dict[str, deque] = {
             f.value: deque(maxlen=OUTCOME_BUFFER_MAXLEN) for f in HemisphereFocus
         }
+        # Phase M: per-focus Tier-2 signal samples (features, label) for autonomous
+        # birth gating + self-supervised distillation training.
+        self._matrix_signal_buffers: dict[str, deque] = {}
         self._outcomes_since_train: dict[str, int] = {f.value: 0 for f in HemisphereFocus}
 
         self._research_cache: list[str] = []
@@ -281,6 +293,10 @@ class HemisphereOrchestrator:
 
         # Phase 0: prune networks past sunset deadline or over cap
         self._prune_networks()
+
+        # Phase 0.2: Matrix Protocol (Phase M) — accumulate Tier-2 signal + autonomous birth
+        self._observe_matrix_signals()
+        self._check_matrix_births()
 
         # Phase 0.25: check specialist promotion ladder
         self._check_specialist_promotions()
@@ -727,6 +743,84 @@ class HemisphereOrchestrator:
             )
         return arch
 
+    # ── Phase M: autonomous Tier-2 signal accumulation + birth ──
+
+    def _matrix_encoder_for(self, focus):
+        """Return ``(ctx, encoder_class)`` for a Tier-2 focus, or ``(None, None)``.
+
+        Explicit dispatch (no generic detector) mirroring ``_matrix_focus_signal``:
+        each focus has a context builder on this orchestrator + a pure encoder.
+        """
+        import importlib
+        spec = {
+            HemisphereFocus.POSITIVE_MEMORY: ("_build_positive_memory_context", "positive_memory_encoder", "PositiveMemoryEncoder"),
+            HemisphereFocus.NEGATIVE_MEMORY: ("_build_negative_memory_context", "negative_memory_encoder", "NegativeMemoryEncoder"),
+            HemisphereFocus.SPEAKER_PROFILE: ("_build_speaker_profile_context", "speaker_profile_encoder", "SpeakerProfileEncoder"),
+            HemisphereFocus.TEMPORAL_PATTERN: ("_build_temporal_pattern_context", "temporal_pattern_encoder", "TemporalPatternEncoder"),
+            HemisphereFocus.SKILL_TRANSFER: ("_build_skill_transfer_context", "skill_transfer_encoder", "SkillTransferEncoder"),
+        }.get(focus)
+        if not spec:
+            return None, None
+        builder_name, mod_name, cls_name = spec
+        ctx = getattr(self, builder_name)()
+        mod = importlib.import_module(f"hemisphere.{mod_name}")
+        return ctx, getattr(mod, cls_name)
+
+    @staticmethod
+    def _matrix_label(signal: float) -> int:
+        """Bucket an encoder signal in [0,1] into a 4-class regime label (0..3)."""
+        return min(3, max(0, int(float(signal) * 4)))
+
+    def _observe_matrix_signals(self) -> None:
+        """Each cycle: sample every Tier-2 focus's encoder (features + regime label).
+
+        This is the 'accumulate internal signal' step that gates autonomous birth and
+        supplies the self-supervised training set. Read-only over live state; per-focus
+        failures degrade silently (the encoders are best-effort pure functions).
+        """
+        from hemisphere.types import MATRIX_ELIGIBLE_FOCUSES
+        for focus in MATRIX_ELIGIBLE_FOCUSES:
+            try:
+                ctx, enc = self._matrix_encoder_for(focus)
+                if ctx is None or enc is None:
+                    continue
+                features = [float(x) for x in enc.encode(ctx)]
+                label = self._matrix_label(enc.compute_signal_value(ctx))
+                buf = self._matrix_signal_buffers.get(focus.value)
+                if buf is None:
+                    buf = deque(maxlen=MATRIX_SIGNAL_BUFFER_MAX)
+                    self._matrix_signal_buffers[focus.value] = buf
+                buf.append((features, label))
+            except Exception:
+                logger.debug("matrix signal observe failed for %s", focus.value, exc_info=True)
+
+    def _check_matrix_births(self) -> None:
+        """Autonomously birth a Tier-2 specialist once its focus has accumulated
+        enough real signal (and none exists yet, and we're under the cap)."""
+        from hemisphere.types import MATRIX_ELIGIBLE_FOCUSES, SpecialistLifecycleStage
+        if self.count_probationary_specialists() >= MAX_PROBATIONARY_SPECIALISTS:
+            return
+        with self._networks_lock:
+            existing = {
+                n.focus for n in self._networks.values()
+                if n.specialist_lifecycle is not None
+                and n.specialist_lifecycle != SpecialistLifecycleStage.RETIRED
+            }
+        for focus in MATRIX_ELIGIBLE_FOCUSES:
+            if focus in existing:
+                continue
+            buf = self._matrix_signal_buffers.get(focus.value)
+            if not buf or len(buf) < MATRIX_BIRTH_MIN_SAMPLES:
+                continue
+            arch = self.create_probationary_specialist(focus, job_id="autonomous_birth")
+            if arch is not None:
+                logger.info(
+                    "Matrix autonomous birth: %s -> CANDIDATE_BIRTH (%d signal samples)",
+                    focus.value, len(buf),
+                )
+            if self.count_probationary_specialists() >= MAX_PROBATIONARY_SPECIALISTS:
+                break
+
     def matrix_report(self) -> dict[str, Any]:
         """Tier-2 Matrix Protocol observability — live, read-only lifecycle view.
 
@@ -789,6 +883,15 @@ class HemisphereOrchestrator:
         by_stage: dict[str, int] = {}
         for s in specialists:
             by_stage[s["lifecycle"]] = by_stage.get(s["lifecycle"], 0) + 1
+        # Phase M: signal accumulation toward autonomous birth (visible per focus).
+        signal_accumulation = {
+            f.value: {
+                "samples": len(self._matrix_signal_buffers.get(f.value, ())),
+                "birth_at": MATRIX_BIRTH_MIN_SAMPLES,
+                "ready_to_birth": len(self._matrix_signal_buffers.get(f.value, ())) >= MATRIX_BIRTH_MIN_SAMPLES,
+            }
+            for f in MATRIX_ELIGIBLE_FOCUSES
+        }
         return {
             "eligible_focuses": sorted(f.value for f in MATRIX_ELIGIBLE_FOCUSES),
             "specialists": specialists,
@@ -796,6 +899,8 @@ class HemisphereOrchestrator:
             "by_stage": by_stage,
             "promoted_count": by_stage.get("promoted", 0),
             "expansion_min_promoted": EXPANSION_MIN_PROMOTED,
+            "signal_accumulation": signal_accumulation,
+            "probationary_cap": MAX_PROBATIONARY_SPECIALISTS,
             "broadcast_slots": [
                 {"name": s.get("name"), "dwell": s.get("dwell", 0)}
                 for s in self._broadcast_slots
