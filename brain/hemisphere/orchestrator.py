@@ -919,6 +919,11 @@ class HemisphereOrchestrator:
                 # train_distillation updates accuracy but NOT current_epoch — the
                 # birth->probationary gate reads current_epoch, so set it here.
                 net.training_progress.current_epoch += MATRIX_TRAIN_EPOCHS
+                # M3: a trained specialist must be READY to enter the broadcast
+                # ranking (_get_networks_for_focus filters to READY/ACTIVE). Without
+                # this it is excluded from get_hemisphere_signals, so its impact
+                # score is never computed and it stalls at verified_probationary.
+                net.status = NetworkStatus.READY
                 logger.info(
                     "Matrix train %s: acc=%.3f epoch=%d (samples=%d, distinct=%d)",
                     net.focus.value, net.performance.accuracy,
@@ -1126,8 +1131,13 @@ class HemisphereOrchestrator:
 
     def _find_weakest_network(self) -> NetworkArchitecture | None:
         with self._networks_lock:
+            # M3: exclude lifecycle-managed Matrix specialists — they are governed
+            # by their own retirement path (_retire_low_utility_probationary), not
+            # the generic cap-prune, so a low-accuracy born specialist can't be
+            # yanked mid-lifecycle just for being READY.
             active = [n for n in self._networks.values()
-                      if n.status in (NetworkStatus.READY, NetworkStatus.ACTIVE)]
+                      if n.status in (NetworkStatus.READY, NetworkStatus.ACTIVE)
+                      and n.specialist_lifecycle is None]
         if not active:
             return None
         return min(active, key=lambda n: n.performance.accuracy)

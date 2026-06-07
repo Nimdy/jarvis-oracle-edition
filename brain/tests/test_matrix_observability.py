@@ -258,6 +258,32 @@ def test_matrix_training_set_constant_is_single_distinct():
     assert len(X) == 25 and n_distinct == 1  # below MATRIX_TRAIN_MIN_DISTINCT_LABELS
 
 
+def test_weakest_network_excludes_lifecycle_specialists():
+    """M3: a lifecycle-managed Matrix specialist must NOT be eligible for the
+    generic cap-prune, even if it has the lowest accuracy (it has its own
+    retirement path)."""
+    import threading
+    from types import SimpleNamespace
+    from hemisphere.orchestrator import HemisphereOrchestrator as H
+    from hemisphere.types import NetworkStatus, SpecialistLifecycleStage as S
+
+    def net(nid, acc, lifecycle=None):
+        return SimpleNamespace(
+            id=nid, status=NetworkStatus.READY,
+            performance=SimpleNamespace(accuracy=acc),
+            specialist_lifecycle=lifecycle,
+        )
+    # specialist has the LOWEST accuracy but must be skipped
+    spec = net("spec", 0.01, S.PROBATIONARY_TRAINING)
+    normal = net("normal", 0.40)
+    stub = SimpleNamespace(
+        _networks={"spec": spec, "normal": normal},
+        _networks_lock=threading.Lock(),
+    )
+    weakest = H._find_weakest_network(stub)
+    assert weakest is not None and weakest.id == "normal"  # specialist protected
+
+
 def test_observe_accumulates_samples_via_stub():
     from types import SimpleNamespace
     from hemisphere.orchestrator import HemisphereOrchestrator as H
