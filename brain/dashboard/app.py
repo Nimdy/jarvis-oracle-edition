@@ -997,6 +997,19 @@ def _create_app() -> FastAPI:
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
 
+    @app.get("/api/domains")
+    async def api_domains():
+        """Matrix v2 — Capability Domains (Phase 1 isolation substrate).
+
+        Read-only registry view: each isolated, deletable domain's status + tallies
+        (no filesystem paths leaked). Zero authority — cannot create/delete here.
+        """
+        try:
+            from cognition.capability_domains import get_capability_domain_registry
+            return {"available": True, **get_capability_domain_registry().status()}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
     @app.get("/api/skills")
     async def api_skills():
         return {
