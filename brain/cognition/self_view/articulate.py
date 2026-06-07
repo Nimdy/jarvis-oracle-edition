@@ -24,16 +24,27 @@ KINDS = (
 )
 
 # Keyword → kind routing for self-referential questions (order matters: specific first).
+# Widened from the flight-recorder transcript (questions that should reach the OSV but
+# fell through to the INTROSPECTION catch-all). Patterns require self-reference
+# (you / your / yourself) so non-self questions still return None and route normally.
 _KIND_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\b(are you|do you become|becoming) (conscious|self[- ]aware|sentient|alive)\b", re.I), "consciousness_query"),
-    (re.compile(r"\b(conscious|sentien|self[- ]aware|do you have a soul|do you feel)\b", re.I), "consciousness_query"),
-    (re.compile(r"\bwhat('?s| is| are)?\s*(new|changed|different)\b|\bnew (feature|capabilit|skill)", re.I), "recent_changes"),
-    (re.compile(r"\bnot allowed|can('?t| ?not) you (yet|do)|gated|dormant|what.*restricted\b", re.I), "gated_capabilities"),
-    (re.compile(r"\bweakness(es)?\b|\b(weak|limitation|struggl|shortcoming|bad at|worst)\b", re.I), "weaknesses"),
-    (re.compile(r"\b(don'?t|do not|can'?t|cannot) (you )?(know|measure|see)\b|\bunknown|\bblind spot", re.I), "unknowns"),
-    (re.compile(r"\bhow are you( doing| feeling)?\b|\bhow do you feel\b|\byour (health|status|state)\b", re.I), "health"),
-    (re.compile(r"\bwhat can you do\b|\byour (capabilit|abilit|skill)|\bwhat are you (capable|able)\b", re.I), "capabilities"),
-    (re.compile(r"\bwhat are you\b|\bwho are you\b|\bdescribe yourself\b|\btell me about yourself\b", re.I), "identity"),
+    # consciousness / inner-state (specific, first)
+    (re.compile(r"\b(are you|do you become|becoming|you'?re)\b.{0,12}\b(conscious|self[- ]aware|sentient|alive)\b", re.I), "consciousness_query"),
+    (re.compile(r"\b(conscious|sentien|self[- ]aware)\b|\bdo you have (a soul|feelings|emotions|desires|fears|hopes|consciousness|awareness)\b|\bdo you feel\b", re.I), "consciousness_query"),
+    # recent changes / what's new
+    (re.compile(r"\bwhat('?s| is| are| has)?\s*(new|changed|different)\b|\bnew (feature|capabilit|skill)|\bwhat.{0,20}(recently )?(changed|learned|added)\b", re.I), "recent_changes"),
+    # gated / not allowed yet
+    (re.compile(r"\bnot allowed\b|\baren'?t you allowed\b|\bgated\b|\bdormant\b|\brestricted\b|\bwhat can'?t you do\b|\bnot (yet )?(allowed|able) to\b", re.I), "gated_capabilities"),
+    # weaknesses
+    (re.compile(r"\bweakness(es)?\b|\b(your )?(limitation|struggl|shortcoming|blind spot)\b|\bwhat are you bad at\b|\byour worst\b", re.I), "weaknesses"),
+    # unknowns — JARVIS not knowing ONLY (not the user's "I don't know")
+    (re.compile(r"\b(you|jarvis)\b.{0,6}\b(don'?t|do not|can'?t|cannot)\b.{0,6}\b(know|measure|see|read)\b|\b(don'?t|do not|can'?t|cannot) you (know|measure|see|read)\b|\bwhat (don'?t|can'?t) you (know|measure|read)\b|\byour (unknowns|blind spots)\b", re.I), "unknowns"),
+    # health / how are you
+    (re.compile(r"\bhow are you( doing| feeling)?\b|\bhow do you feel\b|\byour (health|wellbeing)\b|\bare you (ok|okay|alright|well|healthy)\b", re.I), "health"),
+    # capabilities / architecture / how you're built / how you work
+    (re.compile(r"\bwhat can you do\b|\bwhat are you (capable|able)\b|\byour (capabilit|abilit|architecture|codebase|subsystem|design)\b|\b(describe|tell me about|explain|walk me through|what can you tell me about)\b.{0,25}\b(your|the)?\b.{0,6}\b(architecture|codebase|subsystem|design|how you (work|reason|think|get|produce|generate|answer))\b|\bhow (do|are) you (work|built|structured|made|put together)\b|\bhow do you (get|reach|produce|generate|come up with|arrive at) an? answer\b", re.I), "capabilities"),
+    # identity (broad, near-last so specific kinds win)
+    (re.compile(r"\bwhat are you\b|\bwho are you\b|\bwhat (do you think )?you are\b|\bdo you know what you are\b|\bdescribe yourself\b|\b(tell me|something)\b.{0,20}\babout yourself\b|\bwhat kind of (system|ai|thing|model|being) are you\b", re.I), "identity"),
 ]
 
 # Unqualified self-claim guard. These words are allowed ONLY near a qualifier (negation /

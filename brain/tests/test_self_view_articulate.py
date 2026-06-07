@@ -59,6 +59,26 @@ class TestClassify:
         assert classify_self_question("what's the weather?") is None
         assert classify_self_question("search your code for the planner") is None
 
+    def test_real_transcript_questions(self):
+        # widened from the flight-recorder transcript that misrouted to the catch-all
+        self_q = {
+            "What can you tell me about your codebase?": "capabilities",
+            "Jarvis, tell me about your architecture.": "capabilities",
+            "Describe your own architecture.": "capabilities",
+            "Walk me through how you get an answer.": "capabilities",
+            "Do you know what you are?": "identity",
+            "Tell me something about yourself that I don't know.": "identity",
+            "do you have feelings?": "consciousness_query",
+        }
+        for q, kind in self_q.items():
+            assert classify_self_question(q) == kind, q
+        # non-self questions must NOT be captured (route normally)
+        for q in ("What do you remember about Skylar?",
+                  "You know how many kids you can help?",
+                  "Give me a status report, please.",
+                  "What do you remember the first time you heard my voice?"):
+            assert classify_self_question(q) is None, q
+
 
 # ---------------------------------------------------------------------------
 # Articulation content
