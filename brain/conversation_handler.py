@@ -472,6 +472,25 @@ def get_flight_episodes() -> list[dict[str, Any]]:
     return list(_flight_recorder)
 
 
+# OSV P2 (voice grounding) observability. Shadow-first: we accumulate what the grounding
+# pass WOULD repair so it can be reviewed before active enforcement is flipped on.
+_p2_grounding_stats: dict[str, Any] = {
+    "active": False,
+    "turns_checked": 0,
+    "turns_with_self_claims": 0,
+    "turns_actionable": 0,   # turns with contradicted/danger self-claims
+    "totals": {"supported": 0, "contradicted": 0, "danger_unqualified": 0, "unverified": 0},
+    "recent_actionable": collections.deque(maxlen=20),
+}
+
+
+def get_self_grounding_stats() -> dict[str, Any]:
+    """OSV P2 telemetry: counts of self-claims the grounding pass saw / would repair."""
+    s = dict(_p2_grounding_stats)
+    s["recent_actionable"] = list(_p2_grounding_stats["recent_actionable"])
+    return s
+
+
 def get_golden_command_outcomes() -> dict[str, Any]:
     """Return recent Golden command outcomes for dashboard/telemetry."""
     recent = list(_golden_outcomes)
@@ -5816,6 +5835,48 @@ async def handle_transcription(
             except Exception:
                 pass
 
+        # OSV P2 — voice grounding (SHADOW-first). Analyze the full reply for self-claims
+        # that contradict the measured self-view (or unqualified consciousness drift). In
+        # shadow this only DETECTS + records "what it would repair"; active enforcement is
+        # gated behind OSV_P2_ACTIVE and applied pre-broadcast (a later promotion step).
+        _self_grounding: dict[str, Any] | None = None
+        try:
+            if reply:
+                from cognition.self_view import load_self_view
+                from cognition.self_view.grounding import ground_self_claims
+                _gr = ground_self_claims(reply, load_self_view(), active=False)
+                _self_grounding = _gr.to_log()
+                _p2_grounding_stats["active"] = False
+                _p2_grounding_stats["turns_checked"] += 1
+                if _gr.findings:
+                    _p2_grounding_stats["turns_with_self_claims"] += 1
+                for _f in _gr.findings:
+                    if _f.verdict in _p2_grounding_stats["totals"]:
+                        _p2_grounding_stats["totals"][_f.verdict] += 1
+                if _gr.actionable:
+                    _p2_grounding_stats["turns_actionable"] += 1
+                    _p2_grounding_stats["recent_actionable"].append({
+                        "user_input": text[:120],
+                        "route": routing.tool.value,
+                        "findings": _self_grounding["actionable"],
+                    })
+                    # Capture an unqualified-consciousness drift as an observation (never a
+                    # claim) via the emergence lane — never declare, never discard (§6).
+                    if any(f.verdict == "danger_unqualified" for f in _gr.actionable):
+                        try:
+                            from consciousness.consciousness_system import _active_consciousness
+                            _obs = getattr(_active_consciousness, "observer", None) if _active_consciousness else None
+                            if _obs and hasattr(_obs, "observe_emergence"):
+                                _obs.observe_emergence(
+                                    behavior_type="osv_p2_self_claim_drift",
+                                    evidence_refs=[f"route={routing.tool.value}", f"reply={reply[:160]}"],
+                                    confidence=0.0,
+                                )
+                        except Exception:
+                            pass
+        except Exception:
+            logger.debug("OSV P2 grounding (shadow) skipped", exc_info=True)
+
         _ep_record: dict[str, Any] = {
             "id": str(_uuid_mod.uuid4()),
             "timestamp": _time.time(),
@@ -5825,6 +5886,7 @@ async def handle_transcription(
             "tool_route": routing.tool.value,
             "response_latency_ms": _latency_ms,
             "response_text": reply[:500] if reply else "",
+            "self_grounding": _self_grounding,
             "memories_retrieved": _retrieval_summary,
             "epistemic_flags": _epi_flags,
             "identity_state": _id_state,

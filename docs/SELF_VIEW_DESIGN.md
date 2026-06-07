@@ -166,7 +166,21 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
   CODEBASE; dormant/gated render as such; gaps → "I don't know / can't measure yet"; the
   language guard holds; deterministic answer path needs no LLM; tests pin routing + content.
 
-### P2 — Voice Grounding / Bounding  *(design contract — focused pass, NOT yet built)*
+### P2 — Voice Grounding / Bounding  *(SHIPPED shadow-first — detect+log live; active gated behind `OSV_P2_ACTIVE`)*
+
+**Status (2026-06-06):** built in `cognition/self_view/grounding.py` (`ground_self_claims`)
+and wired into the conversation turn finalization in `conversation_handler.py` running in
+**shadow** — it analyzes each full reply, records `self_grounding` on the flight episode, and
+accumulates `get_self_grounding_stats()` (exposed at `/api/self-view → p2_grounding`). The
+repair logic is complete and unit-tested (`tests/test_self_view_grounding.py`) but applies
+changes ONLY when `OSV_P2_ACTIVE` is set — promotion is a one-flag flip once shadow logs
+confirm it does not over-filter ordinary content. Scope held narrow: complementary to
+`skills.capability_gate` (which owns action/commitment claims), P2 owns DESCRIPTIVE
+self-claims and acts ONLY on OSV-contradicted or unqualified-consciousness sentences;
+unverifiable self-claims are flagged, never deleted (KNOW-not-guess applies to us too).
+Unqualified-consciousness drift is captured via `observer.observe_emergence` (observation-only
+— never declare, never discard, §6).
+
 
 **The rule (one line):** *If a response makes a claim about JARVIS itself, that claim must be
 supported by the OSV or guarded as unknown / provisional / observation-only.* Grounded lead

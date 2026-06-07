@@ -5,6 +5,40 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
+## Memory recall — relevance fix (2026-06-06, branch `thespark`)
+
+**The defect: recall ranked by memory *weight*, not query *similarity*.** The vector+ranker
+pipeline ranked correctly, but `tools/memory_tool` re-keyed every hit by `m.weight` and
+`search_memory` re-sorted by it — so high-weight boilerplate buried topical matches
+("what do you remember about Skylar?" led with "Good morning, ready to start the day").
+Separately, empty recall fell through to LLM free-narration, which confabulated a precise
+date for "first time you heard my voice". Diagnosed from the live retrieval log + an
+isolated in-process replay (NOT a cold ranker / not state — a reset would not have fixed it).
+
+| Fix | What changed | Commit |
+| --- | --- | --- |
+| **3a** | `semantic_search_scored` threads true cosine similarity out; memory_tool ranks+labels by similarity; keyword fallback re-mapped strictly below semantic | `1ad957a`, `784372e` |
+| **3b** | Explicit recall with no hits answers deterministically ("I don't have a specific memory recorded…") instead of confabulating | `1ad957a` |
+
+Verified live on the real store (voice→voice memory, Skylar→dog memory lead correctly). The
+"do you know who this is?" / "no camera access" deflection was traced to a *separate*
+ungrounded answer path (the camera + fusion are working: `verified_both`, David, 0.86) — not
+this fix, not a perception break.
+
+## Operational Self-View (OSV) — P2 voice grounding (2026-06-06, branch `thespark`)
+
+**Same disease, generalized: the LLM asserting things that contradict the system's grounded
+state** (memory ramble, "no camera access" while the camera sees you, consciousness drift).
+P2 binds DESCRIPTIVE self-claims in generated replies to the OSV. **Shipped shadow-first:**
+`cognition/self_view/grounding.py::ground_self_claims` detects self-claims and classifies each
+vs the OSV (supported / contradicted / unqualified-danger / unverified); wired into the turn
+finalization in `conversation_handler.py` running in **shadow** (records `self_grounding` per
+flight episode + `get_self_grounding_stats()`, exposed at `/api/self-view → p2_grounding`).
+Active repair (cut contradicted / §6-guard danger; never delete the merely-unverifiable, never
+touch ordinary content) is built + unit-tested but gated behind `OSV_P2_ACTIVE` until shadow
+logs prove no over-filtering. Complementary to `skills.capability_gate` (action/commitment
+claims). 10 tests (`tests/test_self_view_grounding.py`).
+
 ## Operational Self-View (OSV) — P0 → P1 (2026-06-06, branch `thespark`)
 
 **The defect this fixed: JARVIS could not safely talk about itself.** Self-questions routed

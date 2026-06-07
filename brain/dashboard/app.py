@@ -614,6 +614,13 @@ def _create_app() -> FastAPI:
                 snapshot=_cache,
             )
             save_self_view(model)
+            # P2 voice-grounding telemetry (shadow): what the grounding pass has seen /
+            # would repair across recent conversational turns.
+            try:
+                from conversation_handler import get_self_grounding_stats
+                model["p2_grounding"] = get_self_grounding_stats()
+            except Exception:
+                pass
             return model
         except Exception as exc:  # honest degradation to last snapshot
             last = load_self_view()
