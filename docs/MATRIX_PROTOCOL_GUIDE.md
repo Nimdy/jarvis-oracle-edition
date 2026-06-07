@@ -51,6 +51,16 @@ A future "kung fu" Matrix lane would not mean instant mastery from a phrase. Arc
 
 So the Matrix Protocol can be the neural substrate for a skill-specific mind. It is not, by itself, the robot body, controller, simulator, or proof harness.
 
+## The Hard Line — Skill vs Matrix vs Library (RATIFIED 2026-06-07)
+
+**The bright-line rule:** *if a capability senses or actuates the physical world, it is ALWAYS Matrix Protocol — never a Skill.*
+
+- **Skill** = a discrete, bounded **tool JARVIS wields** — digital, executable, verified once (`procedural`, SK-001). E.g. `web_scraping`, call an API.
+- **Matrix Protocol (Capability Domain)** = an isolated, continuously-learning **sub-consciousness JARVIS reasons *with*** — anything physical (`perceptual`+`control`, SK-002/003, + the hardware regex in `acquisition/classifier.py`). E.g. robot arm, LCD1602, DHT11, ultrasonic sensor.
+- **Library / Study** = pure reference knowledge, no action.
+
+Document ingestion is the knowledge-intake step *inside* a Matrix domain, not its own lane. Physical Matrix domains live on the **Pi5 (JARVIS's body)** and are where world-predictive modeling dovetails in. Full design: `MATRIX_V2_CAPABILITY_DOMAINS.md` (EPIC #27).
+
 ## How It Differs From Skill Learning
 
 | Lane | What It Produces | Evidence Boundary |

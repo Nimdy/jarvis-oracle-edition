@@ -39,6 +39,23 @@ This document is the durable home of the vision so we do not lose it. It is **va
 
 ---
 
+## 1.5 The hard line — Skill vs Matrix vs Library (RATIFIED 2026-06-07)
+
+Drawn now, before building, so the lanes never cross-wire. **Grounded in the existing code**, which already classifies every capability as `procedural` / `perceptual` / `control` (`brain/acquisition/classifier.py`, protocols SK-001/002/003) and already has a physical-hardware detector regex (`gpio|relay|motor|servo|sensor|actuator|robot|robotic|pi5|raspberry|arm control`).
+
+| Lane | What it is | Maps to | Examples |
+| --- | --- | --- | --- |
+| **Skill** | a discrete, bounded **tool JARVIS wields** — digital, executable, verified once | `procedural` (SK-001) | `web_scraping`, send a text, call an API |
+| **Matrix Protocol (Capability Domain)** | an isolated, continuously-learning **sub-consciousness JARVIS reasons *with*** — **anything that senses or actuates the physical world** | `perceptual` + `control` (SK-002/003) + the hardware regex | robot arm, LCD1602, DHT11, ultrasonic sensor |
+| **Library / Study** | pure **reference knowledge**, no action | study/library pipeline | "learn about Roman history" |
+
+**THE BRIGHT-LINE RULE:** *if a capability senses or actuates the physical world, it is ALWAYS Matrix — never a Skill.* Physical interaction forces Matrix because only Matrix carries the capability-envelope model, grounded affect, the embodiment act→verify→reinforce loop, continuous lived+synthetic training, and the action-safety/authorization gates.
+
+- **Document ingestion is NOT its own lane** — it is the *knowledge-intake step inside* a Matrix domain (feeding the arm's schematics builds that domain's envelope). Pure reference knowledge with no physical capability stays in **Library/Study**.
+- **The dovetail:** physical Matrix domains are exactly where **world-predictive modeling** plugs in — the envelope + MentalSimulator predict an action's outcome, the world model supplies physics/causal priors, lived camera/sensor-verified outcomes feed back. Skills (digital tools) never need this, which is why the line keeps them cleanly separate.
+
+This taxonomy is also summarized in `MATRIX_PROTOCOL_GUIDE.md`.
+
 ## 2. The Capability Domain abstraction (the core new object)
 
 A **Capability Domain** is a self-contained, deletable bundle:
@@ -72,6 +89,26 @@ This makes isolation not just a safety net but a **fidelity property** with two 
 JARVIS already has a `memory_clusters` concept (`~/.jarvis/memory_clusters.json`); a Capability Domain is a **deliberate, governed, deletable cluster** built on that intuition.
 
 ---
+
+## 2.6 The Pi5 — JARVIS's body & sense substrate (parallel prerequisite)
+
+The Pi5 is **JARVIS's body**: it is the `pi5-senses` node that streams perception (camera/edge-VLM, audio) to the brain. **Physical Matrix domains live on the Pi5's hardware** — every module a user plugs into it (LCD1602, DHT11, ultrasonic, a motor driver, the robot arm) is a new physical capability the Matrix Protocol can learn. **You cannot reliably learn to drive hardware you cannot see**, so the body needs an instrument panel.
+
+**Pi5 Engineering / Operational Dashboard (its own milestone — built IN PARALLEL).** *Validated 2026-06-07: today the brain only receives coarse `sensor_health` telemetry (`perception/server.py::get_sensor_health`); there is NO pin/slot/module/GPIO/bus introspection and no hardware dashboard. This is genuinely new.* It must provide:
+- **Hardware map:** pins/slots in use, what's connected where (GPIO/I²C/SPI/UART/USB), free pins.
+- **Module identification:** when something new is plugged in → detect + identify it (by bus address / handshake / user confirmation).
+- **Live signals & comms:** what signals are coming/going on each pin/bus, protocol/traffic view — so we **monitor instead of guess** when something is wrong.
+- **Hookup recommendations:** JARVIS advises "connect this to that / use this pin" based on the module + what's already wired (envelope-aware — it knows the board's limits too).
+- **Health/fault telemetry** per module (power, errors, disconnects).
+
+This dashboard is the **substrate that makes physical Matrix domains practical and safe** — it is how the act→verify loop (Phase 7) and the envelope model (Phase 3) get *real* hardware ground truth, and how a workaround (Phase 8) is risk-assessed against actual wiring. **Dependency:** Matrix embodiment phases (3, 7, 8) require it for any *real* hardware; knowledge/sim phases (M, 0, 1, 2) do not.
+
+**New sense modalities = body awareness (the key insight).** Sensors give JARVIS senses its camera does not have. The ultrasonic example: *"alert me if you detect something your camera eyes didn't see — like a human feeling someone standing behind them without looking."* That is **proprioceptive/spatial body-awareness** — a genuinely new perceptual channel, learned as a `perceptual` Matrix domain, that fuses into the situational read alongside vision/audio. Each such sensor expands JARVIS's *sensorium*, not just its toolbox.
+
+**Worked examples (all physical → Matrix domains, each isolated/deletable):**
+- "Matrix learn to send messages to the **LCD1602** module" → a `control` output domain.
+- "Matrix learn to collect + report **temperature/humidity from the DHT11**" → a `perceptual` sensing domain.
+- "Matrix learn to use the **ultrasonic sensor** and alert me to presence my camera missed" → a `perceptual` body-awareness domain that feeds the situational read.
 
 ## 3. What already exists (validated 2026-06-07 — reuse, don't reinvent)
 
