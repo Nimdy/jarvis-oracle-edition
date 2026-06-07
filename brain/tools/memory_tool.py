@@ -244,9 +244,19 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
             referenced_entities=referenced_entities,
         )
         seen = {preview for _, preview in results}
-        for score, preview in kw_results:
+        # Keyword is a lexical FALLBACK, scored by memory weight (not query
+        # similarity, and sometimes >1.0 for core memories). Re-map it onto the
+        # 0..1 relevance scale STRICTLY below the weakest semantic hit so the
+        # similarity-ranked semantic results always lead — otherwise a
+        # high-weight core/boilerplate memory could outrank a real topical
+        # match in the downstream renderer (same weight-as-relevance bug).
+        sem_floor = min((s for s, _ in results), default=0.30)
+        kw_base = min(sem_floor, 0.30)
+        rank = 0
+        for _, preview in kw_results:
             if preview not in seen:
-                results.append((score, preview))
+                rank += 1
+                results.append((max(0.0, kw_base - 0.01 * rank), preview))
                 seen.add(preview)
 
     if not results:

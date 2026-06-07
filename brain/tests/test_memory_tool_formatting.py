@@ -143,6 +143,35 @@ def test_search_memory_leads_with_topical_match_and_labels_similarity(monkeypatc
     assert "relevance=0.62" in lines[0]
 
 
+def test_keyword_fallback_ranks_below_semantic(monkeypatch) -> None:
+    """A high-weight keyword/core memory must NOT outrank a real semantic match.
+    Keyword fill is re-mapped onto 0..1 strictly below the weakest semantic hit."""
+    topical = SimpleNamespace(
+        type="conversation", payload={"response": "Skyler is your dog, a border collie."},
+        weight=0.55, identity_subject="david", identity_subject_type="person",
+        identity_owner_type="person", tags=(),
+    )
+    # keyword path scores by memory WEIGHT (>1.0 for core) — the old bug source
+    core_mem = SimpleNamespace(
+        id="mem_core", type="core",
+        payload={"response": "First contact about Skylar: gestation complete."},
+        tags=("core",), weight=1.50,
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [(0.40, topical)],
+        keyword_search=lambda *a, **k: [core_mem],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+
+    out = search_memory("what do you remember about Skylar", speaker="David")
+    lines = [ln for ln in out.splitlines() if "relevance=" in ln]
+    assert "Skyler is your dog" in lines[0]  # semantic leads
+    assert "First contact" in lines[1]       # keyword fill follows
+    # the keyword line is re-scored below the semantic floor (no relevance=1.50)
+    assert "relevance=1.5" not in out
+    assert "relevance=0.40" in lines[0]
+
+
 def test_search_memory_empty_returns_no_memories_sentinel(monkeypatch) -> None:
     """No relevant memory -> the honest sentinel the route uses to avoid
     confabulating (the 'first time you heard my voice' fake-date case)."""
