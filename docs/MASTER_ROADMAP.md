@@ -8,5 +8,11 @@
 > - **All issues:** https://github.com/Nimdy/jarvis-oracle-edition/issues
 >
 > **Design/doctrine docs remain the source of truth in `docs/`** (e.g. `SPARK_DESIGN.md`,
-> `WEIGHT_ROOM_DESIGN.md`, `CAPABILITY_AUTHORITY_DESIGN.md`, `SyntheticSoul.md`).
+> `WEIGHT_ROOM_DESIGN.md`, `CAPABILITY_AUTHORITY_DESIGN.md`, `MATRIX_PROTOCOL_GUIDE.md`,
+> `MATRIX_V2_CAPABILITY_DOMAINS.md`, `SyntheticSoul.md`).
 > The full historical build record lives in this file's git history and `docs/BUILD_HISTORY.md`.
+>
+> **North-star vision in flight:** **Matrix Protocol v2 — Capability Domains** (EPIC #27,
+> design `docs/MATRIX_V2_CAPABILITY_DOMAINS.md`): isolated, deletable skill sub-consciousnesses
+> with envelope-aware, affect-grounded reasoning, a strict repeatable training contract, and an
+> embodiment act→verify→reinforce loop — built on the (being-proven) Tier-2 lifecycle (#28).
