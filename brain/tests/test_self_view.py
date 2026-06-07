@@ -329,3 +329,9 @@ class TestSubsystemInventory:
         m = sv.build_self_view(engine=None, eval_snapshot={}, skills_summary={},
                                snapshot=None, now=1.0)
         assert m["subsystems"]["_meta"]["lifecycle"]["provenance"] == Provenance.GAP
+
+    def test_memory_with_total_classifies_active(self):
+        from cognition.self_view.adapters import read_memory
+        out = read_memory({"total": 500, "core_count": 20})  # real get_memory_stats shape
+        assert out["lifecycle"].provenance == Provenance.MEASURED
+        assert out["total_memories"].value == 500

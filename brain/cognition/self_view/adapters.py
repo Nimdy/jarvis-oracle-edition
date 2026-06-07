@@ -269,13 +269,17 @@ def read_quarantine(blob: dict[str, Any]) -> dict[str, Fact]:
 
 def read_memory(blob: dict[str, Any]) -> dict[str, Fact]:
     src = "memory"
-    tm = blob.get("total_memories", blob.get("memory_count"))
+    # engine.get_memory_stats() reports the count as "total" (also accept legacy names)
+    tm = blob.get("total", blob.get("total_memories", blob.get("memory_count")))
     if tm is None:
         return {"lifecycle": unknown("no memory totals in this section", source=src)}
-    return {
+    out = {
         "lifecycle": Fact("active", Provenance.MEASURED, source=src),
         "total_memories": Fact(tm, Provenance.MEASURED, source=src),
     }
+    if blob.get("core_count") is not None:
+        out["core_count"] = Fact(blob.get("core_count"), Provenance.MEASURED, source=src)
+    return out
 
 
 def read_evolution(blob: dict[str, Any]) -> dict[str, Fact]:
