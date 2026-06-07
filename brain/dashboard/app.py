@@ -453,6 +453,20 @@ def _create_app() -> FastAPI:
         with open(v2_maturity_path) as f:
             return HTMLResponse(f.read())
 
+    @app.get("/v2/matrix", response_class=HTMLResponse)
+    async def v2_matrix_page():
+        """dashboardV2 — Matrix Protocol Tier-2 lifecycle (observability).
+
+        Renders the read-only ``/api/matrix`` view: the candidate_birth →
+        promoted ladder, per-focus signal accumulation toward autonomous birth,
+        each born specialist's next gate (have/need/met), and the broadcast
+        slots. The proving-ground surface for Matrix v2 (Capability Domains).
+        Zero authority — cannot write any state.
+        """
+        v2_matrix_path = os.path.join(_STATIC_DIR, "v2", "matrix.html")
+        with open(v2_matrix_path) as f:
+            return HTMLResponse(f.read())
+
     @app.get("/eval")
     async def eval_page():
         from fastapi.responses import RedirectResponse

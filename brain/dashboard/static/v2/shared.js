@@ -43,6 +43,7 @@ window.V2 = (function(){
     ['/static/v2/synthetic.html','synthetic'],
     ['/static/v2/ops.html','ops'],
     ['/static/v2/training.html','training'],
+    ['/static/v2/matrix.html','matrix'],
     ['#sep','lab'],
     ['/static/v2/lab.html','lab'],
     ['#sep','insight'],

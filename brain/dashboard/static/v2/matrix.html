@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Matrix Protocol (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .ladder{display:flex;gap:6px;flex-wrap:wrap;align-items:stretch;margin:6px 0 2px;}
+    .lstage{flex:1;min-width:96px;border:1px solid var(--line);border-radius:5px;padding:8px 9px;text-align:center;}
+    .lstage .ln{font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);}
+    .lstage .lc{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:3px;}
+    .lstage .arrow{color:var(--dim);}
+    .focus{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:8px 0;}
+    .focus .fh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;}
+    .focus .fn{font-size:13px;font-weight:700;color:var(--text);}
+    .focus .fstats{display:flex;gap:16px;flex-wrap:wrap;font-size:9.5px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:4px;}
+    .focus .fstats b{color:var(--text);font-weight:600;}
+    .gate{margin-top:7px;font-size:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+    .gate .glabel{color:var(--muted);}
+    .bigstat{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .statline{display:flex;gap:22px;flex-wrap:wrap;align-items:baseline;margin:4px 0 8px;}
+    .statline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;line-height:1.55;}
+    .contrast b{color:var(--text);}
+    .slot{display:inline-block;border:1px solid var(--line);border-radius:10px;padding:1px 9px;margin:3px 4px 0 0;font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · MATRIX PROTOCOL</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Tier-2 neural specialist lifecycle (the proving ground for Matrix v2 — Capability Domains). Each specialist is <b>advisory</b>, gate-earned: <code>candidate_birth → probationary → verified → broadcast_eligible → promoted</code>. Birth is autonomous once a focus accumulates enough live signal. Nothing here has behavior authority.</span>
+    <span class="right"><button id="pausebtn" class="pausebtn" onclick="_togglePause()" title="Pause auto-refresh">⏸ Pause</button><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <main>
+    <section class="card col12">
+      <h2>Lifecycle Ladder</h2>
+      <div class="note">Live count of Tier-2 specialists at each stage. A fresh/reset brain shows everything at the left (or not yet born) — that is expected, not broken. The right-most gate (<b>promoted</b>) is what unlocks broadcast expansion + the self-improvement substrate.</div>
+      <div class="ladder" id="ladder"></div>
+      <div class="statline" id="summary"></div>
+      <div class="contrast" id="summary-note"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Specialist Focuses</h2>
+      <div class="note">The five matrix-eligible focuses. Not-yet-born focuses show their <b>signal accumulation</b> filling toward the birth threshold; born specialists show their stage and the <b>next gate</b> they must clear (with have / need / met).</div>
+      <div id="focuses"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Broadcast Slots</h2>
+      <div class="note">The competitive slots a <b>broadcast_eligible</b> specialist must hold (dwell ≥ 10 cycles) to be <b>promoted</b>. Currently held mostly by non-matrix focuses — a matrix specialist has to earn its way in.</div>
+      <div id="slots"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+  var PAUSED=false;
+  function _togglePause(){ PAUSED=!PAUSED; var b=document.getElementById('pausebtn'); b.textContent=PAUSED?'▶ Resume':'⏸ Pause'; b.classList.toggle('on',PAUSED); }
+  V2.renderNav('/static/v2/matrix.html');
+
+  var STAGES=[['candidate_birth','born'],['probationary_training','training'],['verified_probationary','verified'],['broadcast_eligible','broadcast'],['promoted','promoted']];
+
+  function renderLadder(d){
+    var by=d.by_stage||{};
+    var html=STAGES.map(function(s,i){
+      var c=by[s[0]]||0;
+      var arrow=i<STAGES.length-1?'<span class="arrow"> → </span>':'';
+      return '<div class="lstage"><div class="ln">'+s[1]+'</div><div class="lc" style="color:'+(c>0?'var(--text)':'var(--dim)')+'">'+c+'</div></div>'+arrow;
+    }).join('');
+    V2.el('ladder').innerHTML=html;
+
+    var promoted=d.promoted_count||0, need=d.expansion_min_promoted||2;
+    var pc=Math.min(100,(promoted/Math.max(1,need))*100);
+    V2.el('summary').innerHTML=
+      '<div><div class="k">promoted</div><div class="bigstat">'+promoted+' <span style="font-size:13px;color:var(--muted)">/ '+need+' to unlock expansion</span></div></div>'+
+      '<div><div class="k">probationary cap</div><div class="bigstat">'+(by['candidate_birth']||0)+(by['probationary_training']||0?'+'+by['probationary_training']:'')+' <span style="font-size:13px;color:var(--muted)">/ '+(d.probationary_cap||3)+'</span></div></div>'+
+      '<div style="flex:1;min-width:220px;">'+V2.barRow('expansion unlock', pc, promoted+'/'+need, promoted>=need?'var(--ok,#3fb950)':'var(--amber)')+'</div>';
+    V2.el('summary-note').innerHTML='<b>Phase M (proving ground).</b> This Tier-2 lane was dormant — birth was never called and there was no training feed. M1 now autonomously births a specialist once it accumulates '+(_birthAt(d))+' live signal samples; M2 (next) wires the training feed so it can clear <code>accuracy&gt;0.5</code> and climb. Matrix <b>v2 — Capability Domains</b> (the robot arm, isolated deletable sub-consciousnesses) is built on this exact ladder.';
+  }
+
+  function _birthAt(d){ var sa=d.signal_accumulation||{}; for(var k in sa){ return sa[k].birth_at; } return 30; }
+
+  function renderFocuses(d){
+    var sa=d.signal_accumulation||{};
+    var specs={}; (d.specialists||[]).forEach(function(s){ specs[s.focus]=s; });
+    var focuses=(d.eligible_focuses||[]).slice().sort();
+    var html=focuses.map(function(f){
+      var s=specs[f], acc=sa[f]||{samples:0,birth_at:30,ready_to_birth:false};
+      if(!s){
+        // not born yet — show accumulation toward birth
+        var pct=Math.min(100,(acc.samples/Math.max(1,acc.birth_at))*100);
+        var col=acc.ready_to_birth?'var(--ok,#3fb950)':'var(--amber)';
+        return '<div class="focus"><div class="fh"><span class="fn">'+V2.cap(f)+'</span>'+V2.tag('unk','not born')+'</div>'+
+          '<div style="margin-top:7px;">'+V2.barRow('signal accumulation', pct, acc.samples+' / '+acc.birth_at+(acc.ready_to_birth?' · ready':''), col)+'</div></div>';
+      }
+      // born — show stage + next gate
+      var g=s.next_gate||{}, gs=V2.gateState(g.met);
+      var gatetxt=(g.gate||'—');
+      var have=(g.have!==undefined?(' · have '+g.have):'')+(g.in_broadcast!==undefined?(' · in_broadcast '+g.in_broadcast):'');
+      return '<div class="focus"><div class="fh"><span class="fn">'+V2.cap(f)+'</span>'+
+        V2.tag(s.lifecycle==='promoted'?'ok':'unk', V2.cap(s.lifecycle))+'</div>'+
+        '<div class="fstats"><span>accuracy <b>'+V2.f3(s.accuracy)+'</b></span><span>impact <b>'+V2.f3(s.impact_score)+'</b></span><span>epoch <b>'+(s.epoch||0)+'</b></span><span>dwell <b>'+(s.broadcast_dwell||0)+'</b></span><span>samples <b>'+(acc.samples||0)+'</b></span></div>'+
+        '<div class="gate"><span class="glabel">next gate:</span>'+V2.tag(gs, gatetxt)+'<span style="color:var(--muted)">'+have+'</span></div></div>';
+    }).join('');
+    V2.el('focuses').innerHTML=html;
+  }
+
+  function renderSlots(d){
+    var html=(d.broadcast_slots||[]).map(function(s){
+      return '<span class="slot">'+V2.cap(s.name||'—')+' · dwell '+(s.dwell||0)+'</span>';
+    }).join('') || '<span style="color:var(--dim)">no broadcast slots</span>';
+    V2.el('slots').innerHTML=html;
+  }
+
+  function tick(){
+    document.getElementById('clock').textContent=new Date().toLocaleTimeString();
+    if(PAUSED) return;
+    V2.fetchJSON('/api/matrix').then(function(d){
+      document.getElementById('mode').textContent=(d.available===false)?'hemisphere off':'live';
+      if(d.available===false){ V2.el('summary-note').innerHTML='<b>Hemisphere orchestrator not enabled.</b>'; return; }
+      renderLadder(d); renderFocuses(d); renderSlots(d);
+    }).catch(function(e){ document.getElementById('mode').textContent='error'; });
+  }
+  tick(); setInterval(tick, 9000);
+</script>
+</body>
+</html>
