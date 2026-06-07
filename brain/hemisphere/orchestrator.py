@@ -103,6 +103,16 @@ MATRIX_TRAIN_EPOCHS = 20
 MATRIX_TRAIN_OUTPUT_CLASSES = 4
 MATRIX_TRAIN_MIN_DISTINCT_LABELS = 2
 
+# Phase M3 — the sub-conscious broadcast lane. Tier-2 matrix specialists do NOT
+# compete with the high-accuracy Tier-1 distilled specialists for the main
+# broadcast slots (they'd never win the 1.15x swap against ~1.0-accuracy
+# incumbents — a chicken-and-egg that blocks the first promotion). Instead they
+# compete among THEMSELVES in their own lane (David: "a separate broadcast layer
+# — the sub-conscious layer, its own swim lane"). Holding a lane slot for
+# MATRIX_PROMOTE_DWELL cycles is the BROADCAST_ELIGIBLE -> PROMOTED gate.
+MATRIX_BROADCAST_SLOTS = 2
+MATRIX_PROMOTE_DWELL = 10
+
 _TIER1_FOCUSES = frozenset({
     HemisphereFocus.EMOTION_DEPTH,
     HemisphereFocus.SPEAKER_REPR,
@@ -198,6 +208,12 @@ class HemisphereOrchestrator:
             {"name": f.value, "value": 0.0, "score": 0.0, "dwell": 0}
             for f in (HemisphereFocus.MEMORY, HemisphereFocus.MOOD,
                       HemisphereFocus.TRAITS, HemisphereFocus.GENERAL)
+        ]
+        # M3: separate sub-conscious broadcast lane — Tier-2 matrix specialists
+        # compete only among themselves here (not against Tier-1).
+        self._matrix_broadcast_slots: list[dict[str, Any]] = [
+            {"name": None, "score": 0.0, "dwell": 0}
+            for _ in range(MATRIX_BROADCAST_SLOTS)
         ]
 
         # M6 expansion state
@@ -313,6 +329,9 @@ class HemisphereOrchestrator:
 
         # Phase 0.25: check specialist promotion ladder
         self._check_specialist_promotions()
+
+        # Phase 0.27: update the sub-conscious broadcast lane (matrix dwell -> PROMOTED)
+        self._update_matrix_broadcast_slots()
 
         # Phase 0.3: check if broadcast expansion should trigger
         self._check_expansion_trigger()
@@ -932,6 +951,37 @@ class HemisphereOrchestrator:
             except Exception:
                 logger.debug("matrix train failed for %s", net.focus.value, exc_info=True)
 
+    def _update_matrix_broadcast_slots(self) -> None:
+        """M3 sub-conscious lane: rank BROADCAST_ELIGIBLE/PROMOTED matrix specialists
+        among themselves by impact; the top MATRIX_BROADCAST_SLOTS hold lane slots
+        and accrue dwell. Holding a slot for MATRIX_PROMOTE_DWELL cycles is the
+        BROADCAST_ELIGIBLE -> PROMOTED gate (checked in _check_specialist_promotions).
+        Matrix-vs-matrix only — no Tier-1 competition.
+        """
+        from hemisphere.types import MATRIX_ELIGIBLE_FOCUSES, SpecialistLifecycleStage as S
+        with self._networks_lock:
+            eligible = [
+                n for n in self._networks.values()
+                if n.focus in MATRIX_ELIGIBLE_FOCUSES
+                and n.specialist_lifecycle in (S.BROADCAST_ELIGIBLE, S.PROMOTED)
+            ]
+        eligible.sort(key=lambda n: n.specialist_impact_score, reverse=True)
+        winners = eligible[:MATRIX_BROADCAST_SLOTS]
+        prev = {s["name"]: s for s in self._matrix_broadcast_slots if s.get("name")}
+        new_slots: list[dict[str, Any]] = []
+        for n in winners:
+            nm = n.focus.value
+            if nm in prev:
+                sl = prev[nm]
+                sl["dwell"] = sl.get("dwell", 0) + 1
+                sl["score"] = round(n.specialist_impact_score, 4)
+                new_slots.append(sl)
+            else:
+                new_slots.append({"name": nm, "score": round(n.specialist_impact_score, 4), "dwell": 0})
+        while len(new_slots) < MATRIX_BROADCAST_SLOTS:
+            new_slots.append({"name": None, "score": 0.0, "dwell": 0})
+        self._matrix_broadcast_slots = new_slots
+
     def matrix_report(self) -> dict[str, Any]:
         """Tier-2 Matrix Protocol observability — live, read-only lifecycle view.
 
@@ -944,8 +994,10 @@ class HemisphereOrchestrator:
         """
         from hemisphere.types import MATRIX_ELIGIBLE_FOCUSES, SpecialistLifecycleStage as S
 
-        dwell_by_name = {s["name"]: s.get("dwell", 0) for s in self._broadcast_slots}
-        broadcast_names = set(dwell_by_name.keys())
+        # M3: promotion is earned in the sub-conscious lane (matrix-vs-matrix).
+        mx_dwell_by_name = {s["name"]: s.get("dwell", 0)
+                            for s in self._matrix_broadcast_slots if s.get("name")}
+        mx_lane_names = set(mx_dwell_by_name.keys())
 
         def _next_gate(net) -> dict[str, Any]:
             stage = net.specialist_lifecycle
@@ -960,10 +1012,11 @@ class HemisphereOrchestrator:
                 imp = net.specialist_impact_score
                 return {"gate": "impact>0.3", "have": round(imp, 4), "met": imp > 0.3}
             if stage == S.BROADCAST_ELIGIBLE:
-                dwell = dwell_by_name.get(net.focus.value, 0)
-                in_bc = net.focus.value in broadcast_names
-                return {"gate": "broadcast dwell>=10", "have": dwell,
-                        "in_broadcast": in_bc, "met": in_bc and dwell >= 10}
+                dwell = mx_dwell_by_name.get(net.focus.value, 0)
+                in_lane = net.focus.value in mx_lane_names
+                return {"gate": "sub-conscious dwell>=%d" % MATRIX_PROMOTE_DWELL,
+                        "have": dwell, "in_lane": in_lane,
+                        "met": dwell >= MATRIX_PROMOTE_DWELL}
             if stage == S.PROMOTED:
                 return {"gate": "none", "met": True}
             return {"gate": "retired", "met": False}
@@ -984,8 +1037,8 @@ class HemisphereOrchestrator:
                 "impact_score": round(net.specialist_impact_score, 4),
                 "epoch": net.training_progress.current_epoch,
                 "is_training": net.training_progress.is_training,
-                "broadcast_dwell": dwell_by_name.get(net.focus.value, 0),
-                "in_broadcast": net.focus.value in broadcast_names,
+                "broadcast_dwell": mx_dwell_by_name.get(net.focus.value, 0),
+                "in_broadcast": net.focus.value in mx_lane_names,
                 "verification_ts": net.specialist_verification_ts,
                 "job_id": net.specialist_job_id,
                 "next_gate": _next_gate(net),
@@ -1016,6 +1069,12 @@ class HemisphereOrchestrator:
                 {"name": s.get("name"), "dwell": s.get("dwell", 0)}
                 for s in self._broadcast_slots
             ],
+            "matrix_broadcast_slots": [
+                {"name": s.get("name"), "dwell": s.get("dwell", 0),
+                 "score": round(s.get("score", 0.0), 4)}
+                for s in self._matrix_broadcast_slots
+            ],
+            "matrix_promote_dwell": MATRIX_PROMOTE_DWELL,
         }
 
     def _check_specialist_promotions(self) -> None:
@@ -1074,18 +1133,19 @@ class HemisphereOrchestrator:
                                 net.name, net.specialist_impact_score)
 
             elif stage == SpecialistLifecycleStage.BROADCAST_ELIGIBLE:
-                if net.focus.value in broadcast_names:
-                    slot_dwell = 0
-                    for s in self._broadcast_slots:
-                        if s["name"] == net.focus.value:
-                            slot_dwell = s.get("dwell", 0)
-                            break
-                    if slot_dwell >= 10:
-                        net.specialist_lifecycle = SpecialistLifecycleStage.PROMOTED
-                        logger.info(
-                            "Specialist '%s' PROMOTED (dwell=%d, impact=%.2f)",
-                            net.name, slot_dwell, net.specialist_impact_score,
-                        )
+                # M3: promotion is earned in the SUB-CONSCIOUS lane (matrix-vs-matrix),
+                # not the Tier-1-dominated main broadcast slots.
+                slot_dwell = 0
+                for s in self._matrix_broadcast_slots:
+                    if s.get("name") == net.focus.value:
+                        slot_dwell = s.get("dwell", 0)
+                        break
+                if slot_dwell >= MATRIX_PROMOTE_DWELL:
+                    net.specialist_lifecycle = SpecialistLifecycleStage.PROMOTED
+                    logger.info(
+                        "Specialist '%s' PROMOTED via sub-conscious lane (dwell=%d, impact=%.2f)",
+                        net.name, slot_dwell, net.specialist_impact_score,
+                    )
 
     def _construct_for_focus(
         self, focus: HemisphereFocus, name: str,

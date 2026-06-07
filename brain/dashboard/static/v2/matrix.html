@@ -51,8 +51,14 @@
     </section>
 
     <section class="card col12">
-      <h2>Broadcast Slots</h2>
-      <div class="note">The competitive slots a <b>broadcast_eligible</b> specialist must hold (dwell ≥ 10 cycles) to be <b>promoted</b>. Currently held mostly by non-matrix focuses — a matrix specialist has to earn its way in.</div>
+      <h2>Sub-Conscious Broadcast Lane <span style="font-size:9px;color:var(--muted)">(matrix-vs-matrix)</span></h2>
+      <div class="note">Tier-2 specialists' OWN broadcast layer — they compete here among themselves, NOT against the high-accuracy Tier-1 specialists. Holding a lane slot for <b>dwell ≥ 10</b> cycles is the <b>broadcast_eligible → promoted</b> gate. This is the swim lane that breaks the chicken-and-egg (a matrix specialist could never out-score Tier-1 for a main slot).</div>
+      <div id="mxlane"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Main Broadcast Slots <span style="font-size:9px;color:var(--muted)">(Tier-1 "conscious")</span></h2>
+      <div class="note">The main broadcast slots, dominated by high-accuracy Tier-1 distilled specialists. Matrix specialists do not compete here — that is by design.</div>
       <div id="slots"></div>
     </section>
   </main>
@@ -117,13 +123,23 @@
     V2.el('slots').innerHTML=html;
   }
 
+  function renderMxLane(d){
+    var need=d.matrix_promote_dwell||10;
+    var html=(d.matrix_broadcast_slots||[]).map(function(s){
+      if(!s.name) return '<span class="slot" style="color:var(--dim)">(empty)</span>';
+      var col=(s.dwell||0)>=need?'var(--ok,#3fb950)':'var(--amber)';
+      return '<span class="slot" style="border-color:'+col+'">'+V2.cap(s.name)+' · dwell '+(s.dwell||0)+'/'+need+' · impact '+V2.f2(s.score)+'</span>';
+    }).join('') || '<span style="color:var(--dim)">no matrix specialists in the lane yet</span>';
+    V2.el('mxlane').innerHTML=html;
+  }
+
   function tick(){
     document.getElementById('clock').textContent=new Date().toLocaleTimeString();
     if(PAUSED) return;
     V2.fetchJSON('/api/matrix').then(function(d){
       document.getElementById('mode').textContent=(d.available===false)?'hemisphere off':'live';
       if(d.available===false){ V2.el('summary-note').innerHTML='<b>Hemisphere orchestrator not enabled.</b>'; return; }
-      renderLadder(d); renderFocuses(d); renderSlots(d);
+      renderLadder(d); renderFocuses(d); renderMxLane(d); renderSlots(d);
     }).catch(function(e){ document.getElementById('mode').textContent='error'; });
   }
   tick(); setInterval(tick, 9000);

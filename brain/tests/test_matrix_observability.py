@@ -118,7 +118,7 @@ def test_by_stage_and_promoted_count():
 # This runs in any environment, unlike the orchestrator-backed tests above.
 # ---------------------------------------------------------------------------
 
-def _stub(nets, slots=None, buffers=None):
+def _stub(nets, slots=None, buffers=None, mx_slots=None):
     import threading
     from types import SimpleNamespace
     return SimpleNamespace(
@@ -126,6 +126,7 @@ def _stub(nets, slots=None, buffers=None):
         _networks_lock=threading.Lock(),
         _broadcast_slots=slots or [],
         _matrix_signal_buffers=buffers or {},
+        _matrix_broadcast_slots=mx_slots or [],
     )
 
 
@@ -137,8 +138,9 @@ def test_matrix_report_logic_via_stub():
         _arch("positive_memory", S.PROMOTED, suffix="p"),
         _arch("temporal_pattern", S.BROADCAST_ELIGIBLE, impact=0.5, suffix="b"),
     ]
-    slots = [{"name": "temporal_pattern", "dwell": 4}]
-    r = HemisphereOrchestrator.matrix_report(_stub(nets, slots))
+    # dwell lives in the sub-conscious lane now
+    mx = [{"name": "temporal_pattern", "dwell": 4, "score": 0.5}]
+    r = HemisphereOrchestrator.matrix_report(_stub(nets, mx_slots=mx))
 
     assert r["promoted_count"] == 1
     assert set(r["not_born"]) == {"negative_memory", "skill_transfer"}
@@ -147,9 +149,9 @@ def test_matrix_report_logic_via_stub():
     assert sp["next_gate"] == {"gate": "accuracy>0.5", "have": 0.42, "met": False}
 
     tp = next(s for s in r["specialists"] if s["focus"] == "temporal_pattern")
-    # broadcast_eligible: in a slot but dwell 4 < 10 -> gate not met
-    assert tp["next_gate"]["gate"] == "broadcast dwell>=10"
-    assert tp["next_gate"]["in_broadcast"] is True
+    # broadcast_eligible: in the sub-conscious lane but dwell 4 < 10 -> gate not met
+    assert tp["next_gate"]["gate"] == "sub-conscious dwell>=10"
+    assert tp["next_gate"]["in_lane"] is True
     assert tp["next_gate"]["have"] == 4
     assert tp["next_gate"]["met"] is False
     assert tp["broadcast_dwell"] == 4
@@ -159,10 +161,11 @@ def test_stub_promoted_dwell_gate_met():
     from hemisphere.orchestrator import HemisphereOrchestrator
     from hemisphere.types import SpecialistLifecycleStage as S
     nets = [_arch("skill_transfer", S.BROADCAST_ELIGIBLE, impact=0.6)]
-    slots = [{"name": "skill_transfer", "dwell": 12}]
-    r = HemisphereOrchestrator.matrix_report(_stub(nets, slots))
+    # dwell is in the SUB-CONSCIOUS lane now, not the Tier-1 main slots
+    mx = [{"name": "skill_transfer", "dwell": 12, "score": 0.6}]
+    r = HemisphereOrchestrator.matrix_report(_stub(nets, mx_slots=mx))
     st = r["specialists"][0]
-    assert st["next_gate"]["met"] is True  # in slot + dwell 12 >= 10
+    assert st["next_gate"]["met"] is True  # in lane + dwell 12 >= 10
 
 
 # ── Phase M: autonomous birth ──
@@ -256,6 +259,50 @@ def test_matrix_training_set_constant_is_single_distinct():
     samples = [([0.0, 0.0], 0)] * 25
     X, Y, n_distinct = H._matrix_training_set(samples)
     assert len(X) == 25 and n_distinct == 1  # below MATRIX_TRAIN_MIN_DISTINCT_LABELS
+
+
+def test_matrix_broadcast_lane_accrues_dwell():
+    """M3 sub-conscious lane: a BROADCAST_ELIGIBLE specialist holds a matrix-lane
+    slot (matrix-vs-matrix, not Tier-1) and accrues dwell across cycles."""
+    import threading
+    from types import SimpleNamespace
+    from hemisphere.orchestrator import HemisphereOrchestrator as H, MATRIX_BROADCAST_SLOTS
+    from hemisphere.types import HemisphereFocus, SpecialistLifecycleStage as S
+
+    spec = SimpleNamespace(
+        focus=HemisphereFocus.TEMPORAL_PATTERN,
+        specialist_lifecycle=S.BROADCAST_ELIGIBLE,
+        specialist_impact_score=0.9,
+    )
+    stub = SimpleNamespace(
+        _networks={"t": spec}, _networks_lock=threading.Lock(),
+        _matrix_broadcast_slots=[{"name": None, "score": 0.0, "dwell": 0}
+                                 for _ in range(MATRIX_BROADCAST_SLOTS)],
+    )
+    H._update_matrix_broadcast_slots(stub)
+    slot = next(s for s in stub._matrix_broadcast_slots if s.get("name") == "temporal_pattern")
+    assert slot["dwell"] == 0  # entered the lane this cycle
+    H._update_matrix_broadcast_slots(stub)
+    slot = next(s for s in stub._matrix_broadcast_slots if s.get("name") == "temporal_pattern")
+    assert slot["dwell"] == 1  # held the slot -> dwell accrues (toward MATRIX_PROMOTE_DWELL)
+
+
+def test_matrix_lane_excludes_unverified():
+    """Only BROADCAST_ELIGIBLE/PROMOTED specialists enter the lane (not candidate/probationary)."""
+    import threading
+    from types import SimpleNamespace
+    from hemisphere.orchestrator import HemisphereOrchestrator as H, MATRIX_BROADCAST_SLOTS
+    from hemisphere.types import HemisphereFocus, SpecialistLifecycleStage as S
+
+    cand = SimpleNamespace(focus=HemisphereFocus.POSITIVE_MEMORY,
+                           specialist_lifecycle=S.CANDIDATE_BIRTH, specialist_impact_score=0.9)
+    stub = SimpleNamespace(
+        _networks={"c": cand}, _networks_lock=threading.Lock(),
+        _matrix_broadcast_slots=[{"name": None, "score": 0.0, "dwell": 0}
+                                 for _ in range(MATRIX_BROADCAST_SLOTS)],
+    )
+    H._update_matrix_broadcast_slots(stub)
+    assert all(s.get("name") is None for s in stub._matrix_broadcast_slots)  # nobody eligible
 
 
 def test_weakest_network_excludes_lifecycle_specialists():
