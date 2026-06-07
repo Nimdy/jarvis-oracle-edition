@@ -230,6 +230,13 @@ class ConsciousnessEngine:
     def get_hemisphere_state(self) -> dict[str, Any] | None:
         return self._consciousness.get_hemisphere_state()
 
+    def get_matrix_report(self) -> dict[str, Any] | None:
+        """Tier-2 Matrix Protocol specialist lifecycle snapshot (observability)."""
+        orch = self._hemisphere_orchestrator
+        if not orch or not hasattr(orch, "matrix_report"):
+            return None
+        return orch.matrix_report()
+
     def enable_hemisphere(self, orchestrator: Any) -> None:
         """Enable the hemisphere NN system and wire it into the consciousness kernel."""
         self._hemisphere_orchestrator = orchestrator

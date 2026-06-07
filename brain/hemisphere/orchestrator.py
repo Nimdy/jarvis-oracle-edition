@@ -727,6 +727,81 @@ class HemisphereOrchestrator:
             )
         return arch
 
+    def matrix_report(self) -> dict[str, Any]:
+        """Tier-2 Matrix Protocol observability — live, read-only lifecycle view.
+
+        For every matrix-eligible specialist: its lifecycle stage, the live gate
+        metrics, and the gate it must clear NEXT (with have/need/met). Eligible
+        focuses with no specialist yet are listed in ``not_born`` so their absence
+        is VISIBLE, not silent. This is the "we can't verify what we can't see"
+        substrate for the Matrix Protocol verification (mirrors the skill-learning
+        observability work). No mutation, no promotion — pure snapshot.
+        """
+        from hemisphere.types import MATRIX_ELIGIBLE_FOCUSES, SpecialistLifecycleStage as S
+
+        dwell_by_name = {s["name"]: s.get("dwell", 0) for s in self._broadcast_slots}
+        broadcast_names = set(dwell_by_name.keys())
+
+        def _next_gate(net) -> dict[str, Any]:
+            stage = net.specialist_lifecycle
+            if stage == S.CANDIDATE_BIRTH:
+                ep = net.training_progress.current_epoch
+                return {"gate": "training_started", "need": "current_epoch>0",
+                        "have": ep, "met": ep > 0}
+            if stage == S.PROBATIONARY_TRAINING:
+                acc = net.performance.accuracy
+                return {"gate": "accuracy>0.5", "have": round(acc, 4), "met": acc > 0.5}
+            if stage == S.VERIFIED_PROBATIONARY:
+                imp = net.specialist_impact_score
+                return {"gate": "impact>0.3", "have": round(imp, 4), "met": imp > 0.3}
+            if stage == S.BROADCAST_ELIGIBLE:
+                dwell = dwell_by_name.get(net.focus.value, 0)
+                in_bc = net.focus.value in broadcast_names
+                return {"gate": "broadcast dwell>=10", "have": dwell,
+                        "in_broadcast": in_bc, "met": in_bc and dwell >= 10}
+            if stage == S.PROMOTED:
+                return {"gate": "none", "met": True}
+            return {"gate": "retired", "met": False}
+
+        specialists: list[dict[str, Any]] = []
+        seen: set = set()
+        with self._networks_lock:
+            nets = list(self._networks.values())
+        for net in nets:
+            if net.focus not in MATRIX_ELIGIBLE_FOCUSES or net.specialist_lifecycle is None:
+                continue
+            seen.add(net.focus)
+            specialists.append({
+                "focus": net.focus.value,
+                "name": net.name,
+                "lifecycle": net.specialist_lifecycle.value,
+                "accuracy": round(net.performance.accuracy, 4),
+                "impact_score": round(net.specialist_impact_score, 4),
+                "epoch": net.training_progress.current_epoch,
+                "is_training": net.training_progress.is_training,
+                "broadcast_dwell": dwell_by_name.get(net.focus.value, 0),
+                "in_broadcast": net.focus.value in broadcast_names,
+                "verification_ts": net.specialist_verification_ts,
+                "job_id": net.specialist_job_id,
+                "next_gate": _next_gate(net),
+            })
+
+        by_stage: dict[str, int] = {}
+        for s in specialists:
+            by_stage[s["lifecycle"]] = by_stage.get(s["lifecycle"], 0) + 1
+        return {
+            "eligible_focuses": sorted(f.value for f in MATRIX_ELIGIBLE_FOCUSES),
+            "specialists": specialists,
+            "not_born": sorted(f.value for f in MATRIX_ELIGIBLE_FOCUSES if f not in seen),
+            "by_stage": by_stage,
+            "promoted_count": by_stage.get("promoted", 0),
+            "expansion_min_promoted": EXPANSION_MIN_PROMOTED,
+            "broadcast_slots": [
+                {"name": s.get("name"), "dwell": s.get("dwell", 0)}
+                for s in self._broadcast_slots
+            ],
+        }
+
     def _check_specialist_promotions(self) -> None:
         """Advance specialist NNs through their lifecycle based on evidence.
 

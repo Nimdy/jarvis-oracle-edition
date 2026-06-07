@@ -965,6 +965,24 @@ def _create_app() -> FastAPI:
         si = _cache.get("self_improve", {})
         return si.get("specialists", {})
 
+    @app.get("/api/matrix")
+    async def api_matrix():
+        """Tier-2 Matrix Protocol specialist lifecycle (observability).
+
+        Per matrix-eligible specialist: stage, gate metrics, and the next gate to
+        clear. `not_born` lists eligible focuses with no specialist yet (visible,
+        not silent). Read-only — no mutation, no promotion.
+        """
+        if not _engine:
+            return JSONResponse({"error": "Not ready"}, status_code=503)
+        try:
+            report = _engine.get_matrix_report()
+            if report is None:
+                return {"available": False, "reason": "hemisphere orchestrator not enabled"}
+            return {"available": True, **report}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
     @app.get("/api/skills")
     async def api_skills():
         return {
