@@ -5,6 +5,35 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
+## Matrix Protocol — Phase M: Tier-2 lifecycle PROVEN end-to-end (2026-06-07, branch `thespark`)
+
+**The Tier-2 hemisphere specialist lane was completely dormant** — `create_probationary_specialist`
+had zero production callers, there was no training feed, and the per-focus tests passed only by
+*hand-flipping* lifecycle state. All 5 matrix-eligible focuses were `not_born` forever. Phase M
+(the proving ground for Matrix v2, EPIC #27 / #28) wired it end-to-end and **proved it live**:
+two specialists (`speaker_profile`, `temporal_pattern`) autonomously **birthed → trained → reached
+`PROMOTED`** on real signal (`PROMOTED 2/2`, the `EXPANSION_MIN_PROMOTED` gate).
+
+| Step | What shipped | Commit |
+| --- | --- | --- |
+| Observability | `matrix_report()` + `GET /api/matrix` + `/v2/matrix` dashboard page | `8b1e7b4`, `59a425e` |
+| **M1** birth | autonomous birth from accumulated encoder signal (`_observe_matrix_signals` + `_check_matrix_births`) | `08ea405` |
+| **M2** train | self-supervised distillation of each encoder into a 4-class regime NN (real accuracy ~0.85; sets `current_epoch`) + honesty guard (no training a constant) | `a20e70b` |
+| **M3** impact/READY | set `READY` on train (enters broadcast ranking → impact computed ~0.90) + protect specialists from generic cap-prune | `18bb3ed` |
+| **M3** sub-conscious lane | a SEPARATE matrix-vs-matrix broadcast lane (Tier-2 can't out-score Tier-1 for the main slots) — hold a lane slot `dwell≥10` ⇒ `PROMOTED`. David's design. | `72e1ca7` |
+| **M1.1** variation gate | only birth focuses with signal *variation* (≥2 regimes = something to learn), so un-trainable idle focuses can't fill the cap and starve trainable ones | `d57b58f` |
+
+**Live trajectory (proven):** signal 0→31 over ~1h → 2 born (variation-gated) → trained to acc ~0.86,
+impact 0.90 → `verified` → sub-conscious lane dwell 2→4→6→9→11 → **`PROMOTED ×2`**. `positive_memory`/
+`negative_memory`/`skill_transfer` stayed `not_born` — correct: no signal variation in an idle brain,
+they honestly wait for real lived events. Broadcast **expansion** (4→6) intentionally NOT triggered:
+beyond `promoted≥2` + `impact>0.05` it needs **7-day stability** (earned, not rushed).
+
+**Honesty held throughout:** advisory only, no behavior authority; accuracy is real (the NN genuinely
+learns its encoder); the guard refuses constant-fits; never-declare. The sub-conscious lane is the
+architectural seed of Matrix **v2**'s per-domain sub-consciousness broadcast. 13 matrix logic tests
+(torch training live/CI). Memory: [[matrix-protocol-verification]].
+
 ## #9.3-A — goal grounding: metric-goal churn dampening (2026-06-07, branch `thespark`)
 
 **The defect: navel-gazing goal churn.** Live: 56 `system_health` (metric) goals vs 3
