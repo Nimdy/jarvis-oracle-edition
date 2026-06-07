@@ -168,6 +168,11 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
 
 ### P2 — Voice Grounding / Bounding  *(design contract — focused pass, NOT yet built)*
 
+**The rule (one line):** *If a response makes a claim about JARVIS itself, that claim must be
+supported by the OSV or guarded as unknown / provisional / observation-only.* Grounded lead
+stays; unsupported self-claim tail is cut, repaired, or replaced. No new self-facts from the
+LLM; no new authority; no curiosity / self-improvement targeting; no goal creation.
+
 **P2 means this, and ONLY this:** for self-referential CLAIMS inside any conversational
 response, bind the voice to OSV facts. If a generated answer begins grounded but drifts into
 unsupported self-claims, **truncate / repair / replace the unsupported tail** — not the whole
