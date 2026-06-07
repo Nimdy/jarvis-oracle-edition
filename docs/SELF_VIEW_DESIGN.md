@@ -166,12 +166,28 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
   CODEBASE; dormant/gated render as such; gaps → "I don't know / can't measure yet"; the
   language guard holds; deterministic answer path needs no LLM; tests pin routing + content.
 
-### P2 — Voice Grounding / Bounding  *(build-now — the visible "stop rambling" fix)*
-- For self-referential turns, the LLM is bounded to the OSV: it renders grounded facts and
-  is **truncated/flagged** when its continuation asserts self-facts absent from the OSV.
-- Hallucination guard: divergence detector between LLM continuation and grounded self-state.
-- **Acceptance:** long self-talk can't drift into ungrounded claims; tests feed a rambling
-  continuation and prove the ungrounded tail is cut; the grounded lead is preserved.
+### P2 — Voice Grounding / Bounding  *(design contract — focused pass, NOT yet built)*
+
+**P2 means this, and ONLY this:** for self-referential CLAIMS inside any conversational
+response, bind the voice to OSV facts. If a generated answer begins grounded but drifts into
+unsupported self-claims, **truncate / repair / replace the unsupported tail** — not the whole
+answer. (This addresses the other half of the original defect: the LLM that started grounded
+then rambled into self-claims past its grounded state.)
+
+**P2 does NOT:** make JARVIS more autonomous · change general reasoning · add personality ·
+create self-facts · become "LLM police for everything." It only prevents *unsupported
+self-reference* from escaping. Narrow scope is the point — P1 was scoped; P2 must be too, or
+it silently becomes a broad conversational control layer.
+
+**Acceptance — P2 passes only if:**
+- unsupported self-claims are detected in generated continuations
+- grounded self-claims from the OSV survive
+- unsupported tails are cut or rewritten (not the whole answer)
+- ordinary non-self content is NOT over-filtered
+- consciousness-like claims use the §6 balanced template
+- emergence-like anomalies are captured via `observer.observe_emergence` (observation-only)
+- no new facts originate from the LLM
+- no behavior authority / goals / curiosity / self-improvement targeting change
 
 ### P3 — Curiosity Targeting (spark integration)  *(shadow → earned)*
 - The grounding ring points curiosity at OSV **gaps/weaknesses**: low `predictive_accuracy`

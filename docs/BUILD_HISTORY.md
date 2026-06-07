@@ -5,6 +5,37 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
+## Operational Self-View (OSV) — P0 → P1 (2026-06-06, branch `thespark`)
+
+**The defect this fixed: JARVIS could not safely talk about itself.** Self-questions routed
+to a codebase symbol search (`Found 15 symbol(s)…`) or drifted through the LLM. The answer
+*source* now changed — self-question → INTROSPECTION → deterministic OSV articulation →
+provenance-bound answer. Design: `docs/SELF_VIEW_DESIGN.md` (GitHub #23). Read-only,
+shadow/earned, **no new behavior authority**.
+
+| Phase | What shipped | Commit |
+| --- | --- | --- |
+| **P0** | Self-model substrate: enum-like `Provenance` + `Fact` (is_measurement derived, can't be faked), pure read-only `SelfViewSynthesizer`, `GET /api/self-view`, persisted snapshot | `3185e87` |
+| **P0.5** | Sourced from the existing `build_cache` aggregator (80+ subsystems), not 7 hand-picked | `42b9479`, `806e071` |
+| **P0.6** | Bespoke per-subsystem adapters (one each, refuse-to-guess; no generic detector) | `3748b65`, `9c86fe8` |
+| **P1** | Self-introspection answers from the OSV (articulator + router override + danger guard) | `8e61f44`, `3ee0acc` |
+
+**Live, verified:** 19/19 subsystems classified — `measured: 13, shadow_only: 4,
+self_scored: 2`, zero unknown. "what new features?" → earned skill + code changeset (not a
+grep). "what can you do?" → active/measured vs shadow/zero-authority vs self-reported vs
+gaps. "are you conscious?" → balanced *"no measured basis to claim consciousness… recorded
+as observations, not proof."*
+
+**Contract held throughout (strict in claims, rich in capture):** no LLM-authored
+self-facts; no unearned consciousness claim (regression-tested danger guard); measured /
+shadow / self-scored / dormant / gap states stay distinct; emergence-like signal captured
+via `observer.observe_emergence`, never declared; no curiosity/self-improvement targeting,
+no goal creation, no gate tuning. Built on the #9 honesty foundation. Tests: 41 self-view +
+39 router. **Honest scope: necessary infrastructure for honest self-reference — NOT evidence
+of consciousness.** P2 (voice grounding) is the next, separate lane.
+
+---
+
 ## Cognition Growth: CognitivePlanner + Counterfactual Engine (2026-06-06, branch `thespark`)
 
 Two new cognition subsystems landed — both **shadow-first, read-only, no-LLM, and
