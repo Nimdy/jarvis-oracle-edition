@@ -680,6 +680,14 @@ _INTENT_PATTERNS: list[tuple[re.Pattern, ToolType, float]] = [
     (re.compile(r"\bi(?:'m| am)\s+(\w+).{0,15}(?:remember|learn|enroll|register|save)", re.I), ToolType.IDENTITY, 0.9),
     (re.compile(r"\b(?:who am i|who('s| is) (?:speaking|talking))\b", re.I), ToolType.IDENTITY, 0.9),
     (re.compile(r"\b(?:do you (?:know|recognize) (?:me|who i am))\b", re.I), ToolType.IDENTITY, 0.85),
+    # Recognition probes about the present speaker: "do you know who this is?",
+    # "do you recognize this voice?", "can you tell who this is?". These were falling to
+    # NONE -> LLM, which confabulated "I don't have camera access" while fusion already
+    # held the answer (verified_both: David). Route to IDENTITY so the deterministic,
+    # fusion-grounded branch answers from live voice/face state instead of guessing.
+    (re.compile(r"\bdo you (?:know|recognize|see|tell)\b.{0,15}\bwho (?:this|that|i) (?:is|am)\b", re.I), ToolType.IDENTITY, 0.85),
+    (re.compile(r"\b(?:do you (?:know|recognize)|recognize)\b.{0,8}\b(?:this|whose|my) (?:voice|face)\b", re.I), ToolType.IDENTITY, 0.85),
+    (re.compile(r"\bcan you tell who (?:this|that) is\b", re.I), ToolType.IDENTITY, 0.85),
     (re.compile(r"\b(?:remember|learn|save|enroll|register|record)\s+(?:me|my (?:voice|face))\b", re.I), ToolType.IDENTITY, 0.9),
     (re.compile(r"\b(?:record|save|store)\s+(?:my (?:voice|face|image)|me)\b", re.I), ToolType.IDENTITY, 0.9),
     (re.compile(r"\b(?:register|enroll|save|record|learn)\s+(?:her|his|their|that)\s+(?:voice|face)\b", re.I), ToolType.IDENTITY, 0.9),
