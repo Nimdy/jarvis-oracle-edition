@@ -4,6 +4,10 @@ from __future__ import annotations
 
 # ── Capacity caps ──
 MAX_ACTIVE_GOALS: int = 5
+# #9.3-A: cap concurrently-active metric (system_health) goals so they can't fill all
+# active slots and crowd out user/world-grounded goals. Metric goals have no execution
+# path today, so an unbounded share of them just churns (create -> stale -> abandon).
+MAX_ACTIVE_SYSTEM_HEALTH: int = 2
 MAX_CANDIDATES: int = 20
 MAX_COMPLETED_RETAINED: int = 50
 MAX_TASKS_PER_GOAL: int = 8

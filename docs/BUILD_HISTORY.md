@@ -5,6 +5,31 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
+## #9.3-A — goal grounding: metric-goal churn dampening (2026-06-07, branch `thespark`)
+
+**The defect: navel-gazing goal churn.** Live: 56 `system_health` (metric) goals vs 3
+`user_goal`, **52/59 abandoned (~88%)**. JARVIS manufactured low-value internal-repair goals
+on a *single* below-threshold sample, then auto-abandoned them (metric producers are
+observational-only → no execution → no progress → `_prune_stale` abandons at 2h). David's
+load-bearing reframe: #9.3-A should make JARVIS **stop manufacturing** low-value metric goals,
+not want more things. Direction A = **dampen the churn, then observe** (B/C deferred).
+
+What already existed (not rebuilt): per-key abandon-counts + permanent-suppress, cooldown,
+`MAX_NEW_GOALS_PER_HOUR`, `MAX_ACTIVE_GOALS`, promotion-needs-2-deficit-cycles.
+
+What A added:
+| Part | Change |
+| --- | --- |
+| **A.1 sustained gate** | `signal_producers.detect_metric_deficits`: the `health_report` + `calibration` loops now require a deficit on ≥2 consecutive ticks before emitting (mirrors the `active_deficits` duration gate). Recovery resets the streak, so flapping never qualifies. New `metric_sustained_skipped` counter. |
+| **A.2 per-kind cap** | `MAX_ACTIVE_SYSTEM_HEALTH=2` — metric goals can't fill all 5 active slots and crowd out user/world goals (user requests are never metric-capped). |
+| **A.3 source telemetry** | `GoalManager` tracks created/completed/abandoned **by source_scope** (+ derived `abandon_rate`), exposed at `/api/goals → source_lifecycle`, so the success metric is measurable. |
+
+**Deferred deliberately:** the "actionable repair path" gate (behavior policy — what JARVIS is
+allowed to chase) waits until the dampening's effect is observed, per the design's own
+"dampen-then-observe" ordering. **No autonomy promotion, no behavior authority change.** Tests:
+11 in `test_goal_grounding_9_3.py` + 287 goal-suite green. Success metric to watch live:
+metric abandon-rate ↓, user/world share ↑ organically.
+
 ## Memory recall — relevance fix (2026-06-06, branch `thespark`)
 
 **The defect: recall ranked by memory *weight*, not query *similarity*.** The vector+ranker

@@ -23,6 +23,9 @@ _producer_stats: dict[str, int] = {
     "metric_created": 0,
     "metric_warmup_skipped": 0,
     "metric_ignored": 0,
+    # #9.3-A: deficits seen below threshold but NOT yet sustained long enough to
+    # create a goal (the single-sample churn this gate suppresses).
+    "metric_sustained_skipped": 0,
     "autonomy_created": 0,
     "autonomy_ignored": 0,
     "merges": 0,
@@ -68,6 +71,36 @@ def metric_warmup_ready(uptime_s: float) -> bool:
     if _warmup_state["ticks_seen"] < _WARMUP_MIN_TICKS:
         return False
     return True
+
+
+# ── #9.3-A: sustained-deficit gate ──
+# A metric goal must NOT be manufactured from a single weak sample. We require a
+# deficit to persist across >= N consecutive goal ticks (~240s at the 120s cadence)
+# before it is allowed to become a goal signal — mirroring the duration>=300s gate the
+# active_deficits source already applies. This is the core of direction A: stop the
+# create->can't-act->auto-abandon churn at the source. A value that recovers above
+# threshold resets the streak, so flapping right at the threshold never qualifies.
+
+_DEFICIT_STREAK_MIN: int = 2
+_deficit_streaks: dict[str, int] = {}
+
+
+def _deficit_sustained(key: str, is_deficit: bool) -> bool:
+    """Track consecutive below-threshold observations for *key*.
+
+    Returns True only once the deficit has been observed on >= _DEFICIT_STREAK_MIN
+    consecutive ticks. Recovery (is_deficit False) resets the streak.
+    """
+    if is_deficit:
+        _deficit_streaks[key] = _deficit_streaks.get(key, 0) + 1
+    else:
+        _deficit_streaks.pop(key, None)
+    return _deficit_streaks.get(key, 0) >= _DEFICIT_STREAK_MIN
+
+
+def get_deficit_streaks() -> dict[str, int]:
+    """Expose current per-component deficit streaks (observability)."""
+    return dict(_deficit_streaks)
 
 
 # ── Conversation producer ──
@@ -297,20 +330,26 @@ def detect_metric_deficits(
         return []
 
     signals: list[GoalSignal] = []
+    sustained_skipped = 0
 
     if health_report:
         components = health_report.get("components", {})
         for cfg in _DEFICIT_CONFIGS:
             value = components.get(cfg["component"], 1.0)
-            if value < cfg["threshold"]:
-                signals.append(GoalSignal(
-                    signal_type="metric_deficit",
-                    source="health_monitor",
-                    source_scope="metric",
-                    content=cfg["template"].format(value=value),
-                    tag_cluster=cfg["tags"],
-                    priority_hint=0.4 + 0.3 * (1.0 - value),
-                ))
+            is_deficit = value < cfg["threshold"]
+            # #9.3-A: require the deficit to persist before manufacturing a goal.
+            if not _deficit_sustained(f"health:{cfg['component']}", is_deficit):
+                if is_deficit:
+                    sustained_skipped += 1
+                continue
+            signals.append(GoalSignal(
+                signal_type="metric_deficit",
+                source="health_monitor",
+                source_scope="metric",
+                content=cfg["template"].format(value=value),
+                tag_cluster=cfg["tags"],
+                priority_hint=0.4 + 0.3 * (1.0 - value),
+            ))
 
     if calibration_state:
         domain_scores = calibration_state.get("domain_scores", {})
@@ -318,15 +357,20 @@ def detect_metric_deficits(
         for domain, score in domain_scores.items():
             if provisional.get(domain):
                 continue
-            if score < 0.30:
-                signals.append(GoalSignal(
-                    signal_type="metric_deficit",
-                    source="truth_calibration",
-                    source_scope="metric",
-                    content=f"Calibration domain '{domain}' critically low: {score:.2f}",
-                    tag_cluster=("calibration", domain, "drift"),
-                    priority_hint=0.5,
-                ))
+            is_deficit = score < 0.30
+            # #9.3-A: same sustained gate for calibration drift.
+            if not _deficit_sustained(f"calibration:{domain}", is_deficit):
+                if is_deficit:
+                    sustained_skipped += 1
+                continue
+            signals.append(GoalSignal(
+                signal_type="metric_deficit",
+                source="truth_calibration",
+                source_scope="metric",
+                content=f"Calibration domain '{domain}' critically low: {score:.2f}",
+                tag_cluster=("calibration", domain, "drift"),
+                priority_hint=0.5,
+            ))
 
     if active_deficits:
         for metric_name, info in active_deficits.items():
@@ -346,6 +390,9 @@ def detect_metric_deficits(
                 tag_cluster=("metric", metric_name.replace("_", " ").split()[0], severity),
                 priority_hint=0.5 if severity == "medium" else 0.6,
             ))
+
+    if sustained_skipped:
+        _producer_stats["metric_sustained_skipped"] += sustained_skipped
 
     if signals:
         _producer_stats["metric_created"] += len(signals)
