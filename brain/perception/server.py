@@ -135,6 +135,10 @@ class PerceptionServer:
         self._event_counts: dict[str, int] = {}
         self._connect_count: int = 0
         self._disconnect_count: int = 0
+        # Raw-audio receipt (the mic stream rides the bytes path, NOT _process_event,
+        # so track it separately for mic liveness on the operational dashboard).
+        self._audio_chunk_count: int = 0
+        self._last_audio_recv: float = 0.0
 
     def set_face_identifier(self, identifier: Any) -> None:
         self._face_identifier = identifier
@@ -190,6 +194,10 @@ class PerceptionServer:
             "events_in_window": sum(windowed.values()),
             "window_s": window_s,
             "types": types,
+            "audio": {
+                "chunks": self._audio_chunk_count,
+                "last_recv_age_s": round(now - self._last_audio_recv, 1) if self._last_audio_recv else None,
+            },
         }
 
     async def start(self) -> None:
@@ -334,6 +342,8 @@ class PerceptionServer:
             async for raw in websocket:
                 if isinstance(raw, bytes):
                     event_bus.emit(PERCEPTION_RAW_AUDIO, pcm_bytes=raw, sensor_id=sensor_id)
+                    self._audio_chunk_count += 1
+                    self._last_audio_recv = time.time()
                     continue
                 try:
                     data = json.loads(raw)

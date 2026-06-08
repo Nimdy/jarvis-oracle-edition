@@ -23,7 +23,7 @@ except Exception:  # pragma: no cover
     _derive_pi5_devices = None
 
 
-def _stub(recv, counts, connections, cc=1, dc=0):
+def _stub(recv, counts, connections, cc=1, dc=0, audio_chunks=0, audio_age=None):
     now = time.time()
     return SimpleNamespace(
         _event_recv_log=deque(recv),
@@ -33,6 +33,8 @@ def _stub(recv, counts, connections, cc=1, dc=0):
         _disconnect_count=dc,
         _last_sensor_connect=now - 5,
         _last_sensor_disconnect=now - 60,
+        _audio_chunk_count=audio_chunks,
+        _last_audio_recv=(now - audio_age) if audio_age is not None else 0.0,
     )
 
 
@@ -73,6 +75,17 @@ class TestLinkHealth:
         h = PerceptionServer.get_link_health(_stub([], {}, {}, cc=4, dc=3))
         assert h["connect_count"] == 4
         assert h["disconnect_count"] == 3
+
+    def test_audio_receipt_surfaced(self):
+        # mic rides the bytes path (not _process_event) — tracked separately
+        h = PerceptionServer.get_link_health(_stub([], {}, {}, audio_chunks=240, audio_age=1.2))
+        assert h["audio"]["chunks"] == 240
+        assert h["audio"]["last_recv_age_s"] is not None and h["audio"]["last_recv_age_s"] >= 1.0
+
+    def test_audio_absent(self):
+        h = PerceptionServer.get_link_health(_stub([], {}, {}))
+        assert h["audio"]["chunks"] == 0
+        assert h["audio"]["last_recv_age_s"] is None
 
 
 @pytest.mark.skipif(_derive_pi5_devices is None, reason="dashboard.app import unavailable")
@@ -126,3 +139,24 @@ class TestDeriveDevices:
         # no fps, no frame events -> not asserted operational
         assert devs["Camera (imx519)"]["present"] is False
         assert devs["Camera (imx519)"]["status"] == "unknown"
+
+    def test_mic_operational_when_audio_flows(self):
+        cache = {"sensors": ["pi5-senses"], "sensor_health": {},
+                 "link": {"types": {}, "audio": {"chunks": 500, "last_recv_age_s": 0.8}},
+                 "speakers": {}, "lidar": {}}
+        devs = {d["name"]: d for d in _derive_pi5_devices(cache)}
+        assert devs["Microphone"]["present"] is True
+        assert devs["Microphone"]["status"] == "operational"
+
+    def test_mic_stale_when_audio_old(self):
+        cache = {"sensors": ["pi5-senses"], "sensor_health": {},
+                 "link": {"types": {}, "audio": {"chunks": 500, "last_recv_age_s": 300.0}},
+                 "speakers": {}, "lidar": {}}
+        devs = {d["name"]: d for d in _derive_pi5_devices(cache)}
+        assert devs["Microphone"]["status"] == "stale"
+
+    def test_mic_pending_when_no_audio(self):
+        cache = {"sensors": ["pi5-senses"], "sensor_health": {}, "link": {"types": {}},
+                 "speakers": {}, "lidar": {}}
+        devs = {d["name"]: d for d in _derive_pi5_devices(cache)}
+        assert devs["Microphone"]["status"] == "telemetry_pending"

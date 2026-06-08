@@ -19,7 +19,9 @@ PI5_FRESH_S = 30.0
 def derive_pi5_devices(cache: dict[str, Any]) -> list[dict[str, Any]]:
     """Build the device list from the dashboard snapshot cache."""
     sh = cache.get("sensor_health", {}) or {}
-    types = (cache.get("link", {}) or {}).get("types", {}) or {}
+    link = cache.get("link", {}) or {}
+    types = link.get("types", {}) or {}
+    audio = link.get("audio", {}) or {}
     lidar = cache.get("lidar", {}) or {}
     speakers = cache.get("speakers", {}) or {}
     sids = cache.get("sensors", []) or []
@@ -53,8 +55,10 @@ def derive_pi5_devices(cache: dict[str, Any]) -> list[dict[str, Any]]:
          "status": ("playing" if prim.get("audio_playing")
                     else "available" if speakers.get("available") else "down"),
          "detail": {"current": speakers.get("current")}},
-        {"name": "Microphone", "kind": "mic", "present": True, "status": "telemetry_pending",
-         "detail": {}, "note": "no direct mic telemetry yet (RMS/wake-score) — phase 2"},
+        {"name": "Microphone", "kind": "mic",
+         "present": (audio.get("chunks") or 0) > 0,
+         "status": _op(audio.get("last_recv_age_s")) if audio.get("chunks") else "telemetry_pending",
+         "detail": {"chunks": audio.get("chunks"), "last_audio_age_s": audio.get("last_recv_age_s")}},
         {"name": "RPLIDAR", "kind": "lidar", "present": bool(lidar),
          "status": "operational" if lidar else "absent",
          "detail": {"sensors": list(lidar.keys())}},

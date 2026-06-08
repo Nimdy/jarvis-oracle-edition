@@ -116,6 +116,8 @@
       if(det.fps!=null) bits.push(V2.f2(det.fps)+'fps');
       if(det.last_inference_age_s!=null) bits.push('infer '+V2.f2(det.last_inference_age_s)+'s ago');
       if(det.last_frame_event_age_s!=null) bits.push('frame '+V2.f2(det.last_frame_event_age_s)+'s ago');
+      if(det.last_audio_age_s!=null) bits.push('audio '+V2.f2(det.last_audio_age_s)+'s ago');
+      if(det.chunks!=null) bits.push(det.chunks+' chunks');
       if(det.uptime_s!=null) bits.push('up '+V2.fmtUptime(det.uptime_s));
       if(det.current) bits.push(det.current);
       if(det.sensors&&det.sensors.length) bits.push(det.sensors.join(','));
