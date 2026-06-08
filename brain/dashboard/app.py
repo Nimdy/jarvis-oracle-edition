@@ -1982,6 +1982,15 @@ def _create_app() -> FastAPI:
             for m in memories
         ]
 
+    @app.get("/api/memory-integrity")
+    async def api_memory_integrity():
+        """Banter-firewall observability: provenance trust-class distribution +
+        recent writes with their provenance. Read-only — watch chatter stay
+        chatter (casual_conversation, 0.0 trust) while golden commands and
+        validated research write authoritatively. No fabricated gauges.
+        """
+        return _cache.get("memory_provenance", {})
+
     @app.get("/api/memories/search")
     async def api_memory_search(q: str = "", tag: str = "", type: str = "",
                                 limit: int = 20):
