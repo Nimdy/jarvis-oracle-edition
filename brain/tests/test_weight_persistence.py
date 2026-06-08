@@ -107,13 +107,14 @@ class TestRestore:
         return SimpleNamespace(_registry=fake_registry, _engine=fake_engine,
                                _networks={}, _networks_lock=threading.Lock())
 
-    def test_restores_shadow_skips_matrix(self, tmp_path):
+    def test_restores_shadow_and_tier2_with_firewall(self, tmp_path):
+        from hemisphere.types import SpecialistLifecycleStage
         p = tmp_path / "w.pt"; p.write_text("w")
         loaded = []
         fake_engine = SimpleNamespace(load_model=lambda nid, topo, path: loaded.append(nid))
         best = {
-            "diagnostic": _mv("diagnostic", 3, 0.7, str(p)),       # shadow -> restore
-            "positive_memory": _mv("positive_memory", 2, 0.9, str(p)),  # Tier-2 -> SKIP
+            "diagnostic": _mv("diagnostic", 3, 0.7, str(p)),            # shadow
+            "positive_memory": _mv("positive_memory", 2, 0.9, str(p)),  # Tier-2
         }
         fake_registry = SimpleNamespace(
             foci=lambda: list(best.keys()),
@@ -122,13 +123,37 @@ class TestRestore:
         )
         stub = self._stub(fake_registry, fake_engine)
         HemisphereOrchestrator._restore_persisted_specialists(stub)
-        # shadow restored, weights loaded; authority-bearing focus skipped entirely
-        assert "diagnostic-3" in stub._networks
-        assert "positive_memory-2" not in stub._networks
-        assert loaded == ["diagnostic-3"]  # load_model never called for the Tier-2 focus
-        net = stub._networks["diagnostic-3"]
-        assert net.status.value == "ready"
-        assert net.specialist_lifecycle is None  # no Tier-2 authority restored
+        # BOTH restored, weights loaded for both
+        assert set(loaded) == {"diagnostic-3", "positive_memory-2"}
+        # shadow: keeps training accuracy, no lifecycle (no authority to leak)
+        shadow = stub._networks["diagnostic-3"]
+        assert shadow.status.value == "ready"
+        assert shadow.specialist_lifecycle is None
+        assert shadow.performance.accuracy == 0.7
+        # Tier-2 FIREWALL: weights back, but ALL live standing reset
+        t2 = stub._networks["positive_memory-2"]
+        assert t2.specialist_lifecycle == SpecialistLifecycleStage.PROBATIONARY_TRAINING
+        assert t2.specialist_impact_score == 0.0
+        assert t2.specialist_verification_ts == 0.0
+        assert t2.performance.accuracy == 0.0  # NOT the persisted 0.9 — re-measure live
+
+    def test_tier2_restore_respects_probationary_cap(self, tmp_path):
+        from hemisphere.types import MAX_PROBATIONARY_SPECIALISTS, MATRIX_ELIGIBLE_FOCUSES
+        p = tmp_path / "w.pt"; p.write_text("w")
+        loaded = []
+        fake_engine = SimpleNamespace(load_model=lambda nid, topo, path: loaded.append(nid))
+        # every Tier-2 focus has persisted weights (more than the cap)
+        best = {f.value: _mv(f.value, 1, 0.8, str(p)) for f in MATRIX_ELIGIBLE_FOCUSES}
+        assert len(best) > MAX_PROBATIONARY_SPECIALISTS
+        fake_registry = SimpleNamespace(
+            foci=lambda: list(best.keys()),
+            best_version=lambda f: best[f],
+            discard_version=lambda *a, **k: None,
+        )
+        stub = self._stub(fake_registry, fake_engine)
+        HemisphereOrchestrator._restore_persisted_specialists(stub)
+        assert len(stub._networks) == MAX_PROBATIONARY_SPECIALISTS
+        assert len(loaded) == MAX_PROBATIONARY_SPECIALISTS
 
     def test_incompatible_checkpoint_discarded_not_fatal(self, tmp_path):
         p = tmp_path / "w.pt"; p.write_text("w")

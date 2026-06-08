@@ -236,12 +236,19 @@ class HemisphereOrchestrator:
     def _restore_persisted_specialists(self) -> None:
         """Reload last-known-good specialist WEIGHTS from the registry on boot.
 
-        Weights persist (fast rebuild — no retrain from zero). AUTHORITY does NOT:
-        P0 restores only shadow distillation / Tier-1 specialists, which carry no
-        Tier-2 broadcast authority — there is nothing to smuggle. Authority-bearing
-        Matrix Tier-2 specialists (MATRIX_ELIGIBLE_FOCUSES) are deliberately SKIPPED
-        — restoring their broadcast standing across a reset would violate the
-        lived-only firewall; they re-birth and re-earn on live reps.
+        Weights persist (fast rebuild — no retrain from zero); AUTHORITY re-earns.
+
+        - Shadow / Tier-1 specialists carry no Tier-2 broadcast authority, so their
+          weights AND last training accuracy are restored (the accuracy lets the
+          by-focus ranking reuse these good weights).
+        - Authority-bearing Matrix Tier-2 specialists (MATRIX_ELIGIBLE_FOCUSES) get
+          their WEIGHTS back but ALL live standing RESET — lifecycle →
+          PROBATIONARY_TRAINING, impact/verification → 0, accuracy → 0. They re-walk
+          every gate (acc>0.5 → verified → impact>0.3 → broadcast → dwell≥10 →
+          promoted) on LIVE reps; a stale persisted accuracy must not skip a gate.
+          Restoring at PROBATIONARY means _check_matrix_births treats the focus as
+          occupied (no duplicate birth) and they count toward
+          MAX_PROBATIONARY_SPECIALISTS — which we also honour while restoring.
 
         Fully fail-safe: a corrupt or topology-incompatible checkpoint is skipped
         and discarded (so it stops poisoning future boots); restore never breaks
@@ -249,18 +256,21 @@ class HemisphereOrchestrator:
         reuses them instead of rebuilding from scratch.
         """
         from hemisphere.types import (
-            MATRIX_ELIGIBLE_FOCUSES, PerformanceMetrics, TrainingProgress,
+            MATRIX_ELIGIBLE_FOCUSES, MAX_PROBATIONARY_SPECIALISTS,
+            PerformanceMetrics, TrainingProgress, SpecialistLifecycleStage,
         )
         from hemisphere.registry import _dict_to_topology
 
         restored = 0
+        restored_tier2 = 0
         for focus_key in self._registry.foci():
             try:
                 focus = HemisphereFocus(focus_key)
             except ValueError:
                 continue  # unknown/legacy focus key — leave its checkpoint alone
-            if focus in MATRIX_ELIGIBLE_FOCUSES:
-                continue  # authority-bearing — re-earn on live reps, do not restore (P1)
+            is_matrix = focus in MATRIX_ELIGIBLE_FOCUSES
+            if is_matrix and restored_tier2 >= MAX_PROBATIONARY_SPECIALISTS:
+                continue  # honour the probationary cap
             mv = self._registry.best_version(focus_key)
             if mv is None:
                 continue
@@ -277,19 +287,35 @@ class HemisphereOrchestrator:
                 except Exception:
                     pass
                 continue
-            net = NetworkArchitecture(
-                id=mv.network_id, name=mv.name or focus_key, focus=focus,
-                topology=topology,
-                performance=PerformanceMetrics(accuracy=mv.accuracy),
-                training_progress=TrainingProgress(),
-                status=NetworkStatus.READY,
-            )
+            if is_matrix:
+                # FIREWALL: weights back, all live authority/standing reset so it
+                # re-walks every gate on live reps.
+                net = NetworkArchitecture(
+                    id=mv.network_id, name=mv.name or focus_key, focus=focus,
+                    topology=topology,
+                    performance=PerformanceMetrics(),  # reset — re-measure live
+                    training_progress=TrainingProgress(),
+                    status=NetworkStatus.READY,
+                    specialist_lifecycle=SpecialistLifecycleStage.PROBATIONARY_TRAINING,
+                    specialist_impact_score=0.0,
+                    specialist_verification_ts=0.0,
+                )
+                restored_tier2 += 1
+            else:
+                net = NetworkArchitecture(
+                    id=mv.network_id, name=mv.name or focus_key, focus=focus,
+                    topology=topology,
+                    performance=PerformanceMetrics(accuracy=mv.accuracy),
+                    training_progress=TrainingProgress(),
+                    status=NetworkStatus.READY,
+                )
             with self._networks_lock:
                 self._networks[net.id] = net
             restored += 1
         if restored:
             logger.info("Restored %d persisted specialist(s) from last-known-good "
-                        "weights (shadow/Tier-1 only; authority re-earns)", restored)
+                        "weights (%d Tier-2 re-earning authority; firewall intact)",
+                        restored, restored_tier2)
 
     def _refresh_research_priors(self) -> None:
         """Query memory for NN-related research and feed it to the architect.
