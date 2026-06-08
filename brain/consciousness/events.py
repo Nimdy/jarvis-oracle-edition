@@ -43,6 +43,8 @@ ProvenanceType = Literal[
     "web_scrap",            # Raw scraped web content — UNTRUSTED until cross-validated (data-flow firewall)
     "experiment_result",    # Self-improvement outcomes, learning job results
     "derived_pattern",      # Pattern recognition (clustering, association, analytics)
+    "casual_conversation",  # Playful/banter chatter — LOWEST trust; never asserted as fact
+                            # unless a golden command authorizes it or curiosity validates it
     "seed",                 # Birth/gestation seed memories
     "unknown",              # Legacy or unclassified
 ]
@@ -55,6 +57,7 @@ PROVENANCE_BOOST: dict[str, float] = {
     "conversation": 0.02,
     "model_inference": 0.0,
     "web_scrap": 0.0,        # untrusted scraped web data earns NO confidence boost
+    "casual_conversation": 0.0,  # banter earns NO trust — can't pollute beliefs
     "derived_pattern": 0.0,
     "seed": 0.0,
     "unknown": 0.0,
@@ -128,8 +131,51 @@ def resolve_provenance_boost(mem: Memory) -> float:
 PROVENANCE_ORDINAL: dict[str, int] = {
     "observed": 0, "user_claim": 1, "conversation": 2, "model_inference": 3,
     "external_source": 4, "experiment_result": 5, "derived_pattern": 6,
-    "seed": 7, "unknown": 8, "web_scrap": 9,
+    "seed": 7, "unknown": 8, "web_scrap": 9, "casual_conversation": 10,
 }
+
+
+def resolve_write_provenance(
+    base_provenance: str,
+    *,
+    is_golden_command: bool = False,
+    is_soft_claim: bool = False,
+    tone: str = "",
+) -> str:
+    """Decide the provenance a conversational memory is WRITTEN with — the banter
+    firewall that stops casual chatter from polluting beliefs/memory.
+
+    Rule (David's golden-command authority model):
+      1. A GOLDEN COMMAND is the write-authority. It keeps the base provenance
+         (e.g. ``user_claim``) regardless — the user explicitly meant it, even
+         mid-banter ("Jarvis, remember I like extra garlic").
+      2. Otherwise a SOFT claim — a taste/like/preference, the pollution-prone
+         class ("I love dirt on pizza") — OR a playful/casual tone is downgraded
+         to ``casual_conversation`` (0.0 trust): stored + recallable, but never
+         asserted as a fact unless curiosity/grounding later validates it
+         (→ external_source). Hard biographical facts (name/birthday/location)
+         are NOT soft and keep their base provenance — the dignity-anchor needs
+         to learn those even when they're mentioned in passing.
+      3. Otherwise (hard fact / neutral mention) the base provenance stands.
+
+    Strictly NON-elevating: only ever lowers trust, never raises it.
+    """
+    if is_golden_command:
+        return base_provenance
+    if is_soft_claim or tone in ("playful", "casual"):
+        return "casual_conversation"
+    return base_provenance
+
+
+# Soft claims = tastes/likes/preferences — the banter-prone pollution class
+# ("I love dirt on pizza"). Passive extraction downgrades these to
+# casual_conversation unless a golden command authorizes the write. Hard
+# biographical facts (name/birthday/location) are NOT here — the dignity-anchor
+# must learn those even when mentioned in passing.
+SOFT_CLAIM_CATEGORIES: frozenset[str] = frozenset({
+    "personal_preference", "personal_interest", "personal_dislike",
+    "thirdparty_preference", "former_interest",
+})
 
 
 # ---------------------------------------------------------------------------
