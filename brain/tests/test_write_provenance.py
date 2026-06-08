@@ -11,6 +11,7 @@ import pytest
 try:
     from consciousness.events import (
         PROVENANCE_BOOST, PROVENANCE_ORDINAL, resolve_write_provenance,
+        SOFT_CLAIM_CATEGORIES,
     )
 except Exception:  # pragma: no cover - heavy deps absent
     pytest.skip("consciousness.events import unavailable", allow_module_level=True)
@@ -51,11 +52,58 @@ class TestWriteProvenanceRule:
                 out = resolve_write_provenance(base, is_golden_command=golden, tone=tone)
                 assert PROVENANCE_BOOST.get(out, 0.0) <= PROVENANCE_BOOST[base]
 
+    def test_soft_claim_downgraded(self):
+        # a taste/preference (the pollution-prone class) -> protected
+        assert resolve_write_provenance("user_claim", is_soft_claim=True) == "casual_conversation"
+
+    def test_hard_claim_kept(self):
+        # a hard biographical fact (not soft, neutral tone) -> trusted, dignity-anchor learns it
+        assert resolve_write_provenance("user_claim", is_soft_claim=False) == "user_claim"
+
+    def test_golden_overrides_soft_claim(self):
+        # "Jarvis, remember I love extra garlic" -> golden authority wins
+        assert resolve_write_provenance("user_claim", is_golden_command=True, is_soft_claim=True) == "user_claim"
+
     def test_dirt_on_pizza_scenario(self):
-        # "I love dirt on pizza" said while bsing -> protected, never a fact
-        prov = resolve_write_provenance("user_claim", is_golden_command=False, tone="playful")
+        # "I love dirt on pizza" (a soft taste) while bsing -> protected, never a fact
+        prov = resolve_write_provenance("user_claim", is_golden_command=False, is_soft_claim=True)
         assert prov == "casual_conversation"
         assert PROVENANCE_BOOST[prov] == 0.0
         # ...but "Jarvis, remember I like extra garlic" (golden) IS authoritative
-        prov2 = resolve_write_provenance("user_claim", is_golden_command=True, tone="playful")
+        prov2 = resolve_write_provenance("user_claim", is_golden_command=True, is_soft_claim=True)
         assert prov2 == "user_claim"
+
+    def test_never_elevates_with_soft_claim(self):
+        base = "user_claim"
+        for golden in (True, False):
+            for soft in (True, False):
+                out = resolve_write_provenance(base, is_golden_command=golden, is_soft_claim=soft)
+                assert PROVENANCE_BOOST.get(out, 0.0) <= PROVENANCE_BOOST[base]
+
+
+class TestCategoryClassification:
+    """The taxonomy split that the conversation handler wires in: soft tastes are
+    protected, hard biographical facts are kept (dignity-anchor learns those)."""
+
+    def test_soft_categories_protected_when_not_golden(self):
+        for cat in ("personal_preference", "personal_interest", "personal_dislike",
+                    "thirdparty_preference", "former_interest"):
+            assert cat in SOFT_CLAIM_CATEGORIES
+            prov = resolve_write_provenance("user_claim", is_golden_command=False,
+                                            is_soft_claim=cat in SOFT_CLAIM_CATEGORIES)
+            assert prov == "casual_conversation", cat
+
+    def test_hard_categories_kept(self):
+        # name/birthday/location/schedule/habit must stay learnable from passing mention
+        for cat in ("personal_fact", "response_style", "personal_habit",
+                    "routine_priority", "thirdparty_fact"):
+            assert cat not in SOFT_CLAIM_CATEGORIES
+            prov = resolve_write_provenance("user_claim", is_golden_command=False,
+                                            is_soft_claim=cat in SOFT_CLAIM_CATEGORIES)
+            assert prov == "user_claim", cat
+
+    def test_golden_makes_even_soft_authoritative(self):
+        for cat in SOFT_CLAIM_CATEGORIES:
+            prov = resolve_write_provenance("user_claim", is_golden_command=True,
+                                            is_soft_claim=cat in SOFT_CLAIM_CATEGORIES)
+            assert prov == "user_claim", cat

@@ -139,6 +139,7 @@ def resolve_write_provenance(
     base_provenance: str,
     *,
     is_golden_command: bool = False,
+    is_soft_claim: bool = False,
     tone: str = "",
 ) -> str:
     """Decide the provenance a conversational memory is WRITTEN with — the banter
@@ -146,21 +147,35 @@ def resolve_write_provenance(
 
     Rule (David's golden-command authority model):
       1. A GOLDEN COMMAND is the write-authority. It keeps the base provenance
-         (e.g. ``user_claim``) regardless of tone — the user explicitly meant it,
-         even mid-banter ("Jarvis, remember that…").
-      2. Otherwise, PLAYFUL/CASUAL banter is downgraded to ``casual_conversation``
-         (0.0 trust) — a joke ("I love dirt on pizza") can never be asserted as a
-         fact. It is still stored + recallable, and curiosity/grounding may later
-         promote it via external validation.
-      3. Otherwise (serious/neutral passive mention) the base provenance stands.
+         (e.g. ``user_claim``) regardless — the user explicitly meant it, even
+         mid-banter ("Jarvis, remember I like extra garlic").
+      2. Otherwise a SOFT claim — a taste/like/preference, the pollution-prone
+         class ("I love dirt on pizza") — OR a playful/casual tone is downgraded
+         to ``casual_conversation`` (0.0 trust): stored + recallable, but never
+         asserted as a fact unless curiosity/grounding later validates it
+         (→ external_source). Hard biographical facts (name/birthday/location)
+         are NOT soft and keep their base provenance — the dignity-anchor needs
+         to learn those even when they're mentioned in passing.
+      3. Otherwise (hard fact / neutral mention) the base provenance stands.
 
     Strictly NON-elevating: only ever lowers trust, never raises it.
     """
     if is_golden_command:
         return base_provenance
-    if tone in ("playful", "casual"):
+    if is_soft_claim or tone in ("playful", "casual"):
         return "casual_conversation"
     return base_provenance
+
+
+# Soft claims = tastes/likes/preferences — the banter-prone pollution class
+# ("I love dirt on pizza"). Passive extraction downgrades these to
+# casual_conversation unless a golden command authorizes the write. Hard
+# biographical facts (name/birthday/location) are NOT here — the dignity-anchor
+# must learn those even when mentioned in passing.
+SOFT_CLAIM_CATEGORIES: frozenset[str] = frozenset({
+    "personal_preference", "personal_interest", "personal_dislike",
+    "thirdparty_preference", "former_interest",
+})
 
 
 # ---------------------------------------------------------------------------

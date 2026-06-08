@@ -11,14 +11,20 @@ from pathlib import Path as _Path
 from typing import Any
 
 from consciousness.engine import ConsciousnessEngine
-from consciousness.events import event_bus, CONVERSATION_USER_MESSAGE, CONVERSATION_RESPONSE
+from consciousness.events import (
+    event_bus, CONVERSATION_USER_MESSAGE, CONVERSATION_RESPONSE,
+    resolve_write_provenance, SOFT_CLAIM_CATEGORIES,
+)
 from consciousness.release_validation import output_release_validator
 from consciousness.trace_context import build_trace_context
 from consciousness.soul import soul_service
 from reasoning.response import ResponseGenerator
 from reasoning.ollama_client import OllamaClient
 from reasoning.claude_client import ClaudeClient
-from reasoning.golden_words import GoldenCommandContext, list_canonical_commands, with_golden_outcome
+from reasoning.golden_words import (
+    GoldenCommandContext, list_canonical_commands, with_golden_outcome,
+    parse_golden_command,
+)
 from reasoning.tool_router import tool_router, ToolType, RoutingResult
 from reasoning.context import context_builder
 from reasoning.bounded_response import articulate_meaning_frame, build_meaning_frame
@@ -1887,6 +1893,7 @@ def _store_personal_memory(
     speaker: str,
     *,
     extra_tags: list[str] | None = None,
+    provenance: str = "user_claim",
 ) -> bool:
     """Create a user_preference memory through the unified write path."""
     payload, metadata_tags = _derive_personal_memory_metadata(payload, category)
@@ -1917,7 +1924,7 @@ def _store_personal_memory(
         payload=payload,
         weight=weight,
         tags=tags,
-        provenance="user_claim",
+        provenance=provenance,
         **identity_kwargs,
     ))
     if mem:
@@ -2049,6 +2056,7 @@ def _store_thirdparty_memory(
     relation: str,
     *,
     extra_tags: list[str] | None = None,
+    provenance: str = "user_claim",
 ) -> bool:
     """Create a user_preference memory for a third-party referenced by the user."""
     payload, metadata_tags = _derive_personal_memory_metadata(payload, category)
@@ -2109,7 +2117,7 @@ def _store_thirdparty_memory(
         payload=payload,
         weight=0.75 if extra_tags and "explicit_core_memory" in extra_tags else 0.65,
         tags=tags,
-        provenance="user_claim",
+        provenance=provenance,
         **identity_kwargs,
     ))
     if mem:
@@ -2301,16 +2309,33 @@ def _extract_personal_intel(
             "stored_categories": [],
         }
 
+    # Banter firewall (David's golden-command authority model): a golden command
+    # is the write-authority (authoritative even mid-banter); otherwise soft
+    # tastes/preferences ("I love dirt on pizza") are downgraded to the 0.0-trust
+    # casual_conversation class so chatter can't pollute beliefs OR the
+    # relationship profile. Hard facts (name/birthday/...) stay user_claim.
+    _is_golden = parse_golden_command(text) is not None
+
+    def _write_prov(category: str) -> str:
+        return resolve_write_provenance(
+            "user_claim",
+            is_golden_command=_is_golden,
+            is_soft_claim=category in SOFT_CLAIM_CATEGORIES,
+        )
+
     stored = 0
     stored_categories: list[str] = []
     for payload, category in personal:
-        if _store_personal_memory(payload, category, speaker):
-            _update_relationship(speaker, payload, category)
+        _prov = _write_prov(category)
+        if _store_personal_memory(payload, category, speaker, provenance=_prov):
+            if _prov != "casual_conversation":
+                _update_relationship(speaker, payload, category)
             stored += 1
             stored_categories.append(category)
 
     for payload, category, relation in thirdparty:
-        if _store_thirdparty_memory(payload, category, speaker, relation):
+        if _store_thirdparty_memory(payload, category, speaker, relation,
+                                    provenance=_write_prov(category)):
             stored += 1
             stored_categories.append(category)
 
