@@ -51,6 +51,16 @@ class PolicyOutcome:
     risk_score: float = 0.0
     worked: bool = False         # net_delta > MIN_MEANINGFUL_DELTA and stable
     warmup: bool = False         # recorded during session warmup period
+    # ── SPARK_DESIGN §3/§5/§7 — external grounding outcome (backward-compatible) ──
+    # external_validation: set ONLY by an external validator (source-cited
+    #   finding, user yes/no, or world-model prediction validated ≥0.7) — never
+    #   self-scored. Values: "confirmed" | "refuted" | None (not validated).
+    #   Default None so persisted JSONL without it reads fine.
+    external_validation: str | None = None
+    # grounded: True when a belief moved from inferred to externally-anchored,
+    #   INCLUDING being corrected ("no, you're wrong" → refuted, worked=False,
+    #   grounded=True). The belief gained external anchoring either way (§7).
+    grounded: bool = False
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
@@ -238,16 +248,115 @@ class AutonomyPolicyMemory:
 
         return max(-0.3, min(0.3, adjustment))
 
+    def external_validation_rate(self, window: int = 100) -> float:
+        """Fraction of recent grounding outcomes that got an EXTERNAL touch.
+
+        SPARK §2.8 / §8 P2 / §9: the primary external, falsifiable, anti-gaming
+        signal. Movable ONLY by a real external validator (source-cited finding,
+        user yes/no, or world-model validation). Denominator is grounding
+        outcomes (``external_validation`` is not None OR ``grounded`` True);
+        numerator is those that actually received an external validation
+        (``external_validation in {"confirmed", "refuted"}``). Being corrected
+        (refuted) STILL counts as an external touch — the belief moved from
+        inferred to externally-anchored (§7).
+
+        Warmup outcomes are excluded. Returns 0.0 when there is no grounding
+        traffic yet (honest: ~0 until P3+ emits external validations).
+        """
+        grounding = [
+            o for o in self._outcomes
+            if not o.warmup and (
+                getattr(o, "grounded", False)
+                or getattr(o, "external_validation", None) is not None
+            )
+        ]
+        if not grounding:
+            return 0.0
+        grounding = grounding[-window:]
+        touched = sum(
+            1 for o in grounding
+            if getattr(o, "external_validation", None) in ("confirmed", "refuted")
+        )
+        return touched / len(grounding)
+
+    def grounding_win_stats(
+        self, *, min_grounding_outcomes: int = 20, min_validation_rate: float = 0.40,
+        orphan_rate_trending_down: bool = False,
+    ) -> dict[str, Any]:
+        """Win-rate math with grounded outcomes PROMOTED in — gated (SPARK §3/§8 P5).
+
+        By design, ``grounded`` outcomes are normally EXCLUDED from win-rate math
+        (so the keystone tautology "fix shadow_default_win_rate" can't be gamed by
+        trivial grounding pokes). This method returns the win-rate that COUNTS
+        grounded outcomes as wins — but ONLY when the gate clears: ≥20 grounding
+        outcomes AND ``external_validation_rate ≥ 0.40`` AND ``orphan_rate``
+        trending down. Being CORRECTED (refuted, worked=False, grounded=True) STILL
+        counts as a grounding win — the belief moved from inferred to externally-
+        anchored, which is the goal (§7).
+
+        Returns the gate decision + both the baseline and grounding-aware win
+        counts so the caller can be transparent about which math is in force.
+        ``orphan_rate_trending_down`` is supplied by the caller (read from the
+        DeltaTracker's rolling orphan_rate ring); this method never reads it itself
+        (view-only, no new coupling).
+        """
+        non_warmup = [o for o in self._outcomes if not o.warmup]
+        total = len(non_warmup)
+        baseline_wins = sum(1 for o in non_warmup if o.worked)
+
+        grounding = [
+            o for o in non_warmup
+            if getattr(o, "grounded", False)
+            or getattr(o, "external_validation", None) is not None
+        ]
+        grounding_count = len(grounding)
+        ext_rate = self.external_validation_rate()
+
+        gate_open = (
+            grounding_count >= min_grounding_outcomes
+            and ext_rate >= min_validation_rate
+            and bool(orphan_rate_trending_down)
+        )
+
+        # A grounding WIN = the belief got an external touch (confirmed OR refuted
+        # — being corrected still anchors it). Count those that aren't already a
+        # baseline win, so we don't double-count.
+        grounding_wins = sum(
+            1 for o in grounding
+            if getattr(o, "external_validation", None) in ("confirmed", "refuted")
+            and not o.worked
+        )
+        promoted_wins = baseline_wins + (grounding_wins if gate_open else 0)
+        promoted_win_rate = (promoted_wins / total) if total > 0 else 0.0
+
+        return {
+            "gate_open": gate_open,
+            "grounding_count": grounding_count,
+            "external_validation_rate": round(ext_rate, 4),
+            "orphan_rate_trending_down": bool(orphan_rate_trending_down),
+            "baseline_wins": baseline_wins,
+            "promoted_wins": promoted_wins,
+            "promoted_win_rate": round(promoted_win_rate, 3),
+            "min_grounding_outcomes": min_grounding_outcomes,
+            "min_validation_rate": min_validation_rate,
+        }
+
     def get_stats(self) -> dict[str, Any]:
         non_warmup = [o for o in self._outcomes if not o.warmup]
         total = len(non_warmup)
         wins = sum(1 for o in non_warmup if o.worked)
         warmup_total = sum(1 for o in self._outcomes if o.warmup)
+        grounded_total = sum(
+            1 for o in non_warmup if getattr(o, "grounded", False)
+        )
         return {
             "total_outcomes": total,
             "total_wins": wins,
             "total_losses": total - wins,
             "overall_win_rate": round(wins / total, 3) if total > 0 else 0.0,
+            # SPARK §9 — external grounding telemetry (read-only observability).
+            "grounded_outcomes": grounded_total,
+            "external_validation_rate": round(self.external_validation_rate(), 4),
             "warmup_outcomes": warmup_total,
             "in_warmup": self.is_warmup(),
             "warmup_remaining_s": round(max(0.0, WARMUP_PERIOD_S - (time.time() - self._session_start)), 0),

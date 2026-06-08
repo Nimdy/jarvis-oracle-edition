@@ -935,6 +935,7 @@ from goals.signal_producers import (
     metric_warmup_ready,
     get_producer_stats,
     _warmup_state,
+    _deficit_streaks,
     _normalize_title,
 )
 
@@ -1016,14 +1017,19 @@ class TestMetricDeficitProducer:
     def _reset_warmup(self):
         _warmup_state["ticks_seen"] = 10
         _warmup_state["first_tick_time"] = time.time() - 300
+        _deficit_streaks.clear()  # #9.3-A: independent sustained-gate streaks per test
         yield
         _warmup_state["ticks_seen"] = 0
         _warmup_state["first_tick_time"] = 0.0
+        _deficit_streaks.clear()
 
     def test_detects_processing_deficit(self):
+        # #9.3-A: a deficit must be SUSTAINED (>=2 consecutive ticks) before it
+        # becomes a goal signal — one weak sample is suppressed.
         report = {"components": {"processing_health": 0.30, "memory_health": 0.9,
                                   "personality_health": 0.9, "event_health": 0.9}}
-        signals = detect_metric_deficits(report, None, None, uptime_s=300)
+        assert detect_metric_deficits(report, None, None, uptime_s=300) == []  # tick 1
+        signals = detect_metric_deficits(report, None, None, uptime_s=300)      # tick 2
         assert len(signals) >= 1
         assert any(s.signal_type == "metric_deficit" for s in signals)
         assert any("processing" in s.tag_cluster for s in signals)
@@ -1037,7 +1043,8 @@ class TestMetricDeficitProducer:
     def test_detects_calibration_drift(self):
         cal = {"domain_scores": {"autonomy": 0.20, "reasoning": 0.8},
                "domain_provisional": {"autonomy": False, "reasoning": False}}
-        signals = detect_metric_deficits(None, cal, None, uptime_s=300)
+        detect_metric_deficits(None, cal, None, uptime_s=300)              # tick 1 (sustained gate)
+        signals = detect_metric_deficits(None, cal, None, uptime_s=300)   # tick 2
         assert len(signals) == 1
         assert "calibration" in signals[0].tag_cluster
 
@@ -1082,7 +1089,8 @@ class TestMetricDeficitProducer:
         _warmup_state["first_tick_time"] = time.time() - 300
         report = {"components": {"processing_health": 0.10, "memory_health": 0.9,
                                   "personality_health": 0.9, "event_health": 0.9}}
-        signals = detect_metric_deficits(report, None, None, uptime_s=300)
+        detect_metric_deficits(report, None, None, uptime_s=300)            # tick 1 (sustained gate)
+        signals = detect_metric_deficits(report, None, None, uptime_s=300)  # tick 2
         assert len(signals) >= 1
 
 

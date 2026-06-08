@@ -68,6 +68,9 @@ class ConsciousnessEngine:
         self._policy_interface = None
         self._policy_evaluator = None
         self._last_shadow_eval: float = 0.0
+        # SPARK P1 shadow affect tick cadence + live-tick clock.
+        self._last_affect_tick_ts: float = 0.0
+        self._affect_tick_interval_s: float = 30.0
         self._hemisphere_orchestrator = None
         self._autonomy_orchestrator = None
         self._self_improve_orchestrator = None
@@ -121,7 +124,22 @@ class ConsciousnessEngine:
                 from cognition.hrr_spatial_encoder import HRRSpatialShadow
                 from cognition import mental_world as _mental_world
 
-                self._hrr_spatial_shadow = HRRSpatialShadow(self._hrr_cfg)
+                # P5 spatial-episodic "album": durable, zero-authority capture of
+                # seen worlds. Constructed on the memory side and INJECTED so the
+                # HRR module imports no canonical writer (forbidden-import scan
+                # stays green). It writes ONLY when the album sub-gate is on
+                # (runtime album_active); default OFF — no behavior change unless
+                # the operator opts in.
+                _album_sink = None
+                try:
+                    from memory.spatial_episodic_store import SpatialEpisodicStore
+                    _album_sink = SpatialEpisodicStore()
+                except Exception:
+                    _album_sink = None
+
+                self._hrr_spatial_shadow = HRRSpatialShadow(
+                    self._hrr_cfg, album_sink=_album_sink
+                )
                 register_spatial_scene_reader(self._hrr_spatial_shadow.status)
                 register_spatial_scene_recent(self._hrr_spatial_shadow.recent)
                 _mental_world.register_shadow(self._hrr_spatial_shadow)
@@ -211,6 +229,13 @@ class ConsciousnessEngine:
 
     def get_hemisphere_state(self) -> dict[str, Any] | None:
         return self._consciousness.get_hemisphere_state()
+
+    def get_matrix_report(self) -> dict[str, Any] | None:
+        """Tier-2 Matrix Protocol specialist lifecycle snapshot (observability)."""
+        orch = self._hemisphere_orchestrator
+        if not orch or not hasattr(orch, "matrix_report"):
+            return None
+        return orch.matrix_report()
 
     def enable_hemisphere(self, orchestrator: Any) -> None:
         """Enable the hemisphere NN system and wire it into the consciousness kernel."""
@@ -825,10 +850,24 @@ class ConsciousnessEngine:
                     snap = perc_orch.get_scene_snapshot()
                     tracks = perc_orch.get_spatial_tracks()
                     anchors = perc_orch.get_spatial_anchors()
-                    graph = derive_scene_graph(snap, tracks=tracks, anchors=anchors)
+                    cal_v = (
+                        perc_orch.get_calibration_version()
+                        if hasattr(perc_orch, "get_calibration_version") else 0
+                    )
+                    graph = derive_scene_graph(
+                        snap, tracks=tracks, anchors=anchors, calibration_version=cal_v
+                    )
                     self._hrr_spatial_shadow.maybe_sample(graph)
             except Exception as exc:
                 logger.debug("HRR spatial-shadow sample skipped: %s", exc)
+
+        # SPARK Phase 1 — shadow affect tick (SHADOW level, log-only, alters
+        # nothing). Computes the dopamine/serotonin/cortisol readout with
+        # provenance + cannot-lie clamps, runs the homeostatic governor, and
+        # writes the scalars + PROPOSED (unapplied) levers to the attribution
+        # ledger via the affect promotion controller. Default level 0 (shadow):
+        # drives NO real lever. Fully wrapped so a failure never touches the tick.
+        self._run_shadow_affect_tick(now)
 
         self.run_shadow_evaluation()
 
@@ -932,6 +971,152 @@ class ConsciousnessEngine:
         except Exception as exc:
             logger.warning("Shadow evaluation failed: %s", exc)
 
+    def _run_shadow_affect_tick(self, now: float) -> None:
+        """SPARK P1 — compute + regulate the affect readout in SHADOW (log-only).
+
+        Reads the real signals (DriveSignals via the autonomy orchestrator's
+        read-only accessors; contradiction_debt / quarantine pressure / curiosity
+        satisfaction / overconfidence via their singletons inside AffectState),
+        runs the homeostatic governor, and hands the snapshot to the affect
+        promotion controller which — at the DEFAULT shadow level — writes the
+        scalars + PROPOSED levers to the attribution ledger ONLY.  Applies no
+        lever. Throttled to ``_affect_tick_interval_s`` and fully guarded.
+        """
+        if now - self._last_affect_tick_ts < self._affect_tick_interval_s:
+            return
+        dt = (now - self._last_affect_tick_ts) if self._last_affect_tick_ts > 0 else 0.0
+        self._last_affect_tick_ts = now
+        try:
+            from consciousness.affect_state import affect_state
+            from consciousness.affect_promotion import affect_promotion
+
+            orch = self._autonomy_orchestrator
+            signals = None
+            delta_tracker = None
+            if orch is not None:
+                try:
+                    signals = orch.get_last_drive_signals()
+                except Exception:
+                    signals = None
+                try:
+                    delta_tracker = orch.get_delta_tracker()
+                except Exception:
+                    delta_tracker = None
+
+            snapshot = affect_state.compute(
+                signals=signals,
+                delta_tracker=delta_tracker,
+                world_model=self._world_model,
+                now_ts=now,
+            )
+            # Shadow: ledger-only write + paired-observation accrual. No lever.
+            affect_promotion.record_shadow_tick(snapshot, tick_dt_s=dt)
+            # SPARK P5 — cadence/reward coupling (LAST, riskiest). The coupling
+            # controller decides whether the PROPOSED levers become real levers:
+            # at the DEFAULT shadow level (or with the kill-switch engaged) it
+            # returns the neutral no-op set, so nothing about cadence / interval
+            # multipliers / urgency bias / memory reinforcement changes. Only an
+            # operator promotion (after every §8 P5 gate clears) makes them live.
+            self._apply_affect_coupling(snapshot, tick_dt_s=dt)
+        except Exception as exc:
+            logger.debug("Shadow affect tick skipped: %s", exc)
+
+    def _apply_affect_coupling(self, snapshot: Any, *, tick_dt_s: float = 0.0) -> None:
+        """SPARK P5 — gate + apply the affect→cadence/reward coupling (active-only).
+
+        Reads the lever set the coupling controller permits this tick.  At the
+        DEFAULT shadow level (or with the kill-switch engaged) this is the neutral
+        identity set, so every ``set_*`` call below is a no-op (cadence → 1.0,
+        memory reinforcement → 1.0, no urgency bias, no interval change) and
+        DEFAULT runtime behaviour is UNCHANGED.  Promoted to active, the levers are
+        the homeostatically-governed proposals re-clamped to their kernel-native
+        bounds.  Fully guarded — a failure never touches the tick.
+        """
+        try:
+            from consciousness.affect_coupling import affect_coupling
+        except Exception:
+            return
+        try:
+            affect_coupling.record_tick(tick_dt_s=tick_dt_s)
+            # Auto-demote / kill-switch on §8 P5 regression (governor break or
+            # external-validation collapse) before computing the levers.
+            ext_rate, grounded = self._grounding_outcome_stats()
+            affect_coupling.maybe_auto_demote(
+                external_validation_rate=ext_rate, grounded_outcomes=grounded,
+            )
+            levers = affect_coupling.apply_levers(snapshot)
+        except Exception:
+            logger.debug("affect coupling lever computation failed", exc_info=True)
+            return
+
+        # 1) Cadence multiplier → kernel (clamped [0.5,2.0] by the kernel setter,
+        #    and again by the coupling controller's clamp_levers — outermost guard).
+        try:
+            cad = levers.get("cadence_multiplier")
+            if cad is not None and self._kernel is not None:
+                self._kernel.set_cadence_multiplier(float(cad))
+        except Exception:
+            logger.debug("affect coupling cadence apply failed", exc_info=True)
+
+        # 2) Per-cycle interval multipliers → kernel (empty dict = all 1.0 = no-op).
+        #    The affect map uses cycle nicknames; only the meta-thought cycle has a
+        #    kernel-native interval, so we translate that nickname to the kernel
+        #    key. The epistemic-cycle nicknames (contradiction / truth_calibration
+        #    / belief_graph / curiosity) run off-kernel and are carried for the
+        #    autonomy layer / dashboard, not applied to the kernel loop here.
+        try:
+            iv = levers.get("interval_multipliers")
+            if isinstance(iv, dict) and self._kernel is not None and hasattr(
+                self._kernel, "set_interval_multipliers"
+            ):
+                kernel_iv: dict[str, float] = {}
+                if "meta_thought" in iv:
+                    kernel_iv["META_THOUGHT_INTERVAL_S"] = float(iv["meta_thought"])
+                self._kernel.set_interval_multipliers(kernel_iv)
+        except Exception:
+            logger.debug("affect coupling interval apply failed", exc_info=True)
+
+        # 3) Memory reinforcement multiplier (clamped [0.5,2.0] by the store).
+        try:
+            mr = levers.get("memory_reinforcement")
+            if mr is not None:
+                from memory.storage import memory_storage
+                memory_storage.set_reinforcement_multiplier(float(mr))
+        except Exception:
+            logger.debug("affect coupling memory reinforcement apply failed", exc_info=True)
+
+        # 4) Drive-urgency bias → autonomy orchestrator (additive, clamped [0,1]
+        #    after add). Empty dict = no bias = no-op.
+        try:
+            ub = levers.get("urgency_bias")
+            orch = self._autonomy_orchestrator
+            if isinstance(ub, dict) and orch is not None and hasattr(
+                orch, "set_affect_urgency_bias"
+            ):
+                orch.set_affect_urgency_bias(ub)
+        except Exception:
+            logger.debug("affect coupling urgency bias apply failed", exc_info=True)
+
+    def _grounding_outcome_stats(self) -> tuple[float, int]:
+        """Read (external_validation_rate, grounded_outcome_count) — read-only.
+
+        Used by the P5 coupling gate; defaults to (0.0, 0) when policy memory is
+        unavailable, so the gate stays shut (honest: no grounding traffic → no
+        external reward, no promotion).
+        """
+        try:
+            orch = self._autonomy_orchestrator
+            pm = getattr(orch, "_policy_memory", None) if orch is not None else None
+            if pm is None:
+                return 0.0, 0
+            stats = pm.get_stats()
+            return (
+                float(stats.get("external_validation_rate", 0.0) or 0.0),
+                int(stats.get("grounded_outcomes", 0) or 0),
+            )
+        except Exception:
+            return 0.0, 0
+
     def _compute_health_reward(self) -> float:
         """Derive a reward signal from kernel performance + consciousness metrics.
 
@@ -977,6 +1162,24 @@ class ConsciousnessEngine:
                 oc = tce._confidence_calibrator.get_overconfidence_error()
                 if oc is not None and oc > 0.05:
                     reward -= 0.15 * min(oc, 0.25)
+        except Exception:
+            pass
+
+        # SPARK_DESIGN §3(component 6) / §5 / §8 P5 — EXTERNAL grounding reward.
+        # Rewards correctness-AGAINST-WORLD: a small, bounded term proportional to
+        # the external_validation_rate (movable ONLY by a real external validator
+        # — source-cited finding, user yes/no, or world-model validation; never a
+        # self-score, §7). Behind the P5 coupling gate + kill-switch: at the
+        # DEFAULT shadow level (or kill-switch engaged) the term is exactly 0.0,
+        # so the unchanged baseline reward above is reachable verbatim. Promoted
+        # to active it nudges the reward toward grounding so the loop finally
+        # rewards being right about the world, not internal consistency.
+        try:
+            from consciousness.affect_coupling import affect_coupling
+            ext_rate, grounded = self._grounding_outcome_stats()
+            reward += affect_coupling.external_reward_term(
+                external_validation_rate=ext_rate, grounded_outcomes=grounded,
+            )
         except Exception:
             pass
 

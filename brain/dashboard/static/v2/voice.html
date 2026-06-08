@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Voice / Speech (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .honest{margin:0 0 11px;border:1px solid var(--line);border-left:3px solid var(--cyan);border-radius:4px;padding:9px 12px;background:rgba(0,180,220,.05);font-size:10.5px;color:var(--muted);}
+    .honest b{color:var(--text);}
+    /* transcript log */
+    .tlog{display:flex;flex-direction:column;gap:7px;max-height:560px;overflow-y:auto;margin-top:4px;}
+    .utt{border:1px solid var(--line);border-radius:6px;padding:8px 11px;background:rgba(3,8,14,.45);}
+    .utt .meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:9px;margin-bottom:5px;}
+    .utt .spk{font-weight:700;letter-spacing:.05em;text-transform:uppercase;font-size:9.5px;}
+    .utt .ago{margin-left:auto;color:var(--dim);font-variant-numeric:tabular-nums;}
+    .utt .said{font-size:11.5px;color:var(--text);line-height:1.35;}
+    .utt .resp{font-size:10px;color:var(--muted);line-height:1.3;margin-top:5px;border-top:1px dashed var(--line);padding-top:5px;}
+    .utt .resp .lbl{color:var(--dim);font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;margin-right:5px;}
+    .utt .lat{color:var(--dim);font-variant-numeric:tabular-nums;}
+    /* voice signal big readout */
+    .vsig{text-align:center;padding:8px 0 4px;}
+    .vsig .name{font-size:30px;font-weight:700;line-height:1;}
+    .vsig .who{font-size:9px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:9px;}
+    .vsig .conf{font-size:13px;font-variant-numeric:tabular-nums;}
+    .gridkv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:10.5px;margin-top:10px;}
+    .gridkv .k{color:var(--muted);}
+    .gridkv b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .gaterow{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px;}
+    .statline{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin:4px 0;}
+    .statline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .bigstat{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
+    .contrast b{color:var(--text);}
+    .idleblock{font-size:11px;color:var(--dim);font-style:italic;padding:14px 4px;text-align:center;border:1px dashed var(--line);border-radius:5px;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · VOICE / SPEECH</h1><span class="v2">dashboardV2</span>
+    <span class="sub">The speech surface: what JARVIS heard (transcript), who it thinks is speaking (voice signal), the mic/audio device's health, and the synthetic-STT exerciser. This is a transcript + STT log, <b>not a raw audio recorder</b> — no live waveform is exposed by the API.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col8">
+      <h2>Transcript Log <span class="asof" id="tlog-asof">episodes · —</span></h2>
+      <div class="note">Recent turns from <code>.episodes</code> (newest first, last ~25). Each row is what was <b>heard</b> (user_input) plus a truncated reply. Emotion + tool_route are JARVIS's own per-turn classification.</div>
+      <div class="tlog" id="tlog"></div>
+    </section>
+
+    <section class="card col4">
+      <h2>Live Voice Signal</h2>
+      <div class="note">Who the voice pipeline currently believes is speaking (<code>.identity.voice_signal</code>) and the speaker-trust state. Marked <b>STALE</b> when the signal is older than 30s.</div>
+      <div id="vsignal"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Mic / Audio Health</h2>
+      <div class="note">Device telemetry from <code>.sensor_health</code> (the Pi sense node). There is no per-microphone level/VU field in the API — what's reported is device presence, audio-playing state, capture phase, and host vitals.</div>
+      <div id="mic"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Synthetic STT Exerciser</h2>
+      <div class="note">The shadow STT drill from <code>.synthetic_exercise</code> — replays utterances through the route engine with side-effects blocked. <b>Shadow / templated</b>, not live audio; counts re-arm from zero each boot.</div>
+      <div id="stt"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, tag=V2.tag, gateState=V2.gateState, cap=V2.cap;
+  var FS=null, lastOkTs=0;
+  V2.renderNav('/static/v2/voice.html');
+
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function trunc(s,n){ s=String(s==null?'':s); return s.length>n ? esc(s.slice(0,n)).replace(/\s+\S*$/,'')+'…' : esc(s); }
+
+  // emotion -> color (purely a visual cue for JARVIS's own classification)
+  function emoColor(e){
+    switch(e){
+      case 'happy': return 'var(--green)';
+      case 'calm': return 'var(--cyan)';
+      case 'neutral': return 'var(--muted)';
+      case 'sad': return 'var(--amber)';
+      case 'frustrated': case 'angry': return 'var(--red)';
+      default: return 'var(--dim)';
+    }
+  }
+
+  function renderTranscript(){
+    var box=el('tlog'); if(!box) return;
+    var eps=(FS&&FS.episodes);
+    if(!Array.isArray(eps)){ box.innerHTML='<div class="idleblock">transcript UNKNOWN — full-snapshot offline</div>'; return; }
+    if(eps.length===0){ box.innerHTML='<div class="idleblock">No utterances yet — armed and listening. The transcript accumulates as conversations happen (zero here = freshly-rebooted, not broken).</div>'; el('tlog-asof').textContent='episodes · 0'; return; }
+    // newest first, last ~25
+    var rows=eps.slice().sort(function(a,b){ return (num(b.timestamp)||0)-(num(a.timestamp)||0); }).slice(0,25);
+    box.innerHTML=rows.map(function(e){
+      var spk=esc(e.speaker||'unknown');
+      var spkColor=(e.speaker&&e.speaker!=='unknown')?'var(--text)':'var(--dim)';
+      var emo=e.emotion||null;
+      var route=e.tool_route||'NONE';
+      var lat=num(e.response_latency_ms);
+      var resp=e.response_text;
+      var said=e.user_input;
+      return '<div class="utt">'+
+        '<div class="meta">'+
+          '<span class="spk" style="color:'+spkColor+'">'+spk+'</span>'+
+          (emo?tag('earned','<span style="color:'+emoColor(emo)+'">'+esc(emo)+'</span>'):tag('self','emotion —'))+
+          tag('grounded','route '+esc(route))+
+          (lat!==null?'<span class="lat">'+(lat/1000).toFixed(1)+'s</span>':'')+
+          '<span class="ago">'+ago(e.timestamp)+'</span>'+
+        '</div>'+
+        '<div class="said">'+(said?trunc(said,400):'<span style="color:var(--dim)">(no transcript text)</span>')+'</div>'+
+        (resp?'<div class="resp"><span class="lbl">reply</span>'+trunc(resp,220)+'</div>':'')+
+      '</div>';
+    }).join('');
+    el('tlog-asof').textContent='episodes · '+ago((num(rows[0].timestamp)||0));
+  }
+
+  function renderVoiceSignal(){
+    var box=el('vsignal'); if(!box) return;
+    var id=(FS&&FS.identity)||null;
+    if(!id){ box.innerHTML='<div class="idleblock">voice signal UNKNOWN — full-snapshot offline</div>'; return; }
+    var vs=id.voice_signal||null;
+    var vts=id.voice_trust_state; // string: trusted/known/unknown/...
+    var name=vs?vs.name:null, conf=vs?num(vs.confidence):null, age=vs?num(vs.age_s):null;
+    var stale=(age!==null&&age>30);
+    var confColor=bandColor(conf,0.7,0.5);
+    // voice_trust_state via gateState-style coloring: 'trusted'/'known' => ok, 'untrusted'/'rejected'/'spoofed' => fail, else unk
+    var ts=String(vts||'').toLowerCase();
+    var trustGate = (ts==='trusted'||ts==='known'||ts==='verified') ? 'ok'
+                  : (ts==='untrusted'||ts==='rejected'||ts==='spoofed'||ts==='blocked') ? 'fail'
+                  : 'unk';
+    var trustTxt = vts ? String(vts) : 'unknown';
+    box.innerHTML=
+      '<div class="vsig">'+
+        '<div class="name" style="color:'+(name&&!stale?'var(--text)':'var(--dim)')+'">'+(name?esc(name):'—')+'</div>'+
+        '<div class="who">current speaker (voice)</div>'+
+        '<div class="conf">confidence <b style="color:'+confColor+'">'+(conf===null?'—':(conf*100).toFixed(1)+'%')+'</b></div>'+
+      '</div>'+
+      '<div class="gaterow">'+
+        '<span class="tag b-'+trustGate+'">trust: '+esc(trustTxt)+'</span>'+
+        (stale?tag('self','STALE'):(age!==null?tag('grounded','fresh'):tag('self','no signal')))+
+      '</div>'+
+      '<div class="gridkv">'+
+        '<span class="k">signal age</span><b style="color:'+(stale?'var(--amber)':'var(--text)')+'">'+(age===null?'—':age.toFixed(1)+'s'+(stale?' (>30s)':''))+'</b>'+
+        '<span class="k">trust reason</span><b>'+esc(id.trust_reason||'—')+'</b>'+
+        '<span class="k">recognition</span><b>'+esc(id.recognition_state||'—')+'</b>'+
+        '<span class="k">unknown voices</span><b>'+(num(id.unknown_voice_count)===null?'—':num(id.unknown_voice_count))+'</b>'+
+        '<span class="k">user present</span><b class="s-'+gateState(id.user_present)+'">'+(id.user_present===true?'yes':id.user_present===false?'no':'unk')+'</b>'+
+      '</div>'+
+      '<div class="contrast">'+
+        (stale
+          ? 'Signal is <b>STALE</b> ('+(age===null?'—':age.toFixed(0)+'s')+' old) — no fresh voice frame; treat the name above as a last-known guess, not a live read.'
+          : (name
+              ? 'Live voice attribution at <b>'+(conf===null?'—':(conf*100).toFixed(0)+'%</b>')+' confidence. Trust state <b>'+esc(trustTxt)+'</b> gates whether this voice can move identity.'
+              : 'No active voice signal — quiet room or mic idle, not a fault.'))+
+      '</div>';
+  }
+
+  function renderMic(){
+    var box=el('mic'); if(!box) return;
+    var sh=(FS&&FS.sensor_health)||null;
+    if(!sh || typeof sh!=='object'){ box.innerHTML='<div class="idleblock">sensor health UNKNOWN — full-snapshot offline</div>'; return; }
+    var keys=Object.keys(sh);
+    if(keys.length===0){ box.innerHTML='<div class="idleblock">No sense nodes reporting yet — armed/accumulating after reboot, not broken.</div>'; return; }
+    box.innerHTML=keys.map(function(node){
+      var s=sh[node]||{};
+      var lu=num(s.last_update);
+      var nodeStale=(lu!==null && (Date.now()/1000 - lu) > 30);
+      var playing=s.audio_playing;
+      var phase=s.phase;
+      var temp=num(s.cpu_temp_c), cpu=num(s.cpu_percent);
+      var memU=num(s.mem_used_mb), memT=num(s.mem_total_mb);
+      var fps=num(s.camera_fps);
+      return '<div style="border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin-bottom:9px;background:rgba(3,8,14,.45)">'+
+        '<div class="gaterow">'+
+          tag('grounded','node: '+esc(node))+
+          (nodeStale?tag('self','STALE '+(lu===null?'':ago(lu))):tag('grounded','reporting'))+
+          (playing===true?tag('earned','audio PLAYING'):playing===false?tag('grounded','audio idle'):tag('self','audio unk'))+
+          (phase?tag('earned','phase: '+esc(phase)):'')+
+        '</div>'+
+        '<div class="gridkv">'+
+          '<span class="k">last update</span><b>'+ago(lu)+'</b>'+
+          '<span class="k">cpu temp</span><b style="color:'+(temp===null?'var(--dim)':(temp>=80?'var(--red)':temp>=70?'var(--amber)':'var(--green)'))+'">'+(temp===null?'—':temp.toFixed(1)+'°C')+'</b>'+
+          '<span class="k">cpu load</span><b>'+(cpu===null?'—':cpu.toFixed(1)+'%')+'</b>'+
+          '<span class="k">memory</span><b>'+((memU===null||memT===null)?'—':(memU/1024).toFixed(2)+' / '+(memT/1024).toFixed(1)+' GB')+'</b>'+
+          (fps!==null?'<span class="k">camera fps</span><b>'+fps+'</b>':'')+
+          (s.throttled!=null?'<span class="k">throttled</span><b style="color:'+(String(s.throttled)==='0x0'?'var(--green)':'var(--amber)')+'">'+esc(String(s.throttled))+'</b>':'')+
+        '</div>'+
+      '</div>';
+    }).join('')+
+      '<div class="contrast">Audio I/O is reported as device-level state (playing / idle, capture <b>phase</b>) — there is <b style="color:var(--dim)">no microphone level / VU / waveform</b> field in the API. A node going STALE (>30s since last_update) means the sense link, not the mic itself, dropped.</div>';
+  }
+
+  function renderSTT(){
+    var box=el('stt'); if(!box) return;
+    var se=(FS&&FS.synthetic_exercise)||null;
+    if(!se){ box.innerHTML='<div class="idleblock">synthetic STT UNKNOWN — full-snapshot offline</div>'; return; }
+    var utt=num(se.utterances_stt)||0;
+    var texts=Array.isArray(se.stt_texts)?se.stt_texts:[];
+    var runs=num(se.total_runs)||0;
+    var active=se.active===true;
+    box.innerHTML=
+      '<div class="gaterow">'+
+        (active?tag('earned','exerciser ACTIVE'):tag('grounded','idle'))+
+        tag('self','shadow / side-effects blocked')+
+      '</div>'+
+      '<div class="statline">'+
+        '<span><div class="k">utterances STT</div><span class="bigstat">'+utt+'</span></span>'+
+        '<span><div class="k">stt texts</div><span class="bigstat">'+texts.length+'</span></span>'+
+        '<span><div class="k">total runs</div><span class="bigstat">'+runs+'</span></span>'+
+        '<span><div class="k">routes produced</div><span class="bigstat">'+(num(se.routes_produced)||0)+'</span></span>'+
+      '</div>'+
+      '<div class="gridkv">'+
+        '<span class="k">distillation records</span><b>'+(num(se.distillation_records)||0)+'</b>'+
+        '<span class="k">blocked side-effects</span><b style="color:'+((num(se.blocked_side_effects)||0)>0?'var(--amber)':'var(--text)')+'">'+(num(se.blocked_side_effects)||0)+'</b>'+
+        '<span class="k">llm / tts leaks</span><b style="color:'+(((num(se.llm_leaks)||0)+(num(se.tts_leaks)||0))>0?'var(--red)':'var(--green)')+'">'+(num(se.llm_leaks)||0)+' / '+(num(se.tts_leaks)||0)+'</b>'+
+        '<span class="k">last run</span><b>'+ (num(se.last_run_time)?ago(se.last_run_time):'never') +'</b>'+
+      '</div>'+
+      (texts.length
+        ? '<div class="note" style="margin:9px 0 3px">recent shadow STT texts</div>'+
+          texts.slice(0,5).map(function(t){ return '<div class="utt"><div class="said">'+trunc(t,200)+'</div></div>'; }).join('')
+        : '')+
+      '<div class="contrast">'+
+        (runs===0
+          ? 'Exerciser has <b>not run since boot</b> ('+runs+' runs) — armed/accumulating, not broken. Counts re-arm from zero each restart.'
+          : '<b>'+runs+'</b> drill runs; <b>'+(num(se.blocked_side_effects)||0)+'</b> side-effects correctly blocked. This is a <b>shadow</b> replay — none of it is live audio, and leaks (LLM/TTS/memory) are the integrity tripwire.')+
+      '</div>';
+  }
+
+  function renderRecovery(){
+    var box=el('recovery');
+    var up=num(((FS&&FS.health)||{}).uptime_s);
+    if(up!==null && up<1800){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — brain up '+V2.fmtUptime(up)+'. Transcript depth, voice trust, and synthetic-STT counts re-accumulate from zero as the brain soaks; empty here is recovery debt, not loss.';
+    } else { box.style.display='none'; }
+  }
+
+  function renderBanner(){
+    var m=((FS&&FS.mode)||{}).mode;
+    var up=num(((FS&&FS.health)||{}).uptime_s);
+    var phase=((FS&&FS.core)||{}).phase;
+    var fresh=(FS&&num(FS._ts)!==null)?Math.max(0,Date.now()/1000-num(FS._ts)):null;
+    el('mode').textContent='mode '+(m||'—')+(phase?' · '+phase:'')+' · uptime '+V2.fmtUptime(up)+(fresh!==null?' · fresh '+fresh.toFixed(1)+'s':'');
+  }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderTranscript(); renderVoiceSignal(); renderMic(); renderSTT(); }
+
+  function refresh(){
+    fetchJSON('/api/full-snapshot').then(function(s){ FS=s; lastOkTs=Date.now(); renderAll(); })
+      .catch(function(){ if(!FS) el('tlog').innerHTML='<div class="offline">full-snapshot offline</div>'; });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 8000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

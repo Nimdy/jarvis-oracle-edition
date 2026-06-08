@@ -13,11 +13,13 @@ Sacred guardrails:
 
 from __future__ import annotations
 
+import ast
 import concurrent.futures
 import hashlib
 import json
 import logging
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -125,6 +127,70 @@ class AcquisitionOrchestrator:
         self._lane_futures: dict[tuple[str, str], concurrent.futures.Future] = {}
 
         self._load_active_jobs()
+        self._reconcile_plugin_authority()
+
+    @staticmethod
+    def _default_trigger_patterns(skill_id: str) -> list[str]:
+        r"""Derive a capability's intent trigger from its OWN identity (not hand-hacked
+        verbs): the skill_id, version-stripped, as a phrase + stemmed token patterns.
+        e.g. 'web_scraping_v1' -> [r'\bweb\s+scraping\b', r'\bscrap\w*\b']."""
+        base = re.sub(r"[_\-]v?\d+$", "", skill_id or "")
+        tokens = [t for t in re.split(r"[_\-\s]+", base) if t]
+        if not tokens:
+            return []
+        pats = [r"\b" + r"\s+".join(re.escape(t) for t in tokens) + r"\b"]
+        for t in tokens:
+            if len(t) < 4:
+                continue
+            stem = re.sub(r"(?:ing|ers|er|s)$", "", t)
+            if len(stem) >= 3:
+                pats.append(r"\b" + re.escape(stem) + r"\w*\b")
+        seen: set[str] = set()
+        return [p for p in pats if not (p in seen or seen.add(p))][:6]
+
+    def _reconcile_plugin_authority(self) -> None:
+        """Boot reconcile (self-healing, cheap once consistent):
+          1. backfill skill_id/generation from each plugin's acquisition,
+          2. enforce ONE active per skill — keep earliest generation, demote pre-fix leaks,
+          3. backfill a skill-derived trigger for skill-bound plugins that have none.
+        The orchestrator owns the acquisition<->registry link, so this lives here."""
+        try:
+            from tools.plugin_registry import get_plugin_registry
+            reg = get_plugin_registry()
+
+            # (1) bind skill_id + generation
+            for rec in list(reg._records.values()):
+                if getattr(rec, "skill_id", "") or not getattr(rec, "acquisition_id", ""):
+                    continue
+                job = self._store.load_job(rec.acquisition_id)
+                sk = (job.requested_by or {}).get("skill_id", "") if job else ""
+                if sk:
+                    reg.set_skill_id(rec.name, sk, int(getattr(job, "revision_generation", 0) or 0))
+
+            # (2) one active per skill: keep earliest generation/activation, demote the rest
+            by_skill: dict[str, list[Any]] = {}
+            for rec in reg._records.values():
+                sk = getattr(rec, "skill_id", "")
+                if sk and rec.state == "active":
+                    by_skill.setdefault(sk, []).append(rec)
+            for sk, actives in by_skill.items():
+                if len(actives) <= 1:
+                    continue
+                actives.sort(key=lambda r: (getattr(r, "generation", 0), r.activated_at or 0.0))
+                for extra in actives[1:]:
+                    reg.demote(extra.name, reason="boot_reconcile_one_active_per_skill",
+                               actor="auto:reconcile")
+                logger.info("Authority reconcile: skill '%s' kept %s, demoted %d leak(s)",
+                            sk, actives[0].name, len(actives) - 1)
+
+            # (3) backfill a skill-derived trigger where missing (so the skill is summonable)
+            for rec in reg._records.values():
+                sk = getattr(rec, "skill_id", "")
+                if not sk or rec.state in ("quarantined", "disabled"):
+                    continue
+                self._ensure_plugin_trigger(reg, rec.name, sk)
+        except Exception as exc:
+            logger.debug("plugin authority reconcile skipped: %s", exc)
 
     def set_codegen_service(self, service: Any) -> None:
         """Wire the CodeGenService for plan enrichment and implementation."""
@@ -153,12 +219,23 @@ class AcquisitionOrchestrator:
         user_text: str,
         requested_by: dict[str, Any] | None = None,
         context: dict[str, Any] | None = None,
+        revision_of: str = "",
+        revision_feedback: str = "",
+        revision_generation: int = 0,
     ) -> CapabilityAcquisitionJob:
-        """Create a new acquisition job from user intent."""
+        """Create a new acquisition job from user intent.
+
+        ``revision_*`` (Pillar 3) seed an operator-driven improvement of a prior
+        capability: the feedback becomes planning+codegen revision context. The new
+        job still runs the full governed lifecycle — trust is never inherited.
+        """
         job = CapabilityAcquisitionJob(
             title=user_text[:120],
             user_intent=user_text,
             requested_by=requested_by or {},
+            revision_of=revision_of or "",
+            revision_feedback=(revision_feedback or "").strip(),
+            revision_generation=int(revision_generation or 0),
         )
 
         # Classify
@@ -203,6 +280,83 @@ class AcquisitionOrchestrator:
             "Acquisition created: %s [%s] tier=%d lanes=%s",
             job.acquisition_id, job.outcome_class, job.risk_tier,
             ",".join(job.required_lanes),
+        )
+        return job
+
+    def improve_capability(
+        self,
+        prior_acquisition_id: str,
+        feedback: str,
+        requested_by: dict[str, Any] | None = None,
+    ) -> CapabilityAcquisitionJob:
+        """Pillar 3: re-enter the pipeline to improve a prior capability.
+
+        An improvement must INHERIT the prior build's structural grounding — its
+        skill/contract binding, classification, risk tier, and doc evidence — not just
+        its intent string. Otherwise a tier>=1 improvement reaches codegen with no
+        evidence (no contract artifact, no docs) and fails the evidence gate
+        ("tier N requires meaningful documentation evidence"). We therefore CLONE the
+        prior's grounding here rather than re-classifying a bare intent. The feedback
+        rides as planning+codegen revision context; the prior job's audit trail is
+        untouched (Terminal Acquisition Closure); trust is NEVER inherited — the
+        improved version still runs the full governed lifecycle and is re-verified.
+        """
+        prior = self.get_job(prior_acquisition_id)
+        if prior is None:
+            raise ValueError(f"acquisition {prior_acquisition_id} not found")
+        feedback = (feedback or "").strip()
+        if not feedback:
+            raise ValueError("feedback is required to seed an improvement")
+
+        intent = (prior.user_intent or prior.title or "").strip()
+        if not intent:
+            raise ValueError("prior acquisition has no intent to revise")
+
+        gen = int(getattr(prior, "revision_generation", 0) or 0) + 1
+
+        # Carry the skill/contract binding forward so the contract evidence (and smoke
+        # fixtures) are reconstructed for the improvement — this is what makes the
+        # evidence gate pass for ANY skill-bound capability, not just this one.
+        prior_req = dict(prior.requested_by or {})
+        new_req: dict[str, Any] = {"source": "operator_improvement", "improves": prior_acquisition_id}
+        for k in ("skill_id", "learning_job_id", "contract_id", "required_executor_kind"):
+            if prior_req.get(k):
+                new_req[k] = prior_req[k]
+        if requested_by:
+            new_req.update(requested_by)
+
+        job = CapabilityAcquisitionJob(
+            title=f"[improve gen-{gen}] {prior.title or intent[:80]}",
+            user_intent=intent,
+            requested_by=new_req,
+            revision_of=prior_acquisition_id,
+            revision_feedback=feedback,
+            revision_generation=gen,
+        )
+        # Clone the prior's classification + structure (skip heuristic re-classification:
+        # we already know what this capability is) and INHERIT its doc evidence floor.
+        job.outcome_class = prior.outcome_class or "plugin_creation"
+        job.classification_confidence = 1.0
+        job.classified_at = time.time()
+        job.required_lanes = list(prior.required_lanes or _LANE_MAP.get(job.outcome_class, []))
+        job.risk_tier = int(getattr(prior, "risk_tier", 0) or 0)
+        job.learning_job_id = getattr(prior, "learning_job_id", "") or ""
+        job.doc_artifact_ids = list(prior.doc_artifact_ids or [])
+
+        self._apply_risk_tier(job)
+        for lane_name in job.required_lanes:
+            job.init_lane(lane_name)
+        self._record_ledger_entry(job, "acquisition:created")
+        job.set_status("planning" if "planning" in job.required_lanes else "executing")
+        job.add_artifact_ref(prior_acquisition_id)
+
+        self._store.save_job(job)
+        self._active_jobs[job.acquisition_id] = job
+        self._total_created += 1
+        logger.info(
+            "Acquisition %s is improvement gen-%d of %s (skill=%s docs=%d tier=%d): %.80s",
+            job.acquisition_id, gen, prior_acquisition_id,
+            new_req.get("skill_id", ""), len(job.doc_artifact_ids), job.risk_tier, feedback,
         )
         return job
 
@@ -523,6 +677,16 @@ class AcquisitionOrchestrator:
             self._run_plugin_activation(job)
             return
 
+        # ── Deployment ───────────────────────────────────────────────
+        # tier >= 2 is held at the human gate above and completed by approve_deployment;
+        # tier < 2 (low blast radius) auto-deploys here — still via make_authoritative so
+        # the one-active-per-skill invariant holds for every path.
+        if lane_name == "deployment":
+            self._make_plugin_authoritative(job, "auto:low_risk", "low-risk auto-deployment")
+            job.complete_lane("deployment", child_id=job.plugin_id)
+            job.set_status("deployed")
+            return
+
         # ── Unimplemented lanes: fail-fast with clear message ─────
         if lane_name in ("self_improve", "matrix_specialist"):
             job.fail_lane(
@@ -824,6 +988,7 @@ class AcquisitionOrchestrator:
                 "coder_available": False,
                 "updated_at": time.time(),
             }
+            plan.governance = self._derive_governance(job, plan)
             logger.info("Planning %s: coder not available, skipping technical design", job.acquisition_id)
             return
 
@@ -908,6 +1073,11 @@ class AcquisitionOrchestrator:
             }
             logger.warning("Planning %s: technical design failed: %s", job.acquisition_id, err_msg)
 
+        # Data-flow firewall: decide the governed egress policy DURING planning. The
+        # deterministic floor is authoritative on safety; a planner-stated section (if
+        # any) is merged in but can only raise caution, never weaken the floor.
+        plan.governance = self._derive_governance(job, plan)
+
         self._record_plan_features_signal(job, plan, getattr(plan, "version", 1))
 
     @staticmethod
@@ -982,6 +1152,45 @@ class AcquisitionOrchestrator:
     def _build_revision_context(
         self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan
     ) -> str:
+        """Build revision context from (a) an operator-requested post-completion
+        improvement (Pillar 3) and/or (b) prior plan-review rejections for this job."""
+        prefix = self._build_improvement_context(job)
+        rejection = self._build_rejection_context(job, plan)
+        return "\n".join(p for p in (prefix, rejection) if p)
+
+    def _build_improvement_context(self, job: CapabilityAcquisitionJob) -> str:
+        """Pillar 3: operator 'do better' feedback on a prior shipped capability,
+        plus the prior plan's approach so the planner revises rather than restarts."""
+        fb = (getattr(job, "revision_feedback", "") or "").strip()
+        if not fb:
+            return ""
+        gen = int(getattr(job, "revision_generation", 0) or 0)
+        lines = [
+            "## OPERATOR REQUESTED AN IMPROVEMENT",
+            f"A prior version of this capability already shipped (improvement round {gen}).",
+            "The operator reviewed it and asked for the following improvement. Address it",
+            "directly and concretely in your design — this is not a fresh request.",
+            "",
+            f"Operator feedback: {fb}",
+        ]
+        prior_id = (getattr(job, "revision_of", "") or "").strip()
+        if prior_id:
+            prior = self.get_job(prior_id)
+            if prior and prior.plan_id:
+                prior_plan = self._store.load_plan(prior.plan_id)
+                prev = (getattr(prior_plan, "technical_approach", "") or "").strip() if prior_plan else ""
+                if prev and "Technical design unavailable" not in prev:
+                    lines += [
+                        "",
+                        "## PREVIOUS VERSION (revise, do not start from scratch):",
+                        prev[:2000],
+                    ]
+        lines.append("")
+        return "\n".join(lines)
+
+    def _build_rejection_context(
+        self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan
+    ) -> str:
         """Build revision context from all prior rejection reviews for this job."""
         if not job.plan_review_id:
             return ""
@@ -1026,6 +1235,100 @@ class AcquisitionOrchestrator:
 
         return "\n".join(lines)
 
+    # ── Data-flow firewall (Pillar 2): governed egress policy, decided in planning ──
+    _GOV_EXTERNAL_MARKERS = (
+        "scrape", "scraping", "scraper", "crawl", "http://", "https://", " http",
+        "url", "fetch", "urllib", "requests", "website", "web page", "webpage",
+        " html", "download", " api", "endpoint", "socket", " ftp", "network request",
+    )
+
+    @staticmethod
+    def _normalize_stated_governance(raw: Any) -> dict[str, Any]:
+        """Normalize planner-stated governance (a JSON dict OR a 'KEY: value' text block)
+        into the floor's key set. Returns {} when nothing usable was stated."""
+        def _b(v: Any) -> bool:
+            return str(v).strip().lower() in ("yes", "true", "1", "y")
+        out: dict[str, Any] = {}
+        if isinstance(raw, dict):
+            if "reads_external" in raw:
+                out["reads_external"] = _b(raw.get("reads_external"))
+            if str(raw.get("egress", "")).strip():
+                out["egress"] = str(raw.get("egress")).strip()[:160]
+            if "may_touch_memory" in raw:
+                out["may_touch_memory"] = _b(raw.get("may_touch_memory"))
+            if str(raw.get("provenance_tag", "")).strip():
+                out["provenance_tag"] = str(raw.get("provenance_tag")).strip()[:40]
+            if "requires_save_consent" in raw:
+                out["requires_save_consent"] = _b(raw.get("requires_save_consent"))
+            return out
+        for line in str(raw or "").split("\n"):
+            if ":" not in line:
+                continue
+            k, _, v = line.partition(":")
+            k = k.strip().lower().replace(" ", "_")
+            v = v.strip()
+            if not v:
+                continue
+            if k in ("reads_external", "may_touch_memory", "requires_save_consent"):
+                out[k] = _b(v)
+            elif k == "egress":
+                out["egress"] = v[:160]
+            elif k == "provenance_tag":
+                out["provenance_tag"] = v.split()[0][:40] if v else "none"
+        return out
+
+    @classmethod
+    def _derive_governance(
+        cls, job: CapabilityAcquisitionJob, plan: AcquisitionPlan
+    ) -> dict[str, Any]:
+        """Infer a CONSERVATIVE governed egress policy from the plan (the firewall must
+        KNOW, not trust the LLM to remember), then merge in any planner-stated governance
+        WITHOUT letting the model weaken the safety floor.
+
+        Safety invariants the planner can never relax:
+          * may_touch_memory stays False (only a human approval may ever flip it).
+          * anything that reads external data is tagged ``web_scrap`` (untrusted) and
+            requires save-consent. The planner may only RAISE caution or add an egress
+            phrase, never lower the bar.
+        """
+        blob = " ".join([
+            str(getattr(job, "user_intent", "") or ""),
+            str(getattr(job, "outcome_class", "") or ""),
+            str(getattr(plan, "technical_approach", "") or ""),
+            str(getattr(plan, "implementation_sketch", "") or ""),
+            " ".join(getattr(plan, "required_capabilities", []) or []),
+            " ".join(getattr(plan, "dependencies", []) or []),
+        ]).lower()
+        reads_external = any(m in blob for m in cls._GOV_EXTERNAL_MARKERS)
+
+        floor: dict[str, Any] = {
+            "reads_external": reads_external,
+            "egress": "external web/network content" if reads_external else "local computation result",
+            "may_touch_memory": False,                       # never auto-true
+            "provenance_tag": "web_scrap" if reads_external else "none",
+            "requires_save_consent": bool(reads_external),
+            "source": "deterministic_floor",
+        }
+
+        stated = cls._normalize_stated_governance(getattr(plan, "governance", {}) or {})
+        # A floor-shaped dict left over from a prior derive isn't a planner statement.
+        if not stated or (getattr(plan, "governance", {}) or {}).get("source"):
+            return floor
+
+        merged = dict(floor)
+        if stated.get("egress"):
+            merged["egress"] = stated["egress"]
+        merged["reads_external"] = bool(floor["reads_external"] or stated.get("reads_external"))
+        merged["requires_save_consent"] = bool(
+            floor["requires_save_consent"] or stated.get("requires_save_consent")
+        )
+        if merged["reads_external"]:
+            merged["provenance_tag"] = "web_scrap"
+            merged["requires_save_consent"] = True
+        merged["may_touch_memory"] = False                   # invariant: human-only
+        merged["source"] = "merged"
+        return merged
+
     @staticmethod
     def _parse_technical_design(plan: AcquisitionPlan, raw: str) -> None:
         """Parse the coder LLM's structured technical design into plan fields."""
@@ -1041,6 +1344,7 @@ class AcquisitionOrchestrator:
                 tests = data.get("test_cases", [])
                 plan.dependencies = [str(d).strip() for d in (deps if isinstance(deps, list) else str(deps).split(",")) if str(d).strip()]
                 plan.test_cases = [str(t).strip() for t in (tests if isinstance(tests, list) else str(tests).split("\n")) if str(t).strip()]
+                plan.governance = AcquisitionOrchestrator._normalize_stated_governance(data.get("governance", {}))
                 return
         except Exception:
             pass
@@ -1052,6 +1356,7 @@ class AcquisitionOrchestrator:
             "DEPENDENCIES:": "_dependencies_raw",
             "TEST CASES:": "_test_cases_raw",
             "RISK ANALYSIS:": "risk_analysis",
+            "GOVERNANCE:": "_governance_raw",
         }
 
         current_field = None
@@ -1060,7 +1365,7 @@ class AcquisitionOrchestrator:
 
         header_re = re.compile(
             r"^\s*(?:#{1,6}\s*)?(?:\d+[.)]\s*)?(?:[*_]{1,3})?"
-            r"(USER STORY|TECHNICAL APPROACH|IMPLEMENTATION SKETCH|DEPENDENCIES|TEST CASES|RISK ANALYSIS)"
+            r"(USER STORY|TECHNICAL APPROACH|IMPLEMENTATION SKETCH|DEPENDENCIES|TEST CASES|RISK ANALYSIS|GOVERNANCE)"
             r"(?:[*_]{1,3})?\s*:?\s*(.*)$",
             re.IGNORECASE,
         )
@@ -1097,6 +1402,10 @@ class AcquisitionOrchestrator:
         tests_raw = parsed.get("_test_cases_raw", "")
         if tests_raw:
             plan.test_cases = [t.strip() for t in tests_raw.split("\n") if t.strip()]
+
+        gov_raw = parsed.get("_governance_raw", "")
+        if gov_raw:
+            plan.governance = AcquisitionOrchestrator._normalize_stated_governance(gov_raw)
 
     def _run_truth_recording(self, job: CapabilityAcquisitionJob) -> None:
         """Truth lane: record outcome in attribution ledger + memory."""
@@ -1169,8 +1478,15 @@ class AcquisitionOrchestrator:
         self,
         job: CapabilityAcquisitionJob,
         plan: AcquisitionPlan,
+        repair_feedback: dict[str, Any] | None = None,
     ) -> tuple[list[dict[str, str]], str, list[dict[str, Any]]]:
-        """Build the Jarvis-authored prompt packet for acquisition codegen."""
+        """Build the Jarvis-authored prompt packet for acquisition codegen.
+
+        When ``repair_feedback`` is provided (a prior attempt failed code
+        validation or the contract smoke), the exact failure is appended so the
+        coder revises the specific problem instead of regenerating blind — the
+        same think→code→validate loop the self-improve path uses.
+        """
         docs = self._load_doc_evidence(job)
         doc_rows = [
             {
@@ -1213,11 +1529,22 @@ class AcquisitionOrchestrator:
         )
         if revision_context:
             prompt += f"{revision_context}\n"
+        if repair_feedback:
+            prompt += self._format_repair_feedback(repair_feedback)
         prompt += (
+            "## Input Contract (MANDATORY — read exactly)\n"
+            "- Your `run(args)` callable receives a SINGLE dict. The user's input string is\n"
+            "  provided under THREE identical keys: `args['text']`, `args['input']`, and\n"
+            "  `args['request']`. Read it as: `user_input = args.get('text') or args.get('input') or args.get('request') or ''`.\n"
+            "- Do NOT invent other input keys (e.g. `user_text`, `query`, `url`) — they will be\n"
+            "  EMPTY and your plugin will fail every fixture with a 'missing input' error.\n"
+            "- Return a JSON-serializable dict whose fields exactly match the contract fixture's\n"
+            "  `expected` keys (e.g. for web scraping: `title`, `status_code`).\n"
             "## Validation Requirements\n"
-            "- The plugin must parse the fixture input shape and return JSON-serializable structured data.\n"
+            "- The plugin must parse the input shape above and return JSON-serializable structured data.\n"
             "- For CSV totals, return numeric sums as numbers, not prose.\n"
-            "- Do not write files, spawn processes, access credentials, or create network side effects.\n"
+            "- Do not write files, spawn processes, or access credentials. Network requests ARE\n"
+            "  permitted when the contract requires them (e.g. web scraping fetches a URL).\n"
             "- The code must be deterministic and stdlib-only unless dependencies were explicitly approved.\n"
         )
         system_prompt = (
@@ -1251,8 +1578,115 @@ class AcquisitionOrchestrator:
             })
         return [{"role": "user", "content": prompt}], system_prompt, evidence_bundle
 
+    # Max code→validate→repair rounds in the implementation lane. Mirrors
+    # self_improve's MAX_ITERATIONS: one-shot-and-fail is the wrong bar for a
+    # system that builds its own tools — it should read the failure and revise.
+    _MAX_CODEGEN_REPAIR_ATTEMPTS = 3
+
+    @staticmethod
+    def _format_repair_feedback(rf: dict[str, Any]) -> str:
+        """Render a prior attempt's failure into a corrective prompt section."""
+        stage = rf.get("stage", "")
+        errors = rf.get("errors", [])
+        if not isinstance(errors, list):
+            errors = [errors]
+        lines = [
+            "## Previous Attempt FAILED — Fix These Exactly\n",
+            f"Your last generated plugin failed at stage '{stage}'. Keep what worked "
+            "and revise ONLY to fix the specific problems below:\n",
+        ]
+        if stage == "contract_smoke":
+            for m in errors:
+                if isinstance(m, dict) and "expected" in m:
+                    lines.append(
+                        f"- Fixture '{m.get('fixture')}': you were called as "
+                        f"run({{'text': {json.dumps(m.get('input'))}, 'input': {json.dumps(m.get('input'))}, "
+                        f"'request': {json.dumps(m.get('input'))}}}). The contract expected output "
+                        f"containing {json.dumps(m.get('expected'))}, but your plugin returned "
+                        f"{json.dumps(m.get('actual'))}. Read the input from args['text'] and make the "
+                        f"returned fields match the expected ones.\n"
+                    )
+                else:
+                    lines.append(f"- {json.dumps(m)}\n")
+        else:
+            for e in errors:
+                lines.append(f"- {e}\n")
+        lines.append("\n")
+        return "".join(lines)
+
+    def _codegen_generate_once(
+        self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan,
+        codegen_service: Any, repair_feedback: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """One codegen round-trip: build packet (+optional repair feedback) → generate_and_validate."""
+        messages, system_prompt, evidence_bundle = self._build_acquisition_codegen_packet(
+            job, plan, repair_feedback=repair_feedback,
+        )
+        if hasattr(codegen_service, "set_consumer"):
+            codegen_service.set_consumer("acquisition")
+        import asyncio
+
+        def _call() -> dict[str, Any]:
+            return asyncio.run(codegen_service.generate_and_validate(
+                messages=messages,
+                system_prompt=system_prompt,
+                write_category="skill_plugin",
+                evidence_bundle=evidence_bundle,
+                risk_tier=job.risk_tier,
+            ))
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(_call).result(timeout=600)
+        return _call()
+
+    def _run_contract_smoke_for_repair(
+        self, job: CapabilityAcquisitionJob, code_bundle: PluginCodeBundle,
+    ) -> tuple[bool, list[dict[str, Any]]]:
+        """Run the linked skill contract smoke against a candidate bundle so the
+        repair loop can self-correct fixture mismatches.
+
+        Returns ``(ok, mismatches)``. ``ok=True`` when the smoke passes, when
+        there is no contract/fixture to check, or when the harness hit an
+        infrastructure/runtime ERROR (e.g. no network) — those are not the
+        generated code's fault, so they must not burn repair rounds; the normal
+        verification lane still owns the authoritative check. Only a genuine
+        expected-vs-actual MISMATCH returns ``ok=False`` with the diffs.
+        """
+        try:
+            skill_id = (job.requested_by or {}).get("skill_id", "")
+            if not skill_id:
+                return True, []
+            from skills.execution_contracts import get_contract
+            contract = get_contract(skill_id)
+            if contract is None or not contract.smoke_fixtures:
+                return True, []
+            import types as _types
+            shim = _types.SimpleNamespace(risk_assessment={})
+            passed = self._run_skill_contract_on_bundle(job, shim, code_bundle)
+            status = shim.risk_assessment.get("skill_contract_status")
+            if passed or status in ("error", "missing_handler", "handler_import_unavailable", "missing_run_callable"):
+                return True, []  # pass, or harness/infra issue — don't repair on these
+            results = shim.risk_assessment.get("skill_contract_results", []) or []
+            fixture_inputs = {f.name: f.input for f in contract.smoke_fixtures}
+            mismatches = [
+                {"fixture": r.get("name"), "input": fixture_inputs.get(r.get("name")),
+                 "expected": r.get("expected"), "actual": r.get("actual")}
+                for r in results if not r.get("passed")
+            ]
+            return False, (mismatches or [{"status": status}])
+        except Exception:
+            return True, []  # never block the build on the repair-smoke harness itself
+
     def _run_implementation(self, job: CapabilityAcquisitionJob) -> None:
-        """Implementation lane: generate code via CodeGenService → PluginCodeBundle."""
+        """Implementation lane: generate code via CodeGenService, repairing against
+        the contract smoke up to ``_MAX_CODEGEN_REPAIR_ATTEMPTS`` rounds."""
+        plan = None
         try:
             if not job.plan_id:
                 job.fail_lane("implementation", "No plan available for implementation")
@@ -1264,72 +1698,105 @@ class AcquisitionOrchestrator:
                 return
 
             codegen_service = getattr(self, "_codegen_service", None)
-
             if codegen_service is None or not codegen_service.coder_available:
                 job.fail_lane("implementation", "codegen_unavailable")
                 self._record_skill_acquisition_feature(job, plan, stage="implementation_failed")
                 self._record_skill_acquisition_label(job)
                 return
 
-            messages, system_prompt, evidence_bundle = self._build_acquisition_codegen_packet(job, plan)
-            if hasattr(codegen_service, "set_consumer"):
-                codegen_service.set_consumer("acquisition")
+            repair_feedback: dict[str, Any] | None = None
+            repair_log: list[dict[str, Any]] = []
 
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
+            last_bundle: PluginCodeBundle | None = None
+            for attempt in range(1, self._MAX_CODEGEN_REPAIR_ATTEMPTS + 1):
+                result = self._codegen_generate_once(job, plan, codegen_service, repair_feedback)
 
-            if loop and loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    result = pool.submit(
-                        lambda: asyncio.run(codegen_service.generate_and_validate(
-                            messages=messages,
-                            system_prompt=system_prompt,
-                            write_category="skill_plugin",
-                            evidence_bundle=evidence_bundle,
-                            risk_tier=job.risk_tier,
-                        ))
-                    ).result(timeout=600)
-            else:
-                result = asyncio.run(
-                    codegen_service.generate_and_validate(
-                        messages=messages,
-                        system_prompt=system_prompt,
-                        write_category="skill_plugin",
-                        evidence_bundle=evidence_bundle,
-                        risk_tier=job.risk_tier,
-                    )
-                )
+                if not result.get("success"):
+                    errors = result.get("validation_errors", ["Unknown error"])
+                    repair_feedback = {"stage": "code_validation", "errors": errors}
+                    repair_log.append({"attempt": attempt, "stage": "code_validation", "passed": False, "errors": errors})
+                    continue
 
-            if result.get("success"):
                 bundle = self._build_code_bundle(job, plan, result)
-                if bundle:
+                if not bundle:
+                    repair_feedback = {"stage": "bundle", "errors": ["code bundle could not be built from generated patch"]}
+                    repair_log.append({"attempt": attempt, "stage": "bundle", "passed": False})
+                    continue
+
+                last_bundle = bundle  # keep the most recent compilable candidate
+                ok, mismatches = self._run_contract_smoke_for_repair(job, bundle)
+                if ok:
                     self._store.save_code_bundle(bundle)
                     job.code_bundle_id = bundle.bundle_id
                     job.add_artifact_ref(bundle.bundle_id)
+                    repair_log.append({"attempt": attempt, "stage": "contract_smoke", "passed": True})
+                    self._record_codegen_repair_log(job, repair_log)
+                    job.complete_lane("implementation")
+                    self._emit_event("ACQUISITION_CODE_GENERATED", job, {
+                        "lane": "implementation", "codegen": True,
+                        "code_bundle_id": job.code_bundle_id,
+                        "validation_errors": [],
+                        "repair_attempts": attempt,
+                    })
+                    return
 
+                repair_feedback = {"stage": "contract_smoke", "errors": mismatches}
+                repair_log.append({"attempt": attempt, "stage": "contract_smoke", "passed": False, "errors": mismatches})
+
+            # Repair rounds exhausted. Fall back NON-REGRESSIVELY: if we built any
+            # compilable candidate, complete implementation with it and let the
+            # verification lane be the authoritative contract check (exactly the
+            # pre-repair single-shot behavior). The repair loop must NEVER fail
+            # earlier than single-shot did — it may only help, never regress.
+            # Only hard-fail if codegen never produced a usable bundle at all.
+            self._record_codegen_repair_log(job, repair_log)
+            if last_bundle is not None:
+                self._store.save_code_bundle(last_bundle)
+                job.code_bundle_id = last_bundle.bundle_id
+                job.add_artifact_ref(last_bundle.bundle_id)
+                logger.warning(
+                    "Acquisition %s: repair loop did not converge in %d attempts; completing "
+                    "implementation with last candidate — verification is authoritative.",
+                    job.acquisition_id, self._MAX_CODEGEN_REPAIR_ATTEMPTS,
+                )
                 job.complete_lane("implementation")
                 self._emit_event("ACQUISITION_CODE_GENERATED", job, {
                     "lane": "implementation", "codegen": True,
                     "code_bundle_id": job.code_bundle_id,
                     "validation_errors": [],
+                    "repair_attempts": self._MAX_CODEGEN_REPAIR_ATTEMPTS,
+                    "repair_converged": False,
                 })
-            else:
-                errors = result.get("validation_errors", ["Unknown error"])
-                job.fail_lane("implementation", "; ".join(errors))
-                self._record_skill_acquisition_feature(job, plan, stage="implementation_failed")
-                self._record_skill_acquisition_label(job)
-                self._emit_event("ACQUISITION_FAILED", job, {
-                    "lane": "implementation",
-                    "validation_errors": errors,
-                })
+                return
+
+            last_errors = (repair_feedback or {}).get("errors", ["repair loop exhausted"])
+            summary = "; ".join(str(e) for e in (last_errors if isinstance(last_errors, list) else [last_errors]))
+            job.fail_lane(
+                "implementation",
+                f"codegen produced no usable bundle after {self._MAX_CODEGEN_REPAIR_ATTEMPTS} attempts: {summary[:300]}",
+            )
+            self._record_skill_acquisition_feature(job, plan, stage="implementation_failed")
+            self._record_skill_acquisition_label(job)
+            self._emit_event("ACQUISITION_FAILED", job, {
+                "lane": "implementation",
+                "validation_errors": last_errors if isinstance(last_errors, list) else [last_errors],
+                "repair_attempts": self._MAX_CODEGEN_REPAIR_ATTEMPTS,
+            })
         except Exception as exc:
             job.fail_lane("implementation", str(exc))
-            self._record_skill_acquisition_feature(job, plan if "plan" in locals() else None, stage="implementation_error")
+            self._record_skill_acquisition_feature(job, plan, stage="implementation_error")
             self._record_skill_acquisition_label(job)
+
+    def _record_codegen_repair_log(self, job: CapabilityAcquisitionJob, repair_log: list[dict[str, Any]]) -> None:
+        """Surface the codegen think→code→validate back-and-forth on the job so it
+        is visible in the acquisition detail (the deliberation was previously invisible)."""
+        try:
+            diag = dict(getattr(job, "codegen_prompt_diagnostics", {}) or {})
+            diag["repair_log"] = repair_log
+            diag["repair_rounds"] = len(repair_log)
+            job.codegen_prompt_diagnostics = diag
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Plugin name + intent pattern derivation
@@ -1432,6 +1899,79 @@ class AcquisitionOrchestrator:
 
         return patterns[:8]
 
+    @staticmethod
+    def _elect_execution_mode(
+        code_files: dict[str, str], plan: AcquisitionPlan | None,
+    ) -> tuple[str, list[str], list[str]]:
+        """Decide in_process vs isolated_subprocess from the generated code's imports.
+
+        A plugin that imports only the in-process stdlib-safe allowlist runs
+        ``in_process`` (fast, no venv). Any import beyond that set — external
+        packages OR stdlib modules not on the in-process safe-list (e.g.
+        ``urllib.request`` for network egress) — runs in an ``isolated_subprocess``
+        with its own venv and no brain on ``PYTHONPATH``, with those imports
+        DECLARED in the manifest. This uses the existing isolation machinery
+        instead of widening the in-process allowlist (a safety boundary), and
+        keeps network-capable code out of the brain's own interpreter.
+
+        Mirrors ``PluginRegistry._check_imports`` top-level matching so the
+        election never drifts from the gate that will validate it. NEVER_ALLOWED
+        imports are left unlisted so the gate still rejects them — we never
+        isolate to smuggle a forbidden import past the wall.
+
+        Returns ``(execution_mode, allowed_imports, pinned_dependencies)``.
+        """
+        import sys as _sys
+        from tools.plugin_registry import (
+            ALWAYS_ALLOWED_IMPORTS, TIER1_IMPORTS, TIER2_IMPORTS,
+            NEVER_ALLOWED_IMPORTS,
+        )
+        in_process_safe = ALWAYS_ALLOWED_IMPORTS | TIER1_IMPORTS | TIER2_IMPORTS
+
+        top_level: set[str] = set()
+        for filename, src in code_files.items():
+            if not filename.endswith(".py"):
+                continue
+            try:
+                tree = ast.parse(src)
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        top_level.add(alias.name.split(".")[0])
+                elif isinstance(node, ast.ImportFrom):
+                    if node.level and node.level > 0:
+                        continue  # relative import — always allowed
+                    if node.module:
+                        top_level.add(node.module.split(".")[0])
+
+        undeclared = sorted(
+            m for m in top_level
+            if m and m not in in_process_safe and m not in NEVER_ALLOWED_IMPORTS
+        )
+        if not undeclared:
+            return "in_process", [], []
+
+        # External (pip) deps need an exact pin; resolve from the plan where given.
+        plan_pins: dict[str, str] = {}
+        for dep in (getattr(plan, "dependencies", None) or []):
+            if isinstance(dep, str) and "==" in dep:
+                name = dep.split("==")[0].strip().split(".")[0].lower()
+                plan_pins[name] = dep.strip()
+
+        pinned: list[str] = []
+        for m in undeclared:
+            if m in _sys.stdlib_module_names:
+                continue  # stdlib: already in the venv, no pip install needed
+            pin = plan_pins.get(m.lower())
+            if pin:
+                pinned.append(pin)
+            # else: external dep with no resolvable pin — declared as an allowed
+            # import so the gate permits it, but left unpinned (venv install is a
+            # known follow-up). The caller logs this case.
+        return "isolated_subprocess", undeclared, pinned
+
     def _build_code_bundle(
         self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan, result: dict,
     ) -> PluginCodeBundle | None:
@@ -1485,6 +2025,22 @@ class AcquisitionOrchestrator:
             plugin_name = f"{plugin_name}_{job.acquisition_id[-6:]}"
         intent_patterns = self._derive_intent_patterns(job, plan, code_files)
 
+        execution_mode, allowed_imports, pinned_dependencies = self._elect_execution_mode(
+            code_files, plan,
+        )
+        if execution_mode == "isolated_subprocess":
+            _pinned_names = {p.split("==")[0].strip().lower() for p in pinned_dependencies}
+            external_unpinned = [
+                m for m in allowed_imports
+                if m not in sys.stdlib_module_names and m.lower() not in _pinned_names
+            ]
+            logger.info(
+                "Acquisition %s: electing isolated_subprocess (own venv) — imports "
+                "beyond in_process safe-set declared=%s pinned=%s%s",
+                job.acquisition_id, allowed_imports, pinned_dependencies,
+                (f" UNPINNED_EXTERNAL={external_unpinned}" if external_unpinned else ""),
+            )
+
         from tools.plugin_registry import PluginManifest
         manifest = PluginManifest(
             name=plugin_name,
@@ -1493,6 +2049,9 @@ class AcquisitionOrchestrator:
             risk_tier=job.risk_tier,
             supervision_mode="shadow",
             intent_patterns=intent_patterns,
+            execution_mode=execution_mode,
+            allowed_imports=allowed_imports,
+            pinned_dependencies=pinned_dependencies,
         )
 
         bundle = PluginCodeBundle(
@@ -1636,6 +2195,19 @@ class AcquisitionOrchestrator:
 
             ok, errors = registry.quarantine(plugin_name, code_files, manifest, job.acquisition_id)
             if ok:
+                # Bind the record to its skill (the capability-authority grouping key) so
+                # all versions of a skill are known to the registry — at most one active.
+                try:
+                    skill_id = (job.requested_by or {}).get("skill_id", "")
+                    if skill_id:
+                        registry.set_skill_id(
+                            plugin_name, skill_id,
+                            int(getattr(job, "revision_generation", 0) or 0),
+                        )
+                        # born summonable: ensure a trigger now (not only on reboot)
+                        self._ensure_plugin_trigger(registry, plugin_name, skill_id)
+                except Exception:
+                    pass
                 job.plugin_id = plugin_name
                 job.complete_lane("plugin_quarantine", child_id=plugin_name)
                 self._emit_event("ACQUISITION_PLUGIN_DEPLOYED", job, {
@@ -2068,12 +2640,12 @@ class AcquisitionOrchestrator:
                     )
                     return  # re-check on next tick
 
-                # Promote through remaining tiers
+                # Promote to SUPERVISED only — never `active` here. Per the capability-
+                # authority doctrine (Invariants 1 & 2), the owner-approved DEPLOYMENT is the
+                # single path to active, via make_authoritative (one active per skill). The
+                # activation lane only earns observation, never authority.
                 if rec.state == "shadow":
                     registry.promote(plugin_name)  # shadow → supervised
-                    rec = registry.get_record(plugin_name)
-                if rec and rec.state == "supervised":
-                    registry.promote(plugin_name)  # supervised → active
                     rec = registry.get_record(plugin_name)
 
             final_state = rec.state if rec else "unknown"
@@ -2198,6 +2770,40 @@ class AcquisitionOrchestrator:
         self._store.save_job(job)
         return True
 
+    def _ensure_plugin_trigger(self, reg: Any, plugin_name: str, skill_id: str) -> None:
+        """Guarantee a plugin is summonable: if it has no compiled trigger patterns, give it
+        the skill-derived trigger. The LIVE version must always be reachable by voice — a
+        newly-built/deployed plugin can't wait for a reboot to get its trigger."""
+        if not skill_id:
+            return
+        try:
+            if reg._compiled_patterns.get(plugin_name):
+                return
+            pats = self._default_trigger_patterns(skill_id)
+            if pats:
+                reg.set_intent_patterns(plugin_name, pats)
+        except Exception:
+            pass
+
+    def _make_plugin_authoritative(
+        self, job: CapabilityAcquisitionJob, approved_by: str, reason: str
+    ) -> None:
+        """Promote the job's plugin to the SINGLE active version for its skill — the only
+        path to `active` (the owner-approved deploy gate). Atomic per skill via the
+        capability-authority layer; no-op if there's no plugin or the registry is down."""
+        plugin_name = getattr(job, "plugin_id", "") or ""
+        if not plugin_name:
+            return
+        try:
+            from tools.plugin_registry import get_plugin_registry
+            reg = get_plugin_registry()
+            reg.make_authoritative(plugin_name, approved_by=approved_by, reason=reason)
+            # The version going live MUST be summonable — give it a trigger now if the
+            # build didn't produce one (don't make the owner reboot to invoke it).
+            self._ensure_plugin_trigger(reg, plugin_name, (job.requested_by or {}).get("skill_id", ""))
+        except Exception as exc:
+            logger.warning("make_authoritative failed for %s: %s", plugin_name, exc)
+
     def approve_deployment(self, acquisition_id: str, approved: bool,
                            approved_by: str = "human") -> bool:
         """Handle human deployment approval decision."""
@@ -2209,6 +2815,9 @@ class AcquisitionOrchestrator:
             job.approval_status = "approved"
             job.approved_by = approved_by
             job.approval_timestamp = time.time()
+            # The ONLY path to `active`: owner-approved deploy -> make_authoritative
+            # (atomic per skill, demotes the prior live version to shadow as the floor).
+            self._make_plugin_authoritative(job, approved_by, "owner-approved deployment")
             deployment_lane = job.lanes.get("deployment")
             if deployment_lane:
                 deployment_lane.status = "completed"
@@ -2229,15 +2838,125 @@ class AcquisitionOrchestrator:
         return True
 
     def cancel_job(self, acquisition_id: str, reason: str = "operator_cancelled") -> bool:
-        """Cancel and remove a job from the active set (any state)."""
-        job = self._active_jobs.get(acquisition_id)
-        if not job:
-            return False
-        job.set_status("cancelled")
-        self._store.save_job(job)
-        del self._active_jobs[acquisition_id]
-        logger.info("Acquisition %s cancelled and removed: %s", acquisition_id, reason)
-        return True
+        """Back-compat shim: cancel/remove a job (active OR store-only) + safe cleanup."""
+        ok, _ = self.remove_job(acquisition_id, reason=reason)
+        return ok
+
+    def remove_job(
+        self, acquisition_id: str, reason: str = "operator_removed"
+    ) -> tuple[bool, dict[str, Any]]:
+        """Remove a job from the active set AND the store, cleaning up its OWN artifacts.
+
+        The earlier ``cancel_job`` only looked in ``_active_jobs``, so terminal jobs
+        (failed/cancelled — not restored on boot) could never be removed. This loads
+        from the store too. SHARED resources (the per-plugin venv at
+        ``~/.jarvis/plugin_venvs/<name>`` and the plugin dir ``tools/plugins/<name>``)
+        are deleted ONLY when no live plugin and no sibling job still needs them —
+        otherwise they are PROTECTED. Every filesystem delete is base-guarded.
+        """
+        job = self._active_jobs.get(acquisition_id) or self._store.load_job(acquisition_id)
+        if job is None:
+            return False, {"error": "not_found"}
+        try:
+            job.set_status("cancelled")
+        except Exception:
+            pass
+        self._active_jobs.pop(acquisition_id, None)
+        report = self._cleanup_job_artifacts(job)
+        report["job_deleted"] = self._store.delete_job(acquisition_id)
+        logger.info("Acquisition %s removed (%s): %s", acquisition_id, reason, report)
+        return True, report
+
+    def _cleanup_job_artifacts(self, job: CapabilityAcquisitionJob) -> dict[str, Any]:
+        """Delete this job's OWN artifact records; clean shared venv/plugin dir only if orphaned."""
+        report: dict[str, Any] = {"artifacts_deleted": [], "shared": {}, "protected": []}
+        # (a) per-job artifacts — each has a job-unique id, never shared between jobs
+        for cat, oid in (
+            ("plans", job.plan_id),
+            ("reviews", job.plan_review_id),
+            ("code_bundles", job.code_bundle_id),
+            ("environment_setups", job.environment_setup_id),
+            ("verifications", job.verification_id),
+        ):
+            if oid and self._store.delete_artifact(cat, oid):
+                report["artifacts_deleted"].append(f"{cat}/{oid}")
+
+        # (b) shared resources (per-plugin venv + plugin dir) — GUARDED
+        plugin_name = self._job_plugin_name(job)
+        if plugin_name:
+            if self._plugin_name_protected(plugin_name, exclude=job.acquisition_id):
+                report["protected"].append(
+                    f"plugin '{plugin_name}' is live or shared by another build — venv & dir kept"
+                )
+            else:
+                venv_base = Path.home() / ".jarvis" / "plugin_venvs"
+                plug_base = Path(__file__).parent.parent / "tools" / "plugins"
+                report["shared"]["venv"] = self._safe_rmtree(venv_base / plugin_name, venv_base)
+                report["shared"]["plugin_dir"] = self._safe_rmtree(plug_base / plugin_name, plug_base)
+        return report
+
+    def _job_plugin_name(self, job: CapabilityAcquisitionJob) -> str:
+        """Best-effort plugin_name for shared-resource cleanup (env-setup artifact > bundle manifest)."""
+        try:
+            if job.environment_setup_id:
+                es = self._store.load_environment_setup(job.environment_setup_id)
+                if es and getattr(es, "plugin_name", ""):
+                    return es.plugin_name
+        except Exception:
+            pass
+        try:
+            if job.code_bundle_id:
+                b = self._store.load_code_bundle(job.code_bundle_id)
+                nm = (b.manifest_candidate or {}).get("name") if b else ""
+                if nm:
+                    return str(nm)
+        except Exception:
+            pass
+        return str(getattr(job, "plugin_id", "") or "")
+
+    def _plugin_name_protected(self, plugin_name: str, exclude: str = "") -> bool:
+        """True if the plugin is live in the registry OR another job still references it.
+
+        Defaults to PROTECT (True) on any uncertainty — never the cause of a wrong delete.
+        """
+        if not plugin_name:
+            return True
+        try:
+            from tools.plugin_registry import get_plugin_registry
+            if get_plugin_registry().get_record(plugin_name) is not None:
+                return True
+        except Exception:
+            return True  # can't confirm the registry → protect
+        try:
+            for j in self._store.list_jobs():
+                if j.acquisition_id == exclude:
+                    continue
+                if self._job_plugin_name(j) == plugin_name:
+                    return True
+        except Exception:
+            return True  # can't confirm siblings → protect
+        return False
+
+    @staticmethod
+    def _safe_rmtree(path: Path, expect_base: Path) -> str:
+        """rmtree only if ``path`` is a real directory STRICTLY under ``expect_base``.
+
+        Never deletes the base itself; refuses anything outside it. This is the guard
+        against deleting the wrong folder if a plugin_name were ever malformed.
+        """
+        import shutil
+        try:
+            if not path.exists() or not path.is_dir():
+                return "absent"
+            rp, rb = path.resolve(), expect_base.resolve()
+            if rp == rb or rb not in rp.parents:
+                logger.warning("refusing unsafe rmtree: %s not strictly under %s", rp, rb)
+                return "refused_out_of_base"
+            shutil.rmtree(rp)
+            return "deleted"
+        except Exception as exc:
+            logger.warning("rmtree failed for %s: %s", path, exc)
+            return f"error:{type(exc).__name__}"
 
     # ── query ──────────────────────────────────────────────────────────
 
@@ -2402,6 +3121,7 @@ class AcquisitionOrchestrator:
                         "dependencies": plan.dependencies or [],
                         "test_cases": plan.test_cases or [],
                         "implementation_sketch": plan.implementation_sketch or "",
+                        "governance": getattr(plan, "governance", {}) or {},
                         "doc_count": len(plan.doc_artifact_ids or []),
                         "version": plan.version,
                     }
@@ -2662,6 +3382,15 @@ class AcquisitionOrchestrator:
                 model_ver = getattr(meta, "id", "") if meta else ""
             except Exception:
                 pass
+            # Weight-Room P1 (lived-before-synthetic): tag the session this prediction
+            # was made in. A prediction made DURING a synthetic session is telemetry
+            # only and must never count toward the lived live_shadow_accuracy a
+            # promotion gate would read — same firewall world_model.py applies.
+            try:
+                from memory.gate import memory_gate as _mg
+                _origin = "synthetic" if _mg.synthetic_session_active() else "live"
+            except Exception:
+                _origin = "live"
             artifact = ShadowPredictionArtifact(
                 acquisition_id=job.acquisition_id,
                 plan_id=getattr(plan, "plan_id", ""),
@@ -2672,6 +3401,7 @@ class AcquisitionOrchestrator:
                 model_version=model_ver,
                 risk_tier=job.risk_tier,
                 outcome_class=job.outcome_class,
+                origin=_origin,
             )
             self._store_shadow_prediction(artifact)
             logger.info(

@@ -105,6 +105,7 @@ class EvalCollector:
         readers.append(("study_telemetry", self._read_study_telemetry))
         readers.append(("experience_buffer", self._read_experience_buffer))
         readers.append(("world_model_promotion", self._read_world_model_promotion))
+        readers.append(("world_model_causal", self._read_world_model_causal))
         readers.append(("simulator_promotion", self._read_simulator_promotion))
         readers.append(("scene", self._read_scene))
         readers.append(("speakers", self._read_speakers))
@@ -356,6 +357,22 @@ class EvalCollector:
         result = promo.get_status()
         return result if isinstance(result, dict) else {}
 
+    def _read_world_model_causal(self) -> dict[str, Any]:
+        """Capture the causal engine's GROUND-TRUTH accuracy: the world judged whether the
+        model's predictions of CHANGE were right. predictive_accuracy is reported separately
+        from persistence (it can't masquerade as foresight) — a genuine external comparator
+        for the scoreboard, with predictive_total as the honest sample size."""
+        cs = getattr(self._engine, "consciousness", None)
+        wm = getattr(cs, "_world_model", None) if cs else None
+        causal = getattr(wm, "_causal", None) if wm else None
+        if causal is None:
+            return {}
+        try:
+            acc = causal.get_accuracy()
+            return acc if isinstance(acc, dict) else {}
+        except Exception:
+            return {}
+
     def _read_simulator_promotion(self) -> dict[str, Any]:
         cs = getattr(self._engine, "consciousness", None)
         if cs is None:
@@ -593,12 +610,40 @@ class EvalCollector:
             by_status = snapshot.get("by_status", {})
             if not isinstance(by_status, dict):
                 by_status = {}
+
+            # Honest capability evidence (the eval scoreboard's `capability` comparator):
+            # count ONLY skills whose latest evidence is a REAL behavioral proof — a test
+            # that actually executed. Bootstrap skills verified by `codebase_audit` (an
+            # import/AST check proving the code path merely *exists*) are NOT behavioral
+            # proof and are excluded from the denominator; counting them would inflate
+            # capability to ~100% with no earned signal. Empty (applicable==0) when the
+            # brain has only bootstrap skills — that stays visibly empty, not a fake grade.
+            behavioral_applicable = 0
+            behavioral_passing = 0
+            for s in (snapshot.get("skills", []) or []):
+                if not isinstance(s, dict):
+                    continue
+                es = s.get("evidence_summary")
+                if not isinstance(es, dict):
+                    continue
+                method = es.get("verification_method", "") or ""
+                tests_count = int(es.get("tests_count", 0) or 0)
+                is_behavioral = method not in ("", "codebase_audit") and tests_count > 0
+                if not is_behavioral:
+                    continue
+                behavioral_applicable += 1
+                if es.get("result") == "pass":
+                    behavioral_passing += 1
+
             return {
                 "total": int(snapshot.get("total", 0) or 0),
                 "verified_count": int(by_status.get("verified", 0) or 0),
                 "learning_count": int(by_status.get("learning", 0) or 0),
                 "blocked_count": int(by_status.get("blocked", 0) or 0),
                 "degraded_count": int(by_status.get("degraded", 0) or 0),
+                # behavioral-proof counts feed the scoreboard `capability` category
+                "behavioral_applicable_count": behavioral_applicable,
+                "behavioral_passing_count": behavioral_passing,
             }
         except Exception:
             return {}

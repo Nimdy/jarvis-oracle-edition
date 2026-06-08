@@ -26,7 +26,7 @@ from transport.ws_client import TransportClient
 from transport.event_schema import (
     BrainMessage, PerceptionEvent, person_detected, person_lost,
     gesture_detected, face_expression, pose_detected, sensor_status,
-    face_crop_event, scene_summary, sensor_health,
+    face_crop_event, scene_summary, sensor_health, scene_caption,
 )
 from senses.vision.detector import Detector
 from senses.vision.tracker import PersonTracker
@@ -77,6 +77,17 @@ class SensesService:
         self._last_scene_detect_ts: float = 0.0
         self._scene_detect_interval: float = 3.0
         self._was_person_present = False
+        # Edge VLM captioner (opt-in; see _init_vision). _last_vision_frame caches the
+        # most recent RGB frame for the captioner; _vision_frame_count lets the caption
+        # task measure detection fps DURING a caption (the Hailo-contention check).
+        self._captioner = None
+        self._last_vision_frame = None
+        self._vision_frame_count: int = 0
+        self._caption_low_fps_streak: int = 0
+        # Last wall-clock a person was present (tracker-confirmed). The edge captioner
+        # only fires after SUSTAINED absence (now - this >= buffer), so a brief low-light
+        # detection flicker can't open the idle-gate while someone is actually there.
+        self._last_person_seen_ts: float = 0.0
 
         # Audio (mic capture + playback only)
         self._audio = AudioManager(
@@ -244,6 +255,7 @@ class SensesService:
         last_heartbeat = time.time()
         last_health_report = time.time()
         last_stream_check = time.time()
+        last_caption = time.time()
         last_cb_count = 0
         loop = asyncio.get_event_loop()
 
@@ -256,6 +268,20 @@ class SensesService:
                 await loop.run_in_executor(None, self._process_vision_frame)
 
             now = time.time()
+
+            # Edge VLM caption (opt-in, low-cadence). Runs in its own daemon thread so
+            # the 8.8s generation never blocks the senses loop; the Hailo is time-sliced
+            # with detection (ROUND_ROBIN). Stage 1 = LOG ONLY (caption + det-fps impact);
+            # the brain does not consume it yet.
+            if (self._captioner is not None and self._captioner.ready
+                    # idle-gate: only caption after SUSTAINED absence (flicker-proof) —
+                    # no person seen for the buffer AND not present this instant.
+                    and not self._was_person_present
+                    and (now - self._last_person_seen_ts) >= self._config.vision.edge_caption_sustained_idle_s
+                    and now - last_caption >= self._config.vision.edge_caption_interval_s):
+                last_caption = now
+                threading.Thread(target=self._run_edge_caption,
+                                 name="edge-caption", daemon=True).start()
 
             # Mic stream health check
             if now - last_stream_check >= 3.0:
@@ -336,9 +362,28 @@ class SensesService:
             width=vc.width,
             height=vc.height,
             fps=vc.fps,
+            shared_group=vc.edge_caption_enabled,  # SHARED VDevice so the VLM can co-reside
         )
         self._tracker = PersonTracker()
         self._detector.start()
+
+        # Edge VLM scene captioner (Qwen2-VL-2B on the Hailo) — OPT-IN, shadow/log-only
+        # in this stage: it captions at low cadence sharing the detector's VDevice and
+        # LOGS the caption + the detection-fps impact, so we can prove it's safe before
+        # the brain consumes it. Lazy ~76s load in a background thread.
+        if vc.edge_caption_enabled and self._detector.vdevice is not None:
+            try:
+                from senses.vision.scene_captioner import SceneCaptioner
+                self._captioner = SceneCaptioner(
+                    self._detector.vdevice,
+                    hef_path=vc.edge_caption_hef,
+                    max_tokens=vc.edge_caption_max_tokens,
+                )
+                self._captioner.start_load_async()
+                logger.info("Edge VLM captioner enabled (loading in background, ~76s)")
+            except Exception:
+                logger.exception("Edge VLM captioner init failed — continuing without it")
+                self._captioner = None
 
         if vc.enable_expressions:
             self._expression = ExpressionAnalyzer(
@@ -395,15 +440,53 @@ class SensesService:
             ))
         return heads
 
+    def _run_edge_caption(self) -> None:
+        """Idle-gated edge caption: only runs when no person is present, so the VLM's
+        ~3-7s detection blackout (one Hailo can't do detection + generation at once)
+        costs nothing — there is no person to miss. Logs the caption + det-fps (the
+        blackout is expected/observed, not a fault here) and sends it to the brain.
+
+        Race guard: a person can appear DURING the caption; if so the result is
+        DROPPED, so an empty-room caption is never attributed to a person-present moment.
+        Safety = the idle-gate + the EDGE_CAPTION kill-switch (no fps auto-disable: the
+        blackout is intentional on an empty scene)."""
+        cap = self._captioner
+        frame = self._last_vision_frame
+        if cap is None or not cap.ready or frame is None or self._was_person_present:
+            return
+        fc0 = self._vision_frame_count
+        t0 = time.time()
+        text, latency_ms = cap.caption(frame)
+        dt = max(1e-3, time.time() - t0)
+        det_fps = (self._vision_frame_count - fc0) / dt
+        if text is None:
+            return
+        if self._was_person_present:
+            logger.info("Edge caption discarded — a person appeared during it (%dms)", latency_ms)
+            return
+        logger.info("Edge caption (%dms, det %.1f fps during, idle scene): %s",
+                    latency_ms, det_fps, text)
+        try:
+            self._transport.send_event(scene_caption(text, latency_ms=latency_ms))
+        except Exception:
+            logger.debug("scene_caption send failed", exc_info=True)
+
     def _process_vision_frame(self) -> None:
         assert self._detector and self._tracker
         frame = self._detector.capture_frame()
         if frame is None:
             return
+        # Cache the latest RGB frame + count frames so the edge captioner can reuse a
+        # frame without re-grabbing the camera, and measure detection fps during a caption.
+        if self._captioner is not None:
+            self._last_vision_frame = frame
+            self._vision_frame_count += 1
 
         detections = self._detector.detect(frame)
         tracks = self._tracker.update(detections)
         is_present = self._tracker.active_count > 0
+        if is_present:
+            self._last_person_seen_ts = time.time()  # edge-caption sustained-idle anchor
 
         if is_present and not self._was_person_present:
             best = max(tracks, key=lambda t: t.confidence_avg) if tracks else None
@@ -437,12 +520,17 @@ class SensesService:
             self._last_scene_diag = now
         summary = self._scene_agg.feed(detections)
         if summary is not None:
-            logger.info("Scene summary emitted: %d objects, change=%.3f",
-                        len(summary["detections"]), summary["scene_change_score"])
+            # Transient occlusion GEOMETRY only: where a body blocks the view THIS frame.
+            # Used by the brain solely for region-visibility (occluded-vs-removed) reasoning —
+            # never tracked as an entity, stored, or tied to identity. Same frame as objects.
+            person_bboxes = [list(d.bbox) for d in detections if d.label == "person" and d.bbox]
+            logger.info("Scene summary emitted: %d objects, %d persons, change=%.3f",
+                        len(summary["detections"]), len(person_bboxes), summary["scene_change_score"])
             self._transport.send_event(scene_summary(
                 detections=summary["detections"],
                 frame_size=(w, h),
                 scene_change_score=summary["scene_change_score"],
+                person_bboxes=person_bboxes,
             ))
 
         if self._expression:
@@ -453,6 +541,7 @@ class SensesService:
                 if expr.expression != "neutral":
                     self._transport.send_event(face_expression(expr.expression, expr.confidence))
 
+        poses = None
         if self._pose and self._pose.available:
             poses = self._pose.estimate(frame)
             self._tracker.set_pose_gestures(poses)
@@ -467,7 +556,7 @@ class SensesService:
             import base64
             person_dets = [d for d in detections if d.label == "person"]
             track_ids = [t.id for t in tracks[:len(person_dets)]] if tracks else None
-            face_crops = self._face_crop.extract(frame, person_dets[:3], track_ids)
+            face_crops = self._face_crop.extract(frame, person_dets[:3], track_ids, poses=poses)
             for fc in face_crops:
                 crop_bytes = FaceCropExtractor.crop_to_bytes(fc.crop)
                 crop_b64 = base64.b64encode(crop_bytes).decode("ascii")

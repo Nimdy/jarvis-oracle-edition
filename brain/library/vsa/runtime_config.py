@@ -70,6 +70,7 @@ RUNTIME_FLAGS_PATH_ENV: str = "JARVIS_RUNTIME_FLAGS"
 _FILE_KEY_BOOL = {
     "enable_hrr_shadow": "enabled",
     "enable_hrr_spatial_scene": "spatial_scene_enabled",
+    "enable_hrr_spatial_album": "spatial_album_enabled",
 }
 _FILE_KEY_INT = {
     "hrr_shadow_dim": ("dim", 16),
@@ -194,6 +195,11 @@ class HRRRuntimeConfig:
     spatial_scene_enabled: bool = False
     spatial_scene_sample_every_ticks: int = 50
 
+    # P5 spatial-episodic "album" — durable, zero-authority capture of seen
+    # worlds. Third sub-gate, opt-in, default OFF: requires the P5 twin gate to
+    # be active too (album_active). Lets P5 think in-RAM without writing disk.
+    spatial_album_enabled: bool = False
+
     # P5.1 provenance. Tuple-of-pairs because dataclass(frozen=True) needs hashable defaults.
     flag_sources: Tuple[Tuple[str, str], ...] = field(
         default_factory=lambda: (
@@ -202,6 +208,7 @@ class HRRRuntimeConfig:
             ("sample_every_ticks", SOURCE_DEFAULT),
             ("spatial_scene_enabled", SOURCE_DEFAULT),
             ("spatial_scene_sample_every_ticks", SOURCE_DEFAULT),
+            ("spatial_album_enabled", SOURCE_DEFAULT),
         )
     )
     runtime_flags_path: Optional[str] = None
@@ -220,6 +227,15 @@ class HRRRuntimeConfig:
         suppresses sampling. Both default off.
         """
         return bool(self.enabled and self.spatial_scene_enabled)
+
+    @property
+    def album_active(self) -> bool:
+        """True iff durable spatial-episodic capture should write this boot.
+
+        Requires the P5 lane active (master + twin gate) AND the album sub-gate.
+        All three default off — a fresh clone never writes an album.
+        """
+        return bool(self.spatial_scene_active and self.spatial_album_enabled)
 
     @property
     def spatial_scene_sample_interval_s(self) -> float:
@@ -259,6 +275,7 @@ class HRRRuntimeConfig:
         sample_every_ticks: int = 50
         spatial_scene_enabled: bool = False
         spatial_scene_sample_every_ticks: int = 50
+        spatial_album_enabled: bool = False
 
         sources: dict[str, str] = {
             "enabled": SOURCE_DEFAULT,
@@ -266,6 +283,7 @@ class HRRRuntimeConfig:
             "sample_every_ticks": SOURCE_DEFAULT,
             "spatial_scene_enabled": SOURCE_DEFAULT,
             "spatial_scene_sample_every_ticks": SOURCE_DEFAULT,
+            "spatial_album_enabled": SOURCE_DEFAULT,
         }
 
         # Layer 1: persistent runtime-flags file
@@ -280,6 +298,8 @@ class HRRRuntimeConfig:
                         enabled = v
                     elif attr_name == "spatial_scene_enabled":
                         spatial_scene_enabled = v
+                    elif attr_name == "spatial_album_enabled":
+                        spatial_album_enabled = v
                     sources[attr_name] = SOURCE_RUNTIME_FLAGS
 
         for file_key, (attr_name, minimum) in _FILE_KEY_INT.items():
@@ -315,6 +335,11 @@ class HRRRuntimeConfig:
             spatial_scene_enabled = env_p5
             sources["spatial_scene_enabled"] = SOURCE_ENVIRONMENT
 
+        env_album = _bool_from_env("ENABLE_HRR_SPATIAL_ALBUM")
+        if env_album is not None:
+            spatial_album_enabled = env_album
+            sources["spatial_album_enabled"] = SOURCE_ENVIRONMENT
+
         env_p5_every = _int_from_env(
             "HRR_SPATIAL_SCENE_SAMPLE_EVERY_TICKS", minimum=1
         )
@@ -330,6 +355,7 @@ class HRRRuntimeConfig:
             sample_every_ticks=sample_every_ticks,
             spatial_scene_enabled=spatial_scene_enabled,
             spatial_scene_sample_every_ticks=spatial_scene_sample_every_ticks,
+            spatial_album_enabled=spatial_album_enabled,
             flag_sources=flag_sources_tuple,
             runtime_flags_path=str(resolved_path),
             runtime_flags_error=file_error,

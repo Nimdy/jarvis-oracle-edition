@@ -428,18 +428,16 @@ class TestApprovalQueue:
 # ---------------------------------------------------------------------------
 
 class TestHealthGate:
-    def test_no_baseline_returns_healthy(self):
-        """If pre_p95 is 0, health check passes immediately."""
+    def test_no_baseline_fails_closed(self):
+        """#13: no pre-apply baseline means health is UNVERIFIABLE -> FAIL-CLOSED
+        (rollback), not 'assume OK'. (Also reads the real self._engine._kernel; the
+        old `from consciousness.kernel import kernel_loop` was a dead import.)"""
         orch, tmpdir = _make_orch()
         try:
-            mock_kernel = MagicMock()
-            mock_kernel.get_performance.return_value = {"p95_tick_ms": 0.0}
-
-            with patch.dict("sys.modules", {
-                "consciousness.kernel": MagicMock(kernel_loop=mock_kernel),
-            }):
-                result = _run(orch._check_post_apply_health("/tmp/snap"))
-            assert result is True
+            orch._engine = MagicMock()
+            orch._engine._kernel.get_performance.return_value = {"p95_tick_ms": 0.0}
+            result = _run(orch._check_post_apply_health("/tmp/snap"))
+            assert result is False
         finally:
             _cleanup(orch)
 

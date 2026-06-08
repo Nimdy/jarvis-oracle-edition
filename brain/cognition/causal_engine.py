@@ -22,6 +22,31 @@ logger = logging.getLogger(__name__)
 FLOAT_TOLERANCE = 0.1
 MAX_PREDICTION_LOG = 200
 
+# Rules that predict the CURRENT state simply persists (steady-state,
+# "stable stays stable"). Their hits are near-tautological and must NOT be
+# conflated with genuine causal foresight. get_accuracy() reports their
+# accuracy separately (persistence_accuracy) from event-triggered transition
+# rules (predictive_accuracy), so a high pooled number can't masquerade as
+# foresight. MAINTENANCE: when adding a steady-state rule (condition reads
+# current conditions; predicted_delta is the current state continuing), add
+# its rule_id here.
+_PERSISTENCE_RULE_IDS = frozenset({
+    "quiet_desk_stays_quiet",
+    "present_user_stays",
+    "healthy_system_stays_healthy",
+    "absent_room_stays_quiet",
+    "passive_mode_persists",
+    "active_conversation_persists",
+    "workspace_person_stays",
+})
+# #9.2: dropped 4 near-duplicate user.present persistence rules — idle_user_no_conversation
+# (duplicated quiet_desk_stays_quiet), stable_scene_persists / display_zone_mode_stable /
+# multi_entity_scene_stable (all bare {user.present: True} under different stable-scene
+# conditions). They were redundant tautological persistence; present_user_stays remains the
+# canonical presence-persistence rule. Removal does NOT change predictive_accuracy (these
+# never counted toward it — they were persistence-classified); it only de-pads the
+# persistence side so it can't be mistaken for prediction throughput.
+
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -245,22 +270,6 @@ def _build_default_rules() -> list[CausalRule]:
     ))
 
     rules.append(CausalRule(
-        rule_id="idle_user_no_conversation",
-        label="idle_stays_idle",
-        category="user",
-        priority=20,
-        condition=lambda ws, ds: (
-            ws.user.present
-            and not ws.conversation.active
-            and ws.user.seconds_since_last_interaction > 30.0
-            and ws.user.seconds_since_last_interaction < 120.0
-        ),
-        predicted_delta={"user.present": True, "conversation.active": False},
-        confidence=0.80,
-        horizon_s=30.0,
-    ))
-
-    rules.append(CausalRule(
         rule_id="active_conversation_persists",
         label="conversation_stays_active",
         category="conversation",
@@ -279,37 +288,6 @@ def _build_default_rules() -> list[CausalRule]:
     # into legacy WorldState fields for benchmark scoring compatibility.
 
     rules.append(CausalRule(
-        rule_id="stable_scene_persists",
-        label="scene_layout_stable",
-        category="physical",
-        priority=25,
-        condition=lambda ws, ds: (
-            ws.physical.stable_count >= 2
-            and ws.physical.visible_count >= 2
-            and len(ws.physical.region_visibility) >= 2
-        ),
-        predicted_delta={"user.present": True},
-        confidence=0.80,
-        horizon_s=45.0,
-    ))
-
-    rules.append(CausalRule(
-        rule_id="display_zone_mode_stable",
-        label="display_implies_mode_stable",
-        category="system",
-        priority=20,
-        condition=lambda ws, ds: (
-            ws.user.present
-            and len(ws.physical.display_surfaces) >= 1
-            and ws.system.mode in ("passive", "conversational", "reflective")
-            and ws.system.health_score >= 0.7
-        ),
-        predicted_delta={"user.present": True},
-        confidence=0.85,
-        horizon_s=45.0,
-    ))
-
-    rules.append(CausalRule(
         rule_id="workspace_person_stays",
         label="person_at_workspace_stays",
         category="user",
@@ -325,22 +303,39 @@ def _build_default_rules() -> list[CausalRule]:
         horizon_s=45.0,
     ))
 
+    # --- Genuinely predictive transition rules (#9.2) ---
+    # Event-triggered (fire on a transition delta, not steady-state), each predicts a
+    # measurable CHANGE/continuation. NOT in _PERSISTENCE_RULE_IDS, so they count toward
+    # predictive_accuracy and must earn it honestly against real outcomes.
+
     rules.append(CausalRule(
-        rule_id="multi_entity_scene_stable",
-        label="rich_scene_persists",
-        category="physical",
-        priority=20,
+        rule_id="mode_changed_to_sleep_absence",
+        label="sleep_transition_implies_absence",
+        category="system",
+        priority=50,
+        condition=lambda ws, ds: _has_delta_with(ds, "mode_changed", "to", "sleep"),
+        predicted_delta={"user.present": False},
+        confidence=0.7,
+        horizon_s=60.0,
+    ))
+
+    rules.append(CausalRule(
+        rule_id="topic_changed_conversation_continues",
+        label="topic_shift_sustains_conversation",
+        category="conversation",
+        priority=40,
         condition=lambda ws, ds: (
-            ws.physical.entity_count >= 3
-            and ws.physical.stable_count >= 2
-            and ws.user.present
+            _has_delta(ds, "topic_changed") and ws.conversation.active
         ),
-        predicted_delta={"user.present": True},
-        confidence=0.85,
-        horizon_s=45.0,
+        predicted_delta={"conversation.active": True},
+        confidence=0.75,
+        horizon_s=30.0,
     ))
 
     # --- PRUNED RULES (removed with justification) ---
+    # idle_user_no_conversation: #9.2 — duplicated quiet_desk_stays_quiet's prediction
+    # stable_scene_persists / display_zone_mode_stable / multi_entity_scene_stable: #9.2 —
+    #   near-duplicate {user.present: True} persistence rules; redundant with present_user_stays
     # object_appeared: predicted person_count=1 on any entity appearance — semantically wrong
     # object_disappeared: empty predicted_delta → auto-hit, inflates accuracy
     # multiple_barge_ins: empty predicted_delta → auto-hit, inflates accuracy
@@ -364,6 +359,13 @@ class CausalEngine:
         self._predictions: deque[CausalPrediction] = deque(maxlen=MAX_PREDICTION_LOG)
         self._rule_hits: dict[str, int] = {}
         self._rule_misses: dict[str, int] = {}
+        # Lived-only mirror (Weight-Room lived-before-synthetic): outcomes
+        # validated OUTSIDE a synthetic session. Pooled _rule_hits/_misses count
+        # every validation regardless of origin (kept for oracle_benchmark back-
+        # compat); these two count ONLY live reps so the eval scoreboard's
+        # epistemic_integrity can never be inflated by synthetic training.
+        self._rule_hits_live: dict[str, int] = {}
+        self._rule_misses_live: dict[str, int] = {}
         self._total_validated: int = 0
 
     # -- Public API ---------------------------------------------------------
@@ -448,10 +450,19 @@ class CausalEngine:
 
         return fired
 
-    def validate_predictions(self, world_state: WorldState) -> list[CausalPrediction]:
-        """Check expired predictions against actual state.  Returns newly validated."""
+    def validate_predictions(
+        self, world_state: WorldState, origin: str = "live",
+    ) -> list[CausalPrediction]:
+        """Check expired predictions against actual state.  Returns newly validated.
+
+        ``origin`` ("live" | "synthetic") tags each validated outcome by the
+        session it was observed in. Outcomes always feed the pooled
+        _rule_hits/_misses; only ``origin == "live"`` reps additionally feed the
+        lived-only mirror that get_accuracy exposes as predictive_accuracy_live.
+        """
         now = time.time()
         validated: list[CausalPrediction] = []
+        is_live = origin == "live"
 
         for pred in self._predictions:
             if pred.outcome != "pending":
@@ -463,6 +474,8 @@ class CausalEngine:
                 pred.outcome = "hit"
                 pred.validated_at = now
                 self._rule_hits[pred.rule_id] = self._rule_hits.get(pred.rule_id, 0) + 1
+                if is_live:
+                    self._rule_hits_live[pred.rule_id] = self._rule_hits_live.get(pred.rule_id, 0) + 1
                 self._total_validated += 1
                 validated.append(pred)
                 continue
@@ -481,9 +494,13 @@ class CausalEngine:
             if total > 0 and hits >= total * 0.5:
                 pred.outcome = "hit"
                 self._rule_hits[pred.rule_id] = self._rule_hits.get(pred.rule_id, 0) + 1
+                if is_live:
+                    self._rule_hits_live[pred.rule_id] = self._rule_hits_live.get(pred.rule_id, 0) + 1
             else:
                 pred.outcome = "miss"
                 self._rule_misses[pred.rule_id] = self._rule_misses.get(pred.rule_id, 0) + 1
+                if is_live:
+                    self._rule_misses_live[pred.rule_id] = self._rule_misses_live.get(pred.rule_id, 0) + 1
 
             pred.validated_at = now
             self._total_validated += 1
@@ -492,25 +509,64 @@ class CausalEngine:
         return validated
 
     def get_accuracy(self) -> dict[str, Any]:
-        """Overall and per-rule accuracy stats."""
+        """Overall and per-rule accuracy stats.
+
+        Reports persistence_accuracy and predictive_accuracy SEPARATELY:
+        steady-state rules (_PERSISTENCE_RULE_IDS) that predict the current
+        state simply continues are near-tautological, so pooling them into a
+        single number produces a false "foresight" metric. predictive_accuracy
+        reflects genuine event-triggered transition predictions and is the
+        honest foresight signal consumed by the Oracle benchmark. overall_accuracy
+        is retained for backward compatibility.
+        """
         total_hits = sum(self._rule_hits.values())
         total_misses = sum(self._rule_misses.values())
         total = total_hits + total_misses
         overall = total_hits / total if total > 0 else 0.0
 
+        p_hits = p_miss = d_hits = d_miss = 0
         per_rule: dict[str, dict[str, Any]] = {}
         all_ids = set(self._rule_hits) | set(self._rule_misses)
         for rid in all_ids:
             h = self._rule_hits.get(rid, 0)
             m = self._rule_misses.get(rid, 0)
             t = h + m
+            is_persistence = rid in _PERSISTENCE_RULE_IDS
+            if is_persistence:
+                p_hits += h
+                p_miss += m
+            else:
+                d_hits += h
+                d_miss += m
             per_rule[rid] = {
                 "hits": h, "misses": m, "total": t,
                 "accuracy": round(h / t, 3) if t > 0 else 0.0,
+                "kind": "persistence" if is_persistence else "predictive",
             }
+
+        p_total = p_hits + p_miss
+        d_total = d_hits + d_miss
+
+        # Lived-only foresight: same persistence/predictive split, but over the
+        # live mirror only. The eval scoreboard's epistemic_integrity reads these
+        # so synthetic training reps can never inflate the honesty score. Additive
+        # — predictive_accuracy above is unchanged (oracle_benchmark back-compat).
+        dl_hits = dl_miss = 0
+        for rid in set(self._rule_hits_live) | set(self._rule_misses_live):
+            if rid in _PERSISTENCE_RULE_IDS:
+                continue
+            dl_hits += self._rule_hits_live.get(rid, 0)
+            dl_miss += self._rule_misses_live.get(rid, 0)
+        dl_total = dl_hits + dl_miss
 
         return {
             "overall_accuracy": round(overall, 3),
+            "predictive_accuracy": round(d_hits / d_total, 3) if d_total > 0 else 0.0,
+            "predictive_total": d_total,
+            "predictive_accuracy_live": round(dl_hits / dl_total, 3) if dl_total > 0 else 0.0,
+            "predictive_total_live": dl_total,
+            "persistence_accuracy": round(p_hits / p_total, 3) if p_total > 0 else 0.0,
+            "persistence_total": p_total,
             "total_validated": self._total_validated,
             "total_hits": total_hits,
             "total_misses": total_misses,
@@ -521,6 +577,22 @@ class CausalEngine:
             "last_skipped_condition": getattr(self, "_last_infer_skipped_condition", 0),
             "last_skipped_conflict": getattr(self, "_last_infer_skipped_conflict", 0),
             "per_rule": per_rule,
+            # #9 labeling sweep: explicit provenance so a marquee accuracy can never be
+            # read as something it isn't. No scores changed — labels only.
+            "provenance": {
+                "predictive_accuracy": {
+                    "is_measurement": True, "kind": "measured",
+                    "note": "validated against reality — genuine foresight (event-triggered transitions)"},
+                "predictive_accuracy_live": {
+                    "is_measurement": True, "kind": "measured",
+                    "note": "live-only foresight, synthetic-firewalled"},
+                "persistence_accuracy": {
+                    "is_measurement": False, "kind": "internally_scored",
+                    "note": "near-tautological steady-state continuation — NOT foresight"},
+                "overall_accuracy": {
+                    "is_measurement": False, "kind": "pooled_internally_scored",
+                    "note": "pools persistence + predictive; back-compat only — not a clean foresight measurement"},
+            },
         }
 
     def get_pending_predictions(self) -> list[dict[str, Any]]:

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Awakening / Gestation (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .statusbanner{margin:0 0 4px;padding:12px 16px;border:1px solid var(--line);border-left-width:4px;border-radius:5px;}
+    .statusbanner .big{font-size:18px;font-weight:700;letter-spacing:.06em;}
+    .statusbanner .meta{font-size:11px;color:var(--muted);margin-top:4px;}
+    .gauge{display:flex;align-items:baseline;gap:14px;margin:2px 0 10px;}
+    .gauge .v{font-size:42px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .gauge .k{font-size:10px;color:var(--muted);letter-spacing:.08em;}
+    .cert{border:1px solid var(--cyan);border-radius:5px;padding:10px 13px;background:rgba(0,204,255,.05);}
+    .cert .lbl{font-size:9px;letter-spacing:.1em;color:var(--cyan);margin-bottom:6px;}
+    .cert .row{display:flex;justify-content:space-between;font-size:10.5px;margin:3px 0;color:var(--muted);}
+    .cert .row b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .pgrid{display:flex;gap:18px;flex-wrap:wrap;font-size:11px;margin-top:4px;}
+    .pgrid .k{font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;}
+    .pgrid b{font-size:18px;font-variant-numeric:tabular-nums;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · AWAKENING</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Gestation &amp; birth. A fresh brain is <em>pre-mature by design</em>, not broken — this surface is its first voice, and the immutable record of when it was born.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col12"><div class="statusbanner" id="status"></div></section>
+
+    <section class="card col7">
+      <h2>Readiness Composite <span id="rsrc" class="tag derived"></span></h2>
+      <div class="note">Birth-readiness gate (0–1). The 8 components are shown generically — a missing one renders UNKNOWN (hatched), never zero. A low <em>policy_experience</em> on a young brain is baseline, not deficiency.</div>
+      <div class="gauge"><span class="v" id="readiness-v">—</span><span class="k">OVERALL<br>READINESS</span><span id="readiness-rec" class="tag"></span></div>
+      <div class="bars" id="components"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Birth Certificate <span class="tag earned">immutable</span></h2>
+      <div class="note">Proof-of-birth: the authoritative answer to "when born / readiness at birth". Stamped once, never recomputed on reboot.</div>
+      <div class="cert" id="birthcert"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Gestation Progress</h2>
+      <div class="note">The four-phase birthing protocol (self-study → knowledge → bootcamp → identity-formation). Live bars when gestating; historical totals once graduated.</div>
+      <div class="pgrid" id="progress"></div>
+      <div class="bars" id="phasebars" style="margin-top:10px;"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, cap=V2.cap;
+  var G=null, lastOkTs=0;
+  V2.renderNav('/static/v2/awakening.html');
+
+  function mode(g){
+    if(!g) return 'unknown';
+    if(g.active===true) return 'gestating';
+    if(g.graduated===true){
+      var gat=num(g.graduated_at);
+      if(gat && (Date.now()/1000 - gat) < 10800) return 'fresh';   // <3h
+      return 'mature';
+    }
+    return 'unknown';
+  }
+
+  function renderStatus(){
+    var g=G||{}, m=mode(g), box=el('status'), src=el('rsrc');
+    var color={gestating:'var(--amber)',fresh:'var(--green)',mature:'var(--cyan)',unknown:'var(--dim)'}[m];
+    box.style.borderLeftColor=color;
+    src.textContent = (g.readiness_source==='birth_certificate') ? 'at-birth' : (g.readiness_source||'');
+    if(m==='gestating'){
+      var minOk = g.readiness && g.readiness.met_minimum_duration;
+      box.innerHTML='<div class="big" style="color:var(--amber)">⬡ GESTATION IN PROGRESS</div>'+
+        '<div class="meta">phase '+(num(g.phase)||0)+'/3 · '+cap(g.phase_name||'')+' · elapsed '+ago(num(g.started_at))+
+        ' · minimum-duration gate '+(minOk?'<b style="color:var(--green)">met</b>':'<b style="color:var(--amber)">not yet</b>')+
+        '. A fresh brain is pre-mature by design — this is birth, not failure.</div>';
+    } else if(m==='fresh' || m==='mature'){
+      var bs=g.birth_snapshot||{};
+      box.innerHTML='<div class="big" style="color:'+color+'">✦ BORN '+(m==='fresh'?'(fresh)':'')+'</div>'+
+        '<div class="meta">instance <b>'+(bs.instance_id||'?')+'</b> · born '+ago(num(g.graduated_at))+
+        ' · readiness-at-birth <b>'+(g.readiness?f3(g.readiness.overall):'—')+'</b> · gestation complete ('+(num(g.directives_completed)||0)+'/'+(num(g.directives_issued)||0)+' directives). Readiness below is the <b>at-birth</b> record.</div>';
+    } else {
+      box.innerHTML='<div class="big" style="color:var(--dim)">UNKNOWN — no gestation record</div>'+
+        '<div class="meta">No gestation state available (or never gestated). Rendering UNKNOWN rather than green.</div>';
+    }
+  }
+
+  function renderReadiness(){
+    var r=(G&&G.readiness)||null;
+    if(!r){ el('readiness-v').textContent='—'; el('components').innerHTML='<div class="unpop">no readiness data — UNKNOWN</div>'; return; }
+    var ov=num(r.overall);
+    var vEl=el('readiness-v'); vEl.textContent=ov===null?'—':ov.toFixed(3); vEl.style.color=bandColor(ov,0.8,0.6);
+    var rec=el('readiness-rec'); rec.textContent=r.recommendation||''; rec.className='tag '+((r.recommendation==='graduated')?'earned':'derived');
+    var comps=r.components||{};
+    var order=['self_knowledge','knowledge_foundation','memory_mass','consciousness_stage','hemisphere_training','personality_emergence','policy_experience','loop_integrity'];
+    var keys=order.filter(function(k){return k in comps;}).concat(Object.keys(comps).filter(function(k){return order.indexOf(k)<0;}));
+    el('components').innerHTML=keys.map(function(k){
+      var v=num(comps[k]);
+      if(v===null) return V2.barRow(cap(k), null, 'UNKNOWN');
+      return V2.barRow(cap(k), v*100, v.toFixed(2), bandColor(v,0.8,0.5));
+    }).join('') || '<div class="unpop">no components</div>';
+  }
+
+  function renderBirthCert(){
+    var bs=(G&&G.birth_snapshot)||null, box=el('birthcert');
+    if(!bs){ box.innerHTML='<div class="unpop">no birth certificate yet — brain has not graduated</div>'; return; }
+    function row(k,v){ return '<div class="row"><span>'+k+'</span><b>'+v+'</b></div>'; }
+    var dur=num(bs.duration_s);
+    box.innerHTML='<div class="lbl">CERTIFICATE OF BIRTH</div>'+
+      row('instance', bs.instance_id||'?')+
+      row('gestation began', bs.gestation_started?ago(num(bs.gestation_started)):'—')+
+      row('born', bs.gestation_completed?ago(num(bs.gestation_completed)):'—')+
+      row('gestation duration', dur===null?'—':(dur/3600).toFixed(2)+' h')+
+      row('readiness at birth', bs.readiness_at_birth!=null?f3(bs.readiness_at_birth):(G.readiness?f3(G.readiness.overall):'—'));
+  }
+
+  function renderProgress(){
+    var g=G||{};
+    var pc=g.phase_completions||{};
+    el('progress').innerHTML=
+      '<span><div class="k">directives</div><b>'+(num(g.directives_completed)||0)+' / '+(num(g.directives_issued)||0)+'</b></span>'+
+      '<span><div class="k">research jobs</div><b>'+(num(g.research_jobs_completed)||0)+'</b></span>'+
+      '<span><div class="k">backpressure</div><b style="color:'+(g.backpressure_active?'var(--amber)':'var(--green)')+'">'+(g.backpressure_active?'active':'clear')+'</b></span>'+
+      '<span><div class="k">phase</div><b>'+(num(g.phase)||0)+'/3</b></span>';
+    var phases=['self_study','knowledge','bootcamp'];
+    el('phasebars').innerHTML=phases.map(function(k){
+      var done=num(pc[k]); var rem=num(g[k+'_remaining']);
+      var label=cap(k)+(rem!=null?(' ('+rem+' left)'):'');
+      // when graduated these are historical counts; show as completed count, no misleading pct
+      return V2.barRow(label, done!=null&&rem!=null&&(done+rem)>0 ? done/(done+rem)*100 : (done?100:0), (done==null?'—':done)+' done', 'var(--cyan)');
+    }).join('');
+  }
+
+  function renderRecovery(){ el('recovery').style.display='none'; }
+  function renderBanner(){
+    var g=G||{};
+    el('mode').textContent='gestation '+(g.active?'ACTIVE':(g.graduated?'graduated':'—'));
+  }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderStatus(); renderReadiness(); renderBirthCert(); renderProgress(); }
+
+  function refresh(){
+    fetchJSON('/api/full-snapshot').then(function(s){ G=(s&&s.gestation)||{}; lastOkTs=Date.now(); renderAll(); })
+      .catch(function(){ if(!G) el('status').innerHTML='<div class="statusbanner offline">full-snapshot offline — gestation UNKNOWN</div>'; });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 10000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

@@ -23,6 +23,7 @@ from hemisphere.types import (
     DynamicFocus,
     HemisphereFocus,
     HemisphereState,
+    MAX_PROBATIONARY_SPECIALISTS,
     NetworkArchitecture,
     NetworkStatus,
 )
@@ -83,6 +84,34 @@ EXPANSION_MIN_PROMOTED = 2
 EXPANSION_MIN_IMPACT = 0.05
 EXPANSION_STABILITY_DAYS = 7
 EXPANDED_SLOT_COUNT = 6
+
+# Matrix Protocol Phase M — autonomous Tier-2 birth from accumulated signal.
+# A focus must accumulate this many real signal observations (encoder output over
+# live cycles) before a specialist is birthed — the "enough internal signal" gate.
+# The buffered (features, label) samples double as the self-supervised training set
+# (Phase M2). Buffer is bounded + pruned to keep the latest signal.
+MATRIX_BIRTH_MIN_SAMPLES = 30
+MATRIX_SIGNAL_BUFFER_MAX = 500
+
+# Phase M2 — self-supervised training of a born Tier-2 specialist: the NN learns
+# to predict its encoder's regime (4-class) from the encoder's features. This is
+# honest distillation — accuracy means "the NN learned its own encoder," not a
+# faked number. An honesty guard refuses to "train" on a constant label (no signal
+# variation = nothing learned), so a specialist can't advance on a degenerate fit.
+MATRIX_TRAIN_MIN_SAMPLES = 20
+MATRIX_TRAIN_EPOCHS = 20
+MATRIX_TRAIN_OUTPUT_CLASSES = 4
+MATRIX_TRAIN_MIN_DISTINCT_LABELS = 2
+
+# Phase M3 — the sub-conscious broadcast lane. Tier-2 matrix specialists do NOT
+# compete with the high-accuracy Tier-1 distilled specialists for the main
+# broadcast slots (they'd never win the 1.15x swap against ~1.0-accuracy
+# incumbents — a chicken-and-egg that blocks the first promotion). Instead they
+# compete among THEMSELVES in their own lane (David: "a separate broadcast layer
+# — the sub-conscious layer, its own swim lane"). Holding a lane slot for
+# MATRIX_PROMOTE_DWELL cycles is the BROADCAST_ELIGIBLE -> PROMOTED gate.
+MATRIX_BROADCAST_SLOTS = 2
+MATRIX_PROMOTE_DWELL = 10
 
 _TIER1_FOCUSES = frozenset({
     HemisphereFocus.EMOTION_DEPTH,
@@ -151,6 +180,9 @@ class HemisphereOrchestrator:
         self._outcome_buffer: dict[str, deque] = {
             f.value: deque(maxlen=OUTCOME_BUFFER_MAXLEN) for f in HemisphereFocus
         }
+        # Phase M: per-focus Tier-2 signal samples (features, label) for autonomous
+        # birth gating + self-supervised distillation training.
+        self._matrix_signal_buffers: dict[str, deque] = {}
         self._outcomes_since_train: dict[str, int] = {f.value: 0 for f in HemisphereFocus}
 
         self._research_cache: list[str] = []
@@ -176,6 +208,12 @@ class HemisphereOrchestrator:
             {"name": f.value, "value": 0.0, "score": 0.0, "dwell": 0}
             for f in (HemisphereFocus.MEMORY, HemisphereFocus.MOOD,
                       HemisphereFocus.TRAITS, HemisphereFocus.GENERAL)
+        ]
+        # M3: separate sub-conscious broadcast lane — Tier-2 matrix specialists
+        # compete only among themselves here (not against Tier-1).
+        self._matrix_broadcast_slots: list[dict[str, Any]] = [
+            {"name": None, "score": 0.0, "dwell": 0}
+            for _ in range(MATRIX_BROADCAST_SLOTS)
         ]
 
         # M6 expansion state
@@ -282,8 +320,18 @@ class HemisphereOrchestrator:
         # Phase 0: prune networks past sunset deadline or over cap
         self._prune_networks()
 
+        # Phase 0.2: Matrix Protocol (Phase M) — accumulate Tier-2 signal + autonomous birth
+        self._observe_matrix_signals()
+        self._check_matrix_births()
+
+        # Phase 0.22: Matrix Protocol (Phase M2) — train born specialists toward the gates
+        self._train_matrix_specialists()
+
         # Phase 0.25: check specialist promotion ladder
         self._check_specialist_promotions()
+
+        # Phase 0.27: update the sub-conscious broadcast lane (matrix dwell -> PROMOTED)
+        self._update_matrix_broadcast_slots()
 
         # Phase 0.3: check if broadcast expansion should trigger
         self._check_expansion_trigger()
@@ -727,6 +775,325 @@ class HemisphereOrchestrator:
             )
         return arch
 
+    # ── Phase M: autonomous Tier-2 signal accumulation + birth ──
+
+    def _matrix_encoder_for(self, focus):
+        """Return ``(ctx, encoder_class)`` for a Tier-2 focus, or ``(None, None)``.
+
+        Explicit dispatch (no generic detector) mirroring ``_matrix_focus_signal``:
+        each focus has a context builder on this orchestrator + a pure encoder.
+        """
+        import importlib
+        spec = {
+            HemisphereFocus.POSITIVE_MEMORY: ("_build_positive_memory_context", "positive_memory_encoder", "PositiveMemoryEncoder"),
+            HemisphereFocus.NEGATIVE_MEMORY: ("_build_negative_memory_context", "negative_memory_encoder", "NegativeMemoryEncoder"),
+            HemisphereFocus.SPEAKER_PROFILE: ("_build_speaker_profile_context", "speaker_profile_encoder", "SpeakerProfileEncoder"),
+            HemisphereFocus.TEMPORAL_PATTERN: ("_build_temporal_pattern_context", "temporal_pattern_encoder", "TemporalPatternEncoder"),
+            HemisphereFocus.SKILL_TRANSFER: ("_build_skill_transfer_context", "skill_transfer_encoder", "SkillTransferEncoder"),
+        }.get(focus)
+        if not spec:
+            return None, None
+        builder_name, mod_name, cls_name = spec
+        ctx = getattr(self, builder_name)()
+        mod = importlib.import_module(f"hemisphere.{mod_name}")
+        return ctx, getattr(mod, cls_name)
+
+    @staticmethod
+    def _matrix_label(signal: float) -> int:
+        """Bucket an encoder signal in [0,1] into a 4-class regime label (0..3)."""
+        return min(3, max(0, int(float(signal) * 4)))
+
+    def _observe_matrix_signals(self) -> None:
+        """Each cycle: sample every Tier-2 focus's encoder (features + regime label).
+
+        This is the 'accumulate internal signal' step that gates autonomous birth and
+        supplies the self-supervised training set. Read-only over live state; per-focus
+        failures degrade silently (the encoders are best-effort pure functions).
+        """
+        from hemisphere.types import MATRIX_ELIGIBLE_FOCUSES
+        for focus in MATRIX_ELIGIBLE_FOCUSES:
+            try:
+                ctx, enc = self._matrix_encoder_for(focus)
+                if ctx is None or enc is None:
+                    continue
+                features = [float(x) for x in enc.encode(ctx)]
+                label = self._matrix_label(enc.compute_signal_value(ctx))
+                buf = self._matrix_signal_buffers.get(focus.value)
+                if buf is None:
+                    buf = deque(maxlen=MATRIX_SIGNAL_BUFFER_MAX)
+                    self._matrix_signal_buffers[focus.value] = buf
+                buf.append((features, label))
+            except Exception:
+                logger.debug("matrix signal observe failed for %s", focus.value, exc_info=True)
+
+    def _check_matrix_births(self) -> None:
+        """Autonomously birth a Tier-2 specialist once its focus has accumulated
+        enough real signal (and none exists yet, and we're under the cap)."""
+        from hemisphere.types import MATRIX_ELIGIBLE_FOCUSES, SpecialistLifecycleStage
+        if self.count_probationary_specialists() >= MAX_PROBATIONARY_SPECIALISTS:
+            return
+        with self._networks_lock:
+            existing = {
+                n.focus for n in self._networks.values()
+                if n.specialist_lifecycle is not None
+                and n.specialist_lifecycle != SpecialistLifecycleStage.RETIRED
+            }
+        for focus in MATRIX_ELIGIBLE_FOCUSES:
+            if focus in existing:
+                continue
+            buf = self._matrix_signal_buffers.get(focus.value)
+            if not buf or len(buf) < MATRIX_BIRTH_MIN_SAMPLES:
+                continue
+            # Birth-variation gate: only birth a focus whose accumulated signal
+            # shows >=2 regimes — i.e. it has something to LEARN. Births on a
+            # constant signal would just sit untrainable (honesty guard blocks
+            # their training) and hog the cap, starving focuses that can train.
+            _, _, n_distinct = self._matrix_training_set(list(buf))
+            if n_distinct < MATRIX_TRAIN_MIN_DISTINCT_LABELS:
+                continue
+            arch = self.create_probationary_specialist(focus, job_id="autonomous_birth")
+            if arch is not None:
+                logger.info(
+                    "Matrix autonomous birth: %s -> CANDIDATE_BIRTH (%d samples, %d regimes)",
+                    focus.value, len(buf), n_distinct,
+                )
+            if self.count_probationary_specialists() >= MAX_PROBATIONARY_SPECIALISTS:
+                break
+
+    @staticmethod
+    def _matrix_training_set(samples):
+        """Pure: turn buffered (features, label) samples into (X, Y_onehot, n_distinct).
+
+        X is list[list[float]] (N x 16); Y_onehot is list[list[float]] (N x 4);
+        n_distinct is the number of distinct regime labels present (the honesty
+        guard reads this — a single-label set has nothing to learn).
+        """
+        X, Y, labels_seen = [], [], set()
+        for feat, label in samples:
+            lab = int(label)
+            if lab < 0 or lab >= MATRIX_TRAIN_OUTPUT_CLASSES:
+                continue
+            onehot = [0.0] * MATRIX_TRAIN_OUTPUT_CLASSES
+            onehot[lab] = 1.0
+            X.append([float(x) for x in feat])
+            Y.append(onehot)
+            labels_seen.add(lab)
+        return X, Y, len(labels_seen)
+
+    def _matrix_train_topology(self):
+        """4-class regime-classifier topology (16 -> 16 relu -> 4 softmax)."""
+        from hemisphere.types import NetworkTopology, LayerDefinition
+        return NetworkTopology(
+            input_size=16,
+            layers=(
+                LayerDefinition(id="h1", layer_type="hidden", node_count=16,
+                                activation="relu", dropout=0.0),
+                LayerDefinition(id="out", layer_type="output",
+                                node_count=MATRIX_TRAIN_OUTPUT_CLASSES, activation="softmax"),
+            ),
+            output_size=MATRIX_TRAIN_OUTPUT_CLASSES,
+            total_parameters=16 * 16 + 16 + MATRIX_TRAIN_OUTPUT_CLASSES * 16 + MATRIX_TRAIN_OUTPUT_CLASSES,
+            activation_functions=("relu", "softmax"),
+        )
+
+    def _train_matrix_specialists(self) -> None:
+        """Phase M2: train each born-but-unverified Tier-2 specialist on its
+        accumulated signal so it can clear the lifecycle gates honestly.
+
+        Self-supervised distillation: the NN learns to predict the encoder's
+        regime label from the encoder's features. On success this sets
+        performance.accuracy (PROBATIONARY->VERIFIED gate) and advances
+        training_progress.current_epoch (CANDIDATE_BIRTH->PROBATIONARY gate,
+        which train_distillation does NOT set on its own).
+        """
+        from hemisphere.types import (
+            MATRIX_ELIGIBLE_FOCUSES, SpecialistLifecycleStage as S,
+        )
+        with self._networks_lock:
+            trainees = [
+                n for n in self._networks.values()
+                if n.focus in MATRIX_ELIGIBLE_FOCUSES
+                and n.specialist_lifecycle in (
+                    S.CANDIDATE_BIRTH, S.PROBATIONARY_TRAINING,
+                )
+            ]
+        for net in trainees:
+            try:
+                buf = self._matrix_signal_buffers.get(net.focus.value)
+                if not buf or len(buf) < MATRIX_TRAIN_MIN_SAMPLES:
+                    continue
+                X, Y, n_distinct = self._matrix_training_set(list(buf))
+                if len(X) < MATRIX_TRAIN_MIN_SAMPLES:
+                    continue
+                # Honesty guard: a single-regime buffer teaches nothing real.
+                if n_distinct < MATRIX_TRAIN_MIN_DISTINCT_LABELS:
+                    continue
+
+                # Ensure a 4-class model is built + registered for this specialist.
+                if net.id not in self._engine._active_models or net.topology.output_size != MATRIX_TRAIN_OUTPUT_CLASSES:
+                    topo = self._matrix_train_topology()
+                    model = self._engine.build_model(topo)
+                    self._engine._active_models[net.id] = model
+                    net.topology = topo
+
+                import torch
+                feats = torch.tensor(X, dtype=torch.float32)
+                labels = torch.tensor(Y, dtype=torch.float32)
+                self._engine.train_distillation(
+                    net, feats, labels, loss_name="mse", epochs=MATRIX_TRAIN_EPOCHS,
+                )
+                # train_distillation updates accuracy but NOT current_epoch — the
+                # birth->probationary gate reads current_epoch, so set it here.
+                net.training_progress.current_epoch += MATRIX_TRAIN_EPOCHS
+                # M3: a trained specialist must be READY to enter the broadcast
+                # ranking (_get_networks_for_focus filters to READY/ACTIVE). Without
+                # this it is excluded from get_hemisphere_signals, so its impact
+                # score is never computed and it stalls at verified_probationary.
+                net.status = NetworkStatus.READY
+                logger.info(
+                    "Matrix train %s: acc=%.3f epoch=%d (samples=%d, distinct=%d)",
+                    net.focus.value, net.performance.accuracy,
+                    net.training_progress.current_epoch, len(X), n_distinct,
+                )
+            except Exception:
+                logger.debug("matrix train failed for %s", net.focus.value, exc_info=True)
+
+    def _update_matrix_broadcast_slots(self) -> None:
+        """M3 sub-conscious lane: rank BROADCAST_ELIGIBLE/PROMOTED matrix specialists
+        among themselves by impact; the top MATRIX_BROADCAST_SLOTS hold lane slots
+        and accrue dwell. Holding a slot for MATRIX_PROMOTE_DWELL cycles is the
+        BROADCAST_ELIGIBLE -> PROMOTED gate (checked in _check_specialist_promotions).
+        Matrix-vs-matrix only — no Tier-1 competition.
+        """
+        from hemisphere.types import MATRIX_ELIGIBLE_FOCUSES, SpecialistLifecycleStage as S
+        with self._networks_lock:
+            eligible = [
+                n for n in self._networks.values()
+                if n.focus in MATRIX_ELIGIBLE_FOCUSES
+                and n.specialist_lifecycle in (S.BROADCAST_ELIGIBLE, S.PROMOTED)
+            ]
+        eligible.sort(key=lambda n: n.specialist_impact_score, reverse=True)
+        winners = eligible[:MATRIX_BROADCAST_SLOTS]
+        prev = {s["name"]: s for s in self._matrix_broadcast_slots if s.get("name")}
+        new_slots: list[dict[str, Any]] = []
+        for n in winners:
+            nm = n.focus.value
+            if nm in prev:
+                sl = prev[nm]
+                sl["dwell"] = sl.get("dwell", 0) + 1
+                sl["score"] = round(n.specialist_impact_score, 4)
+                new_slots.append(sl)
+            else:
+                new_slots.append({"name": nm, "score": round(n.specialist_impact_score, 4), "dwell": 0})
+        while len(new_slots) < MATRIX_BROADCAST_SLOTS:
+            new_slots.append({"name": None, "score": 0.0, "dwell": 0})
+        self._matrix_broadcast_slots = new_slots
+
+    def matrix_report(self) -> dict[str, Any]:
+        """Tier-2 Matrix Protocol observability — live, read-only lifecycle view.
+
+        For every matrix-eligible specialist: its lifecycle stage, the live gate
+        metrics, and the gate it must clear NEXT (with have/need/met). Eligible
+        focuses with no specialist yet are listed in ``not_born`` so their absence
+        is VISIBLE, not silent. This is the "we can't verify what we can't see"
+        substrate for the Matrix Protocol verification (mirrors the skill-learning
+        observability work). No mutation, no promotion — pure snapshot.
+        """
+        from hemisphere.types import MATRIX_ELIGIBLE_FOCUSES, SpecialistLifecycleStage as S
+
+        # M3: promotion is earned in the sub-conscious lane (matrix-vs-matrix).
+        mx_dwell_by_name = {s["name"]: s.get("dwell", 0)
+                            for s in self._matrix_broadcast_slots if s.get("name")}
+        mx_lane_names = set(mx_dwell_by_name.keys())
+
+        def _next_gate(net) -> dict[str, Any]:
+            stage = net.specialist_lifecycle
+            if stage == S.CANDIDATE_BIRTH:
+                ep = net.training_progress.current_epoch
+                return {"gate": "training_started", "need": "current_epoch>0",
+                        "have": ep, "met": ep > 0}
+            if stage == S.PROBATIONARY_TRAINING:
+                acc = net.performance.accuracy
+                return {"gate": "accuracy>0.5", "have": round(acc, 4), "met": acc > 0.5}
+            if stage == S.VERIFIED_PROBATIONARY:
+                imp = net.specialist_impact_score
+                return {"gate": "impact>0.3", "have": round(imp, 4), "met": imp > 0.3}
+            if stage == S.BROADCAST_ELIGIBLE:
+                dwell = mx_dwell_by_name.get(net.focus.value, 0)
+                in_lane = net.focus.value in mx_lane_names
+                return {"gate": "sub-conscious dwell>=%d" % MATRIX_PROMOTE_DWELL,
+                        "have": dwell, "in_lane": in_lane,
+                        "met": dwell >= MATRIX_PROMOTE_DWELL}
+            if stage == S.PROMOTED:
+                return {"gate": "none", "met": True}
+            return {"gate": "retired", "met": False}
+
+        specialists: list[dict[str, Any]] = []
+        seen: set = set()
+        with self._networks_lock:
+            nets = list(self._networks.values())
+        for net in nets:
+            if net.focus not in MATRIX_ELIGIBLE_FOCUSES or net.specialist_lifecycle is None:
+                continue
+            seen.add(net.focus)
+            specialists.append({
+                "focus": net.focus.value,
+                "name": net.name,
+                "lifecycle": net.specialist_lifecycle.value,
+                "accuracy": round(net.performance.accuracy, 4),
+                "impact_score": round(net.specialist_impact_score, 4),
+                "epoch": net.training_progress.current_epoch,
+                "is_training": net.training_progress.is_training,
+                "broadcast_dwell": mx_dwell_by_name.get(net.focus.value, 0),
+                "in_broadcast": net.focus.value in mx_lane_names,
+                "verification_ts": net.specialist_verification_ts,
+                "job_id": net.specialist_job_id,
+                "next_gate": _next_gate(net),
+            })
+
+        by_stage: dict[str, int] = {}
+        for s in specialists:
+            by_stage[s["lifecycle"]] = by_stage.get(s["lifecycle"], 0) + 1
+        # Phase M: signal accumulation toward autonomous birth (visible per focus).
+        # ready_to_birth needs BOTH enough samples AND signal variation (>=2 regimes),
+        # matching the birth-variation gate — so a constant-signal focus reads as
+        # "accumulating but nothing to learn yet", not falsely "ready".
+        def _distinct(fv):
+            buf = self._matrix_signal_buffers.get(fv)
+            if not buf:
+                return 0
+            return self._matrix_training_set(list(buf))[2]
+        signal_accumulation = {
+            f.value: {
+                "samples": len(self._matrix_signal_buffers.get(f.value, ())),
+                "birth_at": MATRIX_BIRTH_MIN_SAMPLES,
+                "distinct_labels": _distinct(f.value),
+                "ready_to_birth": (len(self._matrix_signal_buffers.get(f.value, ())) >= MATRIX_BIRTH_MIN_SAMPLES
+                                   and _distinct(f.value) >= MATRIX_TRAIN_MIN_DISTINCT_LABELS),
+            }
+            for f in MATRIX_ELIGIBLE_FOCUSES
+        }
+        return {
+            "eligible_focuses": sorted(f.value for f in MATRIX_ELIGIBLE_FOCUSES),
+            "specialists": specialists,
+            "not_born": sorted(f.value for f in MATRIX_ELIGIBLE_FOCUSES if f not in seen),
+            "by_stage": by_stage,
+            "promoted_count": by_stage.get("promoted", 0),
+            "expansion_min_promoted": EXPANSION_MIN_PROMOTED,
+            "signal_accumulation": signal_accumulation,
+            "probationary_cap": MAX_PROBATIONARY_SPECIALISTS,
+            "broadcast_slots": [
+                {"name": s.get("name"), "dwell": s.get("dwell", 0)}
+                for s in self._broadcast_slots
+            ],
+            "matrix_broadcast_slots": [
+                {"name": s.get("name"), "dwell": s.get("dwell", 0),
+                 "score": round(s.get("score", 0.0), 4)}
+                for s in self._matrix_broadcast_slots
+            ],
+            "matrix_promote_dwell": MATRIX_PROMOTE_DWELL,
+        }
+
     def _check_specialist_promotions(self) -> None:
         """Advance specialist NNs through their lifecycle based on evidence.
 
@@ -783,18 +1150,19 @@ class HemisphereOrchestrator:
                                 net.name, net.specialist_impact_score)
 
             elif stage == SpecialistLifecycleStage.BROADCAST_ELIGIBLE:
-                if net.focus.value in broadcast_names:
-                    slot_dwell = 0
-                    for s in self._broadcast_slots:
-                        if s["name"] == net.focus.value:
-                            slot_dwell = s.get("dwell", 0)
-                            break
-                    if slot_dwell >= 10:
-                        net.specialist_lifecycle = SpecialistLifecycleStage.PROMOTED
-                        logger.info(
-                            "Specialist '%s' PROMOTED (dwell=%d, impact=%.2f)",
-                            net.name, slot_dwell, net.specialist_impact_score,
-                        )
+                # M3: promotion is earned in the SUB-CONSCIOUS lane (matrix-vs-matrix),
+                # not the Tier-1-dominated main broadcast slots.
+                slot_dwell = 0
+                for s in self._matrix_broadcast_slots:
+                    if s.get("name") == net.focus.value:
+                        slot_dwell = s.get("dwell", 0)
+                        break
+                if slot_dwell >= MATRIX_PROMOTE_DWELL:
+                    net.specialist_lifecycle = SpecialistLifecycleStage.PROMOTED
+                    logger.info(
+                        "Specialist '%s' PROMOTED via sub-conscious lane (dwell=%d, impact=%.2f)",
+                        net.name, slot_dwell, net.specialist_impact_score,
+                    )
 
     def _construct_for_focus(
         self, focus: HemisphereFocus, name: str,
@@ -840,8 +1208,13 @@ class HemisphereOrchestrator:
 
     def _find_weakest_network(self) -> NetworkArchitecture | None:
         with self._networks_lock:
+            # M3: exclude lifecycle-managed Matrix specialists — they are governed
+            # by their own retirement path (_retire_low_utility_probationary), not
+            # the generic cap-prune, so a low-accuracy born specialist can't be
+            # yanked mid-lifecycle just for being READY.
             active = [n for n in self._networks.values()
-                      if n.status in (NetworkStatus.READY, NetworkStatus.ACTIVE)]
+                      if n.status in (NetworkStatus.READY, NetworkStatus.ACTIVE)
+                      and n.specialist_lifecycle is None]
         if not active:
             return None
         return min(active, key=lambda n: n.performance.accuracy)

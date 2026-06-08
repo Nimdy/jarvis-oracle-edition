@@ -127,6 +127,14 @@ class AutonomyOrchestrator:
         except Exception:
             logger.warning("DriveManager not available, drive-based autonomy disabled")
 
+        # SPARK_DESIGN §2.1/§3 P2 — VIEW-ONLY grounding-tension reader. Lazily
+        # bound to the engine in _collect_drive_signals (engine ref is set later
+        # via set_engine_ref). The grounding drive that consumes it ships
+        # shadow-first behind GroundingDrivePromotion (defaults to shadow), so
+        # default runtime behavior is unchanged.
+        self._provenance_scorer: Any = None
+        self._last_grounding_report: Any = None
+
         self._queue: deque[ResearchIntent] = deque(maxlen=MAX_QUEUE_SIZE)
         self._completed: deque[ResearchIntent] = deque(maxlen=200)
         self._intent_metadata: dict[str, dict[str, Any]] = {}
@@ -1087,6 +1095,17 @@ class AutonomyOrchestrator:
 
             self._record_episode(intent, "allowed", "success", time.time() - start_ts)
 
+            # SPARK §3 component 2 / §8 P3 — emit the external-only teacher signal
+            # (THOUGHT_VALIDATION_OUTCOME) for a tension-seeded intent, with the
+            # FULL result so the grounding decision sees per-finding provenance.
+            # No-op for non-tension intents. Called BEFORE AUTONOMY_RESEARCH_COMPLETED
+            # so the bridge's completion-event fallback sees the intent already
+            # reported (popped) and does not double-emit.
+            try:
+                self._bridge.note_research_outcome(intent, result)
+            except Exception:
+                logger.debug("bridge.note_research_outcome (completed) failed", exc_info=True)
+
             self._emit_event(
                 AUTONOMY_RESEARCH_COMPLETED,
                 intent_id=intent.id,
@@ -1811,6 +1830,33 @@ class AutonomyOrchestrator:
         wins = stats["total_wins"]
         win_rate = stats["overall_win_rate"]
 
+        # SPARK_DESIGN §3 (gate 1) / §8 P5 — promote GROUNDED outcomes into the
+        # win-rate math so an external-grounding goal can finally supersede the
+        # tautological "fix shadow_default_win_rate". GATED: grounded outcomes
+        # count as wins ONLY after ≥20 grounding outcomes with
+        # external_validation_rate ≥0.40 AND orphan_rate trending down. Until the
+        # gate opens, ``grounding`` is a strict no-op and the baseline win-rate
+        # math above is used verbatim (DEFAULT behaviour unchanged). The trend
+        # input is read read-only from the DeltaTracker's rolling orphan_rate ring.
+        grounding = {"gate_open": False}
+        try:
+            trending_down = False
+            try:
+                trending_down = bool(
+                    self._delta_tracker.orphan_rate_trending_down()
+                )
+            except Exception:
+                trending_down = False
+            grounding = self._policy_memory.grounding_win_stats(
+                orphan_rate_trending_down=trending_down,
+            )
+            if grounding.get("gate_open"):
+                # Supersede the inward win-rate with the grounding-aware one.
+                wins = grounding.get("promoted_wins", wins)
+                win_rate = grounding.get("promoted_win_rate", win_rate)
+        except Exception:
+            logger.debug("grounding win-rate promotion unavailable", exc_info=True)
+
         recent_outcomes = list(self._policy_memory._outcomes)[-10:]
         recent_regressions = sum(
             1 for o in recent_outcomes if o.net_delta < -MIN_MEANINGFUL_DELTA
@@ -1826,6 +1872,8 @@ class AutonomyOrchestrator:
             "eligible_for_l3": False,
             "l2_reason": "",
             "l3_reason": "",
+            # SPARK §3/§8 P5 — surface the grounding-promotion math transparently.
+            "grounding_promotion": grounding,
         }
 
         try:
@@ -1891,6 +1939,12 @@ class AutonomyOrchestrator:
             belief_graph_coverage=metrics.get("belief_graph_coverage", 0.0),
             contradiction_resolution_rate=metrics.get("contradiction_resolution_rate", 0.0),
             friction_rate=metrics.get("friction_rate", 0.0),
+            # SPARK_DESIGN §8 P0 — passive grounding-ring baselines (read-only).
+            orphan_rate=metrics.get("orphan_rate", 0.0),
+            inference_validation_gap=metrics.get("inference_validation_gap", 0.0),
+            external_validation_rate=metrics.get("external_validation_rate", 0.0),
+            grounded_inferred_ratio=metrics.get("grounded_inferred_ratio", 0.0),
+            avg_chain_length=metrics.get("spark_avg_chain_length", 0.0),
         )
         self._delta_tracker.record_metrics(snapshot)
         self._metric_history.record(metrics)
@@ -2050,6 +2104,20 @@ class AutonomyOrchestrator:
         except Exception:
             pass
 
+        # SPARK_DESIGN §8 P0 — passive grounding-ring metrics (read-only,
+        # zero authority). Computed + cached in spark_metrics; nothing here or
+        # downstream acts on them in P0. Default-safe: any missing source → 0.0.
+        try:
+            from autonomy.spark_metrics import compute_spark_metrics
+            sm = compute_spark_metrics(engine)
+            m["orphan_rate"] = sm.orphan_rate
+            m["inference_validation_gap"] = sm.inference_validation_gap
+            m["external_validation_rate"] = sm.external_validation_rate
+            m["grounded_inferred_ratio"] = sm.grounded_inferred_ratio
+            m["spark_avg_chain_length"] = sm.avg_chain_length
+        except Exception:
+            pass
+
         return m
 
     # -- drive-based exploration ---------------------------------------------
@@ -2111,7 +2179,11 @@ class AutonomyOrchestrator:
         try:
             self._clear_stale_saturation()
             signals = self._collect_drive_signals()
-            drives = self._drive_manager.evaluate(signals)
+            # SPARK §4/§8 P5 — affect-derived urgency bias (empty unless the
+            # affect coupling is promoted to active; additive + re-clamped to [0,1]
+            # inside evaluate(), so an empty bias is a no-op = default behaviour).
+            urgency_bias = getattr(self, "_affect_urgency_bias", None)
+            drives = self._drive_manager.evaluate(signals, urgency_bias=urgency_bias)
             if not drives:
                 return
             action = self._drive_manager.select_action(drives[0], signals)
@@ -2123,6 +2195,16 @@ class AutonomyOrchestrator:
             if action.action_type == "learn":
                 self._handle_learn_action(action)
                 return
+
+            # ── SPARK_DESIGN §3 P2 — shadow grounding selection + log path ──
+            # The grounding drive ships shadow-first behind GroundingDrivePromotion
+            # (defaults to shadow). In shadow it SELECTS the action and we LOG
+            # "would have asked/researched", but we do NOT enqueue and reach no
+            # operator (zero authority). Only a promoted-to-active gate (never at
+            # P2) would fall through to normal enqueue.
+            if action.drive_type == "grounding":
+                if self._handle_grounding_action_shadow(action):
+                    return
 
             if action.action_type == "recall" and self._current_mode in ("conversational", "focused"):
                 logger.debug("Suppressing drive recall '%s' during %s mode — "
@@ -2232,6 +2314,366 @@ class AutonomyOrchestrator:
                 self._drive_manager.record_outcome("mastery", False)
         except Exception:
             logger.warning("_handle_learn_action failed", exc_info=True)
+
+    def _handle_grounding_action_shadow(self, action: Any) -> bool:
+        """Shadow / advisory path for a winning grounding DriveAction (SPARK §3/§8 P2/P4).
+
+        Returns True when handled here (caller must NOT enqueue through the normal
+        path). Returns False only if the gate is promoted to ACTIVE (P5), letting
+        the caller fall through to the normal enqueue path.
+
+        SHADOW (level 0, default): log "would have asked/researched" with the
+        cited belief + facet-routed channel, note the would-have selection for
+        telemetry, and enqueue NOTHING. No operator is reached. Zero authority.
+
+        ADVISORY (level 1, SPARK §8 P4): may enqueue ≤1 external-validation intent
+        per governor window into the durable async Grounding Queue (operator-gated,
+        never auto-answered) AND ask ONE gated question through the EXISTING
+        curiosity 'research' QuestionSource → ProactiveGovernor (which caps at
+        MAX_QUESTIONS_PER_HOUR=3 with annoyance penalties/cooldowns). Honest
+        input-starvation: if the operator is absent AND no Pi signal AND web
+        exhausted, grounding self-floors to local_only — no validation is
+        manufactured; the question is batched for next operator presence. Still
+        NO cadence/reward coupling (that is P5/active).
+        """
+        try:
+            from autonomy.drives import GroundingDrivePromotion
+            gate = GroundingDrivePromotion.get_instance()
+        except Exception:
+            logger.debug("GroundingDrivePromotion unavailable — defaulting to shadow")
+            gate = None
+
+        if gate is not None and gate.is_active():
+            # Promoted to active (P5). Let the normal enqueue path handle it.
+            return False
+
+        facet = ""
+        belief_id = ""
+        for tag in (action.tags or ()):
+            if tag.startswith("grounding:facet:"):
+                facet = tag.split(":", 2)[2]
+            elif tag.startswith("grounding:belief:"):
+                belief_id = tag.split(":", 2)[2]
+        facet = facet or "factual"
+
+        channel_label = {
+            "operator": "the operator",
+            "memory": "Pi senses / memory",
+            "introspection": "introspection / operator",
+            "web": "web research",
+            "academic": "academic research",
+        }.get(action.tool_hint, action.tool_hint or "external research")
+
+        # ── ADVISORY (level 1) ────────────────────────────────────────────────
+        if gate is not None and gate.is_advisory():
+            self._handle_grounding_action_advisory(
+                gate, action, facet, belief_id, channel_label,
+            )
+            return True
+
+        verb = "asked the operator" if action.tool_hint == "introspection" else "researched"
+
+        # ── SHADOW (level 0, default) — select-only, never reach operator ──────
+        if gate is not None:
+            try:
+                gate.note_shadow_selection(
+                    question=(action.question or ""),
+                    belief_id=belief_id,
+                    facet=facet,
+                    channel=channel_label,
+                    urgency=float(getattr(action, "urgency", 0.0) or 0.0),
+                    verb=verb,
+                )
+            except Exception:
+                pass
+
+        logger.info(
+            "Grounding drive (SHADOW, zero authority): would have %s via %s "
+            "[facet=%s belief=%s urgency=%.2f] — Q: %s",
+            verb, channel_label, facet, belief_id or "n/a",
+            action.urgency, (action.question or "")[:120],
+        )
+        return True
+
+    def refresh_starvation(self, pi_signal_available: bool | None = None) -> None:
+        """Recompute the input-starvation readout from the live environment.
+
+        assess_starvation otherwise runs only inside the advisory handler, so at
+        shadow tier the dashboard banner showed a stale default ("operator absent,
+        no Pi signal") regardless of reality. Called at snapshot-build so the
+        banner is a LIVE readout at any tier. Read-only except the queue readout.
+
+        ``pi_signal_available`` is passed by the snapshot caller (which holds a
+        known-good perception ref via ctx.perception); when None we fall back to a
+        best-effort read off the engine.
+        """
+        try:
+            from autonomy.grounding_queue import GroundingQueue, assess_starvation
+            queue = GroundingQueue.get_instance()
+            operator_present = self._operator_present()
+            pi = (pi_signal_available if pi_signal_available is not None
+                  else self._pi_signal_available())
+            starv = assess_starvation(
+                operator_present=operator_present,
+                pi_signal_available=bool(pi),
+                web_exhausted=False,  # web is generally reachable for factual facets
+                pending_batch_size=queue.pending_count(),
+                last_operator_seen_ts=time.time() if operator_present else 0.0,
+            )
+            queue.set_starvation(starv)
+        except Exception:
+            logger.debug("refresh_starvation failed", exc_info=True)
+
+    def _pi_signal_available(self) -> bool:
+        """Best-effort read: is the Pi actually streaming sensory signal?
+
+        True when the perception orchestrator reports any connected sensor (the
+        same source the dashboard uses). Replaces an earlier bogus proxy
+        (``action.tool_hint == 'memory' and operator_present``) that never read
+        the real Pi state, so the starvation banner falsely reported "no Pi
+        signal" even with the Pi connected and streaming.
+        """
+        try:
+            engine = getattr(self, "_engine_ref", None)
+            perc = getattr(engine, "_perception_orchestrator", None) if engine else None
+            if perc is not None and hasattr(perc, "get_connected_sensors"):
+                return len(perc.get_connected_sensors() or []) > 0
+        except Exception:
+            logger.debug("pi_signal_available read failed", exc_info=True)
+        return False
+
+    def _operator_present(self) -> bool:
+        """Best-effort operator-presence read for input-starvation assessment."""
+        try:
+            from perception.identity_fusion import _active_instance as _fusion
+            if _fusion is not None:
+                status = _fusion.get_status()
+                return bool(status.get("user_present"))
+        except Exception:
+            pass
+        # Fall back to the last collected drive signals (active_user_goals as a
+        # weak presence proxy when identity fusion is unavailable).
+        sig = getattr(self, "_last_drive_signals", None)
+        if sig is not None:
+            try:
+                return int(getattr(sig, "active_user_goals", 0) or 0) > 0
+            except Exception:
+                pass
+        return False
+
+    def _handle_grounding_action_advisory(
+        self, gate: Any, action: Any, facet: str, belief_id: str, channel_label: str,
+    ) -> None:
+        """ADVISORY behaviour for the grounding drive (SPARK §8 P4).
+
+        Enqueues ≤1 external-validation intent per governor window into the durable
+        Grounding Queue, applies the channel-selection router + honest input-
+        starvation degradation, and asks ONE gated question via the existing
+        curiosity research → ProactiveGovernor path. Operator-gated, no auto-fire,
+        no cadence/reward coupling. Never raises into the caller.
+        """
+        # Per-governor-window budget: at most ONE advisory enqueue per window.
+        if not gate.advisory_enqueue_allowed():
+            logger.debug(
+                "Grounding drive (ADVISORY): per-window enqueue budget spent — "
+                "skipping (belief=%s facet=%s)", belief_id or "n/a", facet,
+            )
+            return
+
+        # Pull the live tension reading for this belief (provenance/confidence/
+        # graph-leverage) from the VIEW-ONLY scorer's last report.
+        tension = 0.0
+        provenance = ""
+        rendered_claim = action.question or ""
+        base_conf = 0.0
+        eff_conf = 0.0
+        graph_leverage = 0.0
+        report = getattr(self, "_last_grounding_report", None)
+        top = None
+        try:
+            if report is not None and getattr(report, "top_tensions", None):
+                for t in report.top_tensions:
+                    if t.belief_id == belief_id:
+                        top = t
+                        break
+                if top is None:
+                    top = report.top_tensions[0]
+        except Exception:
+            top = None
+        if top is not None:
+            tension = float(getattr(top, "grounding_tension", 0.0) or 0.0)
+            provenance = getattr(top, "provenance", "") or ""
+            rendered_claim = getattr(top, "rendered_claim", "") or rendered_claim
+            base_conf = float(getattr(top, "base_confidence", 0.0) or 0.0)
+            eff_conf = float(getattr(top, "effective_confidence", 0.0) or 0.0)
+            belief_id = belief_id or getattr(top, "belief_id", "") or ""
+            facet = facet or getattr(top, "facet", "factual")
+
+        # graph-leverage proxy: how many high-tension beliefs share this facet
+        # (a hub belief in a loud facet moves more downstream beliefs, SPARK §6).
+        try:
+            ft = getattr(report, "facet_tension", {}) or {}
+            if ft:
+                hi = ft.get(facet, 0.0)
+                mx = max(ft.values()) or 1.0
+                graph_leverage = max(0.0, min(1.0, float(hi) / float(mx)))
+        except Exception:
+            graph_leverage = 0.0
+
+        # Channel-selection router + honest input-starvation assessment (SPARK §6).
+        try:
+            from autonomy.grounding_queue import (
+                GroundingQueue, route_channel, assess_starvation,
+            )
+        except Exception:
+            logger.debug("GroundingQueue unavailable — advisory enqueue skipped",
+                         exc_info=True)
+            return
+
+        operator_present = self._operator_present()
+        pi_signal = self._pi_signal_available()
+        # Web is "exhausted" only when the facet cannot route to web at all; we do
+        # not track per-query web exhaustion here (advisory), so treat web as open
+        # for factual facets and closed for operator/scene facets.
+        web_exhausted = facet not in ("factual",)
+        channel = route_channel(facet, web_exhausted=web_exhausted)
+
+        queue = GroundingQueue.get_instance()
+        starv = assess_starvation(
+            operator_present=operator_present,
+            pi_signal_available=pi_signal,
+            web_exhausted=web_exhausted,
+            pending_batch_size=queue.pending_count(),
+            last_operator_seen_ts=time.time() if operator_present else 0.0,
+        )
+        queue.set_starvation(starv)
+
+        # Always enqueue the (durable, ranked) async validation question — this is
+        # the leisure-review batch and is operator-gated (never auto-answered).
+        queue.enqueue(
+            belief_id=belief_id,
+            question_text=action.question or "",
+            facet=facet,
+            channel=channel,
+            provenance=provenance,
+            rendered_claim=rendered_claim,
+            grounding_tension=tension,
+            graph_leverage=graph_leverage,
+            base_confidence=base_conf,
+            effective_confidence=eff_conf,
+        )
+
+        # Self-floor to local_only when starved: do NOT ask synchronously and do
+        # NOT enqueue a live external research intent (no manufactured validation).
+        asked_question = False
+        if not starv.self_floored_local_only:
+            # One gated question through the EXISTING curiosity research source →
+            # ProactiveGovernor (rate-limited at MAX_QUESTIONS_PER_HOUR=3 with the
+            # existing annoyance penalties/cooldowns). Operator channels only.
+            if channel == "operator":
+                asked_question = self._ask_grounding_curiosity_question(
+                    action.question or "", belief_id, facet,
+                )
+            # One external-validation research intent into the normal queue for
+            # web-validatable factual facets (still advisory; scope external_ok).
+            elif channel == "web" and not self._question_already_queued(action.question):
+                try:
+                    from autonomy.research_intent import ResearchIntent
+                    intent = ResearchIntent(
+                        question=action.question,
+                        source_event="drive:grounding:advisory",
+                        source_hint="web",
+                        scope="external_ok",
+                        tag_cluster=tuple(action.tags or ()),
+                        priority=action.urgency,
+                        belief_id=belief_id,
+                    )
+                    self.enqueue(intent)
+                except Exception:
+                    logger.debug("advisory grounding research enqueue failed",
+                                 exc_info=True)
+
+        try:
+            gate.note_advisory_enqueue(asked_question=asked_question)
+        except Exception:
+            pass
+
+        logger.info(
+            "Grounding drive (ADVISORY): enqueued validation Q to async queue via "
+            "%s [facet=%s belief=%s tension=%.2f leverage=%.2f starved=%s asked=%s]",
+            channel, facet, belief_id or "n/a", tension, graph_leverage,
+            starv.self_floored_local_only, asked_question,
+        )
+
+    def _ask_grounding_curiosity_question(
+        self, question: str, belief_id: str, facet: str,
+    ) -> bool:
+        """Surface ONE grounding question via the EXISTING curiosity 'research'
+        QuestionSource (SPARK §6 / §8 P4). Respects MAX_QUESTIONS_PER_HOUR=3 + the
+        existing annoyance penalties/cooldowns (the buffer enforces both). Returns
+        True if the candidate was accepted into the buffer (not yet asked — the
+        ProactiveGovernor delivers it on its own cadence)."""
+        if not question:
+            return False
+        try:
+            from personality.curiosity_questions import (
+                CuriosityQuestionBuffer, CuriosityQuestion, _dedup_key,
+                MAX_QUESTIONS_PER_HOUR,
+            )
+        except Exception:
+            logger.debug("curiosity buffer unavailable — advisory ask skipped",
+                         exc_info=True)
+            return False
+        try:
+            buf = CuriosityQuestionBuffer.get_instance()
+            # Hard rate-limit guard (the governor also enforces this on delivery;
+            # we check here so an advisory grounding ask never queues past the cap).
+            if buf.hourly_count() >= MAX_QUESTIONS_PER_HOUR:
+                logger.debug("advisory grounding ask suppressed — hourly cap reached")
+                return False
+            key = _dedup_key("research", (belief_id or facet or "grounding")[:60])
+            candidate = CuriosityQuestion(
+                source="research",  # reuse the EXISTING research source (no new member)
+                question_text=question,
+                evidence=f"grounding_validation: belief={belief_id or 'n/a'} facet={facet}",
+                priority=0.55,  # below identity/scene; competes within the 3/hr buffer
+                cooldown_key=key,
+            )
+            # buf.add() applies dedup + per-key cooldown + annoyance multipliers.
+            return bool(buf.add(candidate))
+        except Exception:
+            logger.debug("advisory grounding curiosity ask failed", exc_info=True)
+            return False
+
+    def get_last_drive_signals(self) -> Any:
+        """Last DriveSignals built by ``_collect_drive_signals`` (or None).
+
+        Read-only accessor for shadow consumers (e.g. the affect layer) that
+        need ``novelty_events`` / ``gate_blocks_recent`` without forcing a fresh
+        collection pass.  Returns None before the first drive tick.
+        """
+        return getattr(self, "_last_drive_signals", None)
+
+    def set_affect_urgency_bias(self, bias: dict[str, float]) -> None:
+        """SPARK §4/§8 P5 — set the affect-derived drive-urgency bias (active-only).
+
+        ``bias`` maps a drive nickname (curiosity | truth | coherence | grounding)
+        to an ADDITIVE urgency delta. Applied at the next drive evaluation, then
+        re-clamped into [0,1] (so a bias can never alone push past the urgency
+        envelope). Set ONLY by the promoted affect coupling; the engine passes an
+        empty dict at the shadow level, which is a no-op. Stored, never persisted —
+        a restart drops the bias to empty (safe default).
+        """
+        try:
+            self._affect_urgency_bias = {
+                str(k): float(v) for k, v in (bias or {}).items()
+            }
+        except Exception:
+            self._affect_urgency_bias = {}
+
+    def get_delta_tracker(self) -> Any:
+        """Read-only accessor for the DeltaTracker (counterfactual validator)."""
+        return getattr(self, "_delta_tracker", None)
 
     def _collect_drive_signals(self) -> Any:
         """Build DriveSignals from current system state."""
@@ -2348,7 +2790,78 @@ class AutonomyOrchestrator:
             except Exception:
                 pass
 
+        # ── SPARK_DESIGN §2.1/§3 P2 — grounding-drive signals (shadow) ──
+        # VIEW-ONLY: read belief-map tension from the ProvenanceScorer and the
+        # external-validation/world-drift signals. The grounding drive that
+        # consumes these ships shadow-first; nothing here enqueues or acts.
+        try:
+            self._populate_grounding_signals(signals)
+        except Exception:
+            logger.debug("grounding signal collection failed (non-critical)", exc_info=True)
+
+        # Cache for read-only shadow consumers (e.g. affect layer).
+        self._last_drive_signals = signals
         return signals
+
+    def _populate_grounding_signals(self, signals: Any) -> None:
+        """Fill DriveSignals' grounding fields from the VIEW-ONLY ProvenanceScorer
+        plus DeltaTracker stability misses and world-model drift. Read-only."""
+        if self._provenance_scorer is None:
+            try:
+                from epistemic.provenance_scorer import ProvenanceScorer
+                self._provenance_scorer = ProvenanceScorer(engine=self._engine_ref)
+            except Exception:
+                logger.debug("ProvenanceScorer unavailable", exc_info=True)
+                return
+        else:
+            # Keep the engine ref fresh (it is bound after __init__).
+            self._provenance_scorer._engine = self._engine_ref
+
+        report = self._provenance_scorer.compute(top_n=10)
+        self._last_grounding_report = report
+        if not report.sources_available:
+            return
+
+        signals.grounding_tension = report.aggregate_tension
+        # external-validation gaps = high-tension beliefs (the loudest inferred /
+        # orphaned ones) that have never been externally touched. In P2 there is
+        # no validator yet, so every high-tension belief is a gap (honest).
+        signals.external_validation_gaps = report.high_tension_count
+
+        if report.top_tensions:
+            top = report.top_tensions[0]
+            signals.grounding_facet = top.facet
+            signals.grounding_target_id = top.belief_id
+            signals.grounding_target_claim = top.rendered_claim
+            signals.grounding_tool_hint = top.channel and {
+                "operator": "introspection",
+                "pi_senses": "memory",
+                "web": "web",
+            }.get(top.channel, "web")
+
+        # delta_stability_misses — counterfactual windows that closed without a
+        # meaningful, stable positive delta (inward work that moved nothing).
+        try:
+            if self._delta_tracker is not None:
+                ds = self._delta_tracker.get_stats()
+                measured = int(ds.get("total_measured", 0) or 0)
+                improved = int(ds.get("total_improved", 0) or 0)
+                signals.delta_stability_misses = max(0, measured - improved)
+        except Exception:
+            pass
+
+        # world_drift_events — world-model predictions that failed validation
+        # (the world disagreeing with us). Read-only from the world model legacy
+        # stats; default 0 when the world model is shadow/absent.
+        try:
+            engine = self._engine_ref
+            cs = getattr(engine, "consciousness", None) if engine else None
+            wm = getattr(cs, "_world_model", None) if cs else None
+            if wm is not None and hasattr(wm, "get_state"):
+                legacy = wm.get_state().get("legacy", {})
+                signals.world_drift_events = int(legacy.get("total_misses", 0) or 0)
+        except Exception:
+            pass
 
     _TOPIC_STOPWORDS: frozenset[str] = frozenset({
         "about", "after", "again", "being", "could", "doing", "every",
@@ -2452,6 +2965,11 @@ class AutonomyOrchestrator:
                 self._drive_manager.save_state()
         except Exception:
             logger.warning("Drive manager save failed", exc_info=True)
+        try:
+            from autonomy.drives import GroundingDrivePromotion
+            GroundingDrivePromotion.get_instance().save()
+        except Exception:
+            logger.debug("Grounding drive promotion save failed", exc_info=True)
         self._save_autonomy_state()
 
     def _save_autonomy_state(self) -> None:
@@ -2541,7 +3059,60 @@ class AutonomyOrchestrator:
                 "recent_previews": list(self._planner_shadow_previews)[-10:],
                 "preview_count": len(self._planner_shadow_previews),
             },
+            "grounding_ring": self._build_grounding_ring_status(),
         }
+
+    def _build_grounding_ring_status(self) -> dict[str, Any]:
+        """SPARK_DESIGN §8 P0 — observable grounding-ring baselines + gate.
+
+        Read-only / zero authority. Surfaces the five passive metrics and the
+        shadow promotion gate so the baselines (3.3x grounded:inferred, 0.857
+        orphan_rate, ~1.0 avg_chain_length, ~0 external_validation_rate) are
+        observable before any mechanism can move them. Nothing reads this to act.
+        """
+        try:
+            from autonomy.spark_metrics import (
+                compute_spark_metrics,
+                SparkPromotion,
+                SPARK_BASELINES,
+            )
+            sm = compute_spark_metrics(self._engine_ref)
+            gate = SparkPromotion.get_instance()
+            status: dict[str, Any] = {
+                "phase": "P2_grounding_drive_shadow",
+                "authority": "zero_authority",
+                "drives_levers": gate.is_active(),  # always False at P0/P2
+                "metrics": sm.to_dict(),
+                "baselines": dict(SPARK_BASELINES),
+                "promotion": gate.get_status(),
+            }
+            # SPARK §3 P2 — grounding-drive shadow telemetry (read-only).
+            try:
+                from autonomy.drives import GroundingDrivePromotion
+                gd_gate = GroundingDrivePromotion.get_instance()
+                status["grounding_drive"] = gd_gate.get_status()
+            except Exception:
+                pass
+            try:
+                report = getattr(self, "_last_grounding_report", None)
+                if report is not None:
+                    status["grounding_tension"] = report.to_dict()
+                status["external_validation_rate"] = round(
+                    self._policy_memory.external_validation_rate(), 4,
+                )
+            except Exception:
+                pass
+            return status
+        except Exception:
+            logger.debug("grounding_ring status unavailable", exc_info=True)
+            return {
+                "phase": "P2_grounding_drive_shadow",
+                "authority": "zero_authority",
+                "drives_levers": False,
+                "metrics": {},
+                "baselines": {},
+                "promotion": {},
+            }
 
     def get_evidence_summary(self) -> str:
         return self._integrator.get_evidence_summary()

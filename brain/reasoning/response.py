@@ -740,24 +740,30 @@ class ResponseGenerator:
         model_override = None
         max_tokens = llm_params.get("max_tokens")
         temperature = llm_params.get("temperature")
+        # These routes are SPOKEN aloud (TTS). Cap length to a voice-appropriate
+        # ceiling so a reply is a substantive few sentences, not a 30s+ monologue.
+        # Deterministic config (a length cap, NOT a content/behaviour guard) — the
+        # honest lever, not more prompt verb-hacking. The prior `max(.., 1024/512)`
+        # was a FLOOR that let replies run to 2048 tokens.
+        _VOICE_CAP = 280
         if tool_hint == "introspection":
             temperature = 0.35
-            max_tokens = max(max_tokens, 1024)
-            logger.info("Introspection override: temp=%.2f, max_tokens=%d (grounding mode)",
+            max_tokens = min(max_tokens or _VOICE_CAP, _VOICE_CAP)
+            logger.info("Introspection override: temp=%.2f, max_tokens=%d (grounding, voice-capped)",
                         temperature, max_tokens)
         elif tool_hint == "reflective_introspection":
-            max_tokens = max(max_tokens, 1024)
-            logger.info("Reflective introspection: temp=%.2f (trait-adjusted), max_tokens=%d (personality mode)",
+            max_tokens = min(max_tokens or _VOICE_CAP, _VOICE_CAP)
+            logger.info("Reflective introspection: temp=%.2f (trait-adjusted), max_tokens=%d (voice-capped)",
                         temperature, max_tokens)
         elif tool_hint == "memory":
             temperature = 0.55
-            max_tokens = max(max_tokens, 512)
-            logger.info("Memory override: temp=%.2f, max_tokens=%d (relational recall)",
+            max_tokens = min(max_tokens or _VOICE_CAP, _VOICE_CAP)
+            logger.info("Memory override: temp=%.2f, max_tokens=%d (relational recall, voice-capped)",
                         temperature, max_tokens)
         elif tool_hint == "general_knowledge":
             temperature = 0.6
-            max_tokens = max(max_tokens, 512)
-            logger.info("General knowledge override: temp=%.2f, max_tokens=%d (factual, main model)",
+            max_tokens = min(max_tokens or _VOICE_CAP, _VOICE_CAP)
+            logger.info("General knowledge override: temp=%.2f, max_tokens=%d (factual, voice-capped)",
                         temperature, max_tokens)
         elif self._fast_model and complexity == "simple":
             model_override = self._fast_model

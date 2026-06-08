@@ -24,7 +24,7 @@ from consciousness.events import (
     event_bus,
 )
 from cognition.causal_engine import CausalEngine
-from cognition.planner import WorldPlanner
+from cognition.planner import WorldPlanner, CognitivePlanner
 from cognition.promotion import WorldModelPromotion, SimulatorPromotion
 from cognition.simulator import MentalSimulator
 from cognition.world_state import (
@@ -89,6 +89,9 @@ class WorldModel:
         self._simulator = MentalSimulator(self._sim_causal)
         self._sim_promotion = SimulatorPromotion()
         self._planner = WorldPlanner()
+        # Phase 8 (#16): multi-step path planner. Read-only, data-gated on the
+        # simulator reaching advisory (100+ verified live sims) — dormant until then.
+        self._cognitive_planner = CognitivePlanner()
 
         # Canonical substrate (runs in parallel with legacy WorldState)
         self._canonical_projector = CanonicalWorldProjector()
@@ -182,9 +185,17 @@ class WorldModel:
                 pass
 
         predictions = self._causal.infer(self._current, new_deltas)
-        validated = self._causal.validate_predictions(self._current)
+        # Weight-room P0: tag validation outcomes by session origin so that
+        # predictions validated DURING a synthetic session are counted for
+        # telemetry but never feed the promotion gate (closes the leak).
+        try:
+            from memory.gate import memory_gate as _mg
+            _origin = "synthetic" if _mg.synthetic_session_active() else "live"
+        except Exception:
+            _origin = "live"
+        validated = self._causal.validate_predictions(self._current, origin=_origin)
         for v in validated:
-            self._promotion.record_outcome(v.outcome == "hit")
+            self._promotion.record_outcome(v.outcome == "hit", origin=_origin)
             try:
                 event_bus.emit(
                     WORLD_MODEL_PREDICTION_VALIDATED,
@@ -197,9 +208,9 @@ class WorldModel:
                 pass
 
         # Phase 3: validate simulator predictions against real state
-        sim_validated = self._sim_causal.validate_predictions(self._current)
+        sim_validated = self._sim_causal.validate_predictions(self._current, origin=_origin)
         for sv in sim_validated:
-            self._sim_promotion.record_outcome(sv.outcome == "hit")
+            self._sim_promotion.record_outcome(sv.outcome == "hit", origin=_origin)
 
         self._update_count += 1
 
@@ -316,6 +327,7 @@ class WorldModel:
             "simulator": self._simulator.get_stats(),
             "simulator_promotion": self._sim_promotion.get_status(),
             "planner": self._planner.get_state(),
+            "cognitive_planner": self._cognitive_planner.get_state(),
             "recent_simulations": self._simulator.get_recent_traces(5),
             "recent_deltas": [
                 {
@@ -412,6 +424,13 @@ class WorldModel:
                 "rules_cooldown": causal.get("rules_cooldown", 0),
                 "total_validated": causal.get("total_validated", 0),
                 "overall_accuracy": causal.get("overall_accuracy", 0.0),
+                "predictive_accuracy": causal.get("predictive_accuracy", 0.0),
+                "predictive_total": causal.get("predictive_total", 0),
+                # lived-only foresight (synthetic-firewalled) — what the eval scoreboard reads
+                "predictive_accuracy_live": causal.get("predictive_accuracy_live", 0.0),
+                "predictive_total_live": causal.get("predictive_total_live", 0),
+                "persistence_accuracy": causal.get("persistence_accuracy", 0.0),
+                "persistence_total": causal.get("persistence_total", 0),
                 "total_hits": causal.get("total_hits", 0),
                 "total_misses": causal.get("total_misses", 0),
                 "pending": causal.get("pending", 0),
@@ -433,6 +452,7 @@ class WorldModel:
             "simulator": self._simulator.get_stats(),
             "simulator_promotion": self._sim_promotion.get_status(),
             "planner": self._planner.get_state(),
+            "cognitive_planner": self._cognitive_planner.get_state(),
         }
 
     def get_deltas(self, recent_n: int = 20) -> list[WorldDelta]:
@@ -500,6 +520,21 @@ class WorldModel:
             )
         except Exception:
             logger.debug("Shadow planner tick failed", exc_info=True)
+
+        # Phase 8 (#16): multi-step path planner, same shadow tick. Dormant until
+        # the simulator earns advisory (100+ verified live sims).
+        try:
+            self._cognitive_planner.evaluate(
+                world_state=self._current,
+                deltas=deltas,
+                simulator=self._simulator,
+                simulator_promotion_level=self._sim_promotion.level,
+                verified_simulations=self._sim_promotion.get_status().get(
+                    "total_validated", 0),
+                goal_title=self._current.system.active_goal_title,
+            )
+        except Exception:
+            logger.debug("Cognitive planner tick failed", exc_info=True)
 
     # -- Facet readers ------------------------------------------------------
 

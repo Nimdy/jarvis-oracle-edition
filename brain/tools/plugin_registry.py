@@ -134,6 +134,14 @@ class PluginRecord:
     risk_tier: int = 0
     approved_by: str = ""
     acquisition_id: str = ""
+    # Capability authority (shadow-first, reversible): the skill this plugin is a
+    # version of (the general grouping key — at most one version is `active` per
+    # skill_id), and the last-known-good version it displaced when promoted (the
+    # floor to fall back to on demote). See docs/CAPABILITY_AUTHORITY_DESIGN.md.
+    skill_id: str = ""
+    generation: int = 0                  # 0 = original; N = the Nth improvement (for plain labels)
+    prior_authoritative: str = ""        # plugin name that was active before this one
+    last_authoritative_at: float = 0.0   # last time THIS plugin was the active version
     code_hash: str = ""
     execution_mode: str = "in_process"  # "in_process" | "isolated_subprocess"
     venv_ready: bool = False
@@ -326,6 +334,7 @@ class PluginRegistry:
             version=manifest.version,
             risk_tier=manifest.risk_tier,
             acquisition_id=acquisition_id,
+            skill_id=getattr(manifest, "skill_id", "") or "",
             code_hash=code_hash,
             supervision_mode=manifest.supervision_mode,
             execution_mode=manifest.execution_mode,
@@ -502,6 +511,192 @@ class PluginRegistry:
         self._audit_log(plugin_name, {"action": "promoted", "to_state": new_state})
         logger.info("Plugin promoted: %s -> %s", plugin_name, new_state)
         return True
+
+    # ── Capability authority (shadow-first, reversible) ────────────────
+    # General, skill-agnostic: at most one version per skill_id is `active`.
+    # Promotion raises authority (owner-gated); demotion lowers it (owner OR auto).
+    # See docs/CAPABILITY_AUTHORITY_DESIGN.md.
+
+    _SET_SKILL = "set_skill_id"  # noqa
+
+    def set_skill_id(self, plugin_name: str, skill_id: str, generation: int = 0) -> bool:
+        """Bind a plugin record to its skill (the version-grouping key) and its generation
+        (0 = original, N = the Nth improvement) for plain-language labels."""
+        rec = self._records.get(plugin_name)
+        if not rec:
+            return False
+        rec.skill_id = skill_id or ""
+        rec.generation = int(generation or 0)
+        rec.updated_at = time.time()
+        self._save_registry()
+        return True
+
+    def set_intent_patterns(self, plugin_name: str, patterns: list[str]) -> bool:
+        """Set/replace a plugin's intent trigger patterns (the data-owned trigger) and
+        recompile them live. Anchored to the skill via the record; self-cleaning on removal."""
+        rec = self._records.get(plugin_name)
+        if not rec:
+            return False
+        valid: list[str] = []
+        for p in patterns or []:
+            if not isinstance(p, str) or not p or len(p) > 200:
+                continue
+            try:
+                re.compile(p, re.I)
+                valid.append(p)
+            except re.error:
+                pass
+        if not valid:
+            return False
+        self._compiled_patterns[plugin_name] = [re.compile(p, re.I) for p in valid]
+        # persist into the stored manifest so it survives restart
+        try:
+            mdir = self._plugins_dir / plugin_name
+            mpath = mdir / "manifest.json"
+            if mpath.exists():
+                m = json.loads(mpath.read_text())
+                m["intent_patterns"] = valid
+                from memory.persistence import atomic_write_json
+                atomic_write_json(mpath, m)
+        except Exception:
+            pass
+        rec.updated_at = time.time()
+        self._save_registry()
+        self._audit_log(plugin_name, {"action": "intent_patterns_set", "count": len(valid)})
+        return True
+
+    def versions_for_skill(self, skill_id: str) -> list[PluginRecord]:
+        """All plugin versions bound to a skill, newest-activated first."""
+        if not skill_id:
+            return []
+        recs = [r for r in self._records.values() if getattr(r, "skill_id", "") == skill_id]
+        recs.sort(key=lambda r: (r.last_authoritative_at, r.activated_at, r.created_at), reverse=True)
+        return recs
+
+    def active_for_skill(self, skill_id: str) -> PluginRecord | None:
+        """The single authoritative version for a skill, if any."""
+        for r in self.versions_for_skill(skill_id):
+            if r.state == "active":
+                return r
+        return None
+
+    def _known_good_floor(self, skill_id: str, exclude: str) -> PluginRecord | None:
+        """The version to fall back to when the active one is demoted: the most
+        recently-authoritative healthy sibling (shadow/supervised), excluding `exclude`."""
+        if not skill_id:
+            return None
+        best = None
+        for r in self.versions_for_skill(skill_id):
+            if r.name == exclude:
+                continue
+            if r.state in ("shadow", "supervised") and r.last_authoritative_at > 0:
+                if best is None or r.last_authoritative_at > best.last_authoritative_at:
+                    best = r
+        return best
+
+    def make_authoritative(self, plugin_name: str, approved_by: str = "", reason: str = "") -> bool:
+        """Owner-gated: make this version the ACTIVE (authoritative) one for its skill.
+
+        Atomic per skill — demotes the current active version to shadow and records it on
+        the new version as its ``prior_authoritative`` floor. Raises authority, so the
+        caller must already be the operator (the HTTP route is api-key gated).
+        """
+        rec = self._records.get(plugin_name)
+        if not rec:
+            return False
+        if rec.state not in ("shadow", "supervised", "active"):
+            return False  # must be eligible (not quarantined/disabled)
+
+        skill_id = getattr(rec, "skill_id", "") or ""
+        displaced = self.active_for_skill(skill_id) if skill_id else None
+        if displaced and displaced.name != plugin_name:
+            displaced.state = "shadow"
+            displaced.supervision_mode = "shadow"
+            displaced.last_authoritative_at = displaced.last_authoritative_at or time.time()
+            displaced.updated_at = time.time()
+            rec.prior_authoritative = displaced.name
+            self._audit_log(displaced.name, {
+                "action": "authority_changed", "from": "active", "to": "shadow",
+                "actor": approved_by or "owner", "reason": f"displaced by {plugin_name}",
+            })
+
+        rec.state = "active"
+        rec.supervision_mode = "active"
+        rec.approved_by = approved_by or rec.approved_by
+        rec.activated_at = rec.activated_at or time.time()
+        rec.last_authoritative_at = time.time()
+        rec.updated_at = time.time()
+        self._save_registry()
+        self._try_load_handler(plugin_name)
+        self._audit_log(plugin_name, {
+            "action": "authority_changed", "from": "shadow", "to": "active",
+            "actor": approved_by or "owner", "reason": reason or "made authoritative",
+            "skill_id": skill_id, "floor": rec.prior_authoritative,
+        })
+        self._emit_authority_event(rec, "active", approved_by or "owner", reason)
+        logger.info("Capability authority: %s -> ACTIVE for skill '%s' (floor=%s)",
+                    plugin_name, skill_id, rec.prior_authoritative or "none")
+        return True
+
+    def demote(self, plugin_name: str, reason: str = "", actor: str = "owner") -> dict[str, Any]:
+        """Lower authority: active/supervised -> shadow (reversible circuit breaker).
+
+        NOT owner-gated (lowering authority is always safe — the asymmetric gate). When the
+        demoted plugin was the skill's active version, the last-known-good floor is restored
+        to active so the skill keeps serving on the prior trusted version; if there is no
+        floor the skill goes dormant (no active) — safe by design.
+        """
+        rec = self._records.get(plugin_name)
+        if not rec:
+            return {"ok": False, "error": "not_found"}
+        if rec.state not in ("active", "supervised"):
+            return {"ok": False, "error": f"not authoritative (state={rec.state})"}
+
+        was_active = rec.state == "active"
+        skill_id = getattr(rec, "skill_id", "") or ""
+        if was_active:
+            rec.last_authoritative_at = time.time()
+        rec.state = "shadow"
+        rec.supervision_mode = "shadow"
+        rec.updated_at = time.time()
+        self._audit_log(plugin_name, {
+            "action": "authority_changed", "from": "active" if was_active else "supervised",
+            "to": "shadow", "actor": actor, "reason": reason or "demoted",
+        })
+        self._emit_authority_event(rec, "shadow", actor, reason)
+
+        report: dict[str, Any] = {"ok": True, "demoted": plugin_name, "actor": actor,
+                                  "fell_back_to": None, "dormant": False}
+        if was_active and skill_id:
+            floor = self._known_good_floor(skill_id, exclude=plugin_name)
+            if floor is not None:
+                floor.state = "active"
+                floor.supervision_mode = "active"
+                floor.last_authoritative_at = time.time()
+                floor.updated_at = time.time()
+                self._try_load_handler(floor.name)
+                self._audit_log(floor.name, {
+                    "action": "authority_changed", "from": "shadow", "to": "active",
+                    "actor": "auto:fallback", "reason": f"restored after {plugin_name} demoted",
+                })
+                self._emit_authority_event(floor, "active", "auto:fallback", "known-good floor restored")
+                report["fell_back_to"] = floor.name
+            else:
+                report["dormant"] = True
+        self._save_registry()
+        logger.info("Capability authority: %s demoted to shadow by %s (fallback=%s, dormant=%s)",
+                    plugin_name, actor, report["fell_back_to"], report["dormant"])
+        return report
+
+    def _emit_authority_event(self, rec: PluginRecord, to_state: str, actor: str, reason: str) -> None:
+        try:
+            from consciousness.events import event_bus
+            event_bus.emit("plugin:authority_changed", {
+                "plugin_name": rec.name, "skill_id": getattr(rec, "skill_id", ""),
+                "to_state": to_state, "actor": actor, "reason": reason,
+            })
+        except Exception:
+            pass
 
     # ── Invocation ─────────────────────────────────────────────────────
 
@@ -688,18 +883,30 @@ class PluginRegistry:
 
         if len(rec.recent_failures) >= CIRCUIT_BREAKER_FAILURES:
             logger.warning("Circuit breaker triggered for plugin: %s", rec.name)
-            rec.state = "disabled"
-            self._handlers.pop(rec.name, None)
-            self._compiled_patterns.pop(rec.name, None)
-            try:
-                from consciousness.events import event_bus
-                event_bus.emit("plugin:disabled", {
-                    "plugin_name": rec.name,
-                    "reason": "circuit_breaker",
-                    "failures": len(rec.recent_failures),
-                })
-            except Exception:
-                pass
+            skill_id = getattr(rec, "skill_id", "") or ""
+            floor = self._known_good_floor(skill_id, exclude=rec.name) if skill_id else None
+            if rec.state in ("active", "supervised") and floor is not None:
+                # Asymmetric auto-demote: when there's a known-good floor to fall back to,
+                # pull the misbehaving LIVE capability back to shadow and restore the floor,
+                # autonomously — lowering authority is always safe, so no human is needed to
+                # stop the bleeding and the skill keeps serving on the prior trusted version.
+                rec.recent_failures = []
+                self.demote(rec.name, reason="circuit_breaker", actor="auto:circuit_breaker")
+            else:
+                # No safe floor to fall back to (standalone / first version): disable the
+                # broken plugin entirely rather than leave a known-bad one loaded.
+                rec.state = "disabled"
+                self._handlers.pop(rec.name, None)
+                self._compiled_patterns.pop(rec.name, None)
+                try:
+                    from consciousness.events import event_bus
+                    event_bus.emit("plugin:disabled", {
+                        "plugin_name": rec.name,
+                        "reason": "circuit_breaker",
+                        "failures": len(rec.recent_failures),
+                    })
+                except Exception:
+                    pass
 
     # ── Routing ────────────────────────────────────────────────────────
 
@@ -785,10 +992,16 @@ class PluginRegistry:
                 "version": rec.version,
                 "risk_tier": rec.risk_tier,
                 "invocation_count": rec.invocation_count,
+                "success_count": rec.success_count,
                 "success_rate": round(rec.success_count / max(rec.invocation_count, 1), 3),
                 "avg_latency_ms": round(rec.avg_latency_ms, 1),
                 "supervision_mode": rec.supervision_mode,
                 "acquisition_id": rec.acquisition_id,
+                # capability authority (version grouping + floor)
+                "skill_id": getattr(rec, "skill_id", ""),
+                "generation": getattr(rec, "generation", 0),
+                "prior_authoritative": getattr(rec, "prior_authoritative", ""),
+                "last_authoritative_at": getattr(rec, "last_authoritative_at", 0.0),
                 "execution_mode": rec.execution_mode,
                 "venv_ready": rec.venv_ready,
             }

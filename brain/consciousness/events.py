@@ -39,7 +39,8 @@ ProvenanceType = Literal[
     "user_claim",           # User stated (preferences, corrections, identity)
     "conversation",         # Emerged from conversation (LLM response, dialogue)
     "model_inference",      # LLM or NN inferred (reflection, dream insight)
-    "external_source",      # External research (web, academic, library study)
+    "external_source",      # Cited/verified external research (academic, DOI, peer-reviewed)
+    "web_scrap",            # Raw scraped web content — UNTRUSTED until cross-validated (data-flow firewall)
     "experiment_result",    # Self-improvement outcomes, learning job results
     "derived_pattern",      # Pattern recognition (clustering, association, analytics)
     "seed",                 # Birth/gestation seed memories
@@ -53,6 +54,7 @@ PROVENANCE_BOOST: dict[str, float] = {
     "user_claim": 0.04,
     "conversation": 0.02,
     "model_inference": 0.0,
+    "web_scrap": 0.0,        # untrusted scraped web data earns NO confidence boost
     "derived_pattern": 0.0,
     "seed": 0.0,
     "unknown": 0.0,
@@ -126,7 +128,7 @@ def resolve_provenance_boost(mem: Memory) -> float:
 PROVENANCE_ORDINAL: dict[str, int] = {
     "observed": 0, "user_claim": 1, "conversation": 2, "model_inference": 3,
     "external_source": 4, "experiment_result": 5, "derived_pattern": 6,
-    "seed": 7, "unknown": 8,
+    "seed": 7, "unknown": 8, "web_scrap": 9,
 }
 
 
@@ -202,6 +204,7 @@ PERCEPTION_USER_EMOTION = "perception:user_emotion"
 PERCEPTION_POSE_DETECTED = "perception:pose_detected"
 PERCEPTION_FACE_IDENTIFIED = "perception:face_identified"
 PERCEPTION_SCENE_SUMMARY = "perception:scene_summary"
+PERCEPTION_SCENE_CAPTION = "perception:scene_caption"  # edge VLM (Pi Hailo) idle-scene caption
 PERCEPTION_PARTIAL_TRANSCRIPTION = "perception:partial_transcription"  # reserved
 PERCEPTION_BARGE_IN = "perception:barge_in"
 PERCEPTION_PLAYBACK_COMPLETE = "perception:playback_complete"
@@ -395,6 +398,17 @@ SPATIAL_CALIBRATION_CHANGED = "spatial:calibration_changed"
 CURIOSITY_QUESTION_GENERATED = "curiosity:question_generated"
 CURIOSITY_QUESTION_ASKED = "curiosity:question_asked"
 CURIOSITY_ANSWER_PROCESSED = "curiosity:answer_processed"
+
+# Grounding Ring events (SPARK_DESIGN §8 P0 — declared, not yet emitted).
+# BELIEF_EXTERNALLY_CONFIRMED fires (P3+) when an external validator
+# (operator answer, world-model prediction validated, or source-cited
+# finding) touches a belief — the never-self-scored close at station 5.
+# THOUGHT_VALIDATION_OUTCOME fires (P3+) on ResearchIntent completion as
+# the missing teacher signal for the tension-thought selector.
+# Both are reserved here in P0 so the baselines can be observed before any
+# mechanism can move them. No subscriber, no emitter yet.
+BELIEF_EXTERNALLY_CONFIRMED = "belief:externally_confirmed"  # reserved (P0): not emitted yet
+THOUGHT_VALIDATION_OUTCOME = "thought:validation_outcome"  # reserved (P0): not emitted yet
 
 # Fractal Recall events
 FRACTAL_RECALL_SURFACED = "fractal_recall:surfaced"

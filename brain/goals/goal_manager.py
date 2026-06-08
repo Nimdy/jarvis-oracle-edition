@@ -79,7 +79,31 @@ class GoalManager:
         self._dispatch_block_reason: str = ""
         self._current_mode: str = "passive"
         self._abandon_counts: dict[str, int] = {}
+        # #9.3-A: lifecycle telemetry by source_scope (metric/user/system/self/derived)
+        # so the success metric — metric abandon-rate DOWN, user/world share UP — is
+        # directly measurable on the dashboard rather than inferred.
+        self._source_lifecycle: dict[str, dict[str, int]] = {}
         self._rebuild_abandon_counts()
+
+    def _bump_lifecycle(self, source_scope: str, event: str) -> None:
+        scope = source_scope or "unknown"
+        bucket = self._source_lifecycle.setdefault(
+            scope, {"created": 0, "completed": 0, "abandoned": 0},
+        )
+        if event in bucket:
+            bucket[event] += 1
+
+    def get_source_lifecycle(self) -> dict[str, dict[str, int]]:
+        """Per-source created/completed/abandoned counts (with derived abandon_rate)."""
+        out: dict[str, dict[str, int]] = {}
+        for scope, b in self._source_lifecycle.items():
+            created = b.get("created", 0)
+            abandoned = b.get("abandoned", 0)
+            out[scope] = {
+                **b,
+                "abandon_rate": round(abandoned / created, 3) if created else 0.0,
+            }
+        return out
 
     def _rebuild_abandon_counts(self) -> None:
         """Scan historical abandoned goals to populate permanent suppress counters."""
@@ -200,6 +224,7 @@ class GoalManager:
             return ObserveResult(outcome="rejected", reason=result.reason)
 
         self._emit_event("GOAL_CREATED", goal)
+        self._bump_lifecycle(goal.source_scope, "created")
 
         if goal.status == "active":
             self._registry.record_promotion()
@@ -522,6 +547,7 @@ class GoalManager:
             "stats": self._registry.get_stats(),
             "promotion_log": self._promotion_log[-5:],
             "producer_health": self._get_producer_health(),
+            "source_lifecycle": self.get_source_lifecycle(),  # #9.3-A
         }
 
     def _derive_why_not_executing(self, focus: Goal | None) -> str | None:
@@ -794,9 +820,17 @@ class GoalManager:
             if g.status in ("active", "paused", "blocked")
         ])
 
-        from goals.constants import MAX_ACTIVE_GOALS
+        from goals.constants import MAX_ACTIVE_GOALS, MAX_ACTIVE_SYSTEM_HEALTH
         if active_count >= MAX_ACTIVE_GOALS:
             return
+
+        # #9.3-A: count active metric goals separately so they can't crowd out
+        # user/world-grounded goals. Explicit user requests are never capped here.
+        metric_active = len([
+            g for g in self._registry.get_all()
+            if g.status in ("active", "paused", "blocked")
+            and g.kind == "system_health" and not g.explicit_user_requested
+        ])
 
         for cand in self._registry.get_candidates():
             if cand.promotion_score < PROMOTION_SCORE_THRESHOLD:
@@ -804,6 +838,15 @@ class GoalManager:
 
             reason = self._check_promotion_conditions(cand, now)
             if not reason:
+                continue
+
+            # #9.3-A: hold back metric goals once the per-kind cap is reached; let
+            # non-metric (user/world/drive) candidates keep promoting.
+            if (
+                cand.kind == "system_health"
+                and not cand.explicit_user_requested
+                and metric_active >= MAX_ACTIVE_SYSTEM_HEALTH
+            ):
                 continue
 
             cand.status = "active"
@@ -816,6 +859,8 @@ class GoalManager:
             self._record_promotion(cand)
 
             active_count += 1
+            if cand.kind == "system_health" and not cand.explicit_user_requested:
+                metric_active += 1
             if active_count >= MAX_ACTIVE_GOALS:
                 break
             if self._registry.promotions_this_hour() >= MAX_PROMOTIONS_PER_HOUR:
@@ -922,6 +967,7 @@ class GoalManager:
             completed_at=now,
             updated_at=now,
         )
+        self._bump_lifecycle(goal.source_scope, "completed")
         self._emit_event("GOAL_COMPLETED", goal)
 
     _STALE_GOAL_THRESHOLD_S = 7200.0  # 2 hours
@@ -962,6 +1008,7 @@ class GoalManager:
             self._abandon_counts[goal.recurrence_key] = (
                 self._abandon_counts.get(goal.recurrence_key, 0) + 1
             )
+        self._bump_lifecycle(goal.source_scope, "abandoned")
         self._emit_event("GOAL_ABANDONED", goal)
 
     def _pause_goal(self, goal: Goal, reason: str, now: float) -> None:

@@ -425,8 +425,8 @@ def _build_emergence_evidence_snapshot(snapshot: dict[str, Any]) -> dict[str, An
                 "future emergence evidence ledger",
             ],
             "representative_examples": [],
-            "limitations": "Current emergent count is explainable by detector rules over thoughts/inquiries. No durable event has survived known-mechanism elimination.",
-            "falsification_notes": "Requires an event unexplained by templates, LLM prompt context, hardcoded rules, or metric thresholds, with reproducible evidence.",
+            "limitations": "L7 anomaly detection is DESIGNED, NOT YET IMPLEMENTED. The known-mechanism exclusions are PLANNED criteria, not a live filter — no code tests any event against them, and this count is hardcoded 0. So 0 means 'detection not built', NOT 'rigorously eliminated'. The current detector also scans only meta-thoughts + inquiries (clusters of 3+, specific tags) and watches no other subsystem — a genuine anomaly could go undetected. See docs/FINISH_ROADMAP.md (emergence-detector build).",
+            "falsification_notes": "PLANNED criterion (NOT yet enforced): an event unexplained by templates, LLM prompt context, hardcoded rules, metric thresholds, or user prompting, with reproducible evidence. No such test runs today.",
         },
     ]
 
@@ -449,6 +449,12 @@ def _build_emergence_evidence_snapshot(snapshot: dict[str, Any]) -> dict[str, An
             "metric_threshold_triggers",
             "user_prompted_conversation",
         ],
+        # HONESTY: these exclusions are the planned SPEC, not a live filter. No code
+        # tests events against them; L7 evidence_count is hardcoded 0; the detector is
+        # narrow. So "0 surviving" = "detection not built yet", NOT "rigorously eliminated".
+        "exclusions_status": "designed_not_implemented",
+        "l7_detection_implemented": False,
+        "detector_scope_note": "Detector scans only meta-thoughts + existential inquiries (clusters of 3+, specific tags); other subsystems are unwatched. A genuine anomaly outside that window would currently be missed.",
     }
 
 
@@ -1031,6 +1037,13 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         else:
             snapshot["learning_jobs"] = {"active_count": 0, "total_count": 0}
         snapshot["skill_acquisition_specialist"] = _build_skill_acquisition_specialist_cache(ctx.engine)
+        # Weight-Room P2 (shadow): per-specialist lived-baseline would-block decisions.
+        # Logged + surfaced, enforces nothing. See docs/WEIGHT_ROOM_DESIGN.md §6 P2.
+        try:
+            from hemisphere.weight_room_gate import weight_room_gate
+            snapshot["weight_room_gate"] = weight_room_gate.get_status()
+        except Exception:
+            snapshot["weight_room_gate"] = {}
         try:
             from synthetic.skill_acquisition_dashboard import get_skill_acquisition_weight_room_status
             snapshot["skill_acquisition_weight_room"] = get_skill_acquisition_weight_room_status(
@@ -1320,6 +1333,13 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         logger.warning("Snapshot: scene continuity failed", exc_info=True)
         snapshot["scene"] = {}
 
+    # What JARVIS "sees" — latest scene caption + which path produced it (edge VLM on
+    # the Pi Hailo vs desktop GPU). Lets the operator watch the edge-VLM room reads.
+    try:
+        snapshot["scene_caption"] = ctx.perc_orch.get_scene_caption_state() if ctx.perc_orch else {}
+    except Exception:
+        snapshot["scene_caption"] = {}
+
     try:
         if cs and cs._world_model:
             snapshot["world_model"] = cs._world_model.get_state()
@@ -1448,6 +1468,155 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
     except Exception:
         logger.warning("Snapshot: fractal recall failed", exc_info=True)
         snapshot["fractal_recall"] = {"enabled": False}
+
+    # SPARK_DESIGN §8 P0 — Grounding Ring passive metrics + shadow gate.
+    # Read-only / zero authority: surfaces the baselines (3.3x grounded:inferred,
+    # 0.857 orphan_rate, ~1.0 avg_chain_length, ~0 external_validation_rate) so
+    # they are observable before any mechanism can move them. Nothing reads this
+    # to act. Default-safe when sources are missing.
+    try:
+        from autonomy.spark_metrics import (
+            compute_spark_metrics,
+            SparkPromotion,
+            SPARK_BASELINES,
+        )
+        _sm = compute_spark_metrics(ctx.engine)
+        _gate = SparkPromotion.get_instance()
+        _gr: dict[str, Any] = {
+            "phase": "P0_passive_metrics",
+            "authority": "zero_authority",
+            "drives_levers": _gate.is_active(),  # always False until P5/active
+            "metrics": _sm.to_dict(),
+            "baselines": dict(SPARK_BASELINES),
+            "promotion": _gate.get_status(),
+        }
+        # SPARK §8 P4 — per-mechanism advisory promotion levels + the async
+        # Grounding Queue + policy-memory grounding stats. All read-only; the
+        # advisory tier surfaces but drives NO cadence/reward lever.
+        try:
+            from autonomy.drives import GroundingDrivePromotion
+            _gr["drive_promotion"] = GroundingDrivePromotion.get_instance().get_status()
+        except Exception:
+            _gr["drive_promotion"] = {}
+        try:
+            from consciousness.meta_cognitive_thoughts import TensionThoughtPromotion
+            _gr["tension_thought_promotion"] = TensionThoughtPromotion.get_instance().get_status()
+        except Exception:
+            _gr["tension_thought_promotion"] = {}
+        # SPARK §8 P3 teacher-signal health: the external-only THOUGHT_VALIDATION_OUTCOME
+        # flow that the tension_thought_promotion selector earns on. Surfaces whether the
+        # loop is actually emitting outcomes (validation_outcomes_emitted) or is quietly
+        # input-starved (0 = no tension-seeded research has completed yet — expected in
+        # shadow, NOT a fault). Read-only; lets us SEE when P3 is genuinely earning.
+        try:
+            _ao_b = getattr(getattr(ctx, "engine", None), "_autonomy_orchestrator", None)
+            _bridge = getattr(_ao_b, "_bridge", None)
+            _gr["teacher_signal"] = _bridge.get_stats() if _bridge is not None else {}
+        except Exception:
+            _gr["teacher_signal"] = {}
+        try:
+            from consciousness.affect_promotion import affect_promotion as _ap
+            _gr["affect_promotion"] = _ap.get_status()
+        except Exception:
+            _gr["affect_promotion"] = {}
+        try:
+            from autonomy.grounding_queue import GroundingQueue
+            # Refresh the input-starvation readout live so the banner is accurate
+            # at any tier (assess_starvation otherwise runs only in the advisory
+            # path; at shadow it would show a stale default — "no Pi signal" etc).
+            _ao = getattr(ctx.engine, "_autonomy_orchestrator", None) if getattr(ctx, "engine", None) else None
+            if _ao is not None and hasattr(_ao, "refresh_starvation"):
+                # Pass the Pi signal from the known-good perception ref (same call
+                # that populates snapshot["sensors"]) so the banner is correct.
+                _pi_sig = False
+                try:
+                    _pi_sig = bool(ctx.perception and ctx.perception.get_connected_sensors())
+                except Exception:
+                    _pi_sig = False
+                _ao.refresh_starvation(pi_signal_available=_pi_sig)
+            GroundingQueue.get_instance().expire_stale()
+            _gr["queue"] = GroundingQueue.get_instance().get_status(limit=50)
+        except Exception:
+            logger.debug("Snapshot: grounding queue failed", exc_info=True)
+            _gr["queue"] = {}
+        try:
+            pm = getattr(getattr(ctx, "engine", None), "_autonomy_orchestrator", None)
+            pm = getattr(pm, "_policy_memory", None)
+            if pm is not None and hasattr(pm, "get_stats"):
+                _gr["policy_stats"] = pm.get_stats()
+        except Exception:
+            _gr["policy_stats"] = {}
+        # SPARK §8 P1 — logged-shadow OBSERVABILITY (read-only / zero authority):
+        # make the shadow cognition legible — what the affect layer reads, what the
+        # grounding drive would ASK, and what the confabulation guard caught.
+        # Affect readout is an OPERATOR DIAGNOSTIC (readout-not-feeling); JARVIS's
+        # own expression of affect stays gated by capability_gate regardless.
+        try:
+            from consciousness.affect_state import affect_state as _affect
+            _gr["affect_readout"] = _affect.get_status()
+        except Exception:
+            _gr["affect_readout"] = {}
+        try:
+            from autonomy.drives import GroundingDrivePromotion
+            _gr["shadow_questions"] = GroundingDrivePromotion.get_instance().get_recent_selections(limit=15)
+        except Exception:
+            _gr["shadow_questions"] = []
+        try:
+            from skills.capability_gate import capability_gate
+            _gr["confabulation_ledger"] = capability_gate.get_confabulation_ledger(limit=15)
+        except Exception:
+            _gr["confabulation_ledger"] = {}
+        snapshot["grounding_ring"] = _gr
+    except Exception:
+        logger.warning("Snapshot: grounding ring failed", exc_info=True)
+        snapshot["grounding_ring"] = {
+            "phase": "P0_passive_metrics",
+            "authority": "zero_authority",
+            "drives_levers": False,
+            "metrics": {},
+            "baselines": {},
+            "promotion": {},
+        }
+
+    # Companion Cognition P0 — situational read (LOGGED-ONLY / shadow).
+    # JARVIS's internal read of recent exchanges: what it thinks is happening,
+    # why, how confident, what evidence, and what it WOULD have done if allowed.
+    # Changes no behavior, writes no beliefs, asks nothing. Surfaced so the read
+    # and its salience gate can be validated before any later phase acts on it.
+    # See docs/COMPANION_COGNITION_DESIGN.md (P0).
+    try:
+        from consciousness.situational_read import situational_read_engine as _sit_read
+        _cr = _sit_read.get_status()
+        try:
+            from consciousness.theory_of_mind import theory_of_mind_engine as _tom
+            _cr["theory_of_mind"] = _tom.get_status()  # Companion P1 (shadow)
+        except Exception:
+            _cr["theory_of_mind"] = {}
+        try:
+            # Companion P3 — read->behavior ADVISORY (shadow, narrate-only): what
+            # JARVIS "would have" adjusted, person-aware. Applies nothing.
+            from consciousness.behavior_advisory import behavior_advisory_engine as _adv
+            _cr["behavior_advisory"] = _adv.get_status()
+        except Exception:
+            _cr["behavior_advisory"] = {}
+        try:
+            # Environmental memory-of-normal — the "be there for the room" half (shadow).
+            from consciousness.environmental_normal import environmental_normal_engine as _env
+            _cr["environmental_normal"] = _env.get_status()
+        except Exception:
+            _cr["environmental_normal"] = {}
+        snapshot["companion_read"] = _cr
+    except Exception:
+        logger.debug("Snapshot: companion read failed", exc_info=True)
+        snapshot["companion_read"] = {
+            "phase": "P0_situational_read",
+            "authority": "shadow_logged_only",
+            "changes_behavior": False,
+            "observed_turns": 0,
+            "latest": None,
+            "recent": [],
+            "theory_of_mind": {},
+        }
 
     # HRR / VSA shadow substrate — read-only, dormant, non-authoritative.
     # Surface the same payload /api/hrr/status exposes so the memory tab and
@@ -2510,8 +2679,18 @@ def _build_skill_acquisition_specialist_cache(engine: Any) -> dict[str, Any]:
             "live_influence": False,
             "promotion_eligible": False,
             "maturity": maturity,
+            # best_accuracy is TRAINING/validation accuracy across saved versions, not a
+            # live-inference score (the specialist trains predominantly on synthetic signals).
             "synthetic_accuracy": row.get("best_accuracy", 0),
-            "live_shadow_accuracy": 0.0,
+            # HONEST (weight-room #22): this specialist runs NO scored live-shadow inference
+            # yet, so there is no live accuracy to report. None -> dashboard renders "—"
+            # (unmeasured), NOT a fake 0%. A real number needs shadow-inference scoring (#22b).
+            "live_shadow_accuracy": None,
+            "live_accuracy_status": "unmeasured_no_live_inference_scoring",
+            # Honest origin breakdown of the training signals (the weight-room's whole point:
+            # are the reps real?). Lived = real interactions; synthetic = weight-room workouts.
+            "signals_synthetic": feature_stats.get("synthetic", 0) + label_stats.get("synthetic", 0),
+            "signals_lived": feature_stats.get("lived", 0) + label_stats.get("lived", 0),
             "calibration_error": 0.0,
             "false_green_rate": 0.0,
             "false_red_rate": 0.0,

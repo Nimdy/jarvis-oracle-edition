@@ -990,28 +990,44 @@ class SelfImprovementOrchestrator:
             pre_p95 = 0.0
             tick_times: list[float] = []
 
+            # #13: the running kernel is on the engine. (The old `from consciousness.kernel
+            # import kernel_loop` was a DEAD import — that symbol does not exist, so this
+            # check used to ImportError every time and silently "assume OK". Use the real
+            # accessor, the same one _prepare_restart_verify uses, so it actually measures.)
+            kernel = getattr(self._engine, "_kernel", None)
+            if kernel is None:
+                logger.warning("Post-apply health: no kernel handle — FAIL-CLOSED, "
+                               "rolling back (cannot verify health).")
+                return False
+
             try:
-                from consciousness.kernel import kernel_loop
-                perf = kernel_loop.get_performance()
-                pre_p95 = perf.get("p95_tick_ms", 0.0)
+                pre_p95 = kernel.get_performance().get("p95_tick_ms", 0.0)
             except Exception:
-                pass
+                pre_p95 = 0.0
 
             if pre_p95 <= 0:
-                return True
+                # FAIL-CLOSED (#13): no pre-apply baseline = we cannot prove this
+                # self-modification is healthy. Roll back rather than hand-wave "OK".
+                logger.warning("Post-apply health: no pre-apply p95 baseline — "
+                               "FAIL-CLOSED, rolling back (cannot verify health).")
+                return False
 
             for _ in range(HEALTH_MONITOR_TICKS):
                 await asyncio.sleep(0.15)
                 try:
-                    perf = kernel_loop.get_performance()
-                    tick_ms = perf.get("last_tick_ms", 0.0)
+                    tick_ms = kernel.get_performance().get("last_tick_ms", 0.0)
                     if tick_ms > 0:
                         tick_times.append(tick_ms)
                 except Exception:
                     pass
 
             if len(tick_times) < 10:
-                return True
+                # FAIL-CLOSED (#13): too few post-apply samples to judge a regression.
+                # An unverifiable self-modification is rolled back, not assumed OK.
+                logger.warning("Post-apply health: only %d/%d ticks sampled — "
+                               "FAIL-CLOSED, rolling back (sample too thin to verify).",
+                               len(tick_times), HEALTH_MONITOR_TICKS)
+                return False
 
             tick_times.sort()
             idx = int(len(tick_times) * 0.95)
@@ -1028,8 +1044,11 @@ class SelfImprovementOrchestrator:
             return True
 
         except Exception:
-            logger.exception("Health check failed, assuming OK")
-            return True
+            # FAIL-CLOSED (#13): the health check itself errored. The rollback signal
+            # must be REAL — an errored check cannot certify health, so roll back.
+            logger.exception("Post-apply health check errored — FAIL-CLOSED, rolling back "
+                             "(not assuming OK)")
+            return False
 
     def _prepare_restart_verify(
         self,
@@ -1593,8 +1612,12 @@ class SelfImprovementOrchestrator:
     def _capture_health_snapshot(self) -> dict[str, Any] | None:
         """Lightweight health snapshot for delayed outcome comparison."""
         try:
-            from consciousness.kernel import kernel_loop
-            perf = kernel_loop.get_performance()
+            # #13: use the real kernel accessor (the old kernel_loop import was dead,
+            # so this snapshot always returned None — delayed outcome comparison was blind).
+            kernel = getattr(self._engine, "_kernel", None)
+            if kernel is None:
+                return None
+            perf = kernel.get_performance()
             return {
                 "tick_p95_ms": perf.get("p95_tick_ms", 0.0),
                 "error_count": perf.get("error_count", 0),
@@ -1649,9 +1672,17 @@ class SelfImprovementOrchestrator:
         try:
             from epistemic.soul_integrity.index import SoulIntegrityIndex
             si = SoulIntegrityIndex.get_instance()
-            idx = si.get_current_index()
+            state = si.get_state()
+            idx = state.get("current_index")
             result["soul_integrity_index"] = round(idx, 3) if idx is not None else None
             result["soul_integrity_ok"] = idx is None or idx >= SOUL_INTEGRITY_GATE_THRESHOLD
+            # Surface the FLOOR, not just the mean: the index is a weighted average that
+            # can hide a critically-low sub-dimension (e.g. truth_calibration 0.62 sitting
+            # under a 0.82 mean). Show the weakest so the average never conceals it.
+            # (Fidelity #11; gate threshold itself is unchanged.)
+            result["soul_integrity_weakest_dimension"] = state.get("weakest_dimension") or ""
+            ws = state.get("weakest_score")
+            result["soul_integrity_weakest_score"] = round(ws, 3) if isinstance(ws, (int, float)) else None
         except Exception:
             pass
         return result

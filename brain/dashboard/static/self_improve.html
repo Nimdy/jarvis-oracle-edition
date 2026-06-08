@@ -25,9 +25,11 @@
     .si-gate { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:4px; font-size:0.72rem; }
     .si-gate-ok   { background:rgba(0,255,136,.1); color:var(--green); }
     .si-gate-fail { background:rgba(255,0,68,.1); color:var(--red); }
+    .si-gate-unknown { background:rgba(255,170,0,.12); color:var(--amber); }
     .si-gate-dot  { width:8px; height:8px; border-radius:50%; display:inline-block; }
     .si-gate-ok .si-gate-dot   { background:var(--green); }
     .si-gate-fail .si-gate-dot { background:var(--red); }
+    .si-gate-unknown .si-gate-dot { background:var(--amber); }
 
     /* Panels */
     .panel { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; margin-bottom:20px; overflow:hidden; }
@@ -193,8 +195,8 @@
     <!-- Hero Stats -->
     <div class="si-header" id="statusHeader">
       <span class="si-badge si-badge-frozen" id="stageBadge">FROZEN</span>
-      <div class="si-gate si-gate-ok" id="gateQuarantine"><span class="si-gate-dot"></span> Quarantine OK</div>
-      <div class="si-gate si-gate-ok" id="gateSoulIntegrity"><span class="si-gate-dot"></span> Soul Integrity OK</div>
+      <div class="si-gate si-gate-unknown" id="gateQuarantine"><span class="si-gate-dot"></span> Quarantine UNKNOWN</div>
+      <div class="si-gate si-gate-unknown" id="gateSoulIntegrity"><span class="si-gate-dot"></span> Soul Integrity UNKNOWN</div>
       <span class="si-tag si-tag-info" id="acqBadge">Acquisition: --</span>
       <span class="si-tag si-tag-mag" id="pluginBadge">Plugins: --</span>
     </div>
@@ -613,6 +615,18 @@
             <li>P4.7 &mdash; long-run promotion study (&geq; 7 days) with operator-approved promotion only.</li>
           </ol>
 
+          <p style="margin-top:0.8em;"><strong style="color:var(--green,#0f9);">P5: spatial mind's-eye extension.</strong>
+          Building on the P4 substrate, the P5 lane derives a <em>mental-world scene graph</em>
+          (entities, positions, relations) from perception and persists it to a durable,
+          zero-authority spatial-episodic album. The same boundaries apply &mdash; shadow-only,
+          no belief/policy writes, no raw vectors on disk. Two read-only views render it:
+          <a href="/hrr-scene" target="_blank" style="color:var(--cyan);">/hrr-scene</a>
+          (node/edge scene graph + stored-world album) and
+          <a href="/mind" target="_blank" style="color:var(--green,#0f9);">/mind</a>
+          (the "Matrix" world view &mdash; a 2.5D wireframe room with epistemic-colored objects).
+          Object positions are monocular estimates, not a depth scan; a dense depth mesh is a
+          future phase.</p>
+
           <p style="color:var(--text-muted);font-size:0.72rem;margin-top:0.6em;">
             Plan: <code>docs/plans/p4_holographic_cognition_vsa.plan.md</code>.
             Governance rules: <code>AGENTS.md</code> &rarr; "HRR / VSA Governance Rules".
@@ -627,6 +641,8 @@
           <span class="panel-title">HRR Shadow Substrate (live)</span>
           <span style="display:flex;gap:6px;align-items:center;">
             <a href="/hrr" target="_blank" class="si-tag" style="font-size:0.66rem;text-decoration:none;border:1px solid var(--cyan);color:var(--cyan);padding:2px 8px;border-radius:3px;">open full HRR dashboard &rarr;</a>
+            <a href="/hrr-scene" target="_blank" class="si-tag" style="font-size:0.66rem;text-decoration:none;border:1px solid var(--cyan);color:var(--cyan);padding:2px 8px;border-radius:3px;">scene graph &rarr;</a>
+            <a href="/mind" target="_blank" class="si-tag" style="font-size:0.66rem;text-decoration:none;border:1px solid var(--green,#0f9);color:var(--green,#0f9);padding:2px 8px;border-radius:3px;">mind&#39;s-eye &rarr;</a>
             <span id="hrrStatusBadge" class="si-tag si-tag-info" style="font-size:0.66rem;">--</span>
           </span>
         </div>
@@ -828,7 +844,11 @@
 
   function updateGate(id, ok, text) {
     var e = el(id); if (!e) return;
-    e.className = 'si-gate ' + (ok ? 'si-gate-ok' : 'si-gate-fail');
+    // Tri-state, FAIL-CLOSED: ok===true -> green; ok===false -> red; null/undefined
+    // (no data / dead payload) -> amber UNKNOWN, NEVER green. A dead safety payload
+    // must never render as a passing gate. (Fidelity #8.)
+    var cls = (ok === null || ok === undefined) ? 'si-gate-unknown' : (ok ? 'si-gate-ok' : 'si-gate-fail');
+    e.className = 'si-gate ' + cls;
     e.innerHTML = '<span class="si-gate-dot"></span> ' + esc(text);
   }
 
@@ -1171,9 +1191,19 @@
     badge.textContent = label.toUpperCase().replace('_',' ');
     badge.className = 'si-badge ' + (stage===0?'si-badge-frozen':stage===1?'si-badge-dryrun':'si-badge-human');
 
+    // FAIL-CLOSED: only an explicit boolean is trusted. A missing field or a dead/
+    // empty safety_gates payload renders UNKNOWN (amber), never green OK. (Fidelity #8.)
+    var hasGates = full.safety_gates && Object.keys(full.safety_gates).length > 0;
     var gates = full.safety_gates || {};
-    updateGate('gateQuarantine', gates.quarantine_ok!==false, 'Quarantine '+(gates.quarantine_ok!==false?'OK':'HIGH')+(gates.quarantine_composite!=null?' ('+pct(gates.quarantine_composite)+')':''));
-    updateGate('gateSoulIntegrity', gates.soul_integrity_ok!==false, 'Soul '+(gates.soul_integrity_ok!==false?'OK':'LOW')+(gates.soul_integrity_index!=null?' ('+gates.soul_integrity_index.toFixed(2)+')':''));
+    function _tri(v){ return (v === true) ? true : (v === false) ? false : null; }
+    var qOk = hasGates ? _tri(gates.quarantine_ok) : null;
+    var sOk = hasGates ? _tri(gates.soul_integrity_ok) : null;
+    updateGate('gateQuarantine', qOk, 'Quarantine '+(qOk===null?'UNKNOWN':qOk?'OK':'HIGH')+(gates.quarantine_composite!=null?' ('+pct(gates.quarantine_composite)+')':''));
+    // Surface the FLOOR, not just the mean — the weighted index can hide a low
+    // sub-dimension (truth_calibration etc.). (Fidelity #11.)
+    var soulWeak = (gates.soul_integrity_weakest_dimension && gates.soul_integrity_weakest_score!=null)
+      ? ' · weakest '+gates.soul_integrity_weakest_dimension+' '+gates.soul_integrity_weakest_score.toFixed(2) : '';
+    updateGate('gateSoulIntegrity', sOk, 'Soul '+(sOk===null?'UNKNOWN':sOk?'OK':'LOW')+(gates.soul_integrity_index!=null?' ('+gates.soul_integrity_index.toFixed(2)+')':'')+soulWeak);
     el('acqBadge').textContent = 'Acq: '+(acq.active_count||0)+' active / '+(acq.total_count||0);
     el('pluginBadge').textContent = 'Plugins: '+(plugs.total_plugins||0);
     el('statAcqActive').textContent = acq.active_count || 0;

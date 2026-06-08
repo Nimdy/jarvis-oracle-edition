@@ -239,10 +239,15 @@ class HRRSpatialShadow:
         self,
         runtime_cfg: Any,
         symbol_seed: int = 0,
+        album_sink: Any = None,
     ) -> None:
         from collections import deque
 
         self._runtime = runtime_cfg
+        # Injected, zero-authority durable capture sink (memory/spatial_episodic_store).
+        # Injected (never imported here) so this HRR-owned module stays inside the
+        # forbidden-import boundary. Called ONLY when runtime.album_active is true.
+        self._album_sink = album_sink
         self._cfg = HRRConfig(dim=int(runtime_cfg.dim), seed=int(symbol_seed))
         self._symbols = SymbolDictionary(self._cfg)
         seed_all_symbols(self._symbols)
@@ -294,6 +299,23 @@ class HRRSpatialShadow:
         self._last_vector = result["vector"]
         self._last_metrics = metrics
         self._last_scene_payload = scene_payload
+        # Durable, zero-authority capture (the "album") — gated by the third
+        # sub-gate AND only after the vector was stripped above. The sink stores
+        # the vector-free scene graph; the HRR vector NEVER reaches disk. Wrapped
+        # so a capture failure can never disturb the shadow or the tick.
+        if self._album_sink is not None and getattr(self._runtime, "album_active", False):
+            try:
+                from library.vsa.spatial_symbols import VOCAB_VERSION
+                self._album_sink.capture(
+                    scene_payload,
+                    hrr_config={
+                        "dim": int(self._cfg.dim),
+                        "seed": int(self._cfg.seed),
+                        "vocab_version": int(VOCAB_VERSION),
+                    },
+                )
+            except Exception:
+                pass
         return metrics
 
     def status(self) -> Dict[str, Any]:

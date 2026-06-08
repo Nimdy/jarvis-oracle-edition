@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Grounding Queue (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .topgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;align-items:start;}
+    .stat .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .stat .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;}
+    .stat .sub{font-size:9px;color:var(--dim);margin-top:2px;}
+    .banner{margin-top:10px;border:1px solid var(--line);border-left-width:3px;border-radius:4px;padding:9px 12px;font-size:10.5px;color:var(--muted);}
+    .banner b{color:var(--text);}
+    .starv-ok{border-left-color:var(--green);}
+    .starv-warn{border-left-color:var(--amber);}
+    .starv-bad{border-left-color:var(--red);}
+    .levels{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+    .lvl{font-size:9px;padding:3px 8px;border-radius:3px;border:1px solid var(--line);color:var(--muted);}
+    .lvl b{color:var(--text);}
+    .lvl.shadow{border-color:var(--magenta);color:var(--magenta);}
+    .lvl.advisory{border-color:var(--cyan);color:var(--cyan);}
+    .lvl.active{border-color:var(--green);color:var(--green);}
+    /* queue list */
+    .qlist{max-height:620px;overflow:auto;border-top:1px dashed var(--line);margin-top:4px;}
+    .q{border-bottom:1px solid var(--line);padding:11px 10px;}
+    .q .top{display:flex;flex-wrap:wrap;gap:7px;align-items:baseline;}
+    .q .rank{font-size:13px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums;}
+    .q .qt{font-size:12px;color:var(--text);font-weight:700;flex:1;min-width:200px;}
+    .q .claim{font-size:10px;color:var(--muted);margin-top:5px;font-style:italic;}
+    .q .meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center;}
+    .pill{font-size:8.5px;padding:1px 6px;border-radius:3px;border:1px solid var(--line);color:var(--muted);letter-spacing:.04em;white-space:nowrap;}
+    .pill.fac{color:var(--text);border-color:var(--cyan);}
+    .pill.ch-operator{color:var(--magenta);border-color:var(--magenta);}
+    .pill.ch-pi_senses{color:var(--cyan);border-color:var(--cyan);}
+    .pill.ch-web{color:var(--text);border-color:var(--line);}
+    .pill.ch-local_only{color:var(--amber);border-color:var(--amber);}
+    .q .moves{font-size:9.5px;color:var(--dim);margin-top:6px;}
+    .q .moves b{color:var(--amber);}
+    .q .conf{font-size:9px;color:var(--dim);}
+    /* answer action — clearly labelled, operator-gated, never auto-fired */
+    .ansrow{display:flex;gap:7px;margin-top:8px;align-items:center;}
+    .ansrow input{flex:1;min-width:140px;}
+    .opnote{font-size:9px;color:var(--dim);margin-top:5px;border-top:1px dashed var(--line);padding-top:5px;}
+    .answered{opacity:.55;}
+    .answered .av-confirmed{color:var(--green);border-color:var(--green);}
+    .answered .av-refuted{color:var(--amber);border-color:var(--amber);}
+    .hint{color:var(--dim);font-size:11px;padding:26px 6px;text-align:center;}
+    /* affect readout */
+    .prov{font-size:8.5px;color:var(--dim);margin-top:4px;line-height:1.55;}
+    .clamp{font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid var(--amber);color:var(--amber);margin-left:6px;vertical-align:middle;}
+    .levers{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;border-top:1px dashed var(--line);padding-top:9px;align-items:center;}
+    .lever{font-size:9px;padding:3px 8px;border-radius:3px;border:1px solid var(--line);color:var(--dim);white-space:nowrap;}
+    .lever b{color:var(--muted);font-variant-numeric:tabular-nums;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · GROUNDING QUEUE</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Async external-validation queue (SPARK §6). Pending questions ranked by <b>tension × graph-leverage × staleness</b>; each names the belief, its provenance, current confidence, and which way it would move. Answering is <b>operator-gated</b> — a clearly-labelled action, never auto-fired. Read-only render; the grounding ring drives no live lever until promoted.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <main>
+    <section class="card col12">
+      <h2>Grounding-Ring Metrics <span class="asof" id="asof"></span></h2>
+      <div class="note">External-grounding baselines (targets: <b>grounded:inferred ↓ from ~20× (belief graph)</b>, <b>orphan_rate ↓ from 0.857</b>, <b>avg_chain_length ↑ above 1.0</b>, <b>external_validation_rate ↑ toward 0.40</b>). <code>external_validation_rate</code> is movable ONLY by a real external validator (cited source / operator answer / world-model validation) — never self-scored.</div>
+      <div class="topgrid" id="metrics"></div>
+      <div class="levels" id="levels"></div>
+      <div class="banner" id="starv"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Affect Readout <span class="asof" id="affecttick"></span></h2>
+      <div class="note"><b>Operator diagnostic — readout, not feeling.</b> Three governed scalars computed deterministically from real signals every tick (dopamine = novelty / reward / world-model accuracy; serotonin = coherence / curiosity-satisfaction / calibration; cortisol = contradiction-debt / quarantine-pressure / friction). <b>cannot-lie clamp</b>: a scalar is forced to exactly <b>0.0</b> if all its source readings are 0. The levers below are <b>proposed and UNAPPLIED</b> (shadow). JARVIS's own expression of these states stays blocked by the capability gate regardless.</div>
+      <div class="topgrid" id="affect"></div>
+      <div class="levers" id="affectlevers"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Situational Read <span class="asof" id="sitreadtick"></span></h2>
+      <div class="note"><b>Companion Cognition P0 — logged-only, shadow.</b> JARVIS's internal read of each just-finished exchange: what it thinks is happening, why, how confident, what evidence contributed, and what it <b>would have done</b> if it had the authority. <b>Changes no behavior, writes no beliefs, asks nothing.</b> The salience gate (when a read <b>would</b> prompt behavior) is recorded but never acted on — the anti-chatterbox spine, validated against real conversation before it ever steers. <span id="sitreadgate"></span></div>
+      <div class="qlist" id="sitread" style="max-height:360px"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Shadow Grounding Questions <span class="asof" id="shadowqcount"></span></h2>
+      <div class="note">What the grounding drive <b>would ask the world</b>, selected in shadow — <b>never enqueued, never delivered to anyone</b>. The spark's outward curiosity made visible before it has any authority. Durable count: <b id="shadowqtot">—</b> selections shadowed (recent questions reset on restart; the count persists).</div>
+      <div class="qlist" id="shadowq" style="max-height:340px"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Pending Validation Questions <span class="asof" id="pendcount"></span></h2>
+      <div class="note">Ranked highest-leverage first. Answering feeds the external-validation outcome (a "no/wrong" still counts as <b>grounded</b> — being corrected is the goal). The belief itself is <b>not</b> mutated here (view-only); recording the external touch is the advisory action. Synchronous TTS delivery is earned only by hub questions — this queue is for leisure review.</div>
+      <div class="qlist" id="qlist"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Recently Answered</h2>
+      <div class="note">External-validation outcomes recorded by the operator. Confirmed and refuted both anchor the belief externally.</div>
+      <div class="qlist" id="answered" style="max-height:280px"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Confabulation Ledger <span class="asof" id="confabcount"></span></h2>
+      <div class="note">The bidirectional honesty guard (SPARK §7), made observable. <b>backed</b> = anthropomorphic phrasing the gate ALLOWED because a real signal backed it; <b>unbacked</b> = phrasing it rewrote/blocked as confabulation; <b>backed mismatch</b> = signal present but label wrong; <b>affect-name rewrites</b> = "dopamine/serotonin/cortisol" stripped from output. This is the layer that keeps affect a readout and never a claim.</div>
+      <div class="topgrid" id="confabstats"></div>
+      <div class="qlist" id="confab" style="max-height:260px"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, ago=V2.ago, el=V2.el, cap=V2.cap, post=V2.post, act=V2.act;
+  var DATA=null, lastOkTs=0;
+  V2.renderNav('/static/v2/grounding.html');
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+  function metricStat(k, v, sub, color){
+    return '<div class="stat"><div class="k">'+k+'</div><div class="v"'+(color?' style="color:'+color+'"':'')+'>'+v+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
+  }
+
+  // ---- metrics strip ----
+  function renderMetrics(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var m=gr.metrics||{}, ps=gr.policy_stats||{};
+    var evr=num(m.external_validation_rate);
+    if(evr===null) evr=num(ps.external_validation_rate);
+    var gi=num(m.grounded_inferred_ratio), orph=num(m.orphan_rate), acl=num(m.avg_chain_length);
+    var giX=num(m.grounded_inferred_ratio_incl_external), extK=num(m.external_knowledge_count);
+    var giMS=num(m.grounded_inferred_ratio_memory_store);
+    var giBase=num((gr.baselines||{}).grounded_inferred_ratio);
+    var html='';
+    // external_validation_rate: target ↑ toward 0.40 (green at >=0.40)
+    html+=metricStat('external validation rate', evr===null?'—':f3(evr), 'target ↑ ≥0.40',
+       V2.bandColor(evr,0.40,0.20));
+    // grounded:inferred ratio (KEYSTONE = inference vs directly-grounded
+    // observation on the active BELIEF GRAPH; senses+operator only). Baseline
+    // (~20.5× belief-graph) is read from data so it auto-tracks any re-baseline,
+    // and the colour is relative to it (green <½baseline, amber ≤baseline, red
+    // above). Sub shows the memory-store continuity view (~3.5×) and the broad
+    // incl-web view — none of the three masks the others.
+    html+=metricStat('grounded : inferred', gi===null?'—':f2(gi)+'×',
+       'belief-graph · target ↓ from '+(giBase===null?'baseline':f2(giBase)+'×')
+         +(giMS===null?'':' · mem-store '+f2(giMS)+'×')
+         +(giX===null?'':' · incl-web '+f2(giX)+'×'),
+       (gi===null||giBase===null)?'var(--dim)':(gi<=0.5*giBase?'var(--green)':(gi<=giBase?'var(--amber)':'var(--red)')));
+    // orphan_rate: target ↓ from 0.857
+    html+=metricStat('orphan rate', orph===null?'—':f3(orph), 'target ↓ from 0.857',
+       orph===null?'var(--dim)':(orph<=0.5?'var(--green)':(orph<=0.857?'var(--amber)':'var(--red)')));
+    // avg_chain_length: target ↑ above 1.0
+    html+=metricStat('avg chain length', acl===null?'—':f2(acl), 'target ↑ above 1.0',
+       acl===null?'var(--dim)':(acl>1.0?'var(--green)':'var(--amber)'));
+    var q=(gr.queue||{}); var t=(q.totals||{});
+    html+=metricStat('queue pending', num(q.pending_count)===null?'—':q.pending_count, 'awaiting review');
+    html+=metricStat('answered', num(t.answered)===null?'—':t.answered,
+       'conf '+(t.confirmed||0)+' · refute '+(t.refuted||0));
+    el('metrics').innerHTML=html;
+
+    // per-mechanism advisory promotion levels
+    function lvlChip(label, st){
+      st=st||{}; var ln=(st.level_name||'').toLowerCase();
+      var cls=ln==='advisory'?'advisory':(ln==='active'?'active':'shadow');
+      return '<span class="lvl '+cls+'">'+label+': <b>'+(st.level_name||'unknown')+'</b></span>';
+    }
+    el('levels').innerHTML=
+      lvlChip('grounding drive', gr.drive_promotion)+
+      lvlChip('tension-thought', gr.tension_thought_promotion)+
+      lvlChip('affect readout', gr.affect_promotion)+
+      lvlChip('spark gate', gr.promotion);
+  }
+
+  // ---- input-starvation banner (first-class state, never hidden) ----
+  function renderStarvation(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var s=((gr.queue||{}).starvation)||{};
+    var box=el('starv');
+    if(s.starved){
+      box.className='banner starv-bad';
+      box.innerHTML='<b>INPUT-STARVED</b> — operator absent, no Pi signal, web exhausted. Grounding has <b>self-floored to local_only</b>: no validation is manufactured (that would be the keystone failure). '+(num(s.pending_batch_size)||0)+' question(s) batched for next operator presence. '+esc(s.note||'');
+    } else if(s.operator_present===false){
+      box.className='banner starv-warn';
+      box.innerHTML='<b>Operator absent</b> — '+(s.pi_signal_available?'Pi signal available; ':'no Pi signal; ')+(s.web_exhausted?'web exhausted. ':'web channel open for factual facets. ')+(num(s.pending_batch_size)||0)+' batched for review. '+esc(s.note||'');
+    } else if(s.operator_present===true){
+      box.className='banner starv-ok';
+      box.innerHTML='<b>Operator present</b> — synchronous validation channel open. Queue still favours leisure review for non-hub questions.';
+    } else {
+      box.className='banner';
+      box.innerHTML='Input-starvation state not yet reported by the queue (advisory tier not yet active, or no grounding tension surfaced). Treated as <b>unknown</b>, not assumed healthy.';
+    }
+  }
+
+  // ---- pending questions ----
+  function chCls(c){ return 'ch-'+(({operator:1,pi_senses:1,web:1,local_only:1}[c])?c:'web'); }
+  function renderPending(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var q=(DATA&&DATA.queue)||gr.queue||{};
+    var pend=(q.pending||[]);
+    el('pendcount').textContent=pend.length+' pending';
+    if(!pend.length){ el('qlist').innerHTML='<div class="hint">no pending validation questions — grounding tension low, advisory tier not active, or all answered</div>'; return; }
+    el('qlist').innerHTML=pend.map(function(p){
+      var conf='conf '+f2(p.base_confidence)+(num(p.effective_confidence)!==null?' (eff '+f2(p.effective_confidence)+')':'');
+      return '<div class="q" data-qid="'+esc(p.question_id)+'">'+
+        '<div class="top">'+
+          '<span class="rank" title="tension × graph-leverage × staleness">'+f3(p.rank)+'</span>'+
+          '<span class="qt">'+esc(p.question_text||'(no question text)')+'</span>'+
+        '</div>'+
+        (p.rendered_claim?'<div class="claim">belief: "'+esc(p.rendered_claim)+'"</div>':'')+
+        '<div class="meta">'+
+          '<span class="pill fac">'+esc(p.facet||'?')+'</span>'+
+          '<span class="pill '+chCls(p.channel)+'">→ '+esc(p.channel||'?')+'</span>'+
+          '<span class="pill">prov: '+esc(p.provenance||'unknown')+'</span>'+
+          '<span class="pill">tension '+f2(p.grounding_tension)+'</span>'+
+          '<span class="pill">leverage '+f2(p.graph_leverage)+'</span>'+
+          '<span class="pill">stale '+f2(p.staleness)+'</span>'+
+          '<span class="pill conf">'+conf+'</span>'+
+        '</div>'+
+        '<div class="moves">moves: <b>'+esc(p.moves_toward||'')+'</b></div>'+
+        '<div class="ansrow">'+
+          '<input class="v2-field ans-in" autocomplete="off" placeholder="answer (yes / no / freeform) — operator-gated, recorded as external validation">'+
+          '<button class="btn-act ans-go">Record answer</button>'+
+        '</div>'+
+        '<div class="opnote">OPERATOR ACTION — POST /api/grounding/queue/answer. JARVIS never fires this; it records your external-validation outcome (a "no" still counts as grounded). The belief is not mutated here (view-only).</div>'+
+      '</div>';
+    }).join('');
+    Array.prototype.forEach.call(el('qlist').querySelectorAll('.q'), function(node){
+      var qid=node.getAttribute('data-qid');
+      var inp=node.querySelector('.ans-in'), btn=node.querySelector('.ans-go');
+      function fire(){
+        var ans=(inp.value||'').trim();
+        if(!ans){ V2.toast('type an answer first', false); return; }
+        btn.disabled=true;
+        act(post('/api/grounding/queue/answer',{question_id:qid, answer:ans}), 'external validation recorded')
+          .then(function(){ refresh(); })
+          .catch(function(){ btn.disabled=false; });
+      }
+      btn.addEventListener('click', fire);
+      inp.addEventListener('keydown', function(e){ if(e.key==='Enter') fire(); });
+    });
+  }
+
+  // ---- answered ----
+  function renderAnswered(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var q=(DATA&&DATA.queue)||gr.queue||{};
+    var ans=(q.recent_answered||[]);
+    if(!ans.length){ el('answered').innerHTML='<div class="hint">nothing answered yet</div>'; return; }
+    el('answered').innerHTML=ans.map(function(p){
+      var av=p.external_validation||'recorded';
+      return '<div class="q answered">'+
+        '<div class="top"><span class="qt">'+esc(p.question_text||p.belief_id||'?')+'</span>'+
+          '<span class="pill av-'+esc(av)+'">'+esc(av)+(p.grounded?' · grounded':'')+'</span>'+
+          '<span class="pill" style="margin-left:auto">'+ago(p.answered_at)+'</span>'+
+        '</div>'+
+        (p.answer_text?'<div class="claim">answer: "'+esc(p.answer_text)+'"</div>':'')+
+      '</div>';
+    }).join('');
+  }
+
+  // ---- affect readout (operator diagnostic; readout-not-feeling) ----
+  function affectColor(nick, lv){
+    if(lv===null) return 'var(--dim)';
+    if(nick==='cortisol') return lv>=0.66?'var(--red)':(lv>=0.4?'var(--amber)':'var(--green)');
+    return lv>=0.6?'var(--green)':(lv>=0.35?'var(--amber)':'var(--dim)');
+  }
+  function provLine(p){
+    if(!p) return '';
+    return Object.keys(p).map(function(k){
+      var v=p[k], val=Array.isArray(v)?v[1]:v;
+      return esc(k)+'='+(val==null?'—':(typeof val==='number'?f2(val):esc(String(val))));
+    }).join(' · ');
+  }
+  function renderAffect(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var a=gr.affect_readout||{};
+    el('affecttick').textContent=a.tick_count!=null?('tick '+a.tick_count):'';
+    if(!a.computed){
+      el('affect').innerHTML='<div class="hint">affect not yet computed this session — '+esc(a.note||'no tick recorded')+'</div>';
+      el('affectlevers').innerHTML=''; return;
+    }
+    var html='';
+    ['dopamine','serotonin','cortisol'].forEach(function(n){
+      var ro=a[n]||{}, lv=num(ro.level), raw=num(ro.raw);
+      html+='<div class="stat"><div class="k">'+n+'</div>'+
+        '<div class="v" style="color:'+affectColor(n,lv)+'">'+(lv===null?'—':f2(lv))+
+          (ro.cannot_lie_clamped?'<span class="clamp">clamp 0</span>':'')+'</div>'+
+        '<div class="sub">raw '+(raw===null?'—':f2(raw))+(ro.all_sources_zero?' · all-zero':'')+'</div>'+
+        '<div class="prov">'+provLine(ro.provenance)+'</div>'+
+      '</div>';
+    });
+    el('affect').innerHTML=html;
+    var lv=a.proposed_levers||{}, parts=[];
+    if(lv.cadence_multiplier!=null) parts.push('<span class="lever">cadence ×<b>'+f2(lv.cadence_multiplier)+'</b></span>');
+    if(lv.urgency_bias!=null) parts.push('<span class="lever">urgency_bias <b>'+f2(lv.urgency_bias)+'</b></span>');
+    if(lv.memory_reinforcement!=null) parts.push('<span class="lever">mem_reinforce ×<b>'+f2(lv.memory_reinforcement)+'</b></span>');
+    var im=lv.interval_multipliers||{};
+    Object.keys(im).forEach(function(k){ parts.push('<span class="lever">'+esc(k)+' ×<b>'+f2(im[k])+'</b></span>'); });
+    el('affectlevers').innerHTML='<span class="lever" style="border-color:var(--magenta);color:var(--magenta)">PROPOSED · UNAPPLIED (shadow)</span>'+parts.join('')+(a.demote_signal?'<span class="lever" style="border-color:var(--red);color:var(--red)">demote signal</span>':'');
+  }
+
+  // ---- shadow grounding questions (would-have; never enqueued) ----
+  function renderShadowQ(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var qs=gr.shadow_questions||[];
+    var tot=(gr.drive_promotion||{}).selections_shadowed;
+    el('shadowqtot').textContent=tot!=null?tot:'—';
+    el('shadowqcount').textContent=qs.length+' recent';
+    if(!qs.length){ el('shadowq').innerHTML='<div class="hint">no would-have questions retained yet — drive has not selected a grounding target since restart (durable count persists above)</div>'; return; }
+    el('shadowq').innerHTML=qs.map(function(s){
+      return '<div class="q">'+
+        '<div class="top"><span class="qt">'+esc(s.question||'(no question text)')+'</span>'+
+          '<span class="pill" style="margin-left:auto">'+ago(s.ts)+'</span></div>'+
+        '<div class="meta">'+
+          '<span class="pill fac">'+esc(s.facet||'?')+'</span>'+
+          '<span class="pill">would have '+esc(s.verb||'researched')+' → '+esc(s.channel||'?')+'</span>'+
+          (s.belief_id?'<span class="pill">belief '+esc(s.belief_id)+'</span>':'')+
+          '<span class="pill">urgency '+f2(s.urgency)+'</span>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  // ---- confabulation ledger (honesty guard observability) ----
+  function renderConfab(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var c=gr.confabulation_ledger||{};
+    var stats='';
+    stats+=metricStat('backed (allowed)', num(c.backed_anthropomorphized)==null?'—':c.backed_anthropomorphized, 'real signal backed it');
+    stats+=metricStat('unbacked (caught)', num(c.unbacked)==null?'—':c.unbacked, 'rewritten / blocked', num(c.unbacked)?'var(--amber)':null);
+    stats+=metricStat('backed mismatch', num(c.backed_mismatch)==null?'—':c.backed_mismatch, 'signal/label mismatch');
+    stats+=metricStat('affect-name rewrites', num(c.affect_nickname_rewrites)==null?'—':c.affect_nickname_rewrites, 'nickname stripped');
+    el('confabstats').innerHTML=stats;
+    var r=c.recent||[];
+    el('confabcount').textContent=r.length+' recent';
+    if(!r.length){ el('confab').innerHTML='<div class="hint">no confabulation events recorded — the affect/anthropomorphism guard has not fired</div>'; return; }
+    el('confab').innerHTML=r.map(function(e){
+      var txt=e.text||e.claim||e.phrase||e.original||e.rewritten||JSON.stringify(e);
+      var verdict=(e.backed!=null)?(e.backed?'backed':'unbacked'):(e.verdict||e.action||e.kind||'');
+      return '<div class="q"><div class="top"><span class="qt">'+esc(String(txt).slice(0,200))+'</span>'+
+        (verdict?'<span class="pill" style="margin-left:auto">'+esc(verdict)+'</span>':'')+
+        (e.ts?'<span class="pill">'+ago(e.ts)+'</span>':'')+'</div></div>';
+    }).join('');
+  }
+
+  // ---- situational read (companion cognition P0; logged-only / shadow) ----
+  function salColor(sal){ return sal>=0.66?'var(--amber)':(sal>=0.4?'var(--magenta)':'var(--dim)'); }
+  function renderSituational(){
+    var cr=(DATA&&DATA.companion_read)||{};
+    el('sitreadtick').textContent=(cr.observed_turns!=null?(cr.observed_turns+' turns read'):'');
+    var trip=cr.salience_tripped_count||0, thr=cr.salience_threshold;
+    var pr=cr.promotion_readiness||{};
+    el('sitreadgate').innerHTML='<span class="lever" style="border-color:var(--magenta);color:var(--magenta)">LOGGED-ONLY · '+trip+' would-have-acted'+(thr!=null?(' · gate '+f2(thr)):'')+'</span>'+(pr.gate?'<span class="lever">P0→P1 '+(pr.structural_ready?'<b>ready</b>':esc((pr.blocking||[]).join("; ")||"…"))+'</span>':'');
+    var tom=(cr.theory_of_mind)||{}, tms=tom.models||[];
+    var tomHtml='';
+    if(tms.length){
+      tomHtml='<div class="note" style="margin-bottom:6px"><b>Theory-of-Mind (P1 — shadow hypotheses, gates nothing, never persisted to identity).</b> JARVIS\'s rolling per-person read.</div>'+
+        tms.map(function(m){
+          return '<div class="q" style="border-left:3px solid var(--magenta);padding-left:8px">'+
+            '<div class="top"><span class="qt">'+esc(m.name)+'</span><span class="pill" style="margin-left:auto">n='+m.sample_count+'</span></div>'+
+            '<div class="meta"><span class="pill">disposition: '+esc(m.disposition)+' ('+f2(m.disposition_confidence)+')</span>'+
+            '<span class="pill">feeling: '+esc(m.current_feeling)+' ('+f2(m.feeling_confidence)+')</span>'+
+            '<span class="pill">'+esc(m.responsiveness)+'</span></div></div>';
+        }).join('')+
+        (function(){
+          var cz=(tom.crystallization)||{}, props=cz.proposals||[];
+          if(!props.length) return '';
+          return '<div class="note" style="margin:8px 0 4px"><b>Crystallization valve (P2 — shadow: PROPOSES a belief, NEVER writes it).</b> A stable read would become a belief only at ≥'+(cz.min_corroborations||50)+' corroborations + ≥'+f2(cz.min_stability||0.9)+' stability (the real belief gates) — and even then P2 only proposes. Logged, not written.</div>'+
+            props.map(function(p){
+              return '<div class="q" style="border-left:3px solid var(--cyan);padding-left:8px">'+
+                '<div class="top"><span class="qt">would form: '+esc(p.candidate_belief)+'</span></div>'+
+                '<div class="meta"><span class="pill" style="color:'+(p.would_crystallize?'var(--green)':'var(--cyan)')+'">'+(p.would_crystallize?'gates met — still not written (P2 only proposes)':'not yet: '+esc((p.blocking||[]).join(', ')))+'</span>'+
+                '<span class="pill">conf '+f2(p.confidence)+'</span><span class="pill">writes_belief: false</span></div></div>';
+            }).join('');
+        })()+
+        (function(){
+          var pz=(tom.presence)||{}, obs=pz.observations||[];
+          if(!obs.length) return '';
+          return '<div class="note" style="margin:8px 0 4px"><b>Presence read (shadow — gentle "would notice", NEVER spoken).</b> When a person shifts from their usual read. A hypothesis, not a fact. This complements (does not touch) the novel-object curiosity ask.</div>'+
+            obs.map(function(o){
+              return '<div class="q" style="border-left:3px solid var(--amber);padding-left:8px">'+
+                '<div class="top"><span class="qt">would gently note: '+esc(o.would_gently_note)+'</span></div>'+
+                '<div class="meta"><span class="pill">recent withdrawn '+f2(o.recent_disengaged_frac)+'</span>'+
+                '<span class="pill">recent negative '+f2(o.recent_negative_frac)+'</span>'+
+                '<span class="pill">spoken: false</span></div></div>';
+            }).join('');
+        })()+
+        (function(){
+          var en=(cr.environmental_normal)||{}, m=en.metrics||{}, normals=en.learned_normals||[], dev=en.observations||[];
+          if(!en.phase) return '';
+          var head='<div class="note" style="margin:10px 0 4px"><b>Environmental presence — memory-of-normal (shadow, NEVER spoken).</b> JARVIS learns each object\'s usual spot from fresh sightings (plus a short permanence window), then would gently note only a real, debounced, <i>confident</i> <b>"moved"</b> sighting ("the cup isn\'t where it usually lives"). The "be there for the room" half. <b>Data-minimal:</b> it never claims a thing is <i>gone</i> (that would need person-occlusion data we deliberately don\'t wire) — it only reports a thing SEEN in the wrong place. <b>Honest maturity:</b> person-occlusion is now wired (objects behind a person stay <i>occluded</i> = still here, not phantom-removed, and keep accruing their spot). Still coarse — ~60s sampling + coarse regions — so it learns over minutes-to-hours and may stay quiet a while (under-firing, not broken). Complements (does not touch) the novel-object curiosity ask.</div>'+
+            '<div class="meta" style="margin-bottom:4px"><span class="pill">ticks observed '+(num(m.ticks_observed)||0)+'</span>'+
+            '<span class="pill">objects tracked '+(num(m.objects_tracked)||0)+'</span>'+
+            '<span class="pill">learned normals '+(num(m.objects_with_learned_normal)||0)+'</span>'+
+            '<span class="pill">moved noticed '+(num(m.moved_noticed_total)||0)+'</span>'+
+            '<span class="pill">claims absence: '+(en.claims_absence?'yes':'no')+'</span></div>';
+          var devHtml=dev.length?dev.map(function(o){
+            return '<div class="q" style="border-left:3px solid var(--amber);padding-left:8px">'+
+              '<div class="top"><span class="qt">would gently note: '+esc(o.would_gently_note)+'</span></div>'+
+              '<div class="meta"><span class="pill">usual: '+esc(o.usual_region)+' '+f2(o.usual_region_frac)+'</span>'+
+              '<span class="pill">seen in: '+esc(String(o.current_region||'?'))+'</span>'+
+              '<span class="pill">spoken: false</span></div></div>';
+          }).join(''):'';
+          var normHtml=normals.length?'<div class="hint" style="margin-top:4px">learned usual spots: '+normals.map(function(n){ return esc(n.object)+' → '+esc(n.usual_region)+' ('+f2(n.usual_region_frac)+', '+(num(n.observations)||0)+' obs)'; }).join(' · ')+'</div>':'<div class="hint" style="margin-top:4px">still learning the room — no object has reached a confident usual spot yet (needs '+(num(m.min_observations_for_normal)||15)+'+ observations in one region)</div>';
+          return head+devHtml+normHtml;
+        })()+
+        '<div class="note" style="margin:8px 0 4px"><b>Per-turn reads ↓</b></div>';
+    }
+    var rs=cr.recent||[];
+    if(!rs.length && !tomHtml){ el('sitread').innerHTML='<div class="hint">no exchanges read since restart — JARVIS logs an internal read after each conversation turn</div>'; return; }
+    el('sitread').innerHTML=tomHtml+rs.map(function(r){
+      var sal=num(r.salience), col=salColor(sal||0);
+      var ev=(r.evidence||[]).map(function(e){ return esc(String(e[0]))+'='+esc(String(e[1])); }).join(' · ');
+      return '<div class="q" style="border-left:3px solid '+col+';padding-left:8px">'+
+        '<div class="top"><span class="qt">'+esc(r.engagement||'?')+' · '+esc(r.user_sentiment||'?')+'</span>'+
+          '<span class="pill" style="margin-left:auto">'+ago(r.timestamp)+'</span></div>'+
+        '<div class="meta">'+
+          '<span class="pill">'+esc(r.speaker||'?')+'</span>'+
+          '<span class="pill" style="color:'+col+'">salience '+(sal===null?'—':f2(sal))+(r.salience_tripped?' · TRIPPED':'')+'</span>'+
+          '<span class="pill">conf '+f2(num(r.confidence)||0)+'</span>'+
+        '</div>'+
+        '<div class="meta"><span class="qt" style="opacity:.85">self-check: '+esc(r.self_check||'')+'</span></div>'+
+        (r.would_have_done?'<div class="meta"><span class="pill" style="border-color:var(--magenta);color:var(--magenta)">would-have: '+esc(r.would_have_done)+'</span></div>':'')+
+        '<div class="prov" style="margin-top:4px">'+ev+'</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  function renderMode(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var q=(DATA&&DATA.queue)||gr.queue||{};
+    el('mode').textContent='phase '+(gr.phase||'—')+' · '+(num(q.pending_count)||0)+' pending'+(lastOkTs?'':' · connecting…');
+    el('asof').textContent=lastOkTs?('as of '+new Date(lastOkTs).toLocaleTimeString()):'';
+  }
+
+  function refresh(){
+    fetchJSON('/api/grounding/queue').then(function(d){
+      DATA=d; lastOkTs=Date.now();
+      // /api/grounding/queue returns {grounding_ring, queue}; the page reads both.
+      renderMetrics(); renderStarvation(); renderAffect(); renderSituational(); renderShadowQ(); renderPending(); renderAnswered(); renderConfab(); renderMode();
+    }).catch(function(){
+      el('qlist').innerHTML='<div class="hint" style="color:var(--red)">grounding queue endpoint offline — showing nothing rather than a fabricated queue</div>';
+      el('starv').className='banner starv-bad';
+      el('starv').innerHTML='<b>UNKNOWN</b> — queue endpoint offline; starvation state cannot be asserted.';
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

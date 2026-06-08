@@ -10,6 +10,12 @@ from __future__ import annotations
 from collections import deque
 from typing import Any
 
+# Provenance that anchors a belief to evidence outside the graph (mirrors
+# provenance_scorer / spark_metrics). A belief with one of these is GROUNDED even when it
+# has zero belief-edges: a source-cited fact ("c = 299,792,458 m/s") is grounded by
+# provenance, not by neighbours. So "structurally isolated" must not be read as "ungrounded".
+_GROUNDED_PROVENANCE = frozenset({"observed", "user_claim", "external_source"})
+
 
 def compute_integrity(edge_store: Any, belief_store: Any) -> dict[str, Any]:
     """Compute all integrity metrics in a single pass.
@@ -24,8 +30,20 @@ def compute_integrity(edge_store: Any, belief_store: Any) -> dict[str, Any]:
         graph_belief_ids.add(edge.source_belief_id)
         graph_belief_ids.add(edge.target_belief_id)
 
-    orphan_count = len(active_belief_ids - graph_belief_ids)
+    orphan_ids = active_belief_ids - graph_belief_ids
+    orphan_count = len(orphan_ids)
     orphan_rate = orphan_count / max(len(active_belief_ids), 1)
+
+    # Split the structural orphans into "grounded-but-isolated" (legitimate — e.g. a cited
+    # research fact with no belief-edge) vs "ungrounded" (neither connected NOR externally
+    # anchored — the genuinely-floating ones, which is the metric that actually matters).
+    grounded_orphan_count = 0
+    for bid in orphan_ids:
+        b = all_beliefs.get(bid)
+        if b is not None and getattr(b, "provenance", "") in _GROUNDED_PROVENANCE:
+            grounded_orphan_count += 1
+    ungrounded_orphan_count = orphan_count - grounded_orphan_count
+    ungrounded_orphan_rate = ungrounded_orphan_count / max(len(active_belief_ids), 1)
 
     components = _connected_components(edge_store)
     fragmentation = len(components) / max(len(graph_belief_ids), 1) if graph_belief_ids else 0.0
@@ -53,6 +71,10 @@ def compute_integrity(edge_store: Any, belief_store: Any) -> dict[str, Any]:
     return {
         "orphan_count": orphan_count,
         "orphan_rate": round(orphan_rate, 4),
+        # the honest breakdown: grounded-but-isolated is fine; ungrounded is the real concern
+        "grounded_orphan_count": grounded_orphan_count,
+        "ungrounded_orphan_count": ungrounded_orphan_count,
+        "ungrounded_orphan_rate": round(ungrounded_orphan_rate, 4),
         "active_beliefs": len(active_belief_ids),
         "graph_beliefs": len(graph_belief_ids),
         "component_count": len(components),

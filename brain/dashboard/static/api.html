@@ -1067,6 +1067,52 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
       <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th></tr></thead><tbody><tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td>20</td></tr></tbody></table></div>
     </div>
 
+    <div class="a-endpoint" id="ep-hrr-scene-sessions" data-method="GET" data-path="/api/hrr/scene/sessions" data-desc="P5 spatial-album sessions" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/hrr/scene/sessions</span><span class="a-ep-desc">List stored spatial-episodic Mental-World Album sessions</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Read-only, vector-free, authority-pinned (P5 Stone 2, commit f8008a6). PRE-MATURE / shadow-only / zero-authority. Lists durable spatial-episodic sessions persisted by the Album (Stone 1, commit 8c46153). No raw HRR vectors are ever exposed.</p>
+        <div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"sessions"</span>: [ { <span class="a-key">"session_id"</span>: <span class="a-str">"&lt;session&gt;"</span>, <span class="a-key">"records"</span>: <span class="a-num">6</span>, <span class="a-key">"mtime"</span>: <span class="a-num">0</span> } ],
+  <span class="a-key">"status"</span>: <span class="a-str">"PRE-MATURE"</span>,
+  <span class="a-key">"no_raw_vectors_in_api"</span>: <span class="a-bool">true</span>
+}</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-hrr-scene-episode" data-method="GET" data-path="/api/hrr/scene/episode" data-desc="P5 spatial-album episode" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/hrr/scene/episode</span><span class="a-ep-desc">Page stored vector-free worlds for one Album session</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Read-only, vector-free, authority-pinned (P5 Stone 2, commit f8008a6). PRE-MATURE / shadow-only / zero-authority. Returns stored world records (scene graph + provenance envelope) for a session; no raw HRR vectors are exposed.</p>
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">session</td><td class="a-param-type">string</td><td class="a-param-opt">required</td><td>Session id from <code>/api/hrr/scene/sessions</code>.</td></tr>
+          <tr><td class="a-param-name">limit</td><td class="a-param-type">int</td><td class="a-param-opt">optional</td><td>Max stored worlds to return.</td></tr>
+        </tbody></table>
+        <div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"session_id"</span>: <span class="a-str">"&lt;session&gt;"</span>,
+  <span class="a-key">"count"</span>: <span class="a-num">6</span>,
+  <span class="a-key">"worlds"</span>: [ <span class="a-str">"&lt;stored world records&gt;"</span> ],
+  <span class="a-key">"no_raw_vectors_in_api"</span>: <span class="a-bool">true</span>
+}</div></div>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-hrr-scene-explore" data-method="GET" data-path="/api/hrr/scene/explore" data-desc="P5 spatial-album explore" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/hrr/scene/explore</span><span class="a-ep-desc">Re-walk a stored world via pure mental_navigation ops</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Read-only, vector-free, authority-pinned (P5 Stone 2, commit f8008a6). PRE-MATURE / shadow-only / zero-authority. Re-walks a stored world with the pure imagined nav ops (turn-left &rarr; move-forward &rarr; turn-right), returning imagined-step traces. No raw HRR vectors are exposed.</p>
+        <table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+          <tr><td class="a-param-name">world_id</td><td class="a-param-type">string</td><td class="a-param-opt">required</td><td>World id from a stored episode record.</td></tr>
+        </tbody></table>
+        <div class="a-block"><div class="a-block-label">Response</div><div class="a-code"><button class="a-copy-btn" onclick="copyCode(this)">Copy</button>{
+  <span class="a-key">"world_id"</span>: <span class="a-str">"&lt;id&gt;"</span>,
+  <span class="a-key">"world"</span>: <span class="a-str">"&lt;stored world record&gt;"</span>,
+  <span class="a-key">"explore_traces"</span>: [ <span class="a-str">"&lt;imagined nav trace&gt;"</span> ],
+  <span class="a-key">"loaded_from_store"</span>: <span class="a-bool">true</span>,
+  <span class="a-key">"no_raw_vectors_in_api"</span>: <span class="a-bool">true</span>
+}</div></div>
+      </div>
+    </div>
+
     <div class="a-endpoint" id="ep-language" data-method="GET" data-path="/api/language" data-desc="Language runtime status" data-cat="live-addendum">
       <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/language</span><span class="a-ep-desc">Language substrate, promotion gates, and evidence floors</span></div>
       <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Shows why the language runtime bridge is enabled, shadow-only, or held off.</p></div>

@@ -458,6 +458,27 @@ _BLOCKED_VERB_RE = re.compile(
     ) + r')\b',
 )
 
+# Routes whose answers are GROUNDED SELF-KNOWLEDGE (the system reporting on its
+# own measured state / stored memories), not external-capability claims.
+_STRICT_SELF_KNOWLEDGE_ROUTES: frozenset[str] = frozenset({
+    "status", "introspection", "memory", "identity",
+})
+
+# Self-knowledge verbs: epistemic / state-reporting actions the system performs
+# ON ITSELF (recall, store, recognize, monitor). These describe internal state,
+# not an external action capability. The strict-route exemption fires ONLY when
+# the flagged claim is built around one of these — so "I remember X" passes but
+# "I can book you a flight" / "I will fly the drone" are NOT spared (they are
+# action capabilities that happen to occur on a self-knowledge route).
+_SELF_KNOWLEDGE_CLAIM_RE = re.compile(
+    r'\b(?:remember|recall|recollect|know|knew|store|stored|storing|retain|'
+    r'retrieve|recogni[sz]e|identif(?:y|ied)|track|monitor|observ|sense|'
+    r'detect(?:ed)?|measur|report|introspect|reflect|am aware|aware of|'
+    r'have (?:a |the )?(?:memor|record|profile|note)|my (?:memor|status|state|'
+    r'name|identity|architecture|configuration))\b',
+    re.IGNORECASE,
+)
+
 _FIRST_PERSON_RE = re.compile(r'\b(?:I|me|my|myself|we|us|our|ourselves)\b', re.I)
 _SELF_NAME_RE = re.compile(r'\b(?:jarvis)\b', re.I)
 _SELF_REFERENCE_RE = re.compile(
@@ -548,6 +569,66 @@ _AFFECT_CLAIMS: list[tuple[re.Pattern, str]] = [
         re.I,
     ), "that relates to core aspects of my design"),
 ]
+
+# ── Affect-nickname claims (SPARK_DESIGN §7) ─────────────────────────────────
+# The shadow affect layer labels three governed scalars with neuro-nicknames
+# (dopamine/serotonin/cortisol). Those are READOUTS, never feelings. A user-
+# facing "my cortisol is high" must be rewritten to name the underlying real
+# signal and its raw value, e.g.
+#   "an unresolved-tension signal is elevated (derived from contradiction_debt=…)".
+# These patterns are matched UNCONDITIONAL OF ROUTE and BEFORE the simpler
+# capability/affect patterns. Each nickname maps to a human-readable signal
+# phrase and the affect-readout key the live provenance is pulled from.
+
+_AFFECT_NICKNAMES: dict[str, dict[str, str]] = {
+    "dopamine": {
+        "phrase": "a reward / novelty signal",
+        "readout": "dopamine",
+        # primary backing source surfaced in the rewrite
+        "primary_source": "net_attribution",
+    },
+    "serotonin": {
+        "phrase": "a coherence-satisfaction signal",
+        "readout": "serotonin",
+        "primary_source": "coherence",
+    },
+    "cortisol": {
+        "phrase": "an unresolved-tension signal",
+        "readout": "cortisol",
+        "primary_source": "contradiction_debt",
+    },
+}
+
+# "my cortisol is high", "I'm running low on serotonin", "dopamine is elevated",
+# "feeling a dopamine hit", "my cortisol levels are spiking",
+# "my serotonin is running low", etc.
+_AFFECT_NICKNAME_RE = re.compile(
+    r"\b(?:my |the |a |some )?"
+    r"(dopamine|serotonin|cortisol)"
+    r"(?:\s+(?:levels?|reading|signal))?"
+    # connector: one or more linking/aux verbs (e.g. "is", "is running", "are").
+    r"(?:\s+(?:is|are|'s|am|be|been|feels?|seems?|has|have|had|was|were|"
+    r"spik\w*|surg\w*|runs?|running|sitting|getting|stay\w*|remain\w*))*\s*"
+    r"(?:really |very |quite |pretty |a bit |slightly |super )?"
+    r"(high|low|elevated|spiking|surging|rising|falling|up|down|dropping|"
+    r"depleted|drained|flowing|pumping|through the roof|through-the-roof)\b",
+    re.I,
+)
+
+# Catch the inverted phrasing: "I feel/am getting a dopamine hit/rush/spike",
+# "a hit of dopamine", "running on cortisol".  A leading determiner +
+# intensifier is consumed so the rewrite (which carries its own article) does
+# not leave a dangling "a real ..." fragment.
+_AFFECT_NICKNAME_HIT_RE = re.compile(
+    r"(?:\b(?:a|an|some|the)\b\s+)?(?:(?:real|huge|big|nice|little|major|sudden)\s+)?"
+    r"(?:hit|rush|spike|surge|burst|dose|wave|flood)\s+of\s+"
+    r"(dopamine|serotonin|cortisol)\b"
+    r"|\b(?:running|riding|high)\s+on\s+(dopamine|serotonin|cortisol)\b"
+    r"|(?:\b(?:a|an|some|the)\b\s+)?(?:(?:real|huge|big|nice|little|major|sudden)\s+)?"
+    r"(dopamine|serotonin|cortisol)\s+(?:hit|rush|spike|surge|burst)\b",
+    re.I,
+)
+
 
 # ── Ungrounded self-state rhetoric ───────────────────────────────────────────
 # Catches vague self-assessment claims: "I'm functioning well",
@@ -791,6 +872,13 @@ class CapabilityGate:
         self._honesty_failures: int = 0
         self._jobs_auto_created: int = 0
         self._affect_rewrites: int = 0
+        # Affect-nickname (dopamine/serotonin/cortisol) rewrites + the
+        # bidirectional confabulation ledger (SPARK_DESIGN §7).
+        self._affect_nickname_rewrites: int = 0
+        self._confab_backed_anthropomorphized: int = 0
+        self._confab_unbacked: int = 0
+        self._confab_backed_mismatch: int = 0
+        self._recent_confabulations: deque[dict[str, Any]] = deque(maxlen=30)
         self._learning_rewrites: int = 0
         self._self_state_rewrites: int = 0
         self._identity_name_stripped: int = 0
@@ -832,6 +920,26 @@ class CapabilityGate:
         import time
         self._perception_evidence_fresh = fresh
         self._perception_evidence_ts = time.time() if fresh else 0.0
+
+    def get_confabulation_ledger(self, limit: int = 15) -> dict[str, Any]:
+        """Read-only view of the bidirectional confabulation ledger (SPARK §7).
+
+        Surfaces the running counters + the most recent ledger entries so the
+        affect/anthropomorphism guard is observable in shadow (SPARK §8 P1
+        logged-shadow). View-only — never mutates gate state. ``backed`` entries
+        are anthropomorphic phrasings the gate ALLOWED because a real signal
+        backed them; ``unbacked`` are ones it rewrote/blocked as confabulation.
+        """
+        recent = list(self._recent_confabulations)
+        if limit and len(recent) > limit:
+            recent = recent[-limit:]
+        return {
+            "backed_anthropomorphized": self._confab_backed_anthropomorphized,
+            "unbacked": self._confab_unbacked,
+            "backed_mismatch": self._confab_backed_mismatch,
+            "affect_nickname_rewrites": self._affect_nickname_rewrites,
+            "recent": list(reversed(recent)),  # most-recent first
+        }
 
     # ── Claim classifier teacher signal recording ─────────────────────────
 
@@ -907,7 +1015,7 @@ class CapabilityGate:
             "has_reflective_exclusion": bool(_REFLECTIVE_EXCLUSION_RE.search(c_lower)),
             "has_verified_skill_context": False,
             "route_is_none": self._route_hint == "none",
-            "route_is_strict": self._route_hint in ("status", "introspection"),
+            "route_is_strict": self._route_hint in _STRICT_SELF_KNOWLEDGE_ROUTES,
             "status_mode": self._status_mode,
             "registry_verified": registry_status == "verified",
             "registry_learning": registry_status == "learning",
@@ -925,19 +1033,27 @@ class CapabilityGate:
             label, label_meta = ClaimClassifierEncoder.encode_label(tag_clean)
 
             from hemisphere.distillation import distillation_collector
+            # record() signature is (teacher, signal_type, data, metadata, origin, fidelity).
+            # teacher names MUST match the claim_classifier spec in hemisphere/types.py:
+            #   feature_source="claim_features", teacher (label)="claim_verdict".
+            # The prior call omitted the required `teacher` arg and used a non-existent
+            # `source=` kwarg, so every record() raised TypeError and was swallowed below —
+            # claim_classifier never received a single signal. (fixed 2026-06-04)
             distillation_collector.record(
+                teacher="claim_features",
                 signal_type="claim_features",
                 data=features,
-                source="capability_gate",
-                fidelity=1.0,
                 metadata={"claim_id": claim_id},
+                origin="capability_gate",
+                fidelity=1.0,
             )
             distillation_collector.record(
+                teacher="claim_verdict",
                 signal_type="claim_verdict",
                 data=label,
-                source="capability_gate",
-                fidelity=1.0,
                 metadata={"claim_id": claim_id, **label_meta},
+                origin="capability_gate",
+                fidelity=1.0,
             )
         except Exception:
             logger.debug("Claim classifier signal recording failed", exc_info=True)
@@ -1106,6 +1222,26 @@ class CapabilityGate:
         if self._is_grounded_observation(claimed, modified):
             self._claims_grounded += 1
             self._record_claim_signal(claimed, "grounded", is_readiness_frame=rf, pattern_index=pi)
+            return modified
+
+        # Layer 1.1: strict self-knowledge route exemption.
+        # On status/memory/introspection/identity routes, a claim built around a
+        # SELF-KNOWLEDGE verb ("I remember X", "I store memories in...", "my
+        # current status is Y") is the system reporting its own state, NOT an
+        # external capability — exempt it so the gate stops splicing "I don't
+        # have that capability yet" into grounded self-report. Guarded THREE ways
+        # so action capabilities can never slip through on these routes:
+        #   1. route must be a strict self-knowledge route, AND
+        #   2. the claim must contain a self-knowledge verb (remember/store/...), AND
+        #   3. the claim must NOT contain a blocked capability verb (sing/fly/...).
+        # "I can book you a flight" has no self-knowledge verb -> not exempted.
+        if (self._route_hint in _STRICT_SELF_KNOWLEDGE_ROUTES
+                and _SELF_KNOWLEDGE_CLAIM_RE.search(claimed)
+                and not _contains_blocked_capability(claimed)):
+            self._claims_passed += 1
+            self._recent_passed.append(f"[self-knowledge:{self._route_hint}] {claimed}")
+            self._record_claim_signal(claimed, "self-knowledge-route",
+                                      is_readiness_frame=rf, pattern_index=pi)
             return modified
 
         # Layer 1.5: user-preference alignment acknowledgements
@@ -1295,6 +1431,9 @@ class CapabilityGate:
         # phrases like "I'm ready to assist" and "I'm feeling calm and ready
         # to help" atomically, before _CLAIM_PATTERNS can mis-classify them
         # as capability claims for generic verbs like "assist".
+        # Affect-nickname guard runs BEFORE the generic affect rewrite and is
+        # unconditional of route (SPARK_DESIGN §7).
+        modified = self._rewrite_affect_nicknames(modified)
         modified = self._rewrite_ungrounded_affect(modified)
         modified = self._rewrite_ungrounded_self_state(modified)
         modified = self._rewrite_ungrounded_learning(modified)
@@ -1537,6 +1676,10 @@ class CapabilityGate:
         if not _BLOCKED_VERB_RE.search(text_stripped):
             return text
 
+        # Collect the span of every offending sentence in ONE pass (no in-place
+        # mutation — mutating mid-loop previously left multi-verb indices
+        # misaligned), then cut them out right-to-left so indices stay valid.
+        spans: list[tuple[int, int]] = []
         for verb_match in _BLOCKED_VERB_RE.finditer(text_stripped):
             verb = verb_match.group(0)
             if self._registry:
@@ -1566,11 +1709,34 @@ class CapabilityGate:
             _block_eid = self._record_block(f"sweep:{verb}")
             logger.info("Gate blocked (residual sweep): verb=%s in '%s'", verb, sentence[:80])
             self._maybe_auto_create_job(verb, parent_entry_id=_block_eid)
-            text = text[:sent_start + 1] + " I don't have that capability yet." + text[sent_end + 1:]
-            text_lower = text.lower()
-            text_stripped = _strip_diacritics(text_lower)
+            spans.append((sent_start + 1, sent_end + 1))
 
-        return text
+        if not spans:
+            return text
+
+        # Merge overlapping spans (several blocked verbs in one sentence), then
+        # remove them. Dropping the offending sentence preserves the honesty
+        # guarantee — the unverified claim/offer never reaches the user — without
+        # splicing "I don't have that capability yet." into the middle of an
+        # otherwise-natural reply (the jarring mid-flow refusal we used to emit).
+        spans.sort()
+        merged: list[tuple[int, int]] = []
+        for s, e in spans:
+            if merged and s <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+            else:
+                merged.append((s, e))
+        cleaned = text
+        for s, e in reversed(merged):
+            cleaned = cleaned[:s] + cleaned[e:]
+        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+
+        # If a real reply remains after removing the claim, use it. Otherwise the
+        # message was essentially the claim itself — answer with an honest decline
+        # so the user is not left with silence.
+        if len([w for w in cleaned.split() if any(ch.isalpha() for ch in w)]) >= 3:
+            return cleaned
+        return "I don't have that capability yet."
 
     @staticmethod
     def _rewrite_at_match(text: str, match: re.Match, replacement: str) -> str:
@@ -1640,6 +1806,190 @@ class CapabilityGate:
                 text = self._rewrite_at_match(text, match, replacement)
                 self._affect_rewrites += 1
                 logger.debug("Affect rewrite: '%s' → '%s'", original, replacement)
+        return text
+
+    # ── Affect-nickname rewrites + confabulation ledger (SPARK_DESIGN §7) ─────
+
+    @staticmethod
+    def _affect_provenance(nickname: str) -> tuple[float | None, float | None, str, float | None, bool]:
+        """Resolve the live readout for a nickname from the shadow affect layer.
+
+        Returns ``(raw_value, level_value, dominant_source_field,
+        dominant_source_raw, all_sources_zero)``.  The cited source is the one
+        with the largest non-zero raw contribution (so the value actually backs
+        the claimed level — §7), falling back to the configured primary source
+        when nothing is elevated.  All ``None``/``False`` when the affect layer
+        hasn't computed a snapshot yet (e.g. early boot) — the rewrite then
+        falls back to a generic, value-free phrasing.
+        """
+        try:
+            from consciousness.affect_state import affect_state
+            snap = affect_state.snapshot()
+            if snap is None:
+                return None, None, "", None, False
+            ro = getattr(snap, nickname, None)
+            if ro is None:
+                return None, None, "", None, False
+
+            # Pick the dominant (largest absolute raw value) backing source so
+            # the cited number genuinely supports the stated direction.
+            dominant_field, dominant_raw, best = "", None, -1.0
+            for _key, pair in ro.provenance.items():
+                if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+                    continue
+                field_name, raw_val = pair[0], pair[1]
+                if raw_val is None:
+                    continue
+                mag = abs(float(raw_val))
+                if mag > best:
+                    best, dominant_field, dominant_raw = mag, field_name, raw_val
+
+            if dominant_raw is None or best <= 0.0:
+                # Nothing elevated — fall back to the configured primary source.
+                primary_key = _AFFECT_NICKNAMES[nickname]["primary_source"]
+                prov = ro.provenance.get(primary_key) or []
+                dominant_field = prov[0] if len(prov) >= 1 else ""
+                dominant_raw = prov[1] if len(prov) >= 2 else None
+
+            return ro.raw, ro.level, dominant_field, dominant_raw, ro.all_sources_zero
+        except Exception:
+            return None, None, "", None, False
+
+    def _build_affect_nickname_rewrite(self, nickname: str) -> str:
+        """Construct the §7-compliant replacement naming the real signal + value."""
+        meta = _AFFECT_NICKNAMES[nickname]
+        phrase = meta["phrase"]
+        raw, _level, src_field, src_raw, all_zero = self._affect_provenance(nickname)
+
+        # No backing at all → say so honestly (do not fabricate a value).
+        if raw is None:
+            return f"{phrase} is being tracked, but no current reading is available"
+        if all_zero or raw <= 0.0:
+            return f"{phrase} is at baseline (no backing signal is currently elevated)"
+
+        descriptor = "elevated" if raw >= 0.5 else "low"
+        if src_field and src_raw is not None:
+            return f"{phrase} is {descriptor} (derived from {src_field}={src_raw})"
+        if src_field:
+            return f"{phrase} is {descriptor} (derived from {src_field})"
+        return f"{phrase} is {descriptor}"
+
+    def _record_confabulation(
+        self,
+        nickname: str,
+        claimed_direction: str,
+    ) -> None:
+        """Bidirectional confabulation ledger (SPARK_DESIGN §7).
+
+        Records the readout value AND the real backing signal whenever an affect
+        nickname claim is rewritten, classifying the self-deception attempt:
+
+          - ``unbacked``               — claimed a level but the scalar's sources
+            all read 0 (cannot-lie clamp forced raw to 0): pure confabulation.
+          - ``backed_mismatch``        — backed by a real signal, but the claimed
+            direction contradicts the readout (e.g. "high" while raw is low).
+          - ``backed_anthropomorphized`` — a real, correctly-directed signal that
+            was merely dressed up in feeling language (the benign case).
+
+        Written to the attribution ledger; counters surfaced in ``get_stats``.
+        """
+        raw, level, src_field, src_raw, all_zero = self._affect_provenance(nickname)
+
+        claimed_high = claimed_direction.lower() in (
+            "high", "elevated", "spiking", "surging", "rising", "up",
+            "through the roof", "through-the-roof", "flowing", "pumping",
+            "hit", "rush", "spike", "surge", "burst",
+        )
+
+        if raw is None:
+            classification = "unbacked"
+        elif all_zero or raw <= 0.0:
+            classification = "unbacked"
+        else:
+            readout_high = raw >= 0.5
+            if claimed_high != readout_high:
+                classification = "backed_mismatch"
+            else:
+                classification = "backed_anthropomorphized"
+
+        if classification == "unbacked":
+            self._confab_unbacked += 1
+        elif classification == "backed_mismatch":
+            self._confab_backed_mismatch += 1
+        else:
+            self._confab_backed_anthropomorphized += 1
+
+        record = {
+            "nickname": nickname,
+            "claimed_direction": claimed_direction,
+            "classification": classification,
+            "readout_raw": round(raw, 4) if raw is not None else None,
+            "readout_level": round(level, 4) if level is not None else None,
+            "real_signal": src_field,
+            "real_signal_value": src_raw,
+        }
+        self._recent_confabulations.append(record)
+
+        try:
+            from consciousness.attribution_ledger import attribution_ledger
+            attribution_ledger.record(
+                subsystem="capability_gate",
+                event_type="affect_confabulation",
+                source="affect_nickname_guard",
+                data=record,
+            )
+        except Exception:
+            logger.debug("Confabulation ledger write failed", exc_info=True)
+
+    def _rewrite_affect_nicknames(self, text: str) -> str:
+        """Rewrite dopamine/serotonin/cortisol claims; log to the confab ledger.
+
+        Runs unconditional of route (introspection does not exempt it). Each
+        match is replaced with a signal-named, value-cited phrase and recorded in
+        the bidirectional confabulation ledger.
+        """
+        def _direction_from_match(m: "re.Match") -> str:
+            groups = [g for g in m.groups() if g]
+            # The last non-nickname group (if any) is the direction word.
+            for g in reversed(groups):
+                if g.lower() not in _AFFECT_NICKNAMES:
+                    return g
+            return "elevated"
+
+        # Pattern 1: "my cortisol is high"
+        for m in list(_AFFECT_NICKNAME_RE.finditer(text)):
+            nickname = m.group(1).lower()
+            if nickname not in _AFFECT_NICKNAMES:
+                continue
+            direction = m.group(2) if m.lastindex and m.lastindex >= 2 else "elevated"
+            original = m.group(0)
+            if original not in text:
+                continue
+            self._record_confabulation(nickname, direction or "elevated")
+            text = self._replace_through_sentence_end(
+                text, original, self._build_affect_nickname_rewrite(nickname),
+            )
+            self._affect_nickname_rewrites += 1
+            self._affect_rewrites += 1
+            logger.info("Affect-nickname rewrite (%s): '%s'", nickname, original)
+
+        # Pattern 2: "a hit of dopamine" / "running on cortisol" / "dopamine rush"
+        for m in list(_AFFECT_NICKNAME_HIT_RE.finditer(text)):
+            nickname = next((g.lower() for g in m.groups()
+                             if g and g.lower() in _AFFECT_NICKNAMES), None)
+            if nickname is None:
+                continue
+            original = m.group(0)
+            if original not in text:
+                continue
+            self._record_confabulation(nickname, "hit")
+            text = self._replace_through_sentence_end(
+                text, original, self._build_affect_nickname_rewrite(nickname),
+            )
+            self._affect_nickname_rewrites += 1
+            self._affect_rewrites += 1
+            logger.info("Affect-nickname rewrite (%s, hit): '%s'", nickname, original)
+
         return text
 
     def _rewrite_ungrounded_learning(self, text: str) -> str:
@@ -1921,6 +2271,11 @@ class CapabilityGate:
             "honesty_failures": self._honesty_failures,
             "jobs_auto_created": self._jobs_auto_created,
             "affect_rewrites": self._affect_rewrites,
+            "affect_nickname_rewrites": self._affect_nickname_rewrites,
+            "confab_backed_anthropomorphized": self._confab_backed_anthropomorphized,
+            "confab_backed_mismatch": self._confab_backed_mismatch,
+            "confab_unbacked": self._confab_unbacked,
+            "recent_confabulations": list(self._recent_confabulations),
             "learning_rewrites": self._learning_rewrites,
             "self_state_rewrites": self._self_state_rewrites,
             "identity_name_stripped": self._identity_name_stripped,

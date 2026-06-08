@@ -20,11 +20,22 @@ from consciousness.events import (
     META_THOUGHT_GENERATED,
     EXISTENTIAL_INQUIRY_COMPLETED,
     CONSCIOUSNESS_EMERGENT_BEHAVIOR,
+    AUTONOMY_RESEARCH_COMPLETED,
+    AUTONOMY_RESEARCH_FAILED,
 )
 from autonomy.curiosity_detector import CuriosityDetector
-from autonomy.research_intent import ResearchIntent
+from autonomy.research_intent import (
+    ResearchIntent,
+    ResearchResult,
+    emit_thought_validation_outcome,
+)
 
 logger = logging.getLogger(__name__)
+
+# Cap on remembered tension-seeded intents (id → intent) so a long uptime can't
+# leak memory. Tension-seeded intents are rare (gated, shadow-first), so this is
+# generous. Oldest entries are evicted FIFO.
+_MAX_TRACKED_TENSION_INTENTS = 256
 
 
 class AutonomyEventBridge:
@@ -41,6 +52,12 @@ class AutonomyEventBridge:
         self._events_processed: int = 0
         self._intents_generated: int = 0
         self._wired: bool = False
+        # SPARK §3 component 2 — id → tension-seeded ResearchIntent. Used to emit
+        # the external-only THOUGHT_VALIDATION_OUTCOME teacher signal when the
+        # intent completes (so a degraded completion-event fallback can still
+        # cite the belief_id even if the caller didn't hand us the result).
+        self._tension_intents: dict[str, ResearchIntent] = {}
+        self._validation_outcomes_emitted: int = 0
 
     def wire(self) -> None:
         """Subscribe to consciousness events. Safe to call multiple times."""
@@ -51,6 +68,11 @@ class AutonomyEventBridge:
         self._cleanups.append(event_bus.on(META_THOUGHT_GENERATED, self._on_meta_thought))
         self._cleanups.append(event_bus.on(EXISTENTIAL_INQUIRY_COMPLETED, self._on_existential))
         self._cleanups.append(event_bus.on(CONSCIOUSNESS_EMERGENT_BEHAVIOR, self._on_emergence))
+        # SPARK §3 component 2 — emit THOUGHT_VALIDATION_OUTCOME on the completion
+        # of a tension-seeded intent (degraded fallback; the orchestrator may also
+        # call note_research_outcome() directly with the full result object).
+        self._cleanups.append(event_bus.on(AUTONOMY_RESEARCH_COMPLETED, self._on_research_done))
+        self._cleanups.append(event_bus.on(AUTONOMY_RESEARCH_FAILED, self._on_research_done))
 
         try:
             from consciousness.events import CONSCIOUSNESS_LEARNING_PROTOCOL
@@ -75,6 +97,8 @@ class AutonomyEventBridge:
             "wired": self._wired,
             "events_processed": self._events_processed,
             "intents_generated": self._intents_generated,
+            "tension_intents_tracked": len(self._tension_intents),
+            "validation_outcomes_emitted": self._validation_outcomes_emitted,
         }
 
     # -- event handlers -------------------------------------------------------
@@ -99,12 +123,19 @@ class AutonomyEventBridge:
             except ValueError:
                 confidence = 0.5
 
+        # SPARK §3 component 2 — carry grounding provenance from a
+        # belief_validation_curiosity tension-thought (default "" otherwise).
+        belief_id = str(kwargs.get("belief_id", "") or "")
+        validation_target = str(kwargs.get("validation_target", "") or "")
+
         intent = self._detector.evaluate_thought(
             thought_type=thought_type,
             text=text,
             depth=depth,
             tags=tags,
             confidence=confidence,
+            belief_id=belief_id,
+            validation_target=validation_target,
         )
         if intent:
             self._submit(intent)
@@ -171,4 +202,65 @@ class AutonomyEventBridge:
         success = self._enqueue(intent)
         if success:
             self._intents_generated += 1
+            # Remember tension-seeded intents so we can emit the teacher signal
+            # when they complete (SPARK §3 component 2).
+            if getattr(intent, "belief_id", ""):
+                self._track_tension_intent(intent)
             logger.debug("Intent enqueued: %s (priority=%.2f)", intent.question[:50], intent.priority)
+
+    def _track_tension_intent(self, intent: ResearchIntent) -> None:
+        self._tension_intents[intent.id] = intent
+        # FIFO-evict oldest if we exceed the cap (rare; tension intents are gated).
+        while len(self._tension_intents) > _MAX_TRACKED_TENSION_INTENTS:
+            oldest = next(iter(self._tension_intents))
+            self._tension_intents.pop(oldest, None)
+
+    # -- teacher signal (SPARK §3 component 2 / §8 P3) ------------------------
+
+    def note_research_outcome(
+        self,
+        intent: ResearchIntent,
+        result: ResearchResult | None,
+        *,
+        refuted: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """Emit THOUGHT_VALIDATION_OUTCOME for a completed tension-seeded intent.
+
+        Preferred entry point: the caller (orchestrator) hands us the full intent
+        + result so the external-grounding decision sees the per-finding
+        provenance. No-op (returns None) for non-tension intents. Never raises.
+        """
+        try:
+            payload = emit_thought_validation_outcome(intent, result, refuted=refuted)
+        except Exception:
+            logger.debug("note_research_outcome failed", exc_info=True)
+            return None
+        if payload is not None:
+            self._validation_outcomes_emitted += 1
+            self._tension_intents.pop(getattr(intent, "id", ""), None)
+            logger.info(
+                "THOUGHT_VALIDATION_OUTCOME emitted (belief_id=%s grounded=%s refuted=%s)",
+                payload.get("belief_id", "?"),
+                payload.get("grounded"),
+                payload.get("refuted"),
+            )
+        return payload
+
+    def _on_research_done(self, **kwargs: Any) -> None:
+        """Degraded fallback: emit the teacher signal from a completion EVENT.
+
+        Used only for tension intents we remembered whose outcome wasn't already
+        reported via note_research_outcome(). The completion event does not carry
+        per-finding provenance, so result is None here — grounded resolves
+        external-only and conservatively (False) unless note_research_outcome was
+        called with the real result. Idempotent: pops the tracked intent.
+        """
+        intent_id = str(kwargs.get("intent_id", "") or "")
+        if not intent_id:
+            return
+        intent = self._tension_intents.pop(intent_id, None)
+        if intent is None:
+            return  # not tension-seeded (or already reported) — nothing to do.
+        # No result object available from the event; pass None (conservative,
+        # external-only grounding decision in the helper handles it safely).
+        self.note_research_outcome(intent, None)

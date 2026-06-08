@@ -38,6 +38,13 @@ logger = logging.getLogger(__name__)
 
 BELIEF_EXTRACTION_MIN_WEIGHT = 0.20
 _BELIEF_INELIGIBLE_TYPES = frozenset({"error_recovery"})
+# Tags that are categorically NON-belief-bearing regardless of weight: per-
+# interaction episodic telemetry. reflection.py mints a "had a conversation /
+# completed an interaction" log per exchange at weight 0.3 — episodic event logs,
+# not claims about reality. They were meant to be gated by _BELIEF_LOW_WEIGHT_TAGS
+# but leak through the `weight < 0.30` boundary at exactly 0.30. They remain
+# episodic MEMORIES (recall unaffected); they just never become epistemic beliefs.
+_BELIEF_INELIGIBLE_TAGS = frozenset({"interaction_review"})
 _BELIEF_LOW_WEIGHT_TAGS = frozenset({
     "self_reflection", "interaction_review", "ambient_sound",
     "app_switch", "user_left",
@@ -105,6 +112,8 @@ class ContradictionEngine:
             return False
         tags = set(getattr(memory, "tags", ()))
         if tags & _DREAM_INELIGIBLE_TAGS:
+            return False
+        if tags & _BELIEF_INELIGIBLE_TAGS:
             return False
         if "quarantine:suspect" in tags:
             return False

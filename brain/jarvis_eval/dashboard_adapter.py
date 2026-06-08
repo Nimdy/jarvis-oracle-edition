@@ -15,7 +15,10 @@ import time
 from typing import Any
 
 from jarvis_eval import baselines
-from jarvis_eval.config import COMPOSITE_ENABLED, EVAL_DIR, SCORING_VERSION
+from jarvis_eval.config import (
+    COMPOSITE_ENABLED, EVAL_DIR, SCORING_VERSION,
+    SCOREBOARD_MIN_SAMPLES, SCOREBOARD_MIN_CATEGORIES,
+)
 from jarvis_eval.scorecards import build_scorecard_summary
 from jarvis_eval.validation_pack import build_validation_pack
 
@@ -281,11 +284,27 @@ def build_dashboard_snapshot(
         oracle_benchmark = {"version": "1.0.0", "credible": False, "credibility_status": "error",
                             "hard_fail_reasons": ["benchmark_computation_failed"], "composite_score": 0}
 
+    # #9 keystone: the MEASURED scoreboard (real external comparators, >=5 genuine
+    # samples per category) is the authoritative maturity signal. Compute it once,
+    # route it into the banner headline, and explicitly label the oracle benchmark
+    # (a self-grade) so it can never be read as a measurement.
+    scoreboard = _build_scoreboard(recent_scores)
+    if isinstance(oracle_benchmark, dict):
+        oracle_benchmark = {**oracle_benchmark, "self_scored": True, "is_measurement": False}
+
     return {
         "banner": {
             "mode": "shadow",
             "scoring_version": SCORING_VERSION,
-            "composite_enabled": COMPOSITE_ENABLED,
+            # #9 keystone: route maturity reporting onto the MEASURED composite, not the
+            # legacy COMPOSITE_ENABLED flag (which is always off). The legacy flag is kept,
+            # clearly named, for back-compat. Coverage is always shown so a partial composite
+            # (e.g. 2-of-7 measured) is never mistaken for a full grade.
+            "composite_enabled": bool(scoreboard.get("composite_enabled")),
+            "composite": scoreboard.get("composite"),
+            "composite_coverage": scoreboard.get("coverage"),
+            "composite_source": "scoreboard_measured",
+            "legacy_composite_flag": COMPOSITE_ENABLED,
             "data_freshness_s": round(data_freshness_s, 1) if data_freshness_s is not None else None,
             "uptime_s": round(now - store_meta.get("created_at", now), 1),
             "pvl_enabled": True,
@@ -304,7 +323,7 @@ def build_dashboard_snapshot(
         "scorecards": scorecards,
         "self_report_honesty": {"status": "awaiting_scenario_data", "phase": "B"},
         "emotional_independence": {"status": "not_instrumented", "phase": "B"},
-        "scoreboard": _build_scoreboard(recent_scores),
+        "scoreboard": scoreboard,
         "oracle_benchmark": oracle_benchmark,
         "_main_snapshot": {
             "truth_calibration": (main_snapshot or {}).get("truth_calibration", {}),
@@ -965,19 +984,47 @@ def _build_scoreboard(scores: list[dict[str, Any]]) -> dict[str, Any]:
         if cat in categories:
             latest[cat] = s
 
+    # A category only "counts" toward the composite once it carries enough GENUINE
+    # external/ground-truth samples; the composite only enables once enough categories
+    # are really measured. Categories without a real comparator stay visibly empty.
+    # Coverage is always reported — the Observer never paints a self-grade as a measurement.
     bars = []
+    measured = 0
+    composite_sum = 0.0
     for cat in categories:
         entry = latest.get(cat)
+        ss = int(entry.get("sample_size", 0) or 0) if entry else 0
+        sc = entry.get("score") if entry else None
+        is_measured = bool(entry and sc is not None and ss >= SCOREBOARD_MIN_SAMPLES)
         bars.append({
             "category": cat,
-            "score": entry.get("score") if entry else None,
-            "sample_size": entry.get("sample_size", 0) if entry else 0,
+            "score": sc,
+            "sample_size": ss,
+            "measured": is_measured,
+            "comparator": (entry.get("raw_metrics", {}) or {}).get("comparator") if entry else None,
         })
+        if is_measured:
+            measured += 1
+            composite_sum += float(sc)
 
+    enabled = COMPOSITE_ENABLED or measured >= SCOREBOARD_MIN_CATEGORIES
+    composite = round(composite_sum / measured, 4) if (enabled and measured) else None
     return {
         "bars": bars,
-        "composite": None,
-        "composite_enabled": COMPOSITE_ENABLED,
+        "composite": composite,
+        "composite_enabled": enabled,
+        "coverage": {
+            "measured": measured,
+            "total": len(categories),
+            "pct": round(measured / len(categories), 3),
+        },
+        "min_samples": SCOREBOARD_MIN_SAMPLES,
         "scoring_version": SCORING_VERSION,
-        "badge": "experimental",
+        "badge": "experimental" if not enabled else "partial",
+        "note": (
+            f"{measured}/{len(categories)} categories externally measured "
+            f"(≥{SCOREBOARD_MIN_SAMPLES} ground-truth samples). "
+            f"Composite enables at ≥{SCOREBOARD_MIN_CATEGORIES} measured categories. "
+            f"Marquee Oracle score remains self-scored until coverage grows."
+        ),
     }

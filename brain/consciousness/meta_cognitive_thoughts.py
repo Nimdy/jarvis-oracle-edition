@@ -7,12 +7,15 @@ cooldowns and global fatigue. 5 trigger types with staggered cooldowns.
 from __future__ import annotations
 
 import datetime
+import json
 import logging
+import os
 import random
 import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Literal
 
 from consciousness.events import event_bus, KERNEL_THOUGHT
@@ -22,6 +25,203 @@ logger = logging.getLogger(__name__)
 MAX_THOUGHT_HISTORY = 100
 GLOBAL_COOLDOWN_S = 3.0
 FATIGUE_DECAY_RATE = 0.02
+
+# SPARK_DESIGN §2.2 / §3 component 2: a tension-seeded thought fires only when
+# grounding_tension is at/above this floor. Conservative so day-to-day noise
+# (low aggregate tension) never seeds a research question.
+GROUNDING_TENSION_THRESHOLD = 0.40
+
+# ---------------------------------------------------------------------------
+# Tension-thought promotion controller (SHADOW-FIRST, SPARK §3 component 2 / §8 P3)
+#
+# Cloned from cognition/promotion.py (shadow=0/advisory=1/active=2, gated,
+# auto-demoting). DEFAULTS TO SHADOW: in shadow the belief_validation_curiosity
+# trigger COMPUTES + LOGS its thought (with belief_id / validation_target /
+# provenance) but the generator does NOT record it — it is NOT emitted as a
+# KERNEL_THOUGHT and does NOT seed an episode / META_THOUGHT_GENERATED. The gate
+# is external-only (the teacher signal is THOUGHT_VALIDATION_OUTCOME, recorded
+# via record_validation_outcome — never self-scored). This module ships the
+# gate; it does NOT flip it to active.
+# ---------------------------------------------------------------------------
+
+TENSION_THOUGHT_PROMOTION_PATH = Path(
+    "~/.jarvis/tension_thought_promotion.json"
+).expanduser()
+
+TENSION_THOUGHT_MIN_OUTCOMES = 20
+TENSION_THOUGHT_MIN_SHADOW_HOURS = 4.0
+TENSION_THOUGHT_PROMOTE_VALIDATION_RATE = 0.40
+TENSION_THOUGHT_DEMOTE_VALIDATION_RATE = 0.20
+TENSION_THOUGHT_DEMOTE_WINDOW = 20
+TENSION_THOUGHT_TRANSITION_COOLDOWN_S = 300.0
+
+
+@dataclass
+class _TensionThoughtPromotionState:
+    level: int = 0  # 0=shadow, 1=advisory, 2=active — DEFAULTS TO SHADOW
+    shadow_start_ts: float = field(default_factory=time.time)
+    total_outcomes: int = 0
+    validation_history: list[float] = field(default_factory=list)
+    thoughts_shadowed: int = 0
+    last_promoted_at: float = 0.0
+    last_demoted_at: float = 0.0
+
+
+class TensionThoughtPromotion:
+    """Zero-authority promotion gate for tension-seeded thoughts (defaults shadow).
+
+    In shadow the ``belief_validation_curiosity`` trigger computes + logs its
+    thought, but the generator never records / emits it (no KERNEL_THOUGHT, no
+    episode). Promotion is gated on the external-only ``THOUGHT_VALIDATION_OUTCOME``
+    teacher signal — never a self-score (SPARK §7).
+    """
+
+    _instance: TensionThoughtPromotion | None = None
+
+    def __init__(self) -> None:
+        self._state = _TensionThoughtPromotionState()
+        self._load()
+
+    @classmethod
+    def get_instance(cls) -> TensionThoughtPromotion:
+        if cls._instance is None:
+            cls._instance = TensionThoughtPromotion()
+        return cls._instance
+
+    @classmethod
+    def reset_instance(cls) -> None:
+        cls._instance = None
+
+    @property
+    def level(self) -> int:
+        return self._state.level
+
+    def is_shadow(self) -> bool:
+        return self._state.level == 0
+
+    def is_active(self) -> bool:
+        """True only when promoted to active. ALWAYS False at P3 default."""
+        return self._state.level >= 2
+
+    def is_advisory(self) -> bool:
+        """True at level 1 (SPARK §8 P4): the tension-thought may emit
+        KERNEL_THOUGHT + seed episodes (labelled advisory), but drives NO
+        cadence/reward lever (that is P5/active)."""
+        return self._state.level == 1
+
+    def note_shadow_thought(self) -> None:
+        """Count a would-have-emitted shadow thought (telemetry only)."""
+        self._state.thoughts_shadowed += 1
+
+    def record_validation_outcome(self, grounded: bool) -> None:
+        """Record an external-validator outcome (THOUGHT_VALIDATION_OUTCOME).
+
+        ``grounded`` True when an external validator touched the belief (a
+        cited finding, a user answer, or a world-model validation) — including
+        a refutation, which still counts as grounded (SPARK §7: being corrected
+        is success). Never self-scored.
+        """
+        self._state.total_outcomes += 1
+        self._state.validation_history.append(1.0 if grounded else 0.0)
+        if len(self._state.validation_history) > 100:
+            self._state.validation_history = self._state.validation_history[-100:]
+        self._check_transitions()
+
+    def get_status(self) -> dict[str, Any]:
+        hist = self._state.validation_history
+        rate = sum(hist) / len(hist) if hist else 0.0
+        hours = (time.time() - self._state.shadow_start_ts) / 3600.0
+        return {
+            "level": self._state.level,
+            "level_name": {0: "shadow", 1: "advisory", 2: "active"}.get(
+                self._state.level, "unknown"),
+            "authority": "zero_authority_shadow" if self._state.level == 0 else (
+                "advisory" if self._state.level == 1 else "active"),
+            "total_outcomes": self._state.total_outcomes,
+            "external_validation_rate": round(rate, 4),
+            "window_size": len(hist),
+            "thoughts_shadowed": self._state.thoughts_shadowed,
+            "hours_in_shadow": round(hours, 1),
+            "promotion_ready": self._promotion_eligible(),
+            "emits_kernel_thought": self.is_active(),
+        }
+
+    def save(self) -> None:
+        data = {
+            "level": self._state.level,
+            "shadow_start_ts": self._state.shadow_start_ts,
+            "total_outcomes": self._state.total_outcomes,
+            "validation_history": list(self._state.validation_history),
+            "thoughts_shadowed": self._state.thoughts_shadowed,
+            "last_promoted_at": self._state.last_promoted_at,
+            "last_demoted_at": self._state.last_demoted_at,
+        }
+        try:
+            TENSION_THOUGHT_PROMOTION_PATH.parent.mkdir(parents=True, exist_ok=True)
+            tmp = TENSION_THOUGHT_PROMOTION_PATH.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2))
+            tmp.replace(TENSION_THOUGHT_PROMOTION_PATH)
+        except Exception:
+            logger.debug("Failed to save tension-thought promotion state", exc_info=True)
+
+    def _load(self) -> None:
+        try:
+            if not TENSION_THOUGHT_PROMOTION_PATH.exists():
+                return
+            data = json.loads(TENSION_THOUGHT_PROMOTION_PATH.read_text())
+            self._state.level = int(data.get("level", 0) or 0)
+            self._state.shadow_start_ts = data.get("shadow_start_ts", time.time())
+            self._state.total_outcomes = int(data.get("total_outcomes", 0) or 0)
+            self._state.validation_history = [
+                float(v) for v in data.get("validation_history", [])
+            ][-100:]
+            self._state.thoughts_shadowed = int(data.get("thoughts_shadowed", 0) or 0)
+            self._state.last_promoted_at = data.get("last_promoted_at", 0.0)
+            self._state.last_demoted_at = data.get("last_demoted_at", 0.0)
+        except Exception:
+            logger.debug("Failed to load tension-thought promotion state", exc_info=True)
+
+    def _promotion_eligible(self) -> bool:
+        if self._state.level >= 2:
+            return False
+        if self._state.total_outcomes < TENSION_THOUGHT_MIN_OUTCOMES:
+            return False
+        hours = (time.time() - self._state.shadow_start_ts) / 3600.0
+        if hours < TENSION_THOUGHT_MIN_SHADOW_HOURS:
+            return False
+        hist = self._state.validation_history
+        if len(hist) < TENSION_THOUGHT_MIN_OUTCOMES:
+            return False
+        rate = sum(hist) / len(hist)
+        return rate >= TENSION_THOUGHT_PROMOTE_VALIDATION_RATE
+
+    def _check_transitions(self) -> None:
+        now = time.time()
+        last_transition = max(self._state.last_promoted_at, self._state.last_demoted_at)
+        if last_transition > 0 and (now - last_transition) < TENSION_THOUGHT_TRANSITION_COOLDOWN_S:
+            return
+        if self._promotion_eligible():
+            old = self._state.level
+            self._state.level = min(self._state.level + 1, 2)
+            if self._state.level != old:
+                self._state.last_promoted_at = now
+                logger.info("Tension-thought promoted: level %d → %d", old, self._state.level)
+                self.save()
+            return
+        hist = self._state.validation_history
+        if len(hist) >= TENSION_THOUGHT_DEMOTE_WINDOW and self._state.level > 0:
+            recent = hist[-TENSION_THOUGHT_DEMOTE_WINDOW:]
+            rate = sum(recent) / len(recent)
+            if rate < TENSION_THOUGHT_DEMOTE_VALIDATION_RATE:
+                old = self._state.level
+                self._state.level = max(self._state.level - 1, 0)
+                self._state.last_demoted_at = now
+                self._state.shadow_start_ts = now
+                logger.warning(
+                    "Tension-thought demoted: level %d → %d (rate %.2f < %.2f)",
+                    old, self._state.level, rate, TENSION_THOUGHT_DEMOTE_VALIDATION_RATE,
+                )
+                self.save()
 
 # Tier-1 (actionable) vs Tier-2 (decorative) thought classification
 _TIER1_TYPES: frozenset[str] = frozenset({
@@ -64,6 +264,7 @@ class MetaCognitiveThought:
         "pattern_synthesis", "existential_wonder",
         "emotional_awareness", "growth_recognition",
         "connection_discovery", "temporal_reflection",
+        "belief_validation_curiosity",
     ]
     depth: Literal["surface", "deep", "profound"]
     trigger: str
@@ -71,6 +272,13 @@ class MetaCognitiveThought:
     tags: list[str] = field(default_factory=list)
     evidence_refs: list[str] = field(default_factory=list)
     confidence: float = 0.5
+    # SPARK_DESIGN §2.2 / §3 component 2 — tension-thought provenance (default-safe).
+    # Set only by belief_validation_curiosity; "" for every other thought_type so
+    # persisted JSONL / readers tolerate their absence (backward-compatible).
+    belief_id: str = ""
+    validation_target: str = ""
+    grounding_provenance: str = ""
+    grounding_tension: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +482,52 @@ TRIGGERS: list[ThoughtTrigger] = [
         tags=["time", "system", "continuity"],
         depth_weights={"surface": 0.4, "deep": 0.4, "profound": 0.2},
     ),
+    # SPARK_DESIGN §2.2 / §3 component 2 — the keystone-fix trigger. Fires when
+    # grounding_tension (from the view-only ProvenanceScorer) is high: a belief
+    # that is model-inferred, structurally unsupported (orphaned) and/or under
+    # quarantine pressure. The thought NAMES the belief, its provenance, its
+    # confidence and a validation_target, and is phrased so that it matches the
+    # curiosity_detector learning-phrase regex ("I notice" / "I should
+    # investigate/research" / "what does … ?"), so it drives the EXISTING
+    # META_THOUGHT_GENERATED → AutonomyEventBridge → CuriosityDetector →
+    # ResearchIntent chain — a question whose answer must come from OUTSIDE.
+    #
+    # Shadow-first (TensionThoughtPromotion, default shadow): in shadow the
+    # generator logs this thought with belief_id/validation_target/provenance
+    # and does NOT record it (no KERNEL_THOUGHT, no episode). See
+    # check_and_generate / _generate_from_trigger.
+    ThoughtTrigger(
+        name="belief_validation_curiosity",
+        cooldown_s=45.0,
+        condition=lambda ctx: (
+            float(ctx.get("grounding_tension", 0.0) or 0.0) >= GROUNDING_TENSION_THRESHOLD
+            and bool(ctx.get("grounding_target_id"))
+        ),
+        templates=[
+            "I notice belief '{belief_claim}' rests on {grounding_provenance} alone "
+            "(confidence {grounding_confidence:.0%}, tension {grounding_tension:.0%}). "
+            "I should investigate: {validation_target}",
+            "I notice I am holding '{belief_claim}' with no external support "
+            "({grounding_provenance}, confidence {grounding_confidence:.0%}). "
+            "What does the {grounding_channel} say about {validation_target}?",
+            "Belief '{belief_claim}' is {grounding_provenance} and unanchored "
+            "(tension {grounding_tension:.0%}). I should research: {validation_target}",
+            "I notice a high-tension belief: '{belief_claim}'. Its provenance is "
+            "{grounding_provenance} at {grounding_confidence:.0%} confidence. "
+            "I should explore: {validation_target}",
+        ],
+        tags=["grounding", "belief", "validation", "epistemic"],
+        depth_weights={"surface": 0.3, "deep": 0.5, "profound": 0.2},
+    ),
 ]
+
+
+# Ordered tuple of every trigger name — the teacher signal / Phase-2 selector
+# (hemisphere/types.py thought_trigger_selector) classifies over exactly these,
+# so its output_dim MUST equal len(THOUGHT_TRIGGER_NAMES). Kept import-light so
+# hemisphere/types.py can reference it for its regression assert without pulling
+# in any heavy dependency.
+THOUGHT_TRIGGER_NAMES: tuple[str, ...] = tuple(t.name for t in TRIGGERS)
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +593,46 @@ class MetaCognitiveThoughtGenerator:
 
             thought = self._generate_from_trigger(trigger, context)
             if thought:
+                # SPARK §3 component 2 / §8 P3 — tension-thoughts ship SHADOW-first.
+                # In shadow the generator LOGS the thought (with belief_id /
+                # validation_target / provenance) but does NOT record it: no
+                # KERNEL_THOUGHT, no META_THOUGHT_GENERATED, no episode seeding.
+                # Returning None means consciousness_system never observes/emits
+                # it, so DEFAULT runtime behavior is unchanged.
+                if trigger.name == "belief_validation_curiosity":
+                    promo = TensionThoughtPromotion.get_instance()
+                    if promo.is_shadow():
+                        promo.note_shadow_thought()
+                        logger.info(
+                            "[tension-thought SHADOW] would seed grounding research "
+                            "(belief_id=%s validation_target=%r provenance=%s "
+                            "tension=%.2f): %s",
+                            thought.belief_id or "?",
+                            thought.validation_target[:80],
+                            thought.grounding_provenance or "?",
+                            thought.grounding_tension,
+                            thought.text[:100],
+                        )
+                        # Do not record / emit / return — pure shadow.
+                        return None
+                    # SPARK §8 P4 — ADVISORY (level 1): the tension-thought MAY
+                    # emit KERNEL_THOUGHT (via _record) AND seed an episode (the
+                    # caller emits META_THOUGHT_GENERATED → curiosity chain). It
+                    # is labelled "advisory" so downstream consumers know it is a
+                    # gated, not-yet-active grounding seed. Still NO cadence/reward
+                    # coupling (that is P5/active). Tag it so the episode + curiosity
+                    # detector can attribute it to the advisory grounding ring.
+                    if promo.is_advisory():
+                        if "grounding:advisory" not in thought.tags:
+                            thought.tags = list(thought.tags) + ["grounding:advisory"]
+                        logger.info(
+                            "[tension-thought ADVISORY] seeding grounding episode "
+                            "(belief_id=%s validation_target=%r tension=%.2f): %s",
+                            thought.belief_id or "?",
+                            thought.validation_target[:80],
+                            thought.grounding_tension,
+                            thought.text[:100],
+                        )
                 self._record(thought, trigger.name)
                 return thought
 
@@ -435,6 +728,21 @@ class MetaCognitiveThoughtGenerator:
             "uptime_minutes": int(context.get("uptime_s", 0) / 60),
             "association_count": context.get("association_count", 0),
             "emotional_momentum": context.get("emotional_momentum", 0.0),
+            # SPARK §3 component 2 — grounding / tension-thought fill (default-safe).
+            "belief_claim": str(
+                context.get("grounding_target_claim")
+                or context.get("grounding_target_id")
+                or "an unanchored belief"
+            )[:80],
+            "validation_target": str(
+                context.get("grounding_validation_target")
+                or context.get("grounding_target_claim")
+                or "this belief against an external source"
+            )[:120],
+            "grounding_provenance": str(context.get("grounding_provenance", "model_inference")),
+            "grounding_confidence": float(context.get("grounding_confidence", 0.0) or 0.0),
+            "grounding_tension": float(context.get("grounding_tension", 0.0) or 0.0),
+            "grounding_channel": str(context.get("grounding_channel", "external source")),
         }
 
         try:
@@ -456,6 +764,19 @@ class MetaCognitiveThoughtGenerator:
 
         self._recent_fingerprints.append(fingerprint)
 
+        # SPARK §3 component 2 — tension-thoughts carry the belief they name +
+        # provenance so the chain (and the shadow log) can cite the real belief.
+        # Default-safe ("" / 0.0) for every other trigger type.
+        belief_id = ""
+        validation_target = ""
+        grounding_provenance = ""
+        grounding_tension = 0.0
+        if trigger.name == "belief_validation_curiosity":
+            belief_id = str(context.get("grounding_target_id", "") or "")
+            validation_target = str(fill.get("validation_target", "") or "")
+            grounding_provenance = str(fill.get("grounding_provenance", "") or "")
+            grounding_tension = float(fill.get("grounding_tension", 0.0) or 0.0)
+
         return MetaCognitiveThought(
             id=f"thought_{uuid.uuid4().hex[:12]}",
             timestamp=time.time(),
@@ -466,6 +787,10 @@ class MetaCognitiveThoughtGenerator:
             tags=list(trigger.tags),
             evidence_refs=context.get("evidence_refs", [])[:5],
             confidence=confidence,
+            belief_id=belief_id,
+            validation_target=validation_target,
+            grounding_provenance=grounding_provenance,
+            grounding_tension=grounding_tension,
         )
 
     def _pick_depth(self, weights: dict[str, float]) -> Literal["surface", "deep", "profound"]:

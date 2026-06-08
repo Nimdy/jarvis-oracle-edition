@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import threading
 import time
 from collections import deque
@@ -19,6 +20,7 @@ from consciousness.events import (
     PERCEPTION_TRANSCRIPTION,
     PERCEPTION_RAW_AUDIO,
     PERCEPTION_SCENE_SUMMARY,
+    PERCEPTION_SCENE_CAPTION,
     PERCEPTION_USER_PRESENT_STABLE,
     CONVERSATION_RESPONSE,
     PERCEPTION_PLAYBACK_COMPLETE,
@@ -61,6 +63,40 @@ from reasoning.tts import BrainTTS
 from reasoning.voice_policy import OracleVoicePolicy, VoicePolicyConfig
 
 logger = logging.getLogger("jarvis.perception")
+
+
+# Negation / absence markers. If one appears in the same CLAUSE as an object, the VLM
+# is reporting that object's ABSENCE — crediting it as present would be a perception
+# confabulation that corrupts the world model ("no laptop visible" -> phantom laptop).
+_VLM_ABSENCE_MARKERS = frozenset({
+    "no", "not", "without", "cannot", "cant", "none", "never", "dont", "doesnt",
+    "didnt", "isnt", "arent", "wasnt", "werent", "lacks", "lacking", "missing",
+    "absent", "nothing", "gone", "removed", "empty",
+})
+# Clause boundaries: a negation in one clause must not suppress an object in another
+# ("no people, but a laptop" -> the laptop is genuinely present).
+_VLM_CLAUSE_SPLIT_RE = re.compile(r"[,;.]|\b(?:but|however|though|although|while|whereas)\b")
+
+
+def _object_present_in_description(obj: str, desc_lower: str) -> bool:
+    """True only if ``obj`` is mentioned as PRESENT in a VLM scene description.
+
+    Replaces a raw ``obj in desc`` substring test, which produced two confabulations
+    that fed phantom detections into the scene tracker + object memory:
+      - partial-word matches ("cat" in "category", "cup" in "cupboard", "mouse" in
+        "mousepad") — fixed by whole-token matching;
+      - NEGATED mentions ("there is no laptop", "I don't see a phone") — fixed by
+        scanning the clause containing the object for an absence marker.
+    """
+    desc = desc_lower.replace("'", "").replace("’", "")
+    for clause in _VLM_CLAUSE_SPLIT_RE.split(desc):
+        tokens = re.findall(r"[a-z]+", clause)
+        if obj not in tokens:               # whole-token match (not substring)
+            continue
+        if any(tok in _VLM_ABSENCE_MARKERS for tok in tokens):
+            continue                        # object is negated in this clause -> absent
+        return True                         # an affirmative, present mention
+    return False
 
 
 # Bounded scalar keys allowed in the consciousness-feed `scene` block.
@@ -249,6 +285,9 @@ class PerceptionOrchestrator:
         self._scene_interval_present: float = 1800.0
         self._object_memory: dict[str, dict] = {}
         self._last_scene_description: str = ""
+        self._last_edge_caption_ts: float = 0.0  # when the Pi edge VLM last supplied a caption
+        self._last_scene_source: str = ""        # "edge_vlm" (Pi Hailo) | "desktop_gpu" (qwen2.5vl)
+        self._last_scene_ts: float = 0.0         # when _last_scene_description was last set (either path)
         self._scene_analysis_in_progress: bool = False
         self._gestation_active: bool = False
 
@@ -309,6 +348,7 @@ class PerceptionOrchestrator:
         event_bus.on(PERCEPTION_FACE_IDENTIFIED, self._on_face_id)
         event_bus.on(IDENTITY_RESOLVED, self._on_identity_resolved)
         event_bus.on(PERCEPTION_SCENE_SUMMARY, self._on_scene_summary)
+        event_bus.on(PERCEPTION_SCENE_CAPTION, self._on_scene_caption)
         self.identity_fusion.start()
 
         try:
@@ -400,6 +440,9 @@ class PerceptionOrchestrator:
             silence_duration_s=ww.silence_duration_s,
             max_record_s=ww.max_record_s,
             follow_up_timeout_s=ww.follow_up_timeout_s,
+            barge_in_on_speech=getattr(ww, "barge_in_on_speech", True),
+            barge_in_energy_rms=getattr(ww, "barge_in_energy_rms", 900.0),
+            barge_in_hits_required=getattr(ww, "barge_in_hits_required", 4),
             on_wake=self._on_wake_word_detected,
             on_speech_ready=self._on_speech_ready,
             on_barge_in=self._on_barge_in,
@@ -1237,7 +1280,7 @@ class PerceptionOrchestrator:
     # Scene summary (Layer 3B)
     # ------------------------------------------------------------------
 
-    def _on_scene_summary(self, detections=None, frame_size=None, scene_change_score=0.0, **_):
+    def _on_scene_summary(self, detections=None, frame_size=None, scene_change_score=0.0, person_bboxes=None, **_):
         """Handle scene_summary events from the Pi aggregator."""
         if not detections:
             return
@@ -1255,9 +1298,13 @@ class PerceptionOrchestrator:
                 hit_count=d.get("hit_count", 1),
             ))
 
-        person_bboxes: list[tuple[int, int, int, int]] = []
+        # Transient occlusion GEOMETRY only, from the Pi (same frame as detections):
+        # where a body blocks the view this frame. Used solely by scene_tracker ->
+        # estimate_region_visibility (occluded-vs-removed). NEVER tracked as an entity,
+        # persisted, or tied to identity — persons are already filtered out of scene_dets.
+        person_boxes = [tuple(b) for b in (person_bboxes or []) if b and len(b) == 4]
 
-        snapshot = self._scene_tracker.update(scene_dets, fw, fh, person_bboxes)
+        snapshot = self._scene_tracker.update(scene_dets, fw, fh, person_boxes)
         self._last_scene_snapshot = snapshot
 
         entity_ct = len(snapshot.entities)
@@ -1299,6 +1346,61 @@ class PerceptionOrchestrator:
         )
 
         self._process_spatial(snapshot)
+
+    def _on_scene_caption(self, text="", latency_ms=0, model="edge_vlm", **_):
+        """Handle an edge VLM scene caption from the Pi (Qwen2-VL-2B on the Hailo).
+
+        The Pi produced this locally for an IDLE scene instead of us round-tripping a
+        frame to the desktop GPU. Treat it exactly like the periodic vision-tool
+        description: store it + feed the negation-aware object parse. Records the
+        timestamp so the desktop GPU scene-analysis can defer while edge captions flow."""
+        text = (text or "").strip()
+        if not text or "can't see" in text.lower():
+            return
+        # The edge caption is, BY CONSTRUCTION, of an IDLE scene (the Pi only captions
+        # after sustained absence). The VLM still tends to narrate an occupied-LOOKING
+        # workspace as "a person is working…" — a hallucination. The idle-gate is ground
+        # truth (nobody is there), so drop any person-asserting clause before storing or
+        # extracting, so a phantom person can never seed object memory / the tracker.
+        text = self._strip_person_clauses(text)
+        if not text:
+            return
+        self._last_scene_description = text
+        self._last_edge_caption_ts = time.time()
+        self._last_scene_source = "edge_vlm"
+        self._last_scene_ts = self._last_edge_caption_ts
+        logger.info("Edge scene caption (%s, %sms): %s", model, latency_ms, text[:120])
+        try:
+            self._update_object_memory(text)
+            self._feed_vlm_to_tracker(text)
+        except Exception:
+            logger.debug("edge caption tracker-feed failed", exc_info=True)
+
+    def get_scene_caption_state(self) -> dict[str, Any]:
+        """Dashboard visibility: the latest scene description + which path produced it
+        (edge VLM on the Pi Hailo vs the desktop GPU) + its age. Read-only."""
+        age = (time.time() - self._last_scene_ts) if self._last_scene_ts else None
+        return {
+            "text": self._last_scene_description or "",
+            "source": self._last_scene_source or "none",
+            "age_s": round(age, 1) if age is not None else None,
+            # edge is "active" if it supplied a caption recently (matches the GPU-defer window)
+            "edge_active": bool(self._last_edge_caption_ts
+                                and (time.time() - self._last_edge_caption_ts) < 150.0),
+        }
+
+    _PERSON_NOUN_RE = re.compile(
+        r"\b(person|people|man|woman|men|women|someone|somebody|individual|worker|"
+        r"guy|lady|figure|human)s?\b", re.IGNORECASE)
+
+    def _strip_person_clauses(self, text: str) -> str:
+        """Drop clauses that assert a person (idle-gate guarantees none). Clause-level
+        so object clauses survive intact: 'A person is working on a computer, with two
+        monitors, a keyboard' -> 'with two monitors, a keyboard'."""
+        clauses = re.split(r"(?<=[.,;])\s+", text)
+        kept = [c for c in clauses if not self._PERSON_NOUN_RE.search(c)]
+        cleaned = " ".join(kept).strip(" ,.;")
+        return cleaned
 
     # ------------------------------------------------------------------
     # Spatial Intelligence Pipeline
@@ -2450,6 +2552,13 @@ class PerceptionOrchestrator:
     async def _analyze_scene(self) -> None:
         if not self._pi_snapshot_url or not self._ollama:
             return
+        # Defer to the Pi's edge VLM when it's actively supplying captions: if a fresh
+        # edge caption arrived recently, skip the desktop-GPU round-trip entirely (no
+        # frame fetch, no qwen2.5vl load/unload). The edge path captions idle scenes;
+        # the GPU path resumes if the edge stream goes quiet (>150s stale).
+        if self._last_edge_caption_ts and (time.time() - self._last_edge_caption_ts) < 150.0:
+            logger.debug("Scene analysis: deferring to fresh edge VLM caption (skipping GPU path)")
+            return
         with self._conv_lock:
             conv_active = self._active_conversation.get("id") and not self._active_conversation.get("cancelled")
         if conv_active:
@@ -2474,6 +2583,8 @@ class PerceptionOrchestrator:
         if not description or "can't see" in description.lower():
             return
         self._last_scene_description = description
+        self._last_scene_source = "desktop_gpu"
+        self._last_scene_ts = time.time()
         logger.info("Scene analysis: %s", description[:100])
 
         self._update_object_memory(description)
@@ -2494,7 +2605,7 @@ class PerceptionOrchestrator:
         now = time.time()
         desc_lower = description.lower()
         for obj in common_objects:
-            if obj in desc_lower:
+            if _object_present_in_description(obj, desc_lower):
                 if obj in self._object_memory:
                     self._object_memory[obj]["last_seen"] = now
                     self._object_memory[obj]["count"] += 1
@@ -2511,7 +2622,9 @@ class PerceptionOrchestrator:
         desc_lower = description.lower()
         enrichments: list[SceneDetection] = []
         for obj in vlm_objects:
-            if obj in desc_lower:
+            if _object_present_in_description(obj, desc_lower):
+                # confidence is a FIXED prior for unverified VLM enrichment (not a
+                # measurement) — the scene tracker treats it as a low-trust hint.
                 enrichments.append(SceneDetection(
                     label=obj, confidence=0.5, bbox=None, source="vlm",
                 ))
@@ -2582,6 +2695,19 @@ class PerceptionOrchestrator:
         if est is None:
             return {}
         return est.get_anchors()
+
+    def get_calibration_version(self) -> int:
+        """Public read-only accessor: spatial calibration version (0 = uncalibrated).
+
+        Used by the P5 mental-world derive path so stored/observed worlds are
+        tagged with the camera calibration they were actually observed under,
+        instead of a hardcoded 0.
+        """
+        cal = getattr(self, "_calibration_manager", None)
+        try:
+            return int(getattr(cal, "version", 0)) if cal is not None else 0
+        except Exception:
+            return 0
 
     def get_scene_context(self) -> str:
         parts: list[str] = []

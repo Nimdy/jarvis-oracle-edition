@@ -200,6 +200,32 @@
     </div>
   </div>
 
+  <!-- Row 4: Mental-World Album — stored worlds + re-walk (Stone 2) -->
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-title">Mental-World Album — worlds JARVIS has remembered (P5, zero-authority)</span>
+      <span class="panel-meta" id="albumMeta">select a session to scrub through stored worlds</span>
+    </div>
+    <div class="panel-body">
+      <div class="ctrl" style="margin-bottom:12px;">
+        <label class="muted">session</label>
+        <select id="albumSession" class="btn" style="max-width:280px;"></select>
+        <button class="btn" id="albumPrev">◀</button>
+        <input type="range" id="albumScrub" min="0" max="0" value="0" style="flex:1; min-width:160px;" title="scrub through stored worlds">
+        <button class="btn" id="albumNext">▶</button>
+        <button class="btn" id="albumExplore">↻ Explore this world</button>
+        <button class="btn active" id="albumLive">● Live</button>
+      </div>
+      <div class="muted" style="font-size:0.7rem; margin-bottom:8px;">
+        Scrubbing renders a <em>stored, replayed memory</em> onto the same canvas above (live polling pauses).
+        <strong>Explore</strong> re-walks the remembered world in the mind's-eye (turn-left → move-forward →
+        turn-right) — imagined, zero-authority, never written back. <strong>Live</strong> returns to the present.
+      </div>
+      <div id="provStrip" class="auth-grid" style="margin-bottom:10px;"></div>
+      <div id="exploreOut" style="font-size:0.74rem;"></div>
+    </div>
+  </div>
+
   <div class="ctrl">
     <button class="btn" id="autoBtn">Pause auto-refresh</button>
     <button class="btn" id="refreshBtn">Refresh now</button>
@@ -220,6 +246,10 @@
   var paused = false;
   var autoTimer = null;
   var lastState = null;
+  // Album (Stone 2): when viewing a stored world we pause live polling.
+  var albumMode = false;
+  var albumWorlds = [];
+  var albumIdx = 0;
 
   function byId(id) { return document.getElementById(id); }
   function fmt(x) {
@@ -460,6 +490,7 @@
   }
 
   function refreshAll() {
+    if (albumMode) return;  // viewing a stored world — don't overwrite with live
     fetchJSON('/api/hrr/scene').then(function(state){
       lastState = state;
       setEnabledBadge(state);
@@ -488,6 +519,102 @@
     else if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
   });
   byId('refreshBtn').addEventListener('click', refreshAll);
+
+  // ---- Mental-World Album (Stone 2): scrub stored worlds + re-walk -------
+  function setAlbumMode(on) {
+    albumMode = on;
+    byId('albumLive').classList.toggle('active', !on);
+    if (on) {
+      if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    } else {
+      byId('exploreOut').innerHTML = '';
+      byId('provStrip').innerHTML = '';
+      byId('albumMeta').textContent = 'live';
+      byId('metaReason').textContent = 'live';
+      if (!paused) { scheduleTimer(); refreshAll(); }
+    }
+  }
+
+  function renderProvenance(rec) {
+    var ts = rec.captured_ts ? new Date(rec.captured_ts * 1000).toLocaleString() : '—';
+    var rows = [
+      ['world_id', rec.world_id], ['captured', ts], ['fingerprint', rec.fingerprint || '—'],
+      ['calibration_v', rec.calibration_version], ['loaded_from_store', rec.loaded_from_store],
+      ['status', rec.status]
+    ];
+    byId('provStrip').innerHTML = rows.map(function(r){
+      return '<div class="auth-row"><span class="flag">' + r[0] +
+             '</span><span class="val false">' + r[1] + '</span></div>';
+    }).join('');
+  }
+
+  function showStoredWorld(i) {
+    if (!albumWorlds.length) return;
+    albumIdx = Math.max(0, Math.min(albumWorlds.length - 1, i | 0));
+    var rec = albumWorlds[albumIdx];
+    var w = rec.world || {};
+    setEnabledBadge({ enabled: true });
+    drawScene(w);
+    renderMetrics(w);
+    renderEntities(w.entities || []);
+    renderRelations(w.relations || []);
+    renderAuthority(rec.authority || {});
+    renderProvenance(rec);
+    byId('rawState').textContent = JSON.stringify(rec, null, 2);
+    byId('albumScrub').value = albumIdx;
+    byId('albumMeta').textContent = 'world ' + (albumIdx + 1) + ' / ' + albumWorlds.length + '  ·  ' + (rec.world_id || '');
+    byId('metaReason').textContent = 'REPLAYED MEMORY (zero authority)';
+  }
+
+  function loadEpisode(session) {
+    if (!session) return;
+    fetchJSON('/api/hrr/scene/episode?session=' + encodeURIComponent(session) + '&limit=500').then(function(d){
+      albumWorlds = d.worlds || [];
+      byId('albumScrub').max = Math.max(0, albumWorlds.length - 1);
+      setAlbumMode(true);
+      if (albumWorlds.length) showStoredWorld(albumWorlds.length - 1);
+      else byId('albumMeta').textContent = 'no stored worlds in this session yet';
+    }).catch(function(err){ byId('albumMeta').textContent = 'episode error: ' + err.message; });
+  }
+
+  function loadAlbumSessions() {
+    fetchJSON('/api/hrr/scene/sessions').then(function(d){
+      var sessions = (d.sessions || []).slice().sort(function(a,b){ return (b.mtime||0) - (a.mtime||0); });
+      byId('albumSession').innerHTML =
+        '<option value="">— ' + sessions.length + ' session(s) —</option>' +
+        sessions.map(function(s){
+          return '<option value="' + s.session_id + '">' + s.session_id + '  (' + s.records + ' worlds)</option>';
+        }).join('');
+    }).catch(function(){ byId('albumMeta').textContent = 'no album yet'; });
+  }
+
+  function exploreWorld() {
+    if (!albumWorlds.length) return;
+    var rec = albumWorlds[albumIdx];
+    byId('exploreOut').innerHTML = '<span class="muted">re-walking…</span>';
+    fetchJSON('/api/hrr/scene/explore?world_id=' + encodeURIComponent(rec.world_id)).then(function(d){
+      var traces = d.explore_traces || [];
+      byId('exploreOut').innerHTML =
+        '<div style="margin-bottom:6px;color:var(--magenta);font-weight:700;">JARVIS re-walking this remembered world (imagined · zero authority):</div>' +
+        traces.map(function(t){
+          var deltas = (t.entity_deltas || []).map(function(dd){
+            return '<span class="pill pill-rel">' + JSON.stringify(dd) + '</span>';
+          }).join(' ');
+          return '<div style="padding:5px 0;border-bottom:1px solid var(--border);">' +
+                 '<strong>' + t.action + '</strong> · ' + (t.applied ? 'applied' : 'no-op') +
+                 (t.reason ? (' · <span class="muted">' + t.reason + '</span>') : '') +
+                 (deltas ? ('<div style="margin-top:3px;">' + deltas + '</div>') : '') + '</div>';
+        }).join('');
+    }).catch(function(err){ byId('exploreOut').textContent = 'explore error: ' + err.message; });
+  }
+
+  byId('albumSession').addEventListener('change', function(){ loadEpisode(this.value); });
+  byId('albumScrub').addEventListener('input', function(){ showStoredWorld(parseInt(this.value, 10) || 0); });
+  byId('albumPrev').addEventListener('click', function(){ showStoredWorld(albumIdx - 1); });
+  byId('albumNext').addEventListener('click', function(){ showStoredWorld(albumIdx + 1); });
+  byId('albumExplore').addEventListener('click', exploreWorld);
+  byId('albumLive').addEventListener('click', function(){ setAlbumMode(false); });
+  loadAlbumSessions();
 
   byId('pollRate').textContent = (POLL_MS / 1000).toFixed(0);
   refreshAll();

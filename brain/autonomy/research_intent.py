@@ -50,6 +50,15 @@ class ResearchIntent:
     golden_trace_id: str = ""
     golden_command_id: str = ""
     golden_status: str = "none"
+    # ── SPARK_DESIGN §2.2 / §3 component 2 — grounding provenance (default-safe) ──
+    # When this intent was seeded by a belief_validation_curiosity tension-thought,
+    # belief_id names the belief whose grounding is being validated and
+    # validation_target is the externally-answerable target. Both default to ""
+    # so persisted JSONL stays backward-compatible (readers tolerate absence).
+    # P3 uses them to emit THOUGHT_VALIDATION_OUTCOME (the teacher signal) on
+    # completion, carrying whether the validation grounded/refuted the belief.
+    belief_id: str = ""
+    validation_target: str = ""
 
     def elapsed_s(self) -> float:
         if self.started_at and self.completed_at:
@@ -86,9 +95,139 @@ class ResearchIntent:
             "golden_status": self.golden_status,
             "elapsed_s": self.elapsed_s(),
         }
+        # SPARK §3 component 2 — only emit grounding provenance when present so
+        # existing intents (the common case) keep their exact serialised shape.
+        if self.belief_id:
+            d["belief_id"] = self.belief_id
+        if self.validation_target:
+            d["validation_target"] = self.validation_target
         if self.result:
             d["result"] = self.result.to_dict()
         return d
+
+
+# ---------------------------------------------------------------------------
+# SPARK_DESIGN §2.2 / §3 component 2 / §8 P3 — the teacher signal.
+#
+# THOUGHT_VALIDATION_OUTCOME is emitted on a tension-seeded ResearchIntent's
+# completion. It is the missing external-only teacher signal for the
+# tension-thought selector (and the grounding drive). HONESTY GUARDRAIL
+# (SPARK §7): the outcome is set by an EXTERNAL validator, never self-scored —
+# a finding only counts as "grounded" if it is source-cited and external-scope.
+# "Being corrected counts as success": a refutation still has grounded=True.
+# ---------------------------------------------------------------------------
+
+# Source types that count as an external, citeable validator (SPARK §6: web /
+# academic). codebase / memory / introspection are internal — they cannot
+# ground a belief against external truth, so they never set grounded=True.
+_EXTERNAL_SOURCE_TYPES = frozenset({"peer_reviewed", "preprint", "web"})
+
+
+def is_external_grounding(intent: "ResearchIntent", result: "ResearchResult | None") -> bool:
+    """True iff ``result`` is an EXTERNAL, source-cited validation of the intent.
+
+    External-only (SPARK §7): requires external scope, success, and at least one
+    finding whose ``source_type`` is an external validator with a citation
+    (url / doi). Internal tools (codebase/memory/introspection) never qualify —
+    they cannot ground a belief against outside truth. View-only; never mutates.
+    """
+    if result is None or not getattr(result, "success", False):
+        return False
+    if getattr(intent, "scope", "local_only") != "external_ok":
+        return False
+    for f in getattr(result, "findings", []) or []:
+        st = (getattr(f, "source_type", "") or "").lower()
+        cited = bool(getattr(f, "url", "") or getattr(f, "doi", ""))
+        if st in _EXTERNAL_SOURCE_TYPES and cited:
+            return True
+    return False
+
+
+def emit_thought_validation_outcome(
+    intent: "ResearchIntent",
+    result: "ResearchResult | None",
+    *,
+    refuted: bool | None = None,
+) -> dict[str, Any] | None:
+    """Emit THOUGHT_VALIDATION_OUTCOME for a completed tension-seeded intent.
+
+    Returns the emitted payload (for logging/tests), or None if the intent was
+    NOT tension-seeded (no ``belief_id``) — in which case nothing is emitted and
+    DEFAULT behavior is unchanged.
+
+    ``grounded`` is decided EXTERNAL-ONLY via :func:`is_external_grounding`
+    (never self-scored). ``refuted`` (optional) records whether the external
+    evidence contradicted the belief; a refutation still counts as grounded
+    (SPARK §7 — being corrected is success). The tension-thought promotion gate
+    consumes this as its teacher signal.
+
+    Safe by construction: never raises into the caller; the event bus / promotion
+    update is best-effort.
+    """
+    belief_id = getattr(intent, "belief_id", "") or ""
+    if not belief_id:
+        return None  # not tension-seeded — emit nothing, change nothing.
+
+    grounded = is_external_grounding(intent, result)
+    payload: dict[str, Any] = {
+        "intent_id": getattr(intent, "id", ""),
+        "belief_id": belief_id,
+        "validation_target": getattr(intent, "validation_target", "") or "",
+        "source_event": getattr(intent, "source_event", "") or "",
+        "tool_used": getattr(result, "tool_used", "") if result is not None else "",
+        "finding_count": len(getattr(result, "findings", []) or []) if result is not None else 0,
+        "scope": getattr(intent, "scope", "local_only"),
+        "grounded": grounded,
+        "refuted": bool(refuted) if refuted is not None else False,
+        "refuted_known": refuted is not None,
+        "timestamp": time.time(),
+    }
+
+    try:
+        from consciousness.events import event_bus, THOUGHT_VALIDATION_OUTCOME
+        event_bus.emit(THOUGHT_VALIDATION_OUTCOME, **payload)
+    except Exception:
+        pass
+
+    # Feed the external-only teacher signal to the tension-thought promotion
+    # gate (still pure shadow at P3 — this only accrues the outcomes that EARN
+    # promotion later; it flips no lever now).
+    try:
+        from consciousness.meta_cognitive_thoughts import TensionThoughtPromotion
+        TensionThoughtPromotion.get_instance().record_validation_outcome(grounded)
+    except Exception:
+        pass
+
+    # NATIVE-COGNITION SEED (FINISH_ROADMAP native pivot, step 1): capture this
+    # reasoning->outcome pairing as a distillation training signal. Pure SHADOW
+    # accumulation — no NN, no behavior, no promotion. It is the first training
+    # data from which a native reasoning specialist could LATER be distilled
+    # (jump-before-dunk: collect the reps before the muscle can exist). This is the
+    # opposite of qwen-verb-hacking — it grows JARVIS's own cognition, not a guard.
+    try:
+        from hemisphere.distillation import distillation_collector
+        distillation_collector.record(
+            teacher="reasoning_validation",
+            signal_type="belief_validation",
+            data={
+                "belief_id": belief_id,
+                "validation_target": payload["validation_target"],
+                "source_event": payload["source_event"],
+                "tool_used": payload["tool_used"],
+                "finding_count": payload["finding_count"],
+                "scope": payload["scope"],
+                "grounded": bool(grounded),
+                "refuted": payload["refuted"],
+            },
+            metadata={"native_pivot": "reasoning_seed",
+                      "outcome": "grounded" if grounded else "ungrounded"},
+            origin="live",
+            fidelity=1.0,
+        )
+    except Exception:
+        pass
+
+    return payload
 
 
 @dataclass

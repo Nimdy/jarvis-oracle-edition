@@ -70,10 +70,15 @@ class Detector:
         width: int = 640,
         height: int = 480,
         fps: int = 15,
+        shared_group: bool = False,
     ):
         self._model_path = model_path
         self._threshold = threshold
         self._scene_threshold = scene_threshold
+        # When the edge VLM is enabled it must co-reside on this VDevice, which the
+        # genai stack only allows under the "SHARED" group. Off by default -> the
+        # detection-only VDevice config stays byte-identical to before.
+        self._shared_group = shared_group
         self._camera_id = camera_id
         self._width = width
         self._height = height
@@ -126,6 +131,9 @@ class Detector:
             try:
                 params = VDevice.create_params()
                 params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
+                if self._shared_group:
+                    # required for the genai VLM to share this device (see scene_captioner)
+                    params.group_id = "SHARED"
                 self._vdevice = VDevice(params)
                 self._infer_model = self._vdevice.create_infer_model(self._model_path)
                 self._configured = self._infer_model.configure()

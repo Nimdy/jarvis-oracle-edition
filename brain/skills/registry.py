@@ -402,11 +402,22 @@ class SkillRegistry:
                 )
                 return False
             if rec.verification_required:
+                # Normalize the "test:" prefix on BOTH sides before matching.
+                # verification_required is stored prefixed ("test:speaker_id_accuracy_min",
+                # from the resolver/plan verify exit conditions) while the verify
+                # executor records evidence tests bare ("speaker_id_accuracy_min").
+                # Without this normalization the names never match, set_status
+                # always returns False, register fails 10x, and the (genuinely
+                # verified) skill is given up on + purged. The perceptual executor
+                # already accommodates both forms; the registry is the authoritative
+                # gate and must too — this fixes every skill type, not just one.
+                def _bare(n: str) -> str:
+                    return n[5:] if isinstance(n, str) and n.startswith("test:") else n
                 passed_tests = {
-                    t.get("name") for e in (rec.verification_history + [evidence])
+                    _bare(t.get("name", "")) for e in (rec.verification_history + [evidence])
                     if e.result == "pass" for t in e.tests if t.get("passed")
                 }
-                unmet = [r for r in rec.verification_required if r not in passed_tests]
+                unmet = [r for r in rec.verification_required if _bare(r) not in passed_tests]
                 if unmet:
                     logger.warning(
                         "Cannot verify skill %s: unmet requirements %s", skill_id, unmet,

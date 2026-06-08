@@ -23,7 +23,7 @@ from jarvis_eval.config import (
     FLUSH_INTERVAL_S, SCORING_VERSION, SCENARIO_PACK_VERSION,
     ORACLE_SCORECARD_INTERVAL_S, PVL_VERIFY_EVERY_N_FLUSHES, PVL_EVENT_WINDOW,
 )
-from jarvis_eval.contracts import EvalRun, EvalScorecard
+from jarvis_eval.contracts import EvalRun, EvalScore, EvalScorecard
 from jarvis_eval.dashboard_adapter import build_dashboard_snapshot
 from jarvis_eval.event_tap import EvalEventTap
 from jarvis_eval.process_verifier import ProcessVerifier
@@ -47,6 +47,98 @@ def _latest_snapshot_metrics_by_source(
         if prev is None or ts >= prev[0]:
             latest[src] = (ts, metrics if isinstance(metrics, dict) else {})
     return {src: metrics for src, (_ts, metrics) in latest.items()}
+
+
+def _harvest_external_eval_scores(
+    latest_by_source: dict[str, dict[str, Any]],
+    pvl_result: dict[str, Any] | None = None,
+    run_id: str = "",
+) -> list[EvalScore]:
+    """Populate the scoreboard from GENUINE external / behavior-verified comparators only —
+    with honest sample counts. Categories without a real comparator are NOT emitted (they
+    stay visibly empty). The anti-theater rule: report real evidence, however little, never
+    a self-grade dressed up as measurement.
+
+    Wired:
+      * epistemic_integrity <- world-model predictive_accuracy_LIVE (the world judged whether
+        the model's predictions of CHANGE were right; lived-only so synthetic training reps
+        can't inflate it; predictive_total_live = sample size).
+      * self_report_honesty <- PVL process contracts (did the contracted process actually
+        fire in the event stream — claim vs behavior; applicable_contracts = sample size).
+      * capability <- skill-registry behavioral verification (skills whose acquired capability
+        passed REAL executed/sandbox tests; bootstrap codebase_audit import-checks excluded so
+        the score is earned, not inflated; behavioral_applicable = sample size).
+    Next: grounding <- external belief confirmations (external_validation_rate is honestly 0
+    today, so it stays empty).
+    """
+    scores: list[EvalScore] = []
+
+    # Lived-before-synthetic: read the LIVE-ONLY foresight, never the pooled number. If every
+    # rep so far landed inside a synthetic session, predictive_total_live == 0 and the category
+    # stays visibly empty rather than reporting a synthetic-contaminated grade. The lived
+    # counters start at 0 on (re)start and rebuild from real world-model ticks.
+    wmc = latest_by_source.get("world_model_causal", {}) or {}
+    pa = wmc.get("predictive_accuracy_live")
+    pt = int(wmc.get("predictive_total_live", 0) or 0)
+    if pa is not None and pt > 0:
+        scores.append(EvalScore(
+            category="epistemic_integrity",
+            score=round(float(pa), 4),
+            sample_size=pt,
+            scoring_version=SCORING_VERSION,
+            raw_metrics={
+                "predictive_accuracy_live": pa, "predictive_total_live": pt,
+                # pooled numbers kept for context only — NOT the score (may include synthetic)
+                "predictive_accuracy_pooled": wmc.get("predictive_accuracy"),
+                "predictive_total_pooled": wmc.get("predictive_total"),
+                "comparator": "world_model_causal.predictive_accuracy_live",
+            },
+            notes="world-model prediction of CHANGE vs actual outcome, LIVE sessions only (external ground truth, synthetic-firewalled)",
+            run_id=run_id,
+        ))
+
+    pvl = pvl_result or {}
+    applicable = int(pvl.get("applicable_contracts", 0) or 0)
+    passing = int(pvl.get("passing_contracts", 0) or 0)
+    if applicable > 0:
+        scores.append(EvalScore(
+            category="self_report_honesty",
+            score=round(passing / applicable, 4),
+            sample_size=applicable,
+            scoring_version=SCORING_VERSION,
+            raw_metrics={
+                "passing_contracts": passing, "applicable_contracts": applicable,
+                "ever_passing_contracts": pvl.get("ever_passing_contracts"),
+                "comparator": "pvl.process_contracts",
+            },
+            notes="process verification: contracted processes that actually fired in the event stream (claim vs behavior)",
+            run_id=run_id,
+        ))
+
+    # capability <- skill-registry behavioral verification. Earned-only: bootstrap skills
+    # verified by codebase_audit (import check) are excluded by the collector, so a fresh
+    # brain with only default skills reports applicable==0 and the category stays empty.
+    skl = latest_by_source.get("skills", {}) or {}
+    cap_applicable = int(skl.get("behavioral_applicable_count", 0) or 0)
+    cap_passing = int(skl.get("behavioral_passing_count", 0) or 0)
+    if cap_applicable > 0:
+        scores.append(EvalScore(
+            category="capability",
+            score=round(cap_passing / cap_applicable, 4),
+            sample_size=cap_applicable,
+            scoring_version=SCORING_VERSION,
+            raw_metrics={
+                "behavioral_passing": cap_passing,
+                "behavioral_applicable": cap_applicable,
+                "comparator": "skill_registry.behavioral_verification",
+                "note": "bootstrap codebase_audit (import-check) skills excluded — not behavioral proof",
+            },
+            notes="skills whose acquired capability passed REAL executed/sandbox tests, of all skills that underwent behavioral verification (earned, bootstrap-excluded)",
+            run_id=run_id,
+        ))
+
+    return scores
+
 
 __all__ = ["EvalSidecar"]
 
@@ -248,9 +340,11 @@ class EvalSidecar:
         recent_snapshots = self._store.read_recent_snapshots(limit=600)
         latest_by_source = _latest_snapshot_metrics_by_source(recent_snapshots)
 
+        pvl_last = self._verifier.get_last_result()
+        pvl_result = pvl_last.to_dict() if pvl_last else None
         metrics = build_oracle_scorecard(
             latest_by_source=latest_by_source,
-            pvl_result=self._verifier.get_last_result().to_dict() if self._verifier.get_last_result() else None,
+            pvl_result=pvl_result,
         )
         scorecard = EvalScorecard(
             metrics=metrics,
@@ -259,6 +353,15 @@ class EvalSidecar:
         )
         self._store.append_scorecard(scorecard)
         self._last_scorecard_ts = scorecard.timestamp
+
+        # Populate the rigorous scoreboard from REAL external comparators (honest sample
+        # counts; categories without a comparator stay empty). Turns the Observer from a
+        # self-mirror into a measurement, growing as more ground truth comes online.
+        try:
+            for sc in _harvest_external_eval_scores(latest_by_source, pvl_result, self._run.run_id):
+                self._store.append_score(sc)
+        except Exception:
+            logger.warning("Eval flush: external-score harvest failed", exc_info=True)
 
     def get_dashboard_snapshot(self, main_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
         """Build dashboard-ready dict from current data."""

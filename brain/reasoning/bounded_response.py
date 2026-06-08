@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 MAX_ARTICULATE_SENTENCES = 8
 MAX_ARTICULATE_CHARS = 600
@@ -448,12 +451,16 @@ def build_meaning_frame(
             _rstatus = _resolver.get_status()
             _rtotal = _rstatus.get("total_evaluated", 0)
             if _rtotal > 0:
-                facts.append(f"Resolver shadow verdicts evaluated: {_rtotal}")
+                # Fidelity #8.1: this block accumulates into `lines` (see :435/:467);
+                # the previous `facts.append` raised NameError here, swallowed by the
+                # bare except below, silently DROPPING resolver verdict stats from
+                # self-status. Use `lines` so JARVIS actually reports them.
+                lines.append(f"Resolver shadow verdicts evaluated: {_rtotal}")
                 _rmetrics = _rstatus.get("shadow_metrics", {})
                 if _rmetrics.get("sufficient_data"):
-                    facts.append(f"Resolver shadow accuracy: {_rmetrics.get('shadow_accuracy', 0):.1%}")
+                    lines.append(f"Resolver shadow accuracy: {_rmetrics.get('shadow_accuracy', 0):.1%}")
         except Exception:
-            pass
+            logger.debug("self_status resolver-verdict enrichment failed", exc_info=True)
         try:
             from cognition.intention_registry import intention_registry
             snap = intention_registry.get_status()

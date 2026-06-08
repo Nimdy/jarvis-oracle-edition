@@ -23,6 +23,7 @@
 
     <div class="d-nav-group">
       <div class="d-nav-label">2026-05</div>
+      <a class="d-nav-link h-nav-entry" href="#2026-05-30-evidence-integrity-spatial-album">05-30 Evidence-Integrity Triad + Spatial Mind's-Eye Album (SHIPPED; spatial PRE-MATURE)</a>
       <a class="d-nav-link h-nav-entry" href="#2026-05-08-intention-stage1">05-08 Intention Stage 1 — IntentionResolver Shadow</a>
       <a class="d-nav-link h-nav-entry" href="#2026-05-05-skill-acq-hardening">05-05 Skill-Acquisition Hardening + Weight Room Closeout</a>
       <a class="d-nav-link h-nav-entry" href="#2026-05-04-skill-approval-bridge">05-04 Skill Approval Bridge + Matrix Protocol Guide</a>
@@ -153,6 +154,60 @@
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <!--  MAY 2026                                                          -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- 2026-05-30 Evidence-Integrity Triad + Spatial Mind's-Eye Album -->
+    <section id="2026-05-30-evidence-integrity-spatial-album" class="d-section h-entry">
+      <div class="h-entry-header" onclick="toggleEntry(this)">
+        <span class="h-date">2026-05-30</span>
+        <h2>Evidence-Integrity Triad + Spatial Mind's-Eye Album (branch aliceinwonderland)</h2>
+        <div class="h-tags">
+          <span class="h-tag h-tag-shipped">SHIPPED 2026-05-30</span>
+          <span class="h-tag h-tag-fix">honest self-scoring</span>
+          <span class="h-tag h-tag-feature">spatial-episodic store</span>
+          <span class="h-tag h-tag-shipped">PRE-MATURE / shadow-only</span>
+          <span class="h-tag h-tag-shipped">zero-authority</span>
+        </div>
+      </div>
+      <div class="h-entry-body">
+        <p><strong>Intent:</strong> Two independent landings. (A) Make three internal self-scoring metrics honest — the symbolic/perception/epistemic substrate is genuinely real, but the two LEARNED "intelligence" claims (policy-NN superiority and world-model foresight) were largely self-scoring artifacts and are now measured honestly. Truth beats demos. (B) Lay raw baseline foundations for a persistent, revisitable spatial mind's-eye — <strong>PRE-MATURE, shadow-only, zero-authority, default-OFF.</strong></p>
+
+        <h3>A. Evidence-Integrity Triad <span style="color:var(--cyan);">(commit 9f1503c)</span></h3>
+        <table class="h-changes">
+          <thead><tr><th>Metric</th><th>Change</th><th>Verified live</th></tr></thead>
+          <tbody>
+            <tr><td>Calibration diet rebalance<br><code>epistemic/calibration/confidence_calibrator.py</code></td><td>Truth-calibration window was ~98% world-model self-predictions — a ~50:1 firehose that evicted real signal (corrections/attributions) within hours. Added per-provenance retention + a balanced working set capping any single provenance to 50% of the headline Brier/ECE/over-/under-confidence.</td><td>World-model share <code>98.8% → ~50%</code>; attribution retention <code>6 → 250</code>; headline Brier <code>0.0328 (masked) → 0.0546 (real signal now registers)</code></td></tr>
+            <tr><td>Policy win-rate de-circularization<br><code>policy/evaluator.py</code></td><td>Removed the stable-state "diversity bonus" that handed the NN a "win" just for deviating while the system was healthy. A win now requires the NN's divergence to coincide with a MEASURED reward change; stable operation = tie. Does NOT affect NN training; does NOT demote already-promoted live features.</td><td>Win-rate <code>99.2% → 0.0</code> over 3000+ shadow decisions — evaluated honestly, the policy NN shows NO demonstrable advantage over the kernel (honest "unproven")</td></tr>
+            <tr><td>World-model persistence-vs-predictive split<br><code>cognition/causal_engine.py</code>, <code>jarvis_eval/oracle_benchmark.py</code>, <code>cognition/world_model.py</code></td><td>Headline ~99.8% accuracy was dominated by near-tautological "X persists / stable stays stable" rules. <code>get_accuracy()</code> now reports <code>predictive_accuracy</code> (genuine event-triggered foresight) SEPARATELY from <code>persistence_accuracy</code>; the Oracle benchmark scores the honest predictive number.</td><td>Pooled <code>0.92 →</code> persistence <code>0.97</code> vs PREDICTIVE <code>0.20</code>; Oracle composite <code>92.0 Gold → 86.6 Silver</code> (honest re-score)</td></tr>
+          </tbody>
+        </table>
+
+        <h3>B. Spatial Mind's-Eye — persistent mental world (P5)</h3>
+        <p>Raw baseline foundations toward a mobile, HRR-encoded, revisitable spatial world-memory. <strong>Status: PRE-MATURE, shadow-only, ZERO-AUTHORITY, default-OFF.</strong> Safety-audited: forbidden-import scans green, dashboard truth-probe clean (0 fail/warn/info), no canonical-memory pollution, no raw HRR vectors ever written to disk.</p>
+        <table class="h-changes">
+          <thead><tr><th>Stone</th><th>Change</th></tr></thead>
+          <tbody>
+            <tr><td>Stone 1 — the Album <span style="color:var(--cyan);">(8c46153)</span></td><td>NEW <code>memory/spatial_episodic_store.py</code> — a durable, append-only, zero-authority spatial-episodic store. The HRR mind's-eye previously computed a world each sampled tick and discarded it; it now persists the vector-free scene graph + a provenance envelope (<code>world_id</code>, <code>authority=all-false</code>, <code>status=PRE-MATURE</code>, <code>calibration_version</code>, <code>hrr_config{dim,seed,vocab_version}</code>, <code>loaded_from_store</code>) to <code>~/.jarvis/spatial/episodic/&lt;session&gt;.jsonl</code>. New <code>VOCAB_VERSION</code> constant; new default-OFF <code>ENABLE_HRR_SPATIAL_ALBUM</code> sub-gate (<code>album_active</code>). HRR encode is deterministic from the scene graph, so the world re-encodes losslessly and NO vector is stored. NO promotion path in this stone = structurally cannot create/pollute canonical memory.</td></tr>
+            <tr><td>Stone 1.5 — dedup <span style="color:var(--cyan);">(bd9a30d)</span></td><td>Content-fingerprint dedup (entity ids+states + coarse 0.5 m positions + relations) skips storing a world identical to the last STORED one. A static scene is kept once; jitter ignored; only real change stored. Verified live: 11 samples → 6 distinct worlds.</td></tr>
+            <tr><td>Stone 2 — observability <span style="color:var(--cyan);">(f8008a6)</span></td><td>3 read-only, vector-free, authority-pinned endpoints — <code>GET /api/hrr/scene/sessions</code> (list stored sessions), <code>GET /api/hrr/scene/episode?session=&amp;limit=</code> (page stored worlds), <code>GET /api/hrr/scene/explore?world_id=</code> (re-walk a stored world via the pure <code>mental_navigation</code> ops: turn-left → move-forward → turn-right, returning imagined-step traces) — plus a "Mental-World Album" panel on the <code>/hrr-scene</code> page: session picker + timeline scrubber (renders a stored world on the existing canvas, pauses live polling), an Explore overlay, and a provenance strip.</td></tr>
+          </tbody>
+        </table>
+
+        <h3>New API endpoints (GET, read-only, authority-pinned, vector-free)</h3>
+        <ul class="h-file-list">
+          <li><code>GET /api/hrr/scene/sessions</code> → <code>{sessions:[{session_id,records,mtime}], status:"PRE-MATURE", authority…}</code></li>
+          <li><code>GET /api/hrr/scene/episode?session=&lt;id&gt;&amp;limit=&lt;n&gt;</code> → <code>{session_id,count,worlds:[&lt;stored world records&gt;], …}</code></li>
+          <li><code>GET /api/hrr/scene/explore?world_id=&lt;id&gt;</code> → <code>{world_id, world, explore_traces:[&lt;nav trace&gt;], loaded_from_store:true, …}</code> (all authority flags false, <code>no_raw_vectors_in_api true</code>)</li>
+        </ul>
+
+        <h3>Future (not yet built)</h3>
+        <ul>
+          <li>Stone 3 = room-stitcher (room extent / coverage / "what's still unseen"; needs camera calibration — currently <code>calibration_version=0</code>)</li>
+          <li>Stone 4 = human-reviewed SpatialMemoryGate promotion of rare, high-confidence, human-relevant changes to compact STRING memories only ("you left X at Y"), never coordinates</li>
+        </ul>
+
+        <p style="color:#f90; margin-top:0.5em;"><strong>HONEST FRAMING:</strong> The symbolic/perception/epistemic substrate is genuinely real; the policy-NN superiority and world-model foresight claims were largely self-scoring artifacts and are now measured honestly. The spatial album is PRE-MATURE / shadow-only / zero-authority with NO promotion path in any shipped stone — it structurally cannot create or pollute canonical memory.</p>
+      </div>
+    </section>
 
     <!-- 2026-05-08 Intention Stage 1 — IntentionResolver Shadow -->
     <section id="2026-05-08-intention-stage1" class="d-section h-entry">

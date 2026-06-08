@@ -102,7 +102,23 @@ _WEB_SCRAPING_CONTRACT = SkillExecutionContract(
     smoke_test_name="test:scraper_returns_structured_data",
     requires_sandbox=True,
     acquisition_eligible=True,
-    smoke_fixtures=(),
+    # Single deterministic success fixture. example.com is IANA-reserved and
+    # stable, with a fixed <title>Example Domain</title>; asserting that title +
+    # status 200 is real operational proof the scraper fetches + parses live HTML,
+    # not theater. (A connection-error fixture was tried but is incompatible with
+    # the runtime: through the registry's isolated-subprocess invocation a refused
+    # connection is reported as a FAILED invocation — response.success=False, which
+    # raises — so a "graceful structured error" cannot be expressed as a passing
+    # fixture. That brittle error-path assertion is left to plugin-quality work,
+    # not the operational-proof contract.)
+    smoke_fixtures=(
+        SkillSmokeFixture(
+            name="scrape_example_domain_title",
+            input_type="url",
+            input="https://example.com",
+            expected={"title": "Example Domain", "status_code": 200},
+        ),
+    ),
 )
 
 _API_INTEGRATION_CONTRACT = SkillExecutionContract(

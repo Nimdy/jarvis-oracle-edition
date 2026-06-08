@@ -43,6 +43,24 @@ def test_vision_routing():
     assert result2.tool == ToolType.VISION
 
 
+def test_recognition_probes_route_to_identity():
+    """Recognition probes about the present speaker must reach IDENTITY (grounded by
+    live fusion), not fall to NONE where the LLM confabulated 'I have no camera access'
+    while fusion already knew it was David."""
+    for q in (
+        "Jarvis, do you know who this is?",
+        "Do you recognize this voice?",
+        "Can you tell who this is?",
+        "do you recognize my face?",
+    ):
+        assert router.route(q).tool == ToolType.IDENTITY, q
+    # existing identity probes still route correctly
+    assert router.route("Who is speaking?").tool == ToolType.IDENTITY
+    assert router.route("do you recognize me?").tool == ToolType.IDENTITY
+    # must NOT over-capture scene/vision questions
+    assert router.route("What do you see right now?").tool == ToolType.VISION
+
+
 def test_memory_routing():
     result = router.route("Do you remember what we talked about?")
     assert result.tool == ToolType.MEMORY

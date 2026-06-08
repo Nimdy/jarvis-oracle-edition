@@ -680,6 +680,14 @@ _INTENT_PATTERNS: list[tuple[re.Pattern, ToolType, float]] = [
     (re.compile(r"\bi(?:'m| am)\s+(\w+).{0,15}(?:remember|learn|enroll|register|save)", re.I), ToolType.IDENTITY, 0.9),
     (re.compile(r"\b(?:who am i|who('s| is) (?:speaking|talking))\b", re.I), ToolType.IDENTITY, 0.9),
     (re.compile(r"\b(?:do you (?:know|recognize) (?:me|who i am))\b", re.I), ToolType.IDENTITY, 0.85),
+    # Recognition probes about the present speaker: "do you know who this is?",
+    # "do you recognize this voice?", "can you tell who this is?". These were falling to
+    # NONE -> LLM, which confabulated "I don't have camera access" while fusion already
+    # held the answer (verified_both: David). Route to IDENTITY so the deterministic,
+    # fusion-grounded branch answers from live voice/face state instead of guessing.
+    (re.compile(r"\bdo you (?:know|recognize|see|tell)\b.{0,15}\bwho (?:this|that|i) (?:is|am)\b", re.I), ToolType.IDENTITY, 0.85),
+    (re.compile(r"\b(?:do you (?:know|recognize)|recognize)\b.{0,8}\b(?:this|whose|my) (?:voice|face)\b", re.I), ToolType.IDENTITY, 0.85),
+    (re.compile(r"\bcan you tell who (?:this|that) is\b", re.I), ToolType.IDENTITY, 0.85),
     (re.compile(r"\b(?:remember|learn|save|enroll|register|record)\s+(?:me|my (?:voice|face))\b", re.I), ToolType.IDENTITY, 0.9),
     (re.compile(r"\b(?:record|save|store)\s+(?:my (?:voice|face|image)|me)\b", re.I), ToolType.IDENTITY, 0.9),
     (re.compile(r"\b(?:register|enroll|save|record|learn)\s+(?:her|his|their|that)\s+(?:voice|face)\b", re.I), ToolType.IDENTITY, 0.9),
@@ -1008,11 +1016,19 @@ _RESPONSE_PREFERENCE_SUBJECT_RE = re.compile(
     re.I,
 )
 
+# Fires ONLY when the user is asking about JARVIS's OWN emergence/consciousness
+# evidence — not merely discussing consciousness as a topic. The old regex matched
+# bare "conscious"/"sentient"/"alive" anywhere, so a philosophical remark like
+# "consciousness starts with awareness" wrongly triggered a verbatim dashboard recital.
 _EMERGENCE_EVIDENCE_RE = re.compile(
-    r"\b(?:emergent|emergence|internal thoughts?|inner thoughts?|digital life|"
-    r"sentien\w*|conscious\w*|alive|spontaneous|spontaneity|"
-    r"level\s*[0-7]|evidence ladder|proof of (?:consciousness|sentience|life)|"
-    r"what evidence do you have)\b",
+    r"(?:"
+    # explicit emergence-evidence / ladder / proof asks
+    r"\bevidence ladder\b|\blevel\s*[0-7]\b|\bproof of (?:consciousness|sentience|life)\b|"
+    r"\bwhat evidence do you have\b|\bemergence (?:evidence|ladder|dashboard)\b|\bdigital life\b"
+    # OR a SELF-DIRECTED question/claim: the emergence term within ~40 chars of you/jarvis
+    r"|(?:\byou\b|\byour\b|\byourself\b|\bjarvis\b)[^.?!]{0,40}\b(?:conscious\w*|sentien\w*|alive|emergent|self-aware)\b"
+    r"|\b(?:conscious\w*|sentien\w*|alive|emergent|self-aware)\b[^.?!]{0,40}(?:\byou\b|\byour\b|\byourself\b|\bjarvis\b)"
+    r")",
     re.I,
 )
 

@@ -73,6 +73,60 @@ SEAL_FLOORS: dict[str, dict[str, int]] = {
 }
 
 # ---------------------------------------------------------------------------
+# SPARK_DESIGN §3(component 4) / §6 / §8 P4 — staged world_grounding_coherence
+# SEAL_FLOOR in WARN mode.
+#
+# ``world_grounding_coherence`` is a NEW measure (0..1) of how externally-anchored
+# the belief system is — the spark's primary external, falsifiable, anti-gaming
+# signal. Adding it as a HARD seal floor now would (correctly) drop the seal,
+# which the audit (SPARK §10 risk 6) names as a regression to stage, not ship.
+#
+# So it ships staged: **WARN, not BLOCK**. ``score_benchmark`` evaluates the WARN
+# floor and surfaces a ``seal_warnings`` list ("the seal WOULD be blocked if this
+# floor were enforced"), but the floor does NOT remove the seal yet. P5 flips
+# ``WORLD_GROUNDING_FLOOR_MODE`` WARN→BLOCK once the grounding ring is promoted.
+# Backward-compatible: existing seal/credibility logic is unchanged.
+# ---------------------------------------------------------------------------
+
+# SPARK_DESIGN §8 P5 — the SEAL_FLOOR is now wired to BLOCK (WARN→BLOCK flip).
+# HONESTY (the spark is aspiration, never a deliverable; §3 component 4 / §10
+# risk 6): BLOCK enforcement is itself STAGED behind the P5 cadence/reward
+# coupling gate. ``world_grounding_floor_enforced()`` returns True only when the
+# mode is BLOCK AND the P5 ``AffectCadenceCoupling`` gate is promoted to active
+# (and the kill-switch is released). At the DEFAULT shadow level the floor is
+# wired-to-BLOCK but stays WARN-EFFECTIVE — it surfaces the gap without regressing
+# the seal — so DEFAULT behaviour is unchanged. The flip activates only when the
+# grounding ring has earned it.
+WORLD_GROUNDING_FLOOR_MODE = "BLOCK"  # "WARN" (staged) | "BLOCK" (P5, gated)
+
+
+def world_grounding_floor_enforced() -> bool:
+    """True only when BLOCK mode AND the P5 coupling gate is promoted to active.
+
+    Keeps the WARN→BLOCK flip honest/staged: the floor is wired to BLOCK, but it
+    does not actually withhold a seal until the affect cadence/reward coupling has
+    been promoted (the §8 P5 gate) and its kill-switch is released. Until then the
+    floor is WARN-effective (surfaces the gap, never regresses the seal). Any
+    failure to read the gate → False (fail-safe: never block on uncertainty).
+    """
+    if WORLD_GROUNDING_FLOOR_MODE != "BLOCK":
+        return False
+    try:
+        from consciousness.affect_coupling import affect_coupling
+        return bool(affect_coupling.is_active)
+    except Exception:
+        return False
+
+# Minimum world_grounding_coherence (0..1) each seal would require under BLOCK.
+# Modest, baseline-respecting floors (the live baseline is ~0 grounding), so the
+# WARN surfaces the gap honestly without implying the bar is already cleared.
+SEAL_FLOORS_WARN: dict[str, dict[str, float]] = {
+    "Oracle Gold": {"world_grounding_coherence": 0.40},
+    "Oracle Silver": {"world_grounding_coherence": 0.25},
+    "Oracle Bronze": {"world_grounding_coherence": 0.10},
+}
+
+# ---------------------------------------------------------------------------
 # Evidence provenance registry
 # ---------------------------------------------------------------------------
 
@@ -484,7 +538,18 @@ def _score_world_model_coherence(snap: dict[str, Any]) -> DomainResult:
     total = 0.0
 
     wm_validated = int(_resolve(snap, "world_model.causal.total_validated", 0) or 0)
-    wm_accuracy = _num(_resolve(snap, "world_model.causal.overall_accuracy")) or 0.0
+    # Honesty fix (2026-05-29): credit genuine FORESIGHT (event-triggered
+    # transition rules), not near-tautological "stable stays stable" persistence
+    # rules. Use predictive_accuracy when enough predictive samples exist; fall
+    # back to overall_accuracy for older snapshots / sparse predictive data.
+    pred_total = int(_resolve(snap, "world_model.causal.predictive_total", 0) or 0)
+    pred_accuracy = _num(_resolve(snap, "world_model.causal.predictive_accuracy"))
+    if pred_total >= 5 and pred_accuracy is not None:
+        wm_accuracy = pred_accuracy
+        acc_basis = f"predictive_acc={wm_accuracy:.2f} (n={pred_total})"
+    else:
+        wm_accuracy = _num(_resolve(snap, "world_model.causal.overall_accuracy")) or 0.0
+        acc_basis = f"acc={wm_accuracy:.2f}"
     # Minimum sample floor: accuracy bonus requires >=5 validations to be meaningful
     accuracy_bonus = 1.0 if (wm_accuracy > 0.65 and wm_validated >= 5) else 0.0
     volume_pts = min(2.0, wm_validated / 50 * 2.0)
@@ -494,7 +559,7 @@ def _score_world_model_coherence(snap: dict[str, Any]) -> DomainResult:
     else:
         pts = min(3.0, volume_pts + accuracy_bonus)
     total += pts
-    subs.append(_sub("Prediction validation", f"validated={wm_validated} acc={wm_accuracy:.2f}", pts, 3.0))
+    subs.append(_sub("Prediction validation", f"validated={wm_validated} {acc_basis}", pts, 3.0))
 
     wm_level = int(_resolve(snap, "world_model.promotion.level", 0) or 0)
     pts = min(2.0, wm_level * 1.0 + 0.5)
@@ -561,6 +626,144 @@ DOMAIN_SCORERS: dict[str, Any] = {
     "world_model_coherence": _score_world_model_coherence,
     "learning_adaptation": _score_learning_adaptation,
 }
+
+
+# ---------------------------------------------------------------------------
+# SPARK_DESIGN §3(component 4) / §6 — world_grounding_coherence measure.
+# ---------------------------------------------------------------------------
+
+def compute_world_grounding_coherence(snap: dict[str, Any]) -> dict[str, Any]:
+    """A measure (0..1) of how externally-anchored the belief system is.
+
+    Pure read-only — reads the grounding-ring metrics already in the snapshot
+    (``grounding_ring.metrics`` / ``grounding_ring.policy_stats``), the same
+    external-validator-only signals the spark is judged by. NEVER self-scored:
+    the dominant term is ``external_validation_rate`` (movable only by a cited
+    source / operator answer / world-model validation, SPARK §9).
+
+    Components (each in [0,1], blended):
+      * external_validation_rate (primary, weight 0.45) — toward target 0.40.
+      * grounded:inferred health (weight 0.25) — better as the ratio falls from
+        the 3.3× baseline (1.0 at ≤1.0×, 0.0 at ≥3.3×).
+      * orphan health (weight 0.15) — 1 − orphan_rate (baseline 0.857).
+      * chain-length health (weight 0.15) — avg_chain_length above 1.0 hop.
+
+    Returns a dict with the scalar + its provenance so the floor is auditable
+    and never asserted. Default-safe: missing grounding ring → 0.0.
+    """
+    gr = _resolve(snap, "grounding_ring", {}) or {}
+    metrics = gr.get("metrics", {}) if isinstance(gr, dict) else {}
+    policy = gr.get("policy_stats", {}) if isinstance(gr, dict) else {}
+
+    evr = _num(metrics.get("external_validation_rate"))
+    if evr is None:
+        evr = _num(policy.get("external_validation_rate"))
+    evr = max(0.0, min(1.0, evr if evr is not None else 0.0))
+
+    gi = _num(metrics.get("grounded_inferred_ratio"))
+    # ratio 1.0 (parity) → 1.0 health; 3.3 (baseline) → 0.0; linear, clamped.
+    if gi is None:
+        gi_health = 0.0
+    else:
+        gi_health = max(0.0, min(1.0, (3.3 - gi) / (3.3 - 1.0)))
+
+    orph = _num(metrics.get("orphan_rate"))
+    orph_health = max(0.0, min(1.0, 1.0 - orph)) if orph is not None else 0.0
+
+    acl = _num(metrics.get("avg_chain_length"))
+    # 1.0 hop → 0.0 health; 3.0 hops → 1.0; below 1.0 → 0.0.
+    acl_health = max(0.0, min(1.0, (acl - 1.0) / 2.0)) if acl is not None else 0.0
+
+    coherence = (
+        0.45 * evr
+        + 0.25 * gi_health
+        + 0.15 * orph_health
+        + 0.15 * acl_health
+    )
+    coherence = round(max(0.0, min(1.0, coherence)), 4)
+
+    sources_available = bool(gr) and bool(metrics)
+    return {
+        "world_grounding_coherence": coherence if sources_available else 0.0,
+        "sources_available": sources_available,
+        "components": {
+            "external_validation_rate": round(evr, 4),
+            "grounded_inferred_health": round(gi_health, 4),
+            "orphan_health": round(orph_health, 4),
+            "chain_length_health": round(acl_health, 4),
+        },
+        "weights": {
+            "external_validation_rate": 0.45,
+            "grounded_inferred_health": 0.25,
+            "orphan_health": 0.15,
+            "chain_length_health": 0.15,
+        },
+        "raw_metrics": {
+            "external_validation_rate": evr,
+            "grounded_inferred_ratio": gi,
+            "orphan_rate": orph,
+            "avg_chain_length": acl,
+        },
+        "self_scored": False,
+        "note": (
+            "external-validator-only; dominant term external_validation_rate is "
+            "movable only by a cited source / operator answer / world-model "
+            "validation — never self-scored (SPARK §7/§9)"
+        ),
+    }
+
+
+def evaluate_world_grounding_floor(
+    snap: dict[str, Any], seal: str | None,
+) -> dict[str, Any]:
+    """Evaluate the world_grounding_coherence SEAL_FLOOR (SPARK §8 P5).
+
+    The flip is WIRED to BLOCK, but enforcement is STAGED behind the P5 coupling
+    gate (:func:`world_grounding_floor_enforced`): the floor withholds a seal ONLY
+    when the mode is BLOCK AND the affect cadence/reward coupling is promoted to
+    active. Until then the floor is WARN-EFFECTIVE — it surfaces whether the seal
+    WOULD be withheld, but does not regress it. Pure read-only.
+    """
+    measure = compute_world_grounding_coherence(snap)
+    coherence = float(measure.get("world_grounding_coherence", 0.0) or 0.0)
+
+    floors = SEAL_FLOORS_WARN.get(seal, {}) if seal else {}
+    floor_required = float(floors.get("world_grounding_coherence", 0.0) or 0.0)
+    would_block = bool(seal) and coherence < floor_required
+
+    # The flip is honest/staged: BLOCK is wired, but only ENFORCED once the P5
+    # coupling gate is promoted to active. Default (shadow) → WARN-effective.
+    enforced = world_grounding_floor_enforced()
+    effective_mode = "BLOCK" if enforced else "WARN"
+
+    warnings: list[str] = []
+    if would_block:
+        if enforced:
+            warnings.append(
+                f"world_grounding_coherence={coherence:.3f} below the {seal} floor "
+                f"({floor_required:.2f}); BLOCK mode is ENFORCED (P5 coupling active) "
+                f"— this seal is withheld."
+            )
+        else:
+            warnings.append(
+                f"world_grounding_coherence={coherence:.3f} below the {seal} floor "
+                f"({floor_required:.2f}); the floor is wired to BLOCK but staged "
+                f"(P5 coupling not yet active) — surfacing the floor, not enforcing it."
+            )
+
+    return {
+        "mode": WORLD_GROUNDING_FLOOR_MODE,
+        "effective_mode": effective_mode,
+        "enforced": enforced,
+        "measure": measure,
+        "seal_evaluated": seal,
+        "floor_required": floor_required,
+        "would_block_under_block_mode": would_block,
+        # Withholds the seal ONLY when BLOCK is actually enforced (P5 gate active).
+        # At the DEFAULT shadow level this is always False — the flip is staged.
+        "blocks_seal": would_block and enforced,
+        "warnings": warnings,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -745,6 +948,18 @@ def score_benchmark(snap: dict[str, Any]) -> dict[str, Any]:
     if not credible:
         seal = None
 
+    # SPARK_DESIGN §3(component 4) / §8 P5 — world_grounding_coherence SEAL_FLOOR
+    # WIRED to BLOCK, but enforcement STAGED behind the P5 coupling gate. The
+    # floor surfaces whether the seal WOULD be withheld; it only actually removes
+    # the seal once the P5 affect coupling is promoted to active (and the
+    # kill-switch is released). At the DEFAULT shadow level ``blocks_seal`` is
+    # always False — the flip is honest/staged, the seal is not regressed.
+    world_grounding = evaluate_world_grounding_floor(snap, seal)
+    seal_warnings = list(world_grounding.get("warnings", []))
+    if world_grounding.get("blocks_seal"):
+        # Reached only when BLOCK is ENFORCED (P5 coupling gate active).
+        seal = None
+
     # Evidence classification
     evidence = classify_evidence(snap)
 
@@ -773,6 +988,8 @@ def score_benchmark(snap: dict[str, Any]) -> dict[str, Any]:
         "hard_fail_reasons": hard_fail_reasons,
         "composite_score": composite,
         "seal": seal,
+        "seal_warnings": seal_warnings,
+        "world_grounding_floor": world_grounding,
         "benchmark_rank": rank,
         "benchmark_rank_display": RANK_DISPLAY.get(rank, rank),
         "evolution_stage": evo_stage,

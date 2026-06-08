@@ -89,7 +89,12 @@ class ProceduralResearchExecutor(PhaseExecutor):
 
     def run(self, job: Any, ctx: dict[str, Any]) -> PhaseResult:
         if any(a.get("type") == "research_summary" for a in job.artifacts):
-            return PhaseResult(progressed=False, message="Research summary already exists.")
+            # Idempotent SUCCESS, not failure: the phase's required artifact
+            # already exists, so the exit condition is met — report progressed
+            # so auto-advance moves to the next phase. Returning progressed=False
+            # here counted as a failed tick and, after 10 re-entries on the
+            # throttle, blocked a job that had actually completed the phase.
+            return PhaseResult(progressed=True, message="Research summary already present — advancing.")
 
         summary = self._build_research(job, ctx)
         path = os.path.join(_job_dir(job), "research_summary.json")
@@ -163,7 +168,8 @@ class ProceduralAcquireExecutor(PhaseExecutor):
 
     def run(self, job: Any, ctx: dict[str, Any]) -> PhaseResult:
         if any(a.get("type") == "model_or_method_available" for a in job.artifacts):
-            return PhaseResult(progressed=False, message="Method artifact already exists.")
+            # Idempotent success — artifact present, exit condition met, advance.
+            return PhaseResult(progressed=True, message="Method artifact already present — advancing.")
 
         method = self._identify_method(job, ctx)
         path = os.path.join(_job_dir(job), "method.json")
@@ -201,7 +207,10 @@ class ProceduralIntegrateExecutor(PhaseExecutor):
 
     def run(self, job: Any, ctx: dict[str, Any]) -> PhaseResult:
         if any(a.get("type") == "integration_test_passed" for a in job.artifacts):
-            return PhaseResult(progressed=False, message="Integration test already exists.")
+            # Idempotent success — integration already passed, exit condition met,
+            # advance. (Was progressed=False -> counted as failure -> blocked the
+            # web_scraping_v1 job that had actually passed integration.)
+            return PhaseResult(progressed=True, message="Integration test already passed — advancing.")
 
         ok, details = self._run_integration_test(job, ctx)
         result = {

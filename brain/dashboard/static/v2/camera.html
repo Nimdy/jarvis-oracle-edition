@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Camera / Live Perception (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .camwrap{position:relative;background:#03040a;border:1px solid var(--line);border-radius:6px;overflow:hidden;min-height:240px;display:flex;align-items:center;justify-content:center;}
+    .camwrap img{display:block;max-width:100%;width:100%;height:auto;}
+    .camnotice{padding:26px 20px;text-align:center;font-size:11px;color:var(--muted);line-height:1.6;}
+    .camnotice .hl{color:var(--amber);font-weight:700;display:block;margin-bottom:5px;}
+    .camnotice .off{color:var(--red);font-weight:700;display:block;margin-bottom:5px;}
+    .camnotice .urlt{color:var(--dim);font-size:9px;word-break:break-all;display:block;margin-top:6px;}
+    .camctl{display:flex;align-items:center;gap:10px;margin:9px 0 4px;font-size:10px;color:var(--muted);}
+    .camctl label{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;}
+    .cammeta{font-size:9px;color:var(--dim);letter-spacing:.04em;margin-top:6px;}
+    .cammeta b{color:var(--muted);}
+    .ent{border:1px solid var(--line);border-radius:5px;padding:8px 11px;margin-bottom:7px;background:rgba(3,8,14,.5);}
+    .ent .ehead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+    .ent .elabel{font-size:12px;color:var(--text);font-weight:700;text-transform:capitalize;}
+    .ent .emeta{font-size:9px;color:var(--dim);letter-spacing:.04em;}
+    .ent .erow{display:grid;grid-template-columns:1fr 1fr;gap:3px 14px;font-size:10px;margin-top:6px;}
+    .ent .erow .k{color:var(--muted);} .ent .erow b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .stbadge{font-size:8.5px;letter-spacing:.08em;padding:1px 6px;border-radius:3px;border:1px solid;text-transform:uppercase;}
+    .surf{border:1px solid var(--line);border-radius:5px;padding:8px 11px;margin-bottom:7px;background:rgba(3,8,14,.5);}
+    .surf .shead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+    .surf .skind{font-size:12px;color:var(--text);font-weight:700;text-transform:capitalize;}
+    .surf .sact{font-size:10px;color:var(--cyan);margin-top:4px;}
+    .surf .ssum{font-size:9.5px;color:var(--muted);margin-top:3px;font-style:italic;}
+    .surf .smeta{font-size:9px;color:var(--dim);letter-spacing:.04em;margin-top:5px;}
+    .countline{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin:2px 0 10px;}
+    .countline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .countline .bigstat{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .idleblock{font-size:11px;color:var(--dim);font-style:italic;padding:14px 4px;text-align:center;border:1px dashed var(--line);border-radius:5px;}
+    .crossnote{font-size:9.5px;color:var(--dim);border-top:1px dashed var(--line);padding-top:8px;margin-top:10px;line-height:1.5;}
+    .crossnote b{color:var(--muted);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · CAMERA / LIVE PERCEPTION</h1><span class="v2">dashboardV2</span>
+    <span class="sub">The raw Pi-served eye beside what JARVIS actually <em>perceives</em> from it — the entities, display surfaces and on-screen activity the scene tracker resolves. Read-only view; perception runs whether the preview is shown or not.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col5">
+      <h2>Live Feed <span class="asof">Pi-served MJPEG · read-only</span></h2>
+      <div class="note">The MJPEG multipart stream the Pi serves directly. This is a <b>cross-origin <code>&lt;img&gt;</code></b> — your browser pulls the stream straight from the Pi, the dashboard never proxies or records it. It streams on its own once loaded; it is not re-fetched on the scene poll.</div>
+      <div class="camctl">
+        <label><input type="checkbox" id="hide-cam"> Hide feed (this browser)</label>
+        <span class="asof" id="cam-state">—</span>
+      </div>
+      <div class="camwrap" id="cam-container"><div class="camnotice">Loading config…</div></div>
+      <div class="cammeta" id="cam-meta"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>What JARVIS Sees <span class="asof" id="scene-asof">/api/scene · —</span></h2>
+      <div class="note">The scene tracker's resolution of the same frames — independent of whether the preview above is shown. Counts on a fresh boot read <b>accumulating</b>, never broken: persistence and stability re-earn over cycles.</div>
+      <div class="countline" id="scene-counts"></div>
+
+      <h2 style="margin-top:6px">Display Surfaces &amp; On-Screen Activity</h2>
+      <div id="surfaces"></div>
+
+      <h2 style="margin-top:14px">Detected Entities</h2>
+      <div id="entities"></div>
+
+      <h2 style="margin-top:14px">Region Visibility</h2>
+      <div class="bars" id="regions"></div>
+
+      <div class="crossnote" id="crossnote"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, tag=V2.tag, cap=V2.cap, barRow=V2.barRow;
+  var SCENE=null, lastSceneTs=0;
+  V2.renderNav('/static/v2/camera.html');
+
+  // ---- privacy toggle: persisted per-browser like v1 ----
+  var HIDE_KEY='jarvis-v2-hide-cam';
+  function isHidden(){ try{ return localStorage.getItem(HIDE_KEY)==='true'; }catch(_){ return false; } }
+  function setHidden(h){ try{ localStorage.setItem(HIDE_KEY, h?'true':'false'); }catch(_){} }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // ---- camera feed: load ONCE; the MJPEG <img> streams itself, never re-created on poll ----
+  var camLoaded=false;   // true once an <img> has been set (don't rebuild it)
+  var camUrl=null;       // remembered pi_video_url
+  var camConfigDone=false;
+
+  function renderHidden(){
+    camLoaded=false;
+    el('cam-container').innerHTML=
+      '<div class="camnotice"><span class="hl">Camera feed hidden on this browser</span>'+
+      'Perception still runs; only the preview is hidden.</div>';
+    el('cam-state').textContent='hidden (local)';
+  }
+
+  function renderFeed(url){
+    // EXACT v1 working pattern: <img src=url> with onerror that hides img + reveals sibling offline notice (with url text).
+    camLoaded=true;
+    el('cam-container').innerHTML=
+      '<img src="'+esc(url)+'" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'\';">'+
+      '<div class="camnotice" style="display:none;"><span class="off">Camera offline — check Pi connection</span>'+
+      '<span class="urlt">'+esc(url)+'</span></div>';
+    el('cam-state').textContent='streaming (cross-origin)';
+  }
+
+  function renderNoHost(){
+    camLoaded=false;
+    el('cam-container').innerHTML='<div class="camnotice"><span class="off">Pi host not configured</span>'+
+      'No <code>pi_video_url</code> in /api/config — set <code>PI_HOST</code> on the brain.</div>';
+    el('cam-state').textContent='no host';
+  }
+
+  // decide what to show. only fetch config once (it is static), then load the <img> once.
+  function applyCamera(){
+    if(isHidden()){ renderHidden(); return; }
+    if(camLoaded){ return; }                 // already streaming — never rebuild the <img>
+    if(camConfigDone){                       // config already fetched
+      if(camUrl) renderFeed(camUrl); else renderNoHost();
+      return;
+    }
+    fetchJSON('/api/config').then(function(cfg){
+      camConfigDone=true;
+      camUrl=(cfg&&cfg.pi_video_url)||null;
+      el('cam-meta').innerHTML = camUrl
+        ? 'source <b>'+esc(camUrl)+'</b> · served by the Pi, not the brain'
+        : '<b>pi_video_url</b> absent from /api/config';
+      if(isHidden()){ renderHidden(); return; }
+      if(camUrl) renderFeed(camUrl); else renderNoHost();
+    }).catch(function(){
+      el('cam-container').innerHTML='<div class="camnotice"><span class="off">Config unavailable</span>'+
+        'Could not reach /api/config on the brain.</div>';
+      el('cam-state').textContent='config offline';
+    });
+  }
+
+  // wire the toggle
+  var cb=el('hide-cam');
+  cb.checked=isHidden();
+  cb.addEventListener('change', function(){
+    setHidden(cb.checked);
+    if(cb.checked){ renderHidden(); }
+    else { camLoaded=false; applyCamera(); }   // re-load (fresh <img>) only on un-hide
+  });
+
+  // ============================ scene perception ============================
+  // state -> tag class (fail-closed feel: visible/stable = grounded, transient = derived, absent = self/unk)
+  function stateBadge(st){
+    var s=String(st||'').toLowerCase();
+    var col, brd;
+    if(s==='visible'||s==='stable'){ col='var(--green)'; brd='var(--green)'; }
+    else if(s==='candidate'||s==='occluded'){ col='var(--amber)'; brd='var(--amber)'; }
+    else if(s==='missing'||s===''){ col='var(--dim)'; brd='var(--line)'; }
+    else { col='var(--muted)'; brd='var(--line)'; }
+    return '<span class="stbadge" style="color:'+col+';border-color:'+brd+'">'+(s||'unk')+'</span>';
+  }
+
+  function renderCounts(){
+    var s=SCENE||{};
+    var vis=num(s.visible_count), act=num(s.active_entity_count), stab=num(s.stable_count), upd=num(s.update_count);
+    el('scene-counts').innerHTML=
+      '<span><div class="k">visible now</div><span class="bigstat" style="color:'+(vis===null?'var(--dim)':(vis>0?'var(--green)':'var(--amber)'))+'">'+(vis===null?'—':vis)+'</span></span>'+
+      '<span><div class="k">tracked entities</div><span class="bigstat">'+(act===null?'—':act)+'</span></span>'+
+      '<span><div class="k">stable</div><span class="bigstat">'+(stab===null?'—':stab)+'</span></span>'+
+      '<span><div class="k">scene updates</div><span class="bigstat">'+(upd===null?'—':upd)+'</span></span>';
+  }
+
+  function renderSurfaces(){
+    var box=el('surfaces'); if(!box) return;
+    var s=SCENE||{};
+    var surfaces=s.display_surfaces||[];
+    var content=s.display_content||[];
+    if(!surfaces.length){ box.innerHTML='<div class="idleblock">No display surfaces resolved yet — accumulating as the scene tracker soaks.</div>'; return; }
+    // index content by surface_id (the API keys both on surface_id) so we can pair activity to surface.
+    var byId={}; content.forEach(function(c){ if(c&&c.surface_id) byId[c.surface_id]=c; });
+    box.innerHTML=surfaces.map(function(sf){
+      var c=byId[sf.surface_id]||null;
+      var conf=num(sf.confidence);
+      var act = c&&c.activity_label ? c.activity_label : null;
+      var actConf=c?num(c.activity_confidence):null;
+      return '<div class="surf">'+
+        '<div class="shead"><span class="skind">'+esc(sf.kind||'surface')+'</span>'+
+          stateBadge(sf.physical_state)+'</div>'+
+        (act?'<div class="sact">activity: <b>'+esc(act)+'</b>'+(actConf===null?'':' · '+(actConf*100).toFixed(0)+'% conf')+
+             (c&&c.content_type?' · '+esc(cap(c.content_type)):'')+'</div>':'<div class="sact" style="color:var(--dim)">no activity resolved</div>')+
+        (c&&c.semantic_summary?'<div class="ssum">'+esc(c.semantic_summary)+'</div>':'')+
+        '<div class="smeta">surface conf <b style="color:'+bandColor(conf,0.6,0.4)+'">'+(conf===null?'—':(conf*100).toFixed(0)+'%')+'</b>'+
+          ' · stable for <b>'+(num(sf.stable_for_s)===null?'—':V2.fmtUptime(sf.stable_for_s))+'</b>'+
+          ' · <span style="color:var(--dim)">'+esc(sf.surface_id||'')+'</span></div>'+
+      '</div>';
+    }).join('');
+  }
+
+  function renderEntities(){
+    var box=el('entities'); if(!box) return;
+    var s=SCENE||{};
+    var ents=s.entities||[];
+    if(!ents.length){ box.innerHTML='<div class="idleblock">No entities tracked yet — armed and accumulating on this fresh boot.</div>'; return; }
+    box.innerHTML=ents.map(function(e){
+      var conf=num(e.confidence), perm=num(e.permanence_confidence);
+      var src=e.source||'?';
+      return '<div class="ent">'+
+        '<div class="ehead"><span class="elabel">'+esc(e.label||'object')+'</span>'+
+          stateBadge(e.state)+'</div>'+
+        '<div class="erow">'+
+          '<span class="k">region</span><b>'+esc(e.region||'unknown')+'</b>'+
+          '<span class="k">source</span><b>'+esc(src)+'</b>'+
+          '<span class="k">confidence</span><b style="color:'+bandColor(conf,0.6,0.4)+'">'+(conf===null?'—':(conf*100).toFixed(0)+'%')+'</b>'+
+          '<span class="k">permanence</span><b style="color:'+bandColor(perm,0.5,0.2)+'">'+(perm===null?'—':(perm*100).toFixed(0)+'%')+'</b>'+
+          '<span class="k">stable cycles</span><b>'+(num(e.stable_cycles)===null?'—':e.stable_cycles)+'</b>'+
+          '<span class="k">last seen</span><b>'+ago(e.last_seen_ts)+'</b>'+
+        '</div>'+
+        '<div class="emeta">'+esc(e.entity_id||'')+(e.is_display_surface?' · display surface':'')+'</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  function renderRegions(){
+    var box=el('regions'); if(!box) return;
+    var rv=(SCENE&&SCENE.region_visibility)||null;
+    var keys=rv?Object.keys(rv):[];
+    if(!keys.length){ box.innerHTML='<div class="idleblock">Region visibility not reported this cycle.</div>'; return; }
+    box.innerHTML=keys.map(function(k){
+      var v=num(rv[k]);
+      return barRow(cap(k), v===null?null:v*100, v===null?'—':(v*100).toFixed(0)+'%', bandColor(v,0.66,0.33));
+    }).join('');
+  }
+
+  function renderCrossnote(){
+    var s=SCENE||{};
+    var vis=num(s.visible_count);
+    el('crossnote').innerHTML=
+      'The feed is <b>Pi-served</b> and the scene above is the brain\'s own resolution of it — two independent reads. '+
+      (vis===0?'<b>0 visible now</b> with tracked entities present = nothing in-frame this instant or the Pi detector is between cycles; permanence keeps remembered objects on the list (state <em>missing/occluded</em>) — recovery/accumulation, not a fault. ':'')+
+      'Confidence and permanence are the tracker\'s own scores; this view is <b>read-only</b> — no capture, trigger or action is fired from here.';
+  }
+
+  function renderBanner(){
+    var m=el('mode'); if(m) m.textContent='live perception · scene-only';
+  }
+
+  function renderScene(){
+    renderCounts(); renderSurfaces(); renderEntities(); renderRegions(); renderCrossnote();
+    el('scene-asof').textContent='/api/scene · '+(lastSceneTs?ago(SCENE&&SCENE.timestamp?SCENE.timestamp:lastSceneTs/1000):'—');
+  }
+
+  function refresh(){
+    applyCamera();   // load the <img> once; on later polls this is a no-op while streaming
+    return Promise.allSettled([
+      fetchJSON('/api/scene').then(function(s){ SCENE=s; lastSceneTs=Date.now(); renderScene(); })
+        .catch(function(){ if(!SCENE) el('entities').innerHTML='<div class="offline">scene offline</div>'; })
+    ]);
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastSceneTs?'':' · connecting…'); }
+
+  renderBanner();
+  refresh(); setInterval(refresh, 4000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

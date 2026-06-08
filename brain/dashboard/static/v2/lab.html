@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Lab (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific — the hands-on bench: master/detail explorers */
+    .md{display:grid;grid-template-columns:240px 1fr;gap:12px;}
+    @media(max-width:820px){.md{grid-template-columns:1fr;}}
+    .list{display:flex;flex-direction:column;gap:4px;max-height:460px;overflow:auto;}
+    .item{border:1px solid var(--line);border-left-width:3px;border-radius:4px;padding:6px 9px;cursor:pointer;background:rgba(3,8,14,.4);}
+    .item:hover{border-color:var(--cyan);}
+    .item.sel{border-color:var(--green);background:rgba(0,255,153,.05);}
+    .item .nm{font-size:10.5px;font-weight:700;display:flex;justify-content:space-between;gap:6px;}
+    .item .sub{font-size:9px;color:var(--muted);margin-top:1px;}
+    .detail{border:1px solid var(--line);border-radius:5px;padding:12px 14px;background:rgba(3,8,14,.5);min-height:200px;}
+    .detail h3{margin:0 0 2px;font-size:13px;}
+    .detail .deck{font-size:10px;color:var(--muted);margin-bottom:10px;}
+    .kvt{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:10.5px;}
+    .kvt .k{color:var(--muted);} .kvt .v{color:var(--text);font-variant-numeric:tabular-nums;text-align:right;word-break:break-word;}
+    .pillbig{display:inline-block;font-size:9px;letter-spacing:.08em;border:1px solid;border-radius:3px;padding:1px 6px;vertical-align:middle;}
+    .totrow{display:flex;gap:18px;flex-wrap:wrap;font-size:11px;margin:2px 0 8px;}
+    .totrow .k{font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;}
+    .totrow b{font-size:18px;font-variant-numeric:tabular-nums;}
+    .placeholder{color:var(--dim);font-style:italic;font-size:10.5px;}
+    /* policy training curves — mini per-epoch loss sparklines */
+    .ptc{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
+    .ptc-run{border:1px solid var(--line);border-left-width:3px;border-radius:5px;padding:9px 11px;background:rgba(3,8,14,.45);}
+    .ptc-run .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:10.5px;}
+    .ptc-run .hd .fl{font-weight:700;font-variant-numeric:tabular-nums;}
+    .ptc-run .meta{font-size:9px;color:var(--muted);margin-top:1px;display:flex;justify-content:space-between;gap:6px;}
+    .spark{display:flex;align-items:flex-end;gap:2px;height:46px;margin:8px 0 2px;}
+    .spark .sb{flex:1 1 0;min-width:2px;background:var(--cyan);border-radius:1px 1px 0 0;opacity:.85;}
+    .spark .sb.last{background:var(--green);opacity:1;}
+    .ptc-cap{font-size:8.5px;color:var(--dim);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;}
+    /* distillation teacher streams */
+    .dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;}
+    .tcard{border:1px solid var(--line);border-left-width:3px;border-radius:5px;padding:8px 10px;background:rgba(3,8,14,.45);}
+    .tcard .nm{font-size:10px;font-weight:700;display:flex;justify-content:space-between;gap:6px;font-variant-numeric:tabular-nums;}
+    .tcard .row{font-size:9px;color:var(--muted);margin-top:3px;display:flex;justify-content:space-between;gap:8px;}
+    .tcard .row b{color:var(--text);font-variant-numeric:tabular-nums;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · LAB</h1><span class="v2">dashboardV2</span>
+    <span class="sub">The hands-on bench — pick the internals apart. Read-only exploration (drill / inspect); nothing here writes to the brain. Click an item to drill in.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col7">
+      <h2>NN Inspector</h2>
+      <div class="note">Every learned network in one place — hemisphere specialists, memory-cortex ranker/salience, distillation specialists, the policy NN. Click one to inspect its training, accuracy and lifecycle. <b>shadow</b> = telemetry-only, not live-scoring.</div>
+      <div class="md"><div class="list" id="nn-list"></div><div class="detail" id="nn-detail"><span class="placeholder">select a network…</span></div></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Dream-Artifact Browser</h2>
+      <div class="note">The sleep-cycle consolidation buffer: clusters → quality gate → canonical memory. Totals are cumulative; the buffer is often idle (empty) between cycles. Click an artifact to see its verdict.</div>
+      <div class="totrow" id="dream-tot"></div>
+      <div class="md" style="grid-template-columns:200px 1fr;"><div class="list" id="dream-list"></div><div class="detail" id="dream-detail"><span class="placeholder">select an artifact…</span></div></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Distillation Flow &amp; Metrics</h2>
+      <div class="note">How JARVIS outgrows its shell: baseline models/LLM act as <b>teachers</b> → fidelity-scored buffers (low-fidelity <b>quarantined</b>) → student-NN training → tier-1 gating (accuracy floor + regression cooldown) → promotion only when a student beats the baseline, at which point it <b>replaces</b> the baseline at inference. <b>"active networks"</b> = operational student specialists; whether each one beats the baseline is its accuracy in the NN Inspector above (e.g. <code>memory</code> 0.95 vs <code>mood</code> 0.38). Promotion-over-baseline is the move off the LLM — per-network, not a single count.</div>
+      <div class="totrow" id="distill-tot"></div>
+      <div class="note" id="distill-gating" style="margin:0 0 10px"></div>
+      <h3 style="font-size:11px;margin:6px 0 5px;color:var(--muted)">Teacher signal streams <span style="color:var(--dim);font-weight:400">(border = quarantine rate: green &lt;5% · amber &lt;20% · red ≥20%)</span></h3>
+      <div class="dgrid" id="distill-teachers"></div>
+      <h3 style="font-size:11px;margin:14px 0 5px;color:var(--muted)">Skill-acquisition student · distillation maturation</h3>
+      <div class="totrow" id="distill-spec"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Policy Training Curves</h2>
+      <div class="note">Real per-epoch learning curves for the behavioral policy NN (the same net inspected above). Each mini sparkline is one training run's <b>epoch_losses</b> sequence — bars descend left→right as the net learns; the green bar is the final epoch. <b>final_loss</b> is banded (lower is better). Curves are this session's in-memory history — empty after a fresh reboot is recovery-debt, not a failure.</div>
+      <div class="ptc" id="ptc"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, cap=V2.cap;
+  var SNAP=null, SPEC=null, lastOkTs=0;
+  var NN=[], nnSel=0, ART=[], artSel=-1;
+  V2.renderNav('/static/v2/lab.html');
+
+  function kvTable(obj, keys){
+    if(!obj || typeof obj!=='object') return '<span class="placeholder">no detail</span>';
+    var ks = keys || Object.keys(obj);
+    var rows = ks.filter(function(k){return k in obj;}).map(function(k){
+      var v=obj[k];
+      if(v && typeof v==='object') v = JSON.stringify(v).slice(0,80);
+      else if(typeof v==='number' && !Number.isInteger(v)) v = v.toFixed(4);
+      else if(v===null) v='—'; else if(v===true) v='yes'; else if(v===false) v='no';
+      return '<div class="k">'+cap(k)+'</div><div class="v">'+v+'</div>';
+    }).join('');
+    return '<div class="kvt">'+rows+'</div>';
+  }
+
+  function buildNNList(){
+    var out=[];
+    var hsts=((SNAP&&SNAP.hemisphere)||{}).hemisphere_state||{};
+    (hsts.hemispheres||[]).forEach(function(h){
+      out.push({ name: cap(h.focus)+' hemisphere', kind:'hemisphere', acc:num(h.best_accuracy),
+        status:h.status, shadow:false, detail:h,
+        deck:'Self-designed hemisphere NN · '+(num(h.evolution_generations)||0)+' evolution generations · migration readiness '+f3(h.migration_readiness) });
+    });
+    var mc=(SNAP&&SNAP.memory_cortex)||{};
+    ['ranker','salience'].forEach(function(key){
+      var m=mc[key]; if(!m) return;
+      out.push({ name:'Memory '+key, kind:'cortex', acc:num(m.last_accuracy),
+        status: m.permanently_disabled?'disabled':(m.enabled?'enabled':'off'), shadow:false, detail:m,
+        deck:'Memory-cortex NN · trained '+(num(m.train_count)||0)+'x · last loss '+f3(m.last_loss) });
+    });
+    var p=(SNAP&&SNAP.policy)||{};
+    if(p.mode){
+      out.push({ name:'Policy NN', kind:'policy', acc:num(p.nn_win_rate),
+        status:p.mode+(p.auto_disabled?' · auto-disabled':''), shadow:(p.mode==='shadow'),
+        detail:{mode:p.mode, arch:p.arch, decisions_total:p.decisions_total, shadow_ab_total:p.shadow_ab_total, shadow_nn_wins:p.shadow_nn_wins, shadow_kernel_wins:p.shadow_kernel_wins, shadow_ties:p.shadow_ties, nn_win_rate:p.nn_win_rate, nn_decisive_win_rate:p.nn_decisive_win_rate, win_margin_ema:p.win_margin_ema, last_train_loss:p.last_train_loss, eligible_for_control:p.eligible_for_control},
+        deck:'Behavioral policy NN (shadow A/B) · win-rate carries the ×0.3 diversity bonus — see /yardsticks for the honest read' });
+    }
+    (SPEC&&SPEC.specialists||[]).forEach(function(s){
+      out.push({ name: cap(s.focus||s.name||'specialist'), kind:'specialist', acc:num(s.best_accuracy),
+        status:(s.maturity||'')+(s.shadow_only?' · shadow':''), shadow:!!s.shadow_only, detail:s,
+        deck:'Distillation specialist · '+(num(s.signals_total)||0)+' signals · '+(s.shadow_only?'telemetry-only (not live-scoring)':'live') });
+    });
+    return out;
+  }
+
+  function renderNN(){
+    NN=buildNNList();
+    if(nnSel>=NN.length) nnSel=0;
+    el('nn-list').innerHTML = NN.length ? NN.map(function(n,i){
+      var c = n.acc===null?'var(--dim)':bandColor(n.acc,0.8,0.55);
+      return '<div class="item'+(i===nnSel?' sel':'')+'" data-nn="'+i+'" style="border-left-color:'+c+'">'+
+        '<div class="nm"><span>'+n.name+'</span><span style="color:'+c+'">'+(n.acc===null?'—':(n.acc*100).toFixed(0)+'%')+'</span></div>'+
+        '<div class="sub">'+n.kind+' · '+(n.status||'')+(n.shadow?' <span class="pillbig" style="color:var(--magenta);border-color:var(--magenta)">shadow</span>':'')+'</div></div>';
+    }).join('') : '<span class="placeholder">no networks (recovering?)</span>';
+    var n=NN[nnSel];
+    el('nn-detail').innerHTML = n ? (
+      '<h3 style="color:'+(n.acc===null?'var(--dim)':bandColor(n.acc,0.8,0.55))+'">'+n.name+
+        (n.shadow?' <span class="pillbig" style="color:var(--magenta);border-color:var(--magenta)">shadow — not live-scoring</span>':'')+'</h3>'+
+      '<div class="deck">'+n.deck+'</div>'+ kvTable(n.detail)
+    ) : '<span class="placeholder">select a network…</span>';
+  }
+
+  function renderDream(){
+    var da=(SNAP&&SNAP.dream_artifacts)||{}, b=da.buffer||{};
+    el('dream-tot').innerHTML=
+      '<span><div class="k">created</div><b>'+(num(b.total_created)||0)+'</b></span>'+
+      '<span><div class="k">promoted</div><b style="color:var(--green)">'+(num(b.total_promoted)||0)+'</b></span>'+
+      '<span><div class="k">held</div><b style="color:var(--amber)">'+(num(b.total_held)||0)+'</b></span>'+
+      '<span><div class="k">discarded</div><b>'+(num(b.total_discarded)||0)+'</b></span>'+
+      '<span><div class="k">quarantined</div><b style="color:'+((num(b.total_quarantined)||0)>0?'var(--red)':'var(--text)')+'">'+(num(b.total_quarantined)||0)+'</b></span>'+
+      '<span><div class="k">buffer</div><b>'+(num(b.buffer_size)||0)+' / '+(num(b.buffer_capacity)||0)+'</b></span>';
+    ART = da.recent_artifacts||[];
+    if(artSel>=ART.length) artSel=-1;
+    el('dream-list').innerHTML = ART.length ? ART.map(function(a,i){
+      var st=(a.state||a.status||'?');
+      var c = st==='promoted'?'var(--green)':(st==='held'?'var(--amber)':(st==='discarded'||st==='quarantined'?'var(--red)':'var(--dim)'));
+      return '<div class="item'+(i===artSel?' sel':'')+'" data-art="'+i+'" style="border-left-color:'+c+'">'+
+        '<div class="nm"><span>'+cap(a.type||a.artifact_type||'artifact')+'</span><span style="color:'+c+'">'+st+'</span></div>'+
+        '<div class="sub">'+(a.created?ago(num(a.created)):'')+(a.confidence!=null?(' · conf '+f3(a.confidence)):'')+'</div></div>';
+    }).join('') : '<span class="placeholder">buffer idle — no artifacts in the cycle right now. Totals above are cumulative.</span>';
+    el('dream-detail').innerHTML = (artSel>=0&&ART[artSel]) ? (
+      '<h3>'+cap(ART[artSel].type||'artifact')+'</h3><div class="deck">dream consolidation artifact · quality-gate verdict + provenance</div>'+kvTable(ART[artSel])
+    ) : '<span class="placeholder">select an artifact… (none buffered while the cycle is idle)</span>';
+  }
+
+  function renderPTC(){
+    var pt=(SNAP&&SNAP.policy_training)||{};
+    var hist=pt.loss_history;
+    if(!Array.isArray(hist)||!hist.length){
+      el('ptc').innerHTML='<span class="placeholder">no training runs recorded this session (recovering) — in-memory loss history is empty on a freshly-rebooted brain.</span>';
+      return;
+    }
+    // most recent ~5 runs, newest first.
+    var runs=hist.slice(-5).reverse();
+    el('ptc').innerHTML=runs.map(function(r){
+      var fl=num(r.final_loss), ep=num(r.epochs);
+      // lower loss is better => band on (1-loss). null loss stays dim, never green.
+      var flCol=fl===null?'var(--dim)':bandColor(1-fl,0.9,0.8);
+      var losses=(Array.isArray(r.epoch_losses)?r.epoch_losses:[]).map(num).filter(function(v){return v!==null;});
+      var spark;
+      if(losses.length){
+        var mx=Math.max.apply(null,losses), mn=Math.min.apply(null,losses), span=(mx-mn)||1;
+        spark=losses.map(function(v,i){
+          var h=12+((v-mn)/span)*88; // 12..100% of track height; taller bar = higher loss
+          var last=(i===losses.length-1);
+          return '<div class="sb'+(last?' last':'')+'" style="height:'+h.toFixed(0)+'%" title="epoch '+(i+1)+': '+v.toFixed(4)+'"></div>';
+        }).join('');
+      } else {
+        spark='<span class="placeholder" style="align-self:center">no per-epoch losses</span>';
+      }
+      var first=losses.length?losses[0]:null, lastv=losses.length?losses[losses.length-1]:null;
+      return '<div class="ptc-run" style="border-left-color:'+flCol+'">'+
+        '<div class="hd"><span>final loss</span><span class="fl" style="color:'+flCol+'">'+f3(fl)+'</span></div>'+
+        '<div class="meta"><span>'+(ep===null?'—':ep+' epochs')+'</span><span>'+ago(r.timestamp)+'</span></div>'+
+        '<div class="spark">'+spark+'</div>'+
+        '<div class="ptc-cap"><span>start '+(first===null?'—':first.toFixed(3))+'</span><span>end '+(lastv===null?'—':lastv.toFixed(3))+'</span></div>'+
+      '</div>';
+    }).join('');
+  }
+
+  el('nn-list').addEventListener('click', function(e){ var t=e.target.closest('[data-nn]'); if(t){ nnSel=+t.getAttribute('data-nn'); renderNN(); } });
+  el('dream-list').addEventListener('click', function(e){ var t=e.target.closest('[data-art]'); if(t){ artSel=+t.getAttribute('data-art'); renderDream(); } });
+
+  function fmtDur(s){ s=num(s); if(s===null) return '—'; if(s<60) return s.toFixed(0)+'s'; if(s<3600) return (s/60).toFixed(0)+'m'; if(s<86400) return (s/3600).toFixed(1)+'h'; return (s/86400).toFixed(1)+'d'; }
+  function renderDistill(){
+    var H=(SNAP&&SNAP.hemisphere)||{};
+    var dist=H.distillation||{}, teachers=dist.teachers||{};
+    var tnames=Object.keys(teachers);
+    var hs=(H.hemisphere_state||{}).hemispheres||[];
+    var live=hs.filter(function(h){ var st=(h.status||'').toLowerCase(); return st==='active'||st==='promoted'||h.promoted===true; }).length;
+    var totSig=num(dist.total_signals), totQ=num(dist.total_quarantined);
+    if(totSig===null){ totSig=0; tnames.forEach(function(t){ totSig+=num(teachers[t].total)||0; }); }
+    if(totQ===null){ totQ=0; tnames.forEach(function(t){ totQ+=num(teachers[t].quarantined)||0; }); }
+    el('distill-tot').innerHTML=
+      '<span><div class="k">teacher streams</div><b>'+tnames.length+'</b></span>'+
+      '<span><div class="k">signals captured</div><b>'+totSig+'</b></span>'+
+      '<span><div class="k">quarantined</div><b style="color:'+(totQ>0?'var(--amber)':'var(--text)')+'">'+totQ+'</b></span>'+
+      '<span><div class="k">lived / synthetic</div><b><span style="color:var(--green)">'+(num(dist.total_lived)||0)+'</span> / <span style="color:var(--amber)">'+(num(dist.total_synthetic)||0)+'</span></b></span>'+
+      '<span><div class="k">student NNs</div><b>'+hs.length+'</b></span>'+
+      '<span><div class="k">active networks</div><b style="color:'+(live>0?'var(--green)':'var(--dim)')+'">'+live+'</b></span>';
+    var g=H.tier1_gating||{};
+    var disabled=g.disabled_for_session||[];
+    var cooldowns=g.regression_cooldown_remaining_s||{};
+    var cd=Object.keys(cooldowns).filter(function(k){ return (num(cooldowns[k])||0)>0; });
+    var gnote='Tier-1 gating: ';
+    if((disabled.length||0)===0 && cd.length===0) gnote+='<span style="color:var(--green)">no focuses disabled, no regression cooldowns active</span>'+(g.accuracy_floor!=null?(' · accuracy floor '+f3(g.accuracy_floor)):'');
+    else gnote+=(disabled.length?('<b style="color:var(--red)">disabled this session: '+disabled.map(cap).join(', ')+'</b>'):'')+(cd.length?((disabled.length?' · ':'')+'<b style="color:var(--amber)">regression cooldown: '+cd.map(function(k){return cap(k)+' '+fmtDur(cooldowns[k]);}).join(', ')+'</b>'):'');
+    el('distill-gating').innerHTML=gnote;
+    tnames.sort(function(a,b){ return (num(teachers[b].total)||0)-(num(teachers[a].total)||0); });
+    el('distill-teachers').innerHTML = tnames.length ? tnames.map(function(t){
+      var d=teachers[t]||{}, tot=num(d.total)||0, q=num(d.quarantined)||0, buf=num(d.buffer_size)||0;
+      var qrate=tot>0?q/tot:0;
+      var col=qrate>=0.2?'var(--red)':(qrate>=0.05?'var(--amber)':'var(--green)');
+      return '<div class="tcard" style="border-left-color:'+col+'">'+
+        '<div class="nm"><span>'+t+'</span><span>'+tot+'</span></div>'+
+        '<div class="row"><span>quarantined</span><b style="color:'+col+'">'+q+(tot>0?(' ('+(qrate*100).toFixed(0)+'%)'):'')+'</b></div>'+
+        '<div class="row"><span>lived / synthetic</span><b>'+(num(d.lived)||0)+' / '+(num(d.synthetic)||0)+'</b></div>'+
+        '<div class="row"><span>buffer</span><b>'+buf+'</b></div>'+
+        '<div class="row"><span>last signal</span><b>'+fmtDur(d.last_seen_s)+' ago</b></div>'+
+      '</div>';
+    }).join('') : '<span class="placeholder">no teacher streams (recovering?)</span>';
+    var sp=(SNAP&&SNAP.skill_acquisition_specialist)||{};
+    function kv(k,v,color){ return '<span><div class="k">'+k+'</div><b'+(color?' style="color:'+color+'"':'')+'>'+v+'</b></span>'; }
+    el('distill-spec').innerHTML = (sp&&Object.keys(sp).length) ? (
+      kv('maturity', sp.maturity||'—')+
+      kv('synthetic acc', num(sp.synthetic_accuracy)!=null?(sp.synthetic_accuracy*100).toFixed(0)+'%':'—')+
+      kv('live-shadow acc', num(sp.live_shadow_accuracy)!=null?(sp.live_shadow_accuracy*100).toFixed(0)+'%':'unmeasured', num(sp.live_shadow_accuracy)==null?'var(--amber)':null)+
+      kv('reps lived/synth', (num(sp.signals_lived)||0)+' / '+(num(sp.signals_synthetic)||0))+
+      kv('networks', num(sp.network_count)||0)+
+      kv('promotion', sp.promotion_eligible?'eligible':'not yet', sp.promotion_eligible?'var(--green)':'var(--dim)')+
+      kv('status', sp.status||'—')
+    ) : '<span class="placeholder">skill-acquisition specialist unavailable</span>';
+  }
+  function renderBanner(){ el('mode').textContent = (NN.length+' networks · '+( ((SNAP&&SNAP.dream_artifacts&&SNAP.dream_artifacts.buffer)||{}).total_created || 0 )+' dream artifacts'); }
+  function renderRecovery(){ el('recovery').style.display='none'; }
+  function renderAll(){ renderRecovery(); renderNN(); renderDream(); renderDistill(); renderPTC(); renderBanner(); }
+
+  function refresh(){
+    Promise.allSettled([fetchJSON('/api/full-snapshot'), fetchJSON('/api/self-improve/specialists')]).then(function(r){
+      if(r[0].status==='fulfilled'){ SNAP=r[0].value; lastOkTs=Date.now(); }
+      if(r[1].status==='fulfilled') SPEC=r[1].value;
+      if(SNAP) renderAll(); else el('nn-list').innerHTML='<span class="offline">full-snapshot offline</span>';
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 8000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

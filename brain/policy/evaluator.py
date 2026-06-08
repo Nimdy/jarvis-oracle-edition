@@ -38,6 +38,9 @@ DEVIATION_BONUS = 0.08
 NOISE_NOOP_SIGMA_MULT = 2.5
 EXPLORATION_SIGMA = 0.03
 EMA_ALPHA = 0.1
+# DEPRECATED 2026-05-29: retained for back-compat/doc reference only. No longer
+# applied — the circular stable-state "diversity bonus" was removed from win
+# scoring (see score_retrospective). Exploration is driven by EXPLORATION_SIGMA.
 _DIVERSITY_BONUS_FRAC = 0.3
 
 
@@ -198,21 +201,27 @@ class PolicyEvaluator:
         )
 
     def score_retrospective(self, actual_reward: float) -> None:
-        """Score the pending shadow using reward level + improvement signal.
+        """Score the pending shadow by correlating NN divergence with the
+        MEASURED reward change (honest, non-circular).
 
-        Scoring logic:
-        - Base: both kernel and NN start at actual_reward.
-        - If NN proposed something meaningfully different (not noise-level noop):
-          * reward improved (delta > 0.02): NN gets full deviation bonus
-          * reward degraded (delta < -0.02): kernel gets credit
-          * reward stable AND system healthy (reward > 0.7): NN gets a
-            proportional diversity bonus so it can earn wins even during
-            stable operation. This is critical for learning — a stable system
-            should still explore, and novel proposals that don't hurt should
-            be rewarded.
-          * reward stable AND system struggling (reward <= 0.7): smaller
-            diversity bonus (NN should prove itself more when things aren't great)
-        - No-ops (including noise-level deviations) are scored as exact ties.
+        The NN's proposal is never executed, so ``actual_reward`` is always the
+        KERNEL's outcome — a true causal counterfactual is not observable in
+        pure shadow. We therefore only credit/charge the NN when its divergent
+        proposal COINCIDES with a measured reward change:
+        - reward improved (delta > 0.02) + NN diverged: NN gets the deviation
+          bonus (correlational evidence it may have helped).
+        - reward degraded (delta < -0.02) + NN diverged: kernel gets credit.
+        - reward stable: TIE — with the proposal unexecuted there is no evidence
+          the NN would have done better, so it earns nothing.
+        - No-ops (incl. noise-level deviations) are scored as exact ties.
+
+        Fidelity fix (2026-05-29): the previous "diversity bonus" credited the
+        NN with a win simply for deviating while the system was healthy, which
+        made the win-rate ~1.0 by construction and drove promotion on no causal
+        evidence (a circular self-score). It has been removed from win scoring.
+        Exploration is still driven by action-sampling noise (EXPLORATION_SIGMA);
+        a true causal win-rate requires interleaved execution (bandit/A-B),
+        which is gated future work and intentionally not done in pure shadow.
         """
         pending = self._pending_shadow
         if pending is None:
@@ -240,13 +249,12 @@ class PolicyEvaluator:
         reward_delta = (actual_reward - self._prev_reward) if self._prev_reward is not None else 0.0
 
         if reward_delta > 0.02:
-            nn_reward += scaled_bonus
+            nn_reward += scaled_bonus            # divergence coincided with improvement
         elif reward_delta < -0.02:
-            kernel_reward += scaled_bonus * 0.5
-        elif actual_reward > 0.7:
-            nn_reward += scaled_bonus * 0.5
-        elif actual_reward > 0.1:
-            nn_reward += scaled_bonus * _DIVERSITY_BONUS_FRAC
+            kernel_reward += scaled_bonus * 0.5  # divergence coincided with degradation
+        # else: reward stable -> no margin -> tie. No diversity bonus: with the
+        # NN proposal unexecuted, a deviation that neither helped nor hurt is not
+        # evidence of a win (see docstring — removed circular stable-state credit).
 
         self.record_shadow(kernel_reward, nn_reward, nn_is_noop=False)
         self._prev_reward = actual_reward
@@ -337,4 +345,17 @@ class PolicyEvaluator:
             "noop_rate": round(report.noop_rate, 3),
             "win_margin_ema": round(self._win_margin_ema, 4),
             "tie_margin_threshold": TIE_MARGIN,
+            # #9 labeling sweep: the policy NN win-rates are SHADOW comparisons (NN vs the
+            # live kernel), scored internally — not external measurements, and advisory /
+            # non-authoritative until the NN earns control via promotion. Labels only.
+            "provenance": {
+                "nn_win_rate": {
+                    "is_measurement": False, "kind": "shadow_only",
+                    "note": "shadow NN-vs-kernel comparison, internally scored; advisory/"
+                            "non-authoritative until promotion"},
+                "nn_decisive_win_rate": {
+                    "is_measurement": False, "kind": "shadow_only",
+                    "note": "shadow NN-vs-kernel comparison, internally scored; advisory/"
+                            "non-authoritative until promotion"},
+            },
         }

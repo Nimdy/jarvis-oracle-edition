@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Circular-Yardstick Monitor (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .dual{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:4px;}
+    .stat{border:1px solid var(--line);border-radius:5px;padding:11px;text-align:center;background:rgba(3,8,14,.4);}
+    .stat .k{font-size:9.5px;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;}
+    .stat .v{font-size:30px;font-weight:700;margin:4px 0 2px;font-variant-numeric:tabular-nums;}
+    .stat .s{font-size:9px;color:var(--dim);}
+    .caveat{margin-top:10px;font-size:10px;color:var(--amber);border-top:1px dashed var(--line);padding-top:7px;}
+    .caveat b{color:#ffd27a;}
+    .tally{height:22px;border:1px solid var(--line);border-radius:5px;overflow:hidden;display:flex;margin:8px 0 4px;}
+    .tally span{display:flex;align-items:center;justify-content:center;font-size:9px;color:#03040a;font-weight:700;white-space:nowrap;}
+    .marg{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .pillrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;}
+    .pill{border:1px solid var(--line);border-radius:4px;padding:4px 9px;font-size:10px;}
+    .pill .pk{color:var(--muted);font-size:9px;} .pill .pv{font-variant-numeric:tabular-nums;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · CIRCULAR-YARDSTICK MONITOR</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Both sides of every self-referential metric, side by side — the introspective proxy next to the honest counterweight — so an inflated number can't pass as measured truth.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col6">
+      <h2>World-Model · persistence vs predictive</h2>
+      <div class="note">"Accuracy" pooled is dominated by near-tautological persistence rules ("a stable thing stays stable"). The predictive split is the real foresight signal — shown separately so the padding is visible.</div>
+      <div class="dual" id="wm-dual"></div>
+      <div class="caveat" id="wm-caveat"></div>
+      <div class="kv" id="wm-kv" style="margin-top:9px;"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Policy · diversity-bonus vs truth</h2>
+      <div class="note">The headline NN "win-rate" carries a diversity bonus (×0.3) that rewards <em>being different</em>, not <em>being better</em>. The raw shadow A/B tally and the win-margin are the honest counterweight.</div>
+      <div class="tally" id="pol-tally"></div>
+      <div class="pillrow" id="pol-pills"></div>
+      <div class="caveat" id="pol-caveat"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Autonomy A/B · vacuity monitor</h2>
+      <div class="note">An A/B that compares two arms is only meaningful if something executes on them. When scores are all 0.0 and agreement is forced to 1.0 because nothing ran, it is <em>live-but-vacuous</em>, not a passing test.</div>
+      <div class="kv" id="ab-kv"></div>
+      <div class="caveat" id="ab-caveat"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el;
+  var WM=null, POL=null, AB=null, lastOkTs=0;
+  V2.renderNav('/static/v2/yardsticks.html');
+
+  function statBlock(k, v, sub, color){
+    return '<div class="stat"><div class="k">'+k+'</div>'+
+      '<div class="v" style="color:'+(color||'var(--text)')+'">'+(v===null?'—':v)+'</div>'+
+      '<div class="s">'+(sub||'')+'</div></div>';
+  }
+
+  function renderWorldModel(){
+    var lg=(WM&&WM.legacy)||{};
+    var pers=num(lg.persistence_accuracy), pred=num(lg.predictive_accuracy), ovr=num(lg.overall_accuracy);
+    el('wm-dual').innerHTML=
+      statBlock('Persistence', pers===null?null:pers.toFixed(3), (num(lg.persistence_total)||0)+' validations', bandColor(pers,0.8,0.6))+
+      statBlock('Predictive', pred===null?null:pred.toFixed(3), (num(lg.predictive_total)||0)+' validations', bandColor(pred,0.8,0.6));
+    el('wm-caveat').innerHTML='Pooled "overall" = <b>'+(ovr===null?'—':ovr.toFixed(3))+'</b> — tautology-padded by persistence; <b>do not cite alone</b>. Cite the predictive number for foresight.';
+    el('wm-kv').innerHTML=
+      '<span>rules <b>'+(num(lg.rules_total)||0)+'</b></span>'+
+      '<span>validated <b>'+(num(lg.total_validated)||0)+'</b></span>'+
+      '<span>hits <b>'+(num(lg.total_hits)||0)+'</b></span>'+
+      '<span>misses <b>'+(num(lg.total_misses)||0)+'</b></span>';
+  }
+
+  function renderPolicy(){
+    var p=POL||{};
+    var w=num(p.shadow_nn_wins)||0, k=num(p.shadow_kernel_wins)||0, t=num(p.shadow_ties)||0;
+    var tot=w+k+t || 1;
+    el('pol-tally').innerHTML=
+      '<span style="width:'+(w/tot*100)+'%;background:var(--green)" title="NN wins">'+(w?('NN '+w):'')+'</span>'+
+      '<span style="width:'+(k/tot*100)+'%;background:var(--cyan)" title="kernel wins">'+(k?('K '+k):'')+'</span>'+
+      '<span style="width:'+(t/tot*100)+'%;background:#2a3543;color:var(--muted)" title="ties">'+(t?('ties '+t):'')+'</span>';
+    var wr=num(p.nn_win_rate), dwr=num(p.nn_decisive_win_rate), margin=num(p.win_margin_ema);
+    var marginColor = margin===null?'var(--dim)':(margin>0?'var(--green)':(margin<0?'var(--red)':'var(--muted)'));
+    el('pol-pills').innerHTML=
+      '<span class="pill"><span class="pk">nn win-rate </span>'+V2.tag('self','×0.3 bonus')+' <span class="pv" style="color:var(--amber)">'+(wr===null?'—':(wr*100).toFixed(0)+'%')+'</span></span>'+
+      '<span class="pill"><span class="pk">decisive </span><span class="pv">'+(dwr===null?'—':(dwr*100).toFixed(0)+'%')+'</span></span>'+
+      '<span class="pill"><span class="pk">win-margin ema </span><span class="pv marg" style="font-size:13px;color:'+marginColor+'">'+(margin===null?'—':margin.toFixed(3))+'</span></span>'+
+      '<span class="pill"><span class="pk">counterfactual </span><span class="pv" style="color:var(--dim)">not measured</span></span>';
+    var honest='';
+    if(margin!==null && margin<=0){
+      honest='Honest read: across <b>'+(w+k+t)+'</b> shadow decisions ('+t+' ties) the win-margin is <b style="color:var(--red)">'+margin.toFixed(3)+'</b> — the NN is <b>not winning on merit</b>; the '+(wr===null?'':((wr*100).toFixed(0)+'% '))+'"win-rate" is the diversity bonus talking. A true counterfactual win-rate (sans bonus) is not computed.';
+    } else {
+      honest='Win-margin <b>'+(margin===null?'—':margin.toFixed(3))+'</b>. The headline win-rate still carries the ×0.3 diversity bonus; counterfactual win-rate is not computed.';
+    }
+    honest += ' mode <b>'+(p.mode||'—')+'</b>'+(p.auto_disabled?' · <b style="color:var(--red)">auto-disabled</b>':'')+'.';
+    el('pol-caveat').innerHTML=honest;
+  }
+
+  function renderAutonomyAB(){
+    var comps=(AB&&AB.comparisons)||[];
+    var c=comps.length?comps[comps.length-1]:null;
+    if(!c){ el('ab-kv').innerHTML='<span class="offline">no comparisons</span>'; el('ab-caveat').innerHTML=''; return; }
+    el('ab-kv').innerHTML=
+      '<span>episodes <b>'+(num(c.episodes_compared)||0)+'</b></span>'+
+      '<span>current score <b>'+f3(c.current_avg_score)+'</b></span>'+
+      '<span>baseline score <b>'+f3(c.baseline_avg_score)+'</b></span>'+
+      '<span>would-execute <b>'+(num(c.current_would_execute)||0)+' / '+(num(c.baseline_would_execute)||0)+'</b></span>'+
+      '<span>agreement <b>'+((num(c.agreement_rate)||0)*100).toFixed(0)+'%</b></span>'+
+      '<span class="asof">'+ago(c.timestamp)+'</span>';
+    var vacuous = (num(c.current_avg_score)===0 && num(c.baseline_avg_score)===0 && num(c.current_would_execute)===0 && num(c.baseline_would_execute)===0);
+    el('ab-caveat').innerHTML = vacuous
+      ? '<b>LIVE-BUT-VACUOUS [gated — by design]</b>: both arms score 0.0 and 0/0 would execute, so the 100% agreement is "nothing happened on either side," not a clean A/B. Becomes meaningful only once real autonomy decisions flow.'
+      : 'Real decisions are flowing — comparison is meaningful.';
+  }
+
+  function renderRecovery(){
+    // reuse the snapshot validation_pack signal would need another fetch; keep banner off here (yardsticks are inherently "immature by design", not recovery).
+  }
+  function renderBanner(){
+    el('mode').textContent='policy '+((POL&&POL.mode)||'—')+' · wm v'+((WM&&WM.version)||'—');
+  }
+
+  function renderAll(){ renderBanner(); renderWorldModel(); renderPolicy(); renderAutonomyAB(); }
+
+  function refresh(){
+    Promise.allSettled([
+      fetchJSON('/api/world-model/diagnostics'),
+      fetchJSON('/api/policy'),
+      fetchJSON('/api/eval/autonomy-ab')
+    ]).then(function(r){
+      if(r[0].status==='fulfilled'){WM=r[0].value; lastOkTs=Date.now();}
+      if(r[1].status==='fulfilled') POL=r[1].value;
+      if(r[2].status==='fulfilled') AB=r[2].value;
+      renderAll();
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

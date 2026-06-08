@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Maturity Ladder (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .catgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+    @media(max-width:760px){.catgrid{grid-template-columns:1fr;}}
+    .catcard{border:1px solid var(--line);border-radius:5px;padding:10px 12px;background:rgba(3,8,14,.4);}
+    .catcard h3{margin:0 0 7px;font-size:10.5px;letter-spacing:.07em;color:var(--cyan);text-transform:uppercase;
+      display:flex;justify-content:space-between;}
+    .catcard h3 .cnt{color:var(--muted);font-weight:400;}
+    .grow{margin:7px 0;padding-bottom:6px;border-bottom:1px solid rgba(21,33,46,.5);}
+    .grow:last-child{border-bottom:none;}
+    .grow .gl{font-size:10.5px;color:var(--text);display:flex;justify-content:space-between;gap:6px;align-items:center;}
+    .gbadge{font-size:8px;letter-spacing:.08em;border:1px solid;border-radius:3px;padding:0 4px;white-space:nowrap;}
+    .gbar{display:grid;grid-template-columns:1fr 84px;gap:8px;align-items:center;margin:3px 0 2px;}
+    .gv{font-size:9.5px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;}
+    .ghw{font-size:8.5px;color:var(--dim);}
+    .ghw.recover{color:var(--cyan);}
+    .tl{display:flex;flex-direction:column;max-height:600px;overflow:auto;}
+    .tlrow{display:grid;grid-template-columns:1fr auto;gap:8px;padding:5px 0;border-bottom:1px solid rgba(21,33,46,.4);font-size:10px;align-items:baseline;}
+    .tlrow .tw{color:var(--text);} .tlrow .tc{color:var(--dim);font-size:9px;}
+    .tlrow .tt{color:var(--cyan);font-variant-numeric:tabular-nums;white-space:nowrap;}
+    .tlrow.never .tw{color:var(--dim);} .tlrow.never .tt{color:var(--gray);}
+    .tlhdr{font-size:9px;letter-spacing:.1em;color:var(--muted);margin:10px 0 2px;text-transform:uppercase;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · MATURITY LADDER</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Per-subsystem gate lifecycle. <em>Current</em> shown beside <em>ever-proven high-water</em> — a gate below threshold after a restart is <em>recovering</em>, not broken, and high-water is never passed off as current.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col12">
+      <h2>Maturity Overview</h2>
+      <div class="note" id="ov-note"></div>
+      <div class="kv" id="ov-kv"></div>
+    </section>
+
+    <section class="card col8">
+      <h2>Gate Ladder <span style="color:var(--dim);font-size:9px;">· current vs ever-proven</span></h2>
+      <div class="note"><span class="gbadge" style="color:var(--green);border-color:var(--green)">ACTIVE</span> met now &nbsp; <span class="gbadge" style="color:var(--cyan);border-color:var(--cyan)">RECOVERING</span> ever-met, rebuilding &nbsp; <span class="gbadge" style="color:var(--amber);border-color:var(--amber)">PRE-MATURE</span> never proven (gated by design)</div>
+      <div class="catgrid" id="ladder"></div>
+    </section>
+
+    <section class="card col4">
+      <h2>Gate-Crossing Timeline</h2>
+      <div class="note">When each gate <em>first</em> crossed its threshold (from <code>ever_met_ts</code>). Real evidence timestamps — gates never proven are listed honestly, not given a guessed date.</div>
+      <div class="tl" id="timeline"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, ago=V2.ago, el=V2.el;
+  var SNAP=null, lastOkTs=0;
+  V2.renderNav('/static/v2/maturity.html');
+
+  function commas(v){ v=num(v); return v===null?'—':Math.round(v).toLocaleString(); }
+
+  function statusInfo(g){
+    if(g.status==='active') return {txt:'ACTIVE', color:'var(--green)'};
+    if(g.ever_met===true)   return {txt:'RECOVERING', color:'var(--cyan)'};
+    return {txt:'PRE-MATURE', color:'var(--amber)'};
+  }
+  function hwText(g){
+    if(g.ever_met===true){
+      var t='↺ ever-met '+ago(g.ever_met_ts);
+      var bc=num(g.best_current), th=num(g.threshold);
+      if(bc!==null && th!==null && bc>th) t+=' · peak '+commas(bc);
+      if(g.status!=='active') t+=' · rebuilding (high-water retained, not inflated)';
+      return {t:t, recover:g.status!=='active'};
+    }
+    return {t:'never proven — pre-mature [gated by design]', recover:false};
+  }
+
+  function renderLadder(){
+    var mt=(SNAP&&SNAP.maturity_tracker)||{}, cats=mt.categories||[];
+    var html=cats.map(function(c){
+      var gates=c.gates||[];
+      var active=gates.filter(function(g){return g.status==='active';}).length;
+      var rows=gates.map(function(g){
+        var info=statusInfo(g), hw=hwText(g);
+        var pct=num(g.pct); var w=pct===null?0:Math.max(0,Math.min(100,pct));
+        return '<div class="grow">'+
+          '<div class="gl"><span>'+(g.label||g.id)+'</span>'+
+            '<span class="gbadge" style="color:'+info.color+';border-color:'+info.color+'">'+info.txt+'</span></div>'+
+          '<div class="gbar"><div class="track"><div class="fill" style="width:'+w.toFixed(0)+'%;background:'+info.color+'"></div></div>'+
+            '<span class="gv">'+(g.display||'—')+'</span></div>'+
+          '<div class="ghw'+(hw.recover?' recover':'')+'">'+hw.t+'</div>'+
+        '</div>';
+      }).join('');
+      return '<div class="catcard"><h3>'+(c.label||c.id)+'<span class="cnt">'+active+' / '+gates.length+' active</span></h3>'+rows+'</div>';
+    }).join('');
+    el('ladder').innerHTML=html||'<div class="unpop">no categories</div>';
+  }
+
+  function renderTimeline(){
+    var mt=(SNAP&&SNAP.maturity_tracker)||{}, cats=mt.categories||[];
+    var all=[];
+    cats.forEach(function(c){ (c.gates||[]).forEach(function(g){ all.push({g:g, cat:c.label||c.id}); }); });
+    var met=all.filter(function(x){return x.g.ever_met===true && num(x.g.ever_met_ts)!==null;})
+               .sort(function(a,b){return num(b.g.ever_met_ts)-num(a.g.ever_met_ts);});
+    var never=all.filter(function(x){return x.g.ever_met!==true;});
+    var html=met.map(function(x){
+      return '<div class="tlrow"><span class="tw">'+(x.g.label||x.g.id)+' <span class="tc">· '+x.cat+'</span></span>'+
+        '<span class="tt">'+ago(x.g.ever_met_ts)+'</span></div>';
+    }).join('');
+    if(never.length){
+      html+='<div class="tlhdr">never proven ('+never.length+')</div>';
+      html+=never.map(function(x){
+        return '<div class="tlrow never"><span class="tw">'+(x.g.label||x.g.id)+' <span class="tc">· '+x.cat+'</span></span><span class="tt">—</span></div>';
+      }).join('');
+    }
+    el('timeline').innerHTML=html||'<div class="unpop">no gates</div>';
+  }
+
+  function renderOverview(){
+    var mt=(SNAP&&SNAP.maturity_tracker)||{}, ob=(SNAP&&SNAP.oracle_benchmark)||{}, sr=ob.stage_restore||{};
+    var ag=num(mt.active_gates), tg=num(mt.total_gates), eg=num(mt.ever_active_gates);
+    var rebuilding=(eg!==null&&ag!==null)?Math.max(0,eg-ag):null;
+    el('ov-kv').innerHTML=
+      '<span>active <b>'+(ag===null?'—':ag)+' / '+(tg===null?'—':tg)+'</b></span>'+
+      '<span>ever-active <b>'+(eg===null?'—':eg)+'</b></span>'+
+      '<span>stage <b>'+(ob.evolution_stage||'—')+'</b></span>'+
+      '<span>restore trust <b>'+(sr.trust||'—')+'</b> ('+(num(sr.anomalies)||0)+' anomalies)</span>';
+    el('ov-note').innerHTML = (rebuilding!==null && rebuilding>0)
+      ? '<b style="color:var(--cyan)">'+rebuilding+'</b> gate(s) ever-active are below threshold right now — rebuilding after a restart. That is recovery debt, not regression; high-water is retained but never shown as current.'
+      : 'All ever-active gates are currently active.';
+  }
+
+  function renderRecovery(){
+    var vp=(SNAP&&SNAP.validation_pack)||{}, reg=num(vp.checks_regressed)||0, box=el('recovery');
+    if(vp.status==='blocked' && reg>0){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — '+reg+' validation check(s) rebuilding: '+(vp.regressed_check_ids||[]).join(', ')+
+        '.<span class="why">Gates and checks drop to pre-mature on each clean restart and re-earn as they soak — by design.</span>';
+    } else { box.style.display='none'; }
+  }
+
+  function renderBanner(){
+    var b=(SNAP&&SNAP.banner)||{};
+    el('mode').textContent='mode '+(b.mode||'—')+' · uptime '+V2.fmtUptime(b.uptime_s)+' · fresh '+(num(b.data_freshness_s)!==null?b.data_freshness_s.toFixed(1)+'s':'—');
+  }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderOverview(); renderLadder(); renderTimeline(); }
+
+  function refresh(){
+    fetchJSON('/api/eval/snapshot').then(function(s){ SNAP=s; lastOkTs=Date.now(); renderAll(); })
+      .catch(function(){ if(!SNAP) el('ladder').innerHTML='<div class="offline">snapshot offline</div>'; });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

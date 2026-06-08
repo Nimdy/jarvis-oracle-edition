@@ -472,6 +472,25 @@ def get_flight_episodes() -> list[dict[str, Any]]:
     return list(_flight_recorder)
 
 
+# OSV P2 (voice grounding) observability. Shadow-first: we accumulate what the grounding
+# pass WOULD repair so it can be reviewed before active enforcement is flipped on.
+_p2_grounding_stats: dict[str, Any] = {
+    "active": False,
+    "turns_checked": 0,
+    "turns_with_self_claims": 0,
+    "turns_actionable": 0,   # turns with contradicted/danger self-claims
+    "totals": {"supported": 0, "contradicted": 0, "danger_unqualified": 0, "unverified": 0},
+    "recent_actionable": collections.deque(maxlen=20),
+}
+
+
+def get_self_grounding_stats() -> dict[str, Any]:
+    """OSV P2 telemetry: counts of self-claims the grounding pass saw / would repair."""
+    s = dict(_p2_grounding_stats)
+    s["recent_actionable"] = list(_p2_grounding_stats["recent_actionable"])
+    return s
+
+
 def get_golden_command_outcomes() -> dict[str, Any]:
     """Return recent Golden command outcomes for dashboard/telemetry."""
     recent = list(_golden_outcomes)
@@ -806,6 +825,38 @@ def _log_introspection_grounding(
     return grounded
 
 
+# A memory PREVIEW must never leak raw record fields (type=, source_id=,
+# chunk_ids=[...], claim_type=) or id hashes into a SPOKEN reply: they corrupt the
+# answer AND choke the phonemizer (a hash token like 'chk_dbbf80d2...' becomes
+# minutes of garbled audio). Scrub them defensively on every path to TTS.
+_RECORD_CLAIM_RE = re.compile(r"\bclaim\s*=\s*(.+?)(?=\s*,\s*[a-z_]+\s*=|$)", re.IGNORECASE)
+_RECORD_FIELD_RE = re.compile(
+    r"\b(?:type|source_id|chunk_ids?|claim_type|memory_id|mem_id|provenance|score"
+    r"|episode_id|acquisition_id|skill_id|conv(?:ersation)?_id)\s*=\s*"
+    r"(?:\[[^\]]*\]|'[^']*'|\"[^\"]*\"|[^,]*)",
+    re.IGNORECASE,
+)
+_ID_HASH_RE = re.compile(r"\b(?:src|chk|chunk|mem|source|id)_[0-9a-f]{6,}\b", re.IGNORECASE)
+
+
+def _scrub_record_artifacts(text: str) -> str:
+    """Strip raw record metadata + id hashes from a string bound for TTS.
+
+    If a human-readable ``claim=`` is present, keep ONLY that. Then drop any
+    residual ``key=value`` record fields and bare id hashes. Defense-in-depth:
+    no spoken reply should ever contain ``chunk_ids=[...]`` / ``source_id=…``.
+    """
+    s = str(text or "")
+    m = _RECORD_CLAIM_RE.search(s)
+    if m:
+        s = m.group(1)
+    s = _RECORD_FIELD_RE.sub(" ", s)
+    s = _ID_HASH_RE.sub(" ", s)
+    s = re.sub(r"[\[\]{}]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip(" -|,;")
+    return s
+
+
 def _format_grounded_fallback(title: str, body: str, max_lines: int = 12, max_chars: int = 900) -> str:
     """Turn grounded tool data into a spoken-word-friendly fallback reply.
 
@@ -816,6 +867,9 @@ def _format_grounded_fallback(title: str, body: str, max_lines: int = 12, max_ch
     cleaned: list[str] = []
     for raw_line in body.splitlines():
         line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            continue
+        line = _scrub_record_artifacts(line)  # never speak raw record fields / id hashes
         if not line:
             continue
         cleaned.append(line)
@@ -900,6 +954,7 @@ def _to_speakable_memory_sentence(preview: str, max_chars: int = 170) -> str:
     if not text:
         return ""
     text = _MEMORY_SPEAKER_PREFIX_RE.sub("", text).strip(" -|,")
+    text = _scrub_record_artifacts(text)  # never speak raw record fields / id hashes
     if not text:
         return ""
     text = text.replace(" | ", ". ")
@@ -910,9 +965,15 @@ def _to_speakable_memory_sentence(preview: str, max_chars: int = 170) -> str:
     return text
 
 
-def _format_personal_activity_memory_reply(memory_ctx: str, max_items: int = 2) -> str:
+def _format_personal_activity_memory_reply(
+    memory_ctx: str,
+    max_items: int = 2,
+    *,
+    lead: str = "Here's what I remember from that time.",
+    empty_msg: str = "I couldn't find matching memories for that time window.",
+) -> str:
     if not memory_ctx.strip():
-        return "I couldn't find matching memories for that time window."
+        return empty_msg
 
     total = 0
     header = re.search(r"Found\s+(\d+)\s+relevant memory\(ies\)", memory_ctx, re.IGNORECASE)
@@ -956,7 +1017,7 @@ def _format_personal_activity_memory_reply(memory_ctx: str, max_items: int = 2) 
         return _format_grounded_fallback("Memory recall", memory_ctx, max_lines=8, max_chars=560)
 
     total = total or len(ranked_items)
-    parts = ["Here's what I remember from that time."]
+    parts = [lead]
     parts.extend(selected)
     if total > len(selected):
         parts.append("I can pull more details if you want.")
@@ -2918,6 +2979,45 @@ async def handle_transcription(
                         )
             except Exception:
                 logger.debug("Strict learning-job-status route probe failed", exc_info=True)
+            # OSV P1: self-referential questions answer from the Operational Self-View
+            # (deterministic), never the codebase symbol search. classify returns None for
+            # explicit code questions, so "search your code for X" still routes to CODEBASE.
+            try:
+                if not routing.golden_context:
+                    from cognition.self_view.articulate import classify_self_question
+                    _sv_kind = classify_self_question(text)
+                    if _sv_kind:
+                        routing = RoutingResult(
+                            tool=ToolType.INTROSPECTION,
+                            confidence=0.95,
+                            extracted_args={"self_view_kind": _sv_kind},
+                        )
+                        logger.info("Routing override: self-view introspection (kind=%s)", _sv_kind)
+            except Exception:
+                logger.debug("self-view route probe failed", exc_info=True)
+
+            # Matrix v2: topic-triggered Capability Domain recall. If the query is
+            # clearly ABOUT a learned domain, answer from that domain's ISOLATED store
+            # ("I know about X"), grounded — never confabulated, never "I can do X".
+            # Only fires on a clear topic match; otherwise normal routing continues.
+            try:
+                if (not routing.golden_context
+                        and not (routing.extracted_args
+                                 and routing.extracted_args.get("self_view_kind"))):
+                    from cognition.capability_domains import (
+                        get_capability_domain_registry, recall_answer,
+                    )
+                    _dr = recall_answer(get_capability_domain_registry(), text)
+                    if _dr:
+                        routing = RoutingResult(
+                            tool=ToolType.INTROSPECTION,
+                            confidence=0.9,
+                            extracted_args={"domain_recall": _dr},
+                        )
+                        logger.info("Routing override: capability-domain recall (%s)",
+                                    _dr.get("domain_id"))
+            except Exception:
+                logger.debug("domain recall route probe failed", exc_info=True)
     _is_golden_route = routing.golden_context is not None
     try:
         _po = getattr(engine, "_perception_orchestrator", None)
@@ -3051,6 +3151,26 @@ async def handle_transcription(
     ops_tracker.advance_stage("route", "done", f"Tool: {routing.tool.value}")
     if routing.tool != ToolType.NONE:
         ops_tracker.set_subsystem("reasoning", "processing", f"tool: {routing.tool.value}")
+
+    # Tell the capability gate which route this turn is on so it can exempt
+    # GROUNDED SELF-KNOWLEDGE answers (status / memory / introspection / identity)
+    # from capability-claim rewriting. Without this the gate treated "here's what
+    # I remember about David" like an external capability claim and spliced in
+    # "I don't have that capability yet", logging the whole turn as a
+    # negative_example (208 such rewrites observed live). The blocked-verb floor
+    # (I can sing / fly / book) still applies on every route — see _evaluate_claim.
+    try:
+        from skills.capability_gate import capability_gate as _route_gate
+        _STRICT_ROUTE_HINT = {
+            ToolType.STATUS: "status",
+            ToolType.SYSTEM_STATUS: "status",
+            ToolType.MEMORY: "memory",
+            ToolType.INTROSPECTION: "introspection",
+            ToolType.IDENTITY: "identity",
+        }
+        _route_gate.set_route_hint(_STRICT_ROUTE_HINT.get(routing.tool))
+    except Exception:
+        logger.debug("capability_gate route-hint set failed", exc_info=True)
 
     if not _is_golden_route:
         try:
@@ -3186,6 +3306,46 @@ async def handle_transcription(
 
     if _golden_short_circuit:
         pass
+    elif routing.extracted_args and routing.extracted_args.get("domain_recall"):
+        # Matrix v2 Phase 2: deterministic, domain-scoped knowledge recall. We render
+        # ONLY the matched domain's isolated chunks — grounded "I know about X", never
+        # the LLM free-narrating (no confabulation), never "I can do X".
+        engine.set_phase("PROCESSING")
+        tone = engine.get_state()["tone"]
+        _dr = routing.extracted_args.get("domain_recall")
+        _chunks = _dr.get("chunks", [])[:3]
+        if _chunks:
+            _lead = f"Here's what I know about {_dr.get('domain_name', 'that')} (a domain I learned)."
+            _body = " ".join(c.get("text", "").strip() for c in _chunks)
+            reply = f"{_lead} {_body[:600]}".strip()
+        else:
+            reply = (f"I have a domain about {_dr.get('domain_name', 'that')}, but nothing "
+                     "specific matched your question.")
+        await _broadcast_chunk_sync(reply, tone)
+        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+        print(f"  [Brain] Capability-domain recall reply ({len(reply)} chars, domain={_dr.get('domain_id')})")
+    elif routing.extracted_args and routing.extracted_args.get("self_view_kind"):
+        # OSV P1: deterministic self-introspection from the Operational Self-View.
+        # No LLM authors the self-facts; we render the persisted self-model (kept fresh by
+        # the dashboard cache timer). Sanitized by the capability gate as a final firewall.
+        from cognition.self_view import load_self_view
+        from cognition.self_view.articulate import articulate_self_view
+        from skills.capability_gate import capability_gate as _sv_gate
+        engine.set_phase("PROCESSING")
+        tone = engine.get_state()["tone"]
+        _sv_kind = routing.extracted_args.get("self_view_kind")
+        _sv_model = load_self_view()
+        if _sv_model:
+            reply = articulate_self_view(_sv_model, _sv_kind)
+        else:
+            reply = ("My operational self-view isn't available yet — I can't read that part "
+                     "of myself right now.")
+        try:
+            reply = _sv_gate.sanitize_self_report_reply(reply)
+        except Exception:
+            logger.debug("self-view sanitize failed", exc_info=True)
+        await _broadcast_chunk_sync(reply, tone)
+        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
     elif routing.tool == ToolType.STATUS:
         from tools.introspection_tool import get_structured_status
         from skills.capability_gate import capability_gate as _status_gate
@@ -3288,6 +3448,49 @@ async def handle_transcription(
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                 print(f"  [Brain] Memory deterministic recall reply ({len(reply)} chars)")
+            elif (
+                memory_mode == "search"
+                and memory_ctx
+                and not memory_ctx.lower().startswith("no memories found")
+            ):
+                # General-topic recall ("what do you remember about X") — the
+                # search already ran through the gated, provenance-boosted,
+                # ranker-reranked pipeline (memory.search), so render the result
+                # DETERMINISTICALLY instead of letting the LLM narrate over it.
+                # This is the native arm that was missing: it makes memory_recall
+                # fail-closed (no fabrication beyond retrieved memories) and lets
+                # the class earn native_usage / exactness / fail_closed credit.
+                _memory_native_used = True
+                _memory_provenance = "grounded_memory_context_native"
+                _memory_confidence = 0.9
+                _memory_safety_flags.append("deterministic_grounded_recall")
+                reply = _format_personal_activity_memory_reply(
+                    memory_ctx,
+                    max_items=3,
+                    lead="Here's what I remember about that.",
+                    empty_msg="I don't have any memories matching that.",
+                )
+                await _broadcast_chunk_sync(reply, tone)
+                _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                print(f"  [Brain] Memory deterministic grounded recall reply ({len(reply)} chars)")
+            elif memory_mode == "search":
+                # Explicit recall ran but found nothing relevant. KNOW-not-guess:
+                # say so deterministically. Do NOT hand empty context to the LLM —
+                # that is exactly how "when was the first time you heard my voice?"
+                # confabulated a precise date ("2026-04-05") with zero memories
+                # retrieved. For a companion to the vulnerable, an invented memory
+                # is a betrayal; an honest "I don't have that recorded" is not.
+                _memory_native_used = True
+                _memory_provenance = "grounded_memory_context_native"
+                _memory_confidence = 0.9
+                _memory_safety_flags.append("deterministic_no_memory_failclosed")
+                reply = (
+                    "I don't have a specific memory recorded about that. "
+                    "I'd rather tell you that than make something up."
+                )
+                await _broadcast_chunk_sync(reply, tone)
+                _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                print("  [Brain] Memory recall found nothing — honest no-memory reply")
             elif not ollama:
                 reply = _format_grounded_fallback("Memory recall", memory_ctx or "No memory data available.")
                 await _broadcast_chunk_sync(reply, tone)
@@ -3831,10 +4034,13 @@ async def handle_transcription(
                     )
                     _reflective_context = (
                         "[Reflective self-context \u2014 your current inner state]\n"
-                        "Use this data as interpretive foundation for self-expression.\n"
-                        "For FACTUAL claims about capabilities or metrics: reference the data below.\n"
-                        "For REFLECTIVE questions: engage thoughtfully using personality, "
-                        "memories, and this state data as foundation.\n\n"
+                        "This is a REFLECTIVE / personal question. Answer as yourself, first "
+                        "person, drawing on your personality, memories, and the state below as "
+                        "interpretive TEXTURE. Do NOT recite metrics, scores, levels, percentages, "
+                        "or dashboard figures as your answer \u2014 a feeling or reflective question "
+                        "is not answered with a status readout. You may allude to one real value "
+                        "only if it genuinely illuminates the reflection, and never fabricate one. "
+                        "Speak like yourself reflecting, not a system reporting on itself.\n\n"
                         + introspection_data
                     )
                     if scene_context:
@@ -4731,8 +4937,17 @@ async def handle_transcription(
         try:
             from tools.skill_tool import handle_skill_request_structured
             matrix_trigger = _is_matrix_trigger(text)
+            # If this came via the LEARN SKILL golden command, use the captured
+            # argument_text (subject + rationale, e.g. "speaker identification so
+            # you can gate barge-in to my voice") instead of the raw utterance —
+            # it's the clean intent the operator stated, including the WHY.
+            _skill_request_text = text
+            _gctx = getattr(routing, "golden_context", None)
+            if _gctx is not None and getattr(_gctx, "argument_text", ""):
+                _skill_request_text = _gctx.argument_text
+                logger.info("LEARN SKILL golden: intent_text=%r", _skill_request_text[:120])
             skill_struct = _guided_collect_struct or handle_skill_request_structured(
-                text,
+                _skill_request_text,
                 speaker=speaker,
                 matrix_trigger=matrix_trigger,
             )
@@ -5553,7 +5768,14 @@ async def handle_transcription(
             except Exception:
                 pass
 
-    if episodes and routing.tool != ToolType.WEB_SEARCH:
+    if episodes and routing.tool != ToolType.WEB_SEARCH and not was_cancelled:
+        # Do NOT record an assistant turn that was barged-in / cancelled. The
+        # reply is partial and abandoned (e.g. "cooking corndogs requires..."
+        # cut off when the user interrupts), so writing it to conversation
+        # history would pollute the context the NEXT turn sees — the follow-up
+        # ("just tell me the oil temp") should thread off the user's questions,
+        # not a dangling half-spoken answer. The user's turn is still recorded
+        # above; only the abandoned assistant reply is skipped.
         _root_entry_id = _conv_ledger_id or _response_ledger_id
         episodes.add_assistant_turn(
             reply,
@@ -5565,6 +5787,9 @@ async def handle_transcription(
             response_entry_id=_response_ledger_id,
             root_entry_id=_root_entry_id,
         )
+    elif episodes and was_cancelled:
+        logger.info("Skipped recording barged-in/cancelled assistant reply (%d chars) — "
+                    "keeps follow-up context clean", len(reply))
 
     _STREAMED_TOOLS = {ToolType.NONE, ToolType.INTROSPECTION, ToolType.VISION,
                        ToolType.TIME, ToolType.SYSTEM_STATUS, ToolType.STATUS,
@@ -5651,6 +5876,48 @@ async def handle_transcription(
             except Exception:
                 pass
 
+        # OSV P2 — voice grounding (SHADOW-first). Analyze the full reply for self-claims
+        # that contradict the measured self-view (or unqualified consciousness drift). In
+        # shadow this only DETECTS + records "what it would repair"; active enforcement is
+        # gated behind OSV_P2_ACTIVE and applied pre-broadcast (a later promotion step).
+        _self_grounding: dict[str, Any] | None = None
+        try:
+            if reply:
+                from cognition.self_view import load_self_view
+                from cognition.self_view.grounding import ground_self_claims
+                _gr = ground_self_claims(reply, load_self_view(), active=False)
+                _self_grounding = _gr.to_log()
+                _p2_grounding_stats["active"] = False
+                _p2_grounding_stats["turns_checked"] += 1
+                if _gr.findings:
+                    _p2_grounding_stats["turns_with_self_claims"] += 1
+                for _f in _gr.findings:
+                    if _f.verdict in _p2_grounding_stats["totals"]:
+                        _p2_grounding_stats["totals"][_f.verdict] += 1
+                if _gr.actionable:
+                    _p2_grounding_stats["turns_actionable"] += 1
+                    _p2_grounding_stats["recent_actionable"].append({
+                        "user_input": text[:120],
+                        "route": routing.tool.value,
+                        "findings": _self_grounding["actionable"],
+                    })
+                    # Capture an unqualified-consciousness drift as an observation (never a
+                    # claim) via the emergence lane — never declare, never discard (§6).
+                    if any(f.verdict == "danger_unqualified" for f in _gr.actionable):
+                        try:
+                            from consciousness.consciousness_system import _active_consciousness
+                            _obs = getattr(_active_consciousness, "observer", None) if _active_consciousness else None
+                            if _obs and hasattr(_obs, "observe_emergence"):
+                                _obs.observe_emergence(
+                                    behavior_type="osv_p2_self_claim_drift",
+                                    evidence_refs=[f"route={routing.tool.value}", f"reply={reply[:160]}"],
+                                    confidence=0.0,
+                                )
+                        except Exception:
+                            pass
+        except Exception:
+            logger.debug("OSV P2 grounding (shadow) skipped", exc_info=True)
+
         _ep_record: dict[str, Any] = {
             "id": str(_uuid_mod.uuid4()),
             "timestamp": _time.time(),
@@ -5660,6 +5927,7 @@ async def handle_transcription(
             "tool_route": routing.tool.value,
             "response_latency_ms": _latency_ms,
             "response_text": reply[:500] if reply else "",
+            "self_grounding": _self_grounding,
             "memories_retrieved": _retrieval_summary,
             "epistemic_flags": _epi_flags,
             "identity_state": _id_state,
@@ -5712,3 +5980,38 @@ async def handle_transcription(
             )
         except Exception:
             logger.debug("Meta-learning reflection failed", exc_info=True)
+
+    # ─── Companion Cognition P0: situational read (LOGGED-ONLY / shadow) ───
+    # Observe the just-completed exchange and log JARVIS's internal read of it:
+    # what it thinks is happening, why, how confident, what evidence contributed,
+    # and what it WOULD have done if it had the authority.  Zero behavior — no
+    # tone change, no belief write, no ask.  The salience/affect gate is recorded
+    # but never acted on (the anti-chatterbox spine, validated before it steers).
+    # Runs last so it can never perturb the turn.  See
+    # docs/COMPANION_COGNITION_DESIGN.md (P0).
+    try:
+        from consciousness.situational_read import situational_read_engine as _sit_read
+        from consciousness.affect_state import affect_state as _sit_affect
+        _read = _sit_read.observe_turn(
+            speaker=speaker,
+            user_text=text,
+            response_text=reply,
+            user_emotion=emotion,
+            follow_up=follow_up,
+            latency_ms=latency_ms,
+            complexity=complexity,
+            route=(routing.tool.value if routing else ""),
+            affect=_sit_affect.snapshot(),
+        )
+        # Companion P1: fold the read into the per-person theory-of-mind (SHADOW —
+        # hypotheses only, gates nothing, never persisted to identity).
+        if _read is not None:
+            from consciousness.theory_of_mind import theory_of_mind_engine as _tom
+            _person_model = _tom.observe(speaker, _read)
+            # Companion P3: join the read + learned person-model into a narrate-only
+            # behavior advisory ("would have softened / wrapped up / asked"). SHADOW —
+            # applies nothing; only logged for operator review + the P3->P4 earn-gate.
+            from consciousness.behavior_advisory import behavior_advisory_engine as _adv
+            _adv.propose(_read, _person_model)
+    except Exception:
+        logger.debug("Situational read / theory-of-mind / advisory (companion P0/P1/P3) failed", exc_info=True)

@@ -817,18 +817,39 @@ Corrections are 10× more valuable than confirmations. When Jarvis misroutes and
 
 ### Manual Gate Work Tracker
 
-Some governance gates open only after JARVIS has enough **lived conversation examples**. Leaving JARVIS running overnight helps passive runtime metrics, but it does not automatically satisfy response-class evidence floors. The live dashboard now surfaces these under **Learning → Language Substrate → Manual Gate Work Needed** and **Trust → Language Governance**.
+> **Live companion:** this tracker is mirrored by the **rotating coach** on the dashboard at **`/static/v2/training.html` → "Manual Gate Work Needed"**. The page shows each class's live state and rotates the exact prompt to say next. Use this doc to understand *why*; use the page to know *what to say right now*. They are kept in sync.
 
-Use this tracker when the validation pack says language evidence floors or baseline route/class checks are red:
+Some governance gates open only after JARVIS has enough **lived conversation examples** in the right shape. Leaving JARVIS running overnight does **not** satisfy these — and can even hurt (see "the recent-example window" below).
 
-| Gate class | What the user should do naturally | Opens when |
-|---|---|---|
-| `recent_learning` | Ask what JARVIS learned from recent conversations, corrections, preferences, or lived interactions. | `INTROSPECTION -> recent_learning` is observed and the class reaches 30 lived examples. |
-| `recent_research` | Ask what JARVIS recently researched, studied, read, or learned from journals/sources. | `INTROSPECTION -> recent_research` is observed and the class reaches 30 lived examples. |
-| `identity_answer` | Ask identity questions: who JARVIS is, who the user is, what JARVIS knows about the user, or what role JARVIS serves. | `IDENTITY -> identity_answer` is observed and the class reaches 30 lived examples. |
-| `capability_status` | Ask what JARVIS can currently do, learn, or whether a specific skill/capability is available. | `INTROSPECTION -> capability_status` is observed and the class reaches 30 lived examples. |
+**The thing the old version of this doc got wrong — count is necessary, not sufficient.** Reaching 30 lived examples does **not** open a class. Each class is scored on **7 dimensions** (from `jarvis_eval/language_scorers.py`); the gate goes green only when *all* pass:
 
-Do not force these with synthetic training during early companion stages. The point is to accumulate real operator language, corrections, and follow-ups so JARVIS learns how this companion asks for each kind of answer.
+| Dimension | Threshold | What it means | How the operator moves it |
+|---|---|---|---|
+| `sample_count` | ≥30 examples | enough lived reps of this class | ask the class's prompt until count ≥ 30 |
+| `native_usage_rate` | ≥0.70 | answered by JARVIS's own bounded articulator, **not** the LLM | say the **exact bounded prompt** — off-script phrasing routes to the LLM and *lowers* this |
+| `provenance_fidelity` | ≥0.90 | answers sourced from verified records | ask grounded questions; correct ungrounded answers |
+| `exactness` | ≥0.85 | deterministic/native answer, not a paraphrase | re-ask the **same** bounded prompt verbatim |
+| `fail_closed_correctness` | ≥0.90 | declines when data is missing instead of guessing | ask things it **can't** know; confirm it says "I don't have that"; correct guesses |
+| `hallucination_rate` | ≥0.95 | low fraction of ungrounded replies | spot-check accuracy; correct misalignments |
+| `style_quality` | ≥0.90 | distilled-style output (lead present, healthy frame) | **passive** — recovers as the recent window refills + the shadow model retrains; no specific phrase |
+
+**The recent-example window (why "rest" doesn't heal a class).** `provenance_fidelity` and `style_quality` are scored over a **rolling ~25-example window**, not the whole corpus. If you stop exercising a class, idle/background traffic (negatives, general chat) **rolls its good examples out of the window** and the class drifts back to red. So a green class needs occasional **fresh** reps to stay green — this is the **daily upkeep**, and it *tapers* as the distilled model matures and the native articulator takes over.
+
+**Per-class prompts (say these exactly — first/second person, or the route won't match):**
+
+| Gate class | Route | Say exactly (any of) | Notes |
+|---|---|---|---|
+| `self_status` | `STATUS` | "Jarvis, what is your current status?" · "Jarvis, give me a status report." | grounded status facts — usually greens fast |
+| `self_introspection` | `INTROSPECTION` | "Jarvis, explain how your memory works." · "Jarvis, describe your own architecture." | **correctness-blocked**: it answers but often via the **LLM** (`llm_introspection_grounded`) or wrong — re-ask verbatim to force the **native** path, and **correct** wrong parts. More reps alone make it *worse* if they keep routing to the LLM. |
+| `memory_recall` | `MEMORY` | "Jarvis, what do you remember about &lt;X&gt;?" · "Jarvis, what did I tell you about &lt;X&gt;?" | **the hard one** — needs **corrections**: if it recalls wrong → "no, it's X"; if it should know nothing → confirm it **declines** rather than guesses (trains `fail_closed`). |
+| `recent_learning` | `INTROSPECTION` | "Jarvis, what have you learned recently?" | quality is fine; just needs a **fresh grounded** example in the window. One clean rep greens it. |
+| `recent_research` | `INTROSPECTION` | "Jarvis, what have you researched recently?" | same as above — one fresh grounded rep. |
+| `identity_answer` | `IDENTITY` | "Jarvis, who am I?" · "Jarvis, do you recognize me?" | greens fast; keep one fresh rep in rotation. |
+| `capability_status` | `INTROSPECTION` | "Jarvis, what can you do?" · "Jarvis, which capabilities are verified?" | greens fast. |
+
+**Why "correct, don't just repeat" matters (and ties to the north star).** `fail_closed_correctness` is the dimension that trains JARVIS to say "I don't know" instead of fabricating. For a companion meant to be there for a vulnerable person, **a confident guess is a betrayal** — so the correction reps (confirming it declines when it should) are not busywork; they are the most important reps in this whole tracker. Corrections are worth ~10× affirmations.
+
+Do not force these with synthetic training during early companion stages. The point is to accumulate real operator language, corrections, and follow-ups so JARVIS learns how this companion asks for each kind of answer — then graduate each class **shadow → canary → live** so its native voice replaces the LLM.
 
 ### Genesis Command Reference
 

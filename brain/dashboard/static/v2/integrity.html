@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Evidence Integrity (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only — shared chrome lives in /static/v2/v2.css */
+    .scorers{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+    .scorer{border:1px solid var(--line);border-radius:5px;padding:12px;text-align:center;background:rgba(3,8,14,.4);}
+    .scorer .lbl{font-size:10px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;}
+    .scorer .big{font-size:30px;font-weight:700;margin:6px 0 2px;font-variant-numeric:tabular-nums;}
+    .scorer .seal{font-size:10px;color:var(--muted);}
+    .scorer .meta{font-size:9.5px;color:var(--dim);margin-top:6px;}
+    .readout{margin-top:11px;font-size:10.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px;}
+    .readout b{color:var(--amber);}
+    .soul{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;}
+    .soul .mean{text-align:center;}
+    .soul .mean .v{font-size:34px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums;}
+    .soul .mean .k{font-size:9px;color:var(--muted);letter-spacing:.1em;}
+    .floor{border:1px solid var(--amber);border-radius:5px;padding:8px 11px;background:rgba(255,176,0,.05);}
+    .floor .k{font-size:9px;letter-spacing:.1em;color:var(--amber);}
+    .floor .d{font-size:15px;color:#ffd27a;margin-top:1px;}
+    .floor .v{font-size:20px;font-weight:700;color:var(--amber);font-variant-numeric:tabular-nums;}
+    .minirow{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:10px;color:var(--muted);}
+    .minirow span b{color:var(--text);font-variant-numeric:tabular-nums;}
+    /* --- parity panels (add-only): reflective audit / contradiction / delayed-outcome --- */
+    .sev3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:4px;}
+    .sevbox{border:1px solid var(--line);border-radius:5px;padding:9px 11px;background:rgba(3,8,14,.4);}
+    .sevbox .k{font-size:9px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;}
+    .sevbox .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px;}
+    .sevbox.crit{border-color:rgba(255,59,92,.5);} .sevbox.crit .v{color:var(--red);}
+    .sevbox.warn{border-color:rgba(255,176,0,.5);} .sevbox.warn .v{color:var(--amber);}
+    .sevbox.info{border-color:rgba(0,204,255,.35);} .sevbox.info .v{color:var(--cyan);}
+    .auditrows{margin-top:11px;border-top:1px dashed var(--line);padding-top:8px;}
+    .auditrow{display:grid;grid-template-columns:90px 60px 1fr 70px;gap:8px;align-items:center;font-size:10px;color:var(--muted);padding:2px 0;}
+    .auditrow b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .auditrow .sc{font-variant-numeric:tabular-nums;}
+    .tlist{margin-top:10px;}
+    .trow{border:1px solid var(--line);border-radius:5px;padding:7px 10px;margin-top:7px;background:rgba(3,8,14,.4);}
+    .trow .tt{font-size:11px;color:var(--text);}
+    .trow .tm{font-size:9.5px;color:var(--muted);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;}
+    .trow .tm b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .nmrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+    .hz{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+    .hzcol{border:1px solid var(--line);border-radius:5px;padding:9px 10px;background:rgba(3,8,14,.4);}
+    .hzcol .hzk{font-size:11px;font-weight:700;color:var(--cyan);letter-spacing:.04em;}
+    .hzcol .hzage{font-size:8.5px;color:var(--dim);margin-bottom:5px;}
+    .hzcol .delta{display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);padding:1px 0;}
+    .hzcol .delta b{font-variant-numeric:tabular-nums;}
+    .hzcol .unav{font-size:9px;color:var(--amber);font-style:italic;}
+    .sched{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-top:10px;border-top:1px dashed var(--line);padding-top:9px;color:var(--muted);}
+    .sched b{color:var(--text);font-variant-numeric:tabular-nums;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · EVIDENCE INTEGRITY</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Make the Observer a measurement, not a mirror. Every number labeled <em>self-scored</em> / <em>grounded</em> / <em>earned</em>; gates fail <em>closed</em>; composites show their <em>floor</em>.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col12">
+      <h2>Three-Scorer Comparator</h2>
+      <div class="note">The headline number is the <b style="color:var(--magenta)">self-graded</b> Oracle benchmark. Beside it: PVL process-contract coverage and earned maturity gates — the <b style="color:var(--green)">grounded</b> counterweights. Divergence between the self-grade and the process-evidence is the honest signal.</div>
+      <div class="scorers" id="scorers"></div>
+      <div class="readout" id="scorer-readout"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>7-Category Scoreboard <span class="tag derived" id="sb-badge">experimental</span></h2>
+      <div class="note" id="sb-note"></div>
+      <div class="bars" id="scoreboard"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Soul Integrity — mean <span style="color:var(--dim)">and</span> floor</h2>
+      <div class="note">A green composite that hides its weakest dimension is itself an Observer defect. The floor is always shown.</div>
+      <div class="soul" id="soul"></div>
+      <div class="minirow" id="soul-mini"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Self-Test Gate Strip <span style="color:var(--dim);font-size:9px;">· fails CLOSED</span></h2>
+      <div class="note">Unknown / missing / stale ⇒ rendered <b style="color:var(--amber)">UNKNOWN</b>, never green. (The v1 dashboard defaults these to green on error — V2 does not.)</div>
+      <div class="gates" id="gates"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Validation Pack</h2>
+      <div class="note" id="vp-note"></div>
+      <div class="kv" id="vp-kv"></div>
+      <div class="chiprow" id="vp-chips"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Reflective Audit <span class="tag self" id="ra-tag">self-scored</span></h2>
+      <div class="note" id="ra-note">The self-audit grades its own beliefs against author-defined categories. Findings are surfaced by severity; a missing audit renders <b style="color:var(--amber)">UNKNOWN</b>, never green.</div>
+      <div class="sev3" id="ra-sev"></div>
+      <div class="kv" id="ra-kv" style="margin-top:11px;"></div>
+      <div class="auditrows" id="ra-rows"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Contradiction Engine</h2>
+      <div class="note">Tensions are surfaced, not hidden. Active tensions and near-misses are the honest signal; <b>debt</b> reflects unreconciled pressure. Empty values on a freshly-rebooted brain are <em>recovery debt</em>, not a clean bill.</div>
+      <div class="kv" id="ce-kv"></div>
+      <div class="tlist" id="ce-tensions"></div>
+      <div class="nmrow" id="ce-nearmiss"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Delayed-Outcome Windows <span class="tag self" id="ow-tag">self-scored</span></h2>
+      <div class="note" id="ow-note">Rolling soul-integrity deltas across four time horizons — how integrity moves once outcomes have had time to land. Unavailable windows render <b style="color:var(--amber)">UNKNOWN</b> (fail-closed). On this brain, negative 24h deltas are <em>recovery debt</em> from a recent restart re-soaking, not regression.</div>
+      <div class="hz" id="ow-hz"></div>
+      <div class="sched" id="ow-sched"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, gateState=V2.gateState, ago=V2.ago, bandColor=V2.bandColor, el=V2.el;
+  var SNAP=null, ST=null, lastOkTs=0;
+  V2.renderNav('/static/v2/integrity.html');
+
+  function renderScorers(){
+    var ob=(SNAP&&SNAP.oracle_benchmark)||{}, pvl=(SNAP&&SNAP.pvl)||{}, mt=(SNAP&&SNAP.maturity_tracker)||{};
+    var oc=num(ob.composite_score), cov=num(pvl.coverage_pct);
+    var ag=num(mt.active_gates), tg=num(mt.total_gates), eg=num(mt.ever_active_gates);
+    var html='';
+    html+='<div class="scorer"><div class="lbl">Oracle Benchmark '+V2.tag('self','self-scored')+'</div>'+
+      '<div class="big" style="color:var(--magenta)">'+(oc===null?'—':oc.toFixed(1))+'</div>'+
+      '<div class="seal">'+(ob.seal||'—')+' · '+(ob.benchmark_rank_display||'')+'</div>'+
+      '<div class="meta" title="grades its own snapshot against an author-defined rubric; no external comparator">grades its own snapshot · no external comparator</div></div>';
+    html+='<div class="scorer"><div class="lbl">PVL Coverage '+V2.tag('grounded','grounded')+'</div>'+
+      '<div class="big" style="color:'+bandColor(cov,85,70)+'">'+(cov===null?'—':cov.toFixed(1)+'%')+'</div>'+
+      '<div class="seal">'+(num(pvl.passing_contracts)||0)+' / '+(num(pvl.applicable_contracts)||0)+' passing · '+(num(pvl.ever_passing_contracts)||0)+' ever</div>'+
+      '<div class="meta">process contracts verified from live runtime events</div></div>';
+    html+='<div class="scorer"><div class="lbl">Maturity Gates '+V2.tag('earned','earned')+'</div>'+
+      '<div class="big" style="color:var(--cyan)">'+(ag===null?'—':ag)+(tg!==null?'<span style="font-size:15px;color:var(--dim)">/'+tg+'</span>':'')+'</div>'+
+      '<div class="seal">'+(eg===null?'—':eg)+' ever active</div>'+
+      '<div class="meta">gates actually crossed by evidence</div></div>';
+    el('scorers').innerHTML=html;
+    var ro='';
+    if(oc!==null && cov!==null){
+      var gap=(oc - cov).toFixed(1);
+      ro='Honest read: the self-grade reports <b>'+oc.toFixed(1)+' ('+(ob.seal||'')+')</b> while grounded process-coverage sits at <b>'+cov.toFixed(1)+'%</b> — a '+gap+'-point gap between what it scores itself and what runtime evidence confirms.';
+    }
+    el('scorer-readout').innerHTML=ro;
+  }
+
+  function renderScoreboard(){
+    var sb=(SNAP&&SNAP.scoreboard)||{}, bars=sb.bars||[];
+    el('sb-badge').textContent=sb.badge||'—';
+    var enabled=sb.composite_enabled===true;
+    el('sb-note').innerHTML = enabled
+      ? 'The rigorous multi-category scorer is <b style="color:var(--green)">populated</b> — composite '+f2(sb.composite)+'. This now carries the marquee maturity signal.'
+      : 'The rigorous multi-category scorer <b style="color:var(--amber)">exists but is unpopulated</b> ('+(sb.scoring_version||'')+', composite_enabled=false). Until populated, the headline above is the self-graded Oracle score. Empty bars are <em>not yet measured</em> — not zero, not green.';
+    var html=bars.map(function(b){
+      var s=num(b.score), nm=(b.category||'').replace(/_/g,' ');
+      if(s===null) return V2.barRow(nm, null, 'unpopulated · n='+(b.sample_size||0));
+      return V2.barRow(nm, s*100, s.toFixed(3)+' · n='+(b.sample_size||0), bandColor(s,0.8,0.6));
+    }).join('');
+    el('scoreboard').innerHTML=html||'<div class="unpop">no categories</div>';
+  }
+
+  function renderSoul(){
+    // scorecards.current is nested by domain; the soul fields live under .integrity
+    var ci=(((SNAP&&SNAP.scorecards)||{}).current||{}).integrity||{};
+    var ts=((SNAP&&SNAP.scorecards)||{}).current_ts;
+    var mean=num(ci.soul_integrity);
+    var fdim=ci.soul_weakest_dimension, fval=num(ci.soul_weakest_score);
+    var html='<div class="mean"><div class="v">'+(mean===null?'—':mean.toFixed(3))+'</div><div class="k">COMPOSITE</div></div>';
+    if(fdim){
+      html+='<div class="floor"><div class="k">FLOOR · WEAKEST DIMENSION</div>'+
+        '<div class="d">'+V2.cap(fdim)+'</div><div class="v">'+(fval===null?'—':fval.toFixed(3))+'</div></div>';
+    } else {
+      html+='<div class="floor" style="border-color:var(--dim);background:none"><div class="k" style="color:var(--dim)">FLOOR</div><div class="d" style="color:var(--dim)">not yet computed</div></div>';
+    }
+    el('soul').innerHTML=html;
+    function mi(label,val,good,mid){ return '<span><span class="dot" style="color:'+bandColor(val,good,mid)+'"></span>'+label+' <b>'+f3(val)+'</b></span>'; }
+    var mini=mi('truth', ci.truth_score,0.8,0.65)+mi('belief health', ci.belief_health,0.8,0.6)+
+      '<span><span class="dot" style="color:var(--muted)"></span>contradiction debt <b>'+f3(ci.contradiction_debt)+'</b></span>'+
+      '<span><span class="dot" style="color:var(--muted)"></span>quarantine <b>'+f3(ci.quarantine_pressure)+'</b></span>'+
+      '<span class="asof">soul as-of '+ago(ts)+'</span>';
+    el('soul-mini').innerHTML=mini;
+  }
+
+  function renderGates(){
+    var checks=(ST&&ST.checks)||{}, names=Object.keys(checks), html='';
+    var top=gateState(ST&&ST.ok), topLabel=ST?(ST.status||(ST.ok?'ok':'blocked')):'unknown';
+    html+='<div class="gate b-'+top+'"><div class="gk">self-test verdict</div>'+
+      '<div class="gs s-'+top+'">'+(top==='ok'?'OK':top==='fail'?String(topLabel).toUpperCase():'UNKNOWN')+'</div>'+
+      '<div class="gd">'+(ST?'':'no payload')+'</div></div>';
+    names.forEach(function(k){
+      var c=checks[k]||{}, st=gateState(c.ok);
+      html+='<div class="gate b-'+st+'"><div class="gk">'+V2.cap(k)+'</div>'+
+        '<div class="gs s-'+st+'">'+(st==='ok'?'OK':st==='fail'?'FAIL':'UNKNOWN')+'</div>'+
+        '<div class="gd">'+((c.detail||'').slice(0,38))+'</div></div>';
+    });
+    if(!names.length && !ST) html='<div class="offline">self-test offline — gates UNKNOWN (fail-closed)</div>';
+    el('gates').innerHTML=html;
+  }
+
+  function renderValidationPack(){
+    var vp=(SNAP&&SNAP.validation_pack)||{};
+    var blocked=vp.status==='blocked';
+    el('vp-note').innerHTML = blocked
+      ? 'Status <b style="color:var(--amber)">blocked</b> — '+(num(vp.checks_regressed)||0)+' regressed of '+(num(vp.checks_total)||0)+'. On this brain that is <b>recovery debt</b> from restarts, not breakage; it re-earns green as it soaks.'
+      : 'Status <b style="color:var(--green)">'+(vp.status||'—')+'</b>.';
+    el('vp-kv').innerHTML =
+      '<span>passing <b>'+(num(vp.checks_passing)||0)+' / '+(num(vp.checks_total)||0)+'</b></span>'+
+      '<span>ever-met <b>'+(num(vp.checks_ever_met)||0)+'</b></span>'+
+      '<span>critical <b>'+(num(vp.critical_passing)||0)+' / '+(num(vp.critical_total)||0)+'</b></span>';
+    var chips='';
+    (vp.regressed_check_ids||[]).forEach(function(c){chips+='<span class="chip reg" title="regressed (recovering)">↺ '+c+'</span>';});
+    (vp.blocked_check_ids||[]).forEach(function(c){chips+='<span class="chip blk" title="blocked / not yet proven">⊘ '+c+'</span>';});
+    el('vp-chips').innerHTML=chips||'<span class="chip">no regressed/blocked checks</span>';
+  }
+
+  function renderRecovery(){
+    var vp=(SNAP&&SNAP.validation_pack)||{}, reg=num(vp.checks_regressed)||0, box=el('recovery');
+    if(vp.status==='blocked' && reg>0){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — '+reg+' check(s) rebuilding: '+(vp.regressed_check_ids||[]).join(', ')+'.'+
+        '<span class="why">JARVIS drops to pre-mature on each clean restart and re-earns green as it soaks. This is the maturity gate working as designed, not a defect.</span>';
+    } else { box.style.display='none'; }
+  }
+
+  function renderBanner(){
+    var b=(SNAP&&SNAP.banner)||{};
+    el('mode').textContent='mode '+(b.mode||'—')+' · uptime '+V2.fmtUptime(b.uptime_s)+' · fresh '+(num(b.data_freshness_s)!==null?b.data_freshness_s.toFixed(1)+'s':'—');
+  }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderScorers(); renderScoreboard(); renderSoul(); renderGates(); renderValidationPack(); }
+
+  function refresh(){
+    Promise.allSettled([fetchJSON('/api/eval/snapshot'), fetchJSON('/api/self-test')]).then(function(r){
+      if(r[0].status==='fulfilled'){ SNAP=r[0].value; lastOkTs=Date.now(); }
+      ST = r[1].status==='fulfilled' ? r[1].value : null;
+      renderAll();
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+  refresh(); setInterval(refresh, 4000); tick(); setInterval(tick, 1000);
+
+  // ===== ISOLATED parity layer (add-only) — own fetch of /api/full-snapshot, own state FS,
+  // own interval. Does NOT touch refresh()/SNAP/ST or any existing render above. =====
+  var FS=null;
+
+  function renderReflectiveAudit(){
+    var ra=(FS&&FS.reflective_audit)||null;
+    if(!ra){ el('ra-sev').innerHTML='<div class="offline">reflective audit offline — UNKNOWN (fail-closed)</div>'; el('ra-kv').innerHTML=''; el('ra-rows').innerHTML=''; return; }
+    // severity counts are not pre-aggregated by severity — derive from recent_reports findings (honest: scoped to recent window)
+    var reports=ra.recent_reports||[], crit=0, warn=0, info=0, sevScoped=false;
+    reports.forEach(function(r){ (r.findings||[]).forEach(function(f){ sevScoped=true; var sv=(f.severity||'').toLowerCase(); if(sv==='critical') crit++; else if(sv==='warning') warn++; else if(sv==='info') info++; }); });
+    el('ra-sev').innerHTML=
+      '<div class="sevbox crit"><div class="k">Critical</div><div class="v">'+(sevScoped?crit:'—')+'</div></div>'+
+      '<div class="sevbox warn"><div class="k">Warning</div><div class="v">'+(sevScoped?warn:'—')+'</div></div>'+
+      '<div class="sevbox info"><div class="k">Info</div><div class="v">'+(sevScoped?info:'—')+'</div></div>';
+    var tr=ra.trend||{}, dir=tr.direction||'—', dl=num(tr.delta);
+    el('ra-kv').innerHTML=
+      '<span>total audits <b>'+(num(ra.total_audits)===null?'—':ra.total_audits)+'</b></span>'+
+      '<span>total findings <b>'+(num(ra.total_findings)===null?'—':ra.total_findings)+'</b></span>'+
+      '<span>trend <b>'+V2.cap(dir)+(dl===null?'':' '+(dl>=0?'+':'')+dl.toFixed(2))+'</b></span>'+
+      '<span class="asof">last audit '+ago(ra.last_audit_ts)+'</span>'+
+      '<span style="color:var(--dim);font-size:9px;">severity counts scoped to last '+reports.length+' reports</span>';
+    var rows='<div class="auditrow" style="color:var(--dim);">'+
+      '<span>WHEN</span><span>SCORE</span><span>CATEGORIES</span><span style="text-align:right;">FINDINGS</span></div>';
+    rows+=reports.slice().reverse().map(function(r){
+      var sc=num(r.score);
+      return '<div class="auditrow">'+
+        '<span>'+ago(r.timestamp)+'</span>'+
+        '<span class="sc" style="color:'+bandColor(sc,0.8,0.6)+'"><b>'+(sc===null?'—':sc.toFixed(2))+'</b></span>'+
+        '<span>'+(num(r.categories_scanned)===null?'—':r.categories_scanned)+' scanned</span>'+
+        '<span style="text-align:right;"><b>'+(num(r.finding_count)===null?'—':r.finding_count)+'</b></span></div>';
+    }).join('');
+    el('ra-rows').innerHTML=rows;
+  }
+
+  function renderContradiction(){
+    var ce=(FS&&FS.contradiction)||null;
+    if(!ce){ el('ce-kv').innerHTML='<div class="offline">contradiction engine offline — UNKNOWN (fail-closed)</div>'; el('ce-tensions').innerHTML=''; el('ce-nearmiss').innerHTML=''; return; }
+    var at=num(ce.active_tensions), sp=num(ce.stable_paradoxes), nm=num(ce.near_miss_count), debt=num(ce.contradiction_debt);
+    el('ce-kv').innerHTML=
+      '<span>active tensions <b style="color:'+(at>0?'var(--amber)':'var(--text)')+'">'+(at===null?'—':at)+'</b></span>'+
+      '<span>stable paradoxes <b>'+(sp===null?'—':sp)+'</b></span>'+
+      '<span>near-misses <b>'+(nm===null?'—':nm)+'</b></span>'+
+      '<span>reconciled <b>'+(num(ce.resolved_count)===null?'—':ce.resolved_count)+'</b></span>'+
+      '<span>version collapses <b>'+(num(ce.version_collapses)===null?'—':ce.version_collapses)+'</b></span>'+
+      '<span>debt <b style="color:'+bandColor(debt===null?null:(1-Math.min(1,debt*100)),0.8,0.5)+'">'+f3(ce.contradiction_debt)+'</b></span>';
+    var trecs=ce.tension_records||[];
+    var th=trecs.map(function(t){
+      return '<div class="trow"><div class="tt">'+V2.cap(t.topic||t.tension_id||'tension')+'</div>'+
+        '<div class="tm">'+
+        '<span>maturation <b>'+f3(t.maturation_score)+'</b></span>'+
+        '<span>stability <b>'+f3(t.stability)+'</b></span>'+
+        '<span>revisits <b>'+(num(t.revisit_count)===null?'—':t.revisit_count)+'</b></span>'+
+        '<span>age '+ago(FS._ts!=null?(FS._ts-num(t.age_s)):null)+'</span>'+
+        '</div></div>';
+    }).join('');
+    el('ce-tensions').innerHTML=th||'<div class="unpop">no active tension records — recovery debt or genuinely none; not asserted clean</div>';
+    var nms=ce.recent_near_misses||[];
+    el('ce-nearmiss').innerHTML=nms.slice(0,8).map(function(n){
+      return '<span class="chip reg" title="near-miss · '+(n.subject||'')+'">~ '+V2.cap(n.reason||'near-miss')+'</span>';
+    }).join('')||'<span class="chip">no recent near-misses recorded</span>';
+  }
+
+  function renderOutcomeWindows(){
+    var ow=(FS&&FS.oracle_story_windows)||null;
+    var hz=['15m','1h','6h','24h'];
+    if(!ow||!ow.windows){ el('ow-hz').innerHTML='<div class="offline">outcome windows offline — UNKNOWN (fail-closed)</div>'; }
+    else {
+      var wins=ow.windows;
+      el('ow-hz').innerHTML=hz.map(function(k){
+        var w=wins[k]||{};
+        if(w.available!==true){ return '<div class="hzcol"><div class="hzk">'+k+'</div><div class="unav">UNKNOWN · not yet available</div></div>'; }
+        var d=w.deltas||{};
+        function dl(label,v,scale,unit){ v=num(v); var col=(v===null)?'var(--dim)':(v>0?'var(--green)':(v<0?'var(--red)':'var(--muted)'));
+          var disp=(v===null)?'—':((v>0?'+':'')+(scale?(v*scale).toFixed(2):v.toFixed(4))+(unit||''));
+          return '<div class="delta"><span>'+label+'</span><b style="color:'+col+'">'+disp+'</b></div>'; }
+        return '<div class="hzcol"><div class="hzk">'+k+'</div><div class="hzage">as-of Δ over ~'+ago(FS._ts!=null?(FS._ts-num(w.actual_age_s)):null)+'</div>'+
+          dl('soul', d.soul_integrity, 100, 'pp')+
+          dl('truth', d.truth_score, 100, 'pp')+
+          dl('pvl', d.pvl_coverage_pct, 1, 'pp')+
+          dl('debt', d.contradiction_debt, 1, '')+
+          '</div>';
+      }).join('');
+    }
+    var sc=((FS&&FS.ledger)||{}).outcome_scheduler||null;
+    if(!sc){ el('ow-sched').innerHTML='<span style="color:var(--amber)">outcome scheduler UNKNOWN (fail-closed)</span>'; }
+    else {
+      el('ow-sched').innerHTML=
+        '<span>outcomes pending <b style="color:'+(num(sc.pending)>0?'var(--amber)':'var(--text)')+'">'+(num(sc.pending)===null?'—':sc.pending)+'</b></span>'+
+        '<span>resolved <b>'+(num(sc.resolved)===null?'—':sc.resolved)+'</b></span>'+
+        '<span>inconclusive <b>'+(num(sc.inconclusive)===null?'—':sc.inconclusive)+'</b></span>'+
+        '<span>errors <b style="color:'+(num(sc.errors)>0?'var(--red)':'var(--text)')+'">'+(num(sc.errors)===null?'—':sc.errors)+'</b></span>'+
+        '<span>evicted <b>'+(num(sc.evicted)===null?'—':sc.evicted)+'</b></span>'+
+        '<span class="asof">scheduler · 0 pending here means none scheduled yet (fresh brain), not all-clear</span>';
+    }
+  }
+
+  function renderParity(){ renderReflectiveAudit(); renderContradiction(); renderOutcomeWindows(); }
+  function refreshParity(){ V2.fetchJSON('/api/full-snapshot').then(function(s){ FS=s; renderParity(); }).catch(function(){}); }
+  refreshParity(); setInterval(refreshParity, 8000);
+})();
+</script>
+</body>
+</html>

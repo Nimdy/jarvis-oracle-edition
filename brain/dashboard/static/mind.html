@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS — Mind's-Eye (Matrix World View)</title>
+  <style>
+    :root{
+      --bg:#03040a; --grid:#0affc8; --cyan:#00ccff; --green:#00ff99; --amber:#ffb000;
+      --red:#ff3b5c; --magenta:#ff2bd6; --gray:#5a6072; --text:#d8f5ec; --muted:#5f6b78;
+      --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    }
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);overflow:hidden;font-family:var(--mono);}
+    #scene{position:fixed;inset:0;width:100vw;height:100vh;display:block;background:
+      radial-gradient(ellipse at 50% 38%, #0a1420 0%, #03040a 72%);}
+    .hud{position:fixed;pointer-events:none;font-size:11px;letter-spacing:.03em;text-shadow:0 0 6px #000;}
+    #title{top:14px;left:18px;}
+    #title h1{margin:0;font-size:15px;font-weight:700;color:var(--green);letter-spacing:.12em;}
+    #title .sub{color:var(--muted);font-size:10px;margin-top:3px;max-width:420px;line-height:1.5;}
+    #title .badge{display:inline-block;margin-top:6px;padding:2px 8px;border:1px solid var(--amber);color:var(--amber);
+      border-radius:3px;font-size:9px;letter-spacing:.1em;}
+    #legend{top:14px;right:18px;text-align:right;}
+    #legend .row{margin:3px 0;color:var(--muted);}
+    #legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-left:7px;vertical-align:middle;box-shadow:0 0 6px currentColor;}
+    #readout{bottom:60px;left:18px;max-width:430px;max-height:42vh;overflow:hidden;}
+    .obj{margin-bottom:7px;padding:5px 8px;border-left:2px solid var(--gray);background:rgba(8,16,24,.55);}
+    .obj .l{font-weight:700;}
+    .obj .m{color:var(--muted);font-size:10px;}
+    #ctrl{bottom:14px;left:18px;right:18px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;pointer-events:auto;}
+    .btn{background:rgba(8,16,24,.7);color:var(--muted);border:1px solid #16202c;padding:4px 10px;border-radius:3px;
+      cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.04em;}
+    .btn:hover{border-color:var(--cyan);color:var(--cyan);}
+    .btn.on{border-color:var(--green);color:var(--green);}
+    .btn.link{color:var(--cyan);border-color:#16202c;}
+    #stat{position:fixed;bottom:40px;right:18px;text-align:right;color:var(--muted);font-size:10px;pointer-events:none;}
+    #readout .hdr{color:var(--green);font-size:10px;letter-spacing:.08em;margin-bottom:5px;}
+    .obj.ghost{opacity:.72;border-left-style:dashed;}
+    /* off-floor dock: things JARVIS believes are present but never localized */
+    #unplaced{position:fixed;pointer-events:none;top:120px;right:18px;max-width:236px;text-align:left;}
+    #unplaced .hdr{color:var(--amber);font-size:10px;letter-spacing:.07em;margin-bottom:3px;}
+    #unplaced .note{color:var(--muted);font-size:9px;line-height:1.45;margin-bottom:6px;max-width:228px;}
+    .uitem{margin:3px 0;padding:3px 8px;border:1px solid #16202c;border-left-width:2px;
+      border-left-style:dashed;background:rgba(8,16,24,.5);border-radius:3px;}
+    .uitem .l{font-weight:700;font-size:10px;letter-spacing:.02em;}
+    .uitem .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;
+      vertical-align:middle;box-shadow:0 0 5px currentColor;}
+  </style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div class="hud" id="title">
+    <h1>JARVIS · MIND'S-EYE</h1>
+    <div class="sub">The world JARVIS <em>believes</em> is here — its mental-world scene graph projected into space.
+      Shapes are estimated (monocular), not a depth scan. Color = epistemic state, not appearance.</div>
+    <div class="badge" id="badge">PRE-MATURE · SHADOW · ZERO-AUTHORITY</div>
+  </div>
+
+  <div class="hud" id="legend">
+    <div class="row">live (sensor-confirmed)<span class="dot" style="color:var(--green);background:var(--green)"></span></div>
+    <div class="row">remembered (not visible)<span class="dot" style="color:var(--cyan);background:var(--cyan)"></span></div>
+    <div class="row">occluded / inferred<span class="dot" style="color:var(--amber);background:var(--amber)"></span></div>
+    <div class="row">conflicting<span class="dot" style="color:var(--red);background:var(--red)"></span></div>
+    <div class="row">candidate / unknown<span class="dot" style="color:var(--gray);background:var(--gray)"></span></div>
+    <div class="row" style="margin-top:6px;color:var(--muted);font-size:9px;">● solid = live pos · ◇ dashed = last-known</div>
+  </div>
+
+  <div class="hud" id="unplaced"></div>
+  <div class="hud" id="readout"></div>
+  <div id="stat"></div>
+
+  <div id="ctrl">
+    <button class="btn on" data-layer="grid">grid</button>
+    <button class="btn on" data-layer="walls">walls</button>
+    <button class="btn on" data-layer="objects">objects</button>
+    <button class="btn on" data-layer="labels">labels</button>
+    <button class="btn on" data-layer="trails">trails</button>
+    <button class="btn on" data-layer="relations">relations</button>
+    <button class="btn" id="pauseBtn">⏸ pause</button>
+    <a class="btn link" href="/hrr-scene">scene graph →</a>
+    <a class="btn link" href="/">← dashboard</a>
+    <span style="color:var(--muted);font-size:10px;">2.5D world-model view · depth mesh = Phase 2</span>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  var POLL_MS = 1500;
+  var canvas = document.getElementById('scene'), ctx = canvas.getContext('2d');
+  var W=0,H=0,DPR=1;
+  var layers = {grid:true,walls:true,objects:true,labels:true,trails:true,relations:true};
+  var paused = false, timer = null;
+  var scene = null;            // latest /api/hrr/scene
+  var trails = {};             // entity_id -> [{x,z,t}, ...]
+  var lastKnownPos = {};       // entity_id -> {x,y,z,ts,label} last RESOLVED room position
+                               //   (seeded from history, updated live) — never invented
+  var ROOM = {w:4.0, d:4.0, h:2.6};   // metres; auto-grown to fit observed extent
+
+  function resize(){
+    DPR = window.devicePixelRatio||1; W=window.innerWidth; H=window.innerHeight;
+    canvas.width=W*DPR; canvas.height=H*DPR; canvas.style.width=W+'px'; canvas.style.height=H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize); resize();
+
+  // --- pseudo-3D camera: looks into +z, slightly elevated. room x=[-w/2,w/2], y up, z fwd ---
+  // --- pseudo-3D camera: eye at (0, CAM_Y, -CAM_DIST) looking into +z, tilted down.
+  // Framed so the NEAR floor edge (z=0) lands at NEAR_FRAC of the screen height
+  // (fully visible) and the horizon sits at HORIZON_FRAC (high) — this makes the
+  // floor grid the hero band instead of letting the room shell balloon center-screen.
+  var HORIZON_FRAC = 0.33, NEAR_FRAC = 0.90, CAM_Y = 1.5, CAM_DIST = 3.0;
+  function project(x,y,z){
+    var horizon = H*HORIZON_FRAC;
+    var f = (NEAR_FRAC - HORIZON_FRAC) * H * CAM_DIST / CAM_Y;  // self-consistent framing
+    var rz = z + CAM_DIST;                    // depth from camera
+    if (rz < 0.05) rz = 0.05;
+    var sx = W/2 + f*(x)/rz;
+    var sy = horizon + f*(CAM_Y - y)/rz;
+    return {x:sx, y:sy, d:rz};
+  }
+
+  function posOf(e){
+    var p = e && e.position_room_m;
+    if (!Array.isArray(p) || p.length<2) return null;
+    if (p.length>=3) return {x:+p[0]||0, y:+p[1]||0, z:+p[2]||0};
+    return {x:+p[0]||0, y:0, z:+p[1]||0};     // [x,z] form
+  }
+
+  function epi(e){
+    // epistemic color from belief STATE (ghosting conveys remembered-vs-live separately)
+    var s=(e.state||'').toLowerCase(), c=e.confidence==null?0:e.confidence;
+    if (s==='visible') return {c:'#00ff99', glow:'#00ff99'};         // live, sensor-confirmed
+    if (s==='occluded') return {c:'#ffb000', glow:'#ffb000'};        // occluded/inferred
+    if (s==='missing'||s==='removed') return {c:'#ff3b5c', glow:'#ff3b5c'};
+    if (s==='candidate'||c<0.45) return {c:'#5a6072', glow:'#5a6072'};
+    if (!s) return {c:'#00ccff', glow:'#00ccff'};                    // remembered, state unknown
+    return {c:'#9fb0c0', glow:'#9fb0c0'};
+  }
+
+  // nowTs: server clock from the scene payload (avoids client/server skew); fall back to local.
+  function nowTs(){ return (scene && scene.timestamp) || (Date.now()/1000); }
+  function age(ts){
+    if(!ts) return '?';
+    var s=Math.max(0, nowTs()-ts);
+    if(s<90) return Math.round(s)+'s';
+    if(s<5400) return Math.round(s/60)+'m';
+    return (s/3600).toFixed(1)+'h';
+  }
+
+  // Resolve a render position WITHOUT inventing geometry:
+  //   1) the entity's current position_room_m if present (live),
+  //   2) else the last position we ever saw for this id (remembered),
+  //   3) else null — it has no room position and cannot go on the floor.
+  function resolvePos(e){
+    var p=posOf(e);
+    if(p) return {x:p.x, y:p.y, z:p.z, remembered:false};
+    var lk=lastKnownPos[e && e.entity_id];
+    if(lk) return {x:lk.x, y:lk.y, z:lk.z, remembered:true};
+    return null;
+  }
+  // Classify for rendering: 'solid' (live & visible), 'ghost' (has a position but not
+  // live-confirmed — occluded/removed/remembered), or 'dock' (believed present, no position).
+  function classify(e){
+    var r=resolvePos(e);
+    if(!r) return {kind:'dock', pos:null};
+    var s=(e.state||'').toLowerCase();
+    var live=(s==='visible') && !r.remembered;
+    return {kind: live?'solid':'ghost', pos:r, remembered:r.remembered};
+  }
+
+  function growRoom(ents){
+    var mx=ROOM.w/2, md=ROOM.d;
+    ents.forEach(function(e){ var p=resolvePos(e); if(p){ mx=Math.max(mx,Math.abs(p.x)+0.6); md=Math.max(md,p.z+0.8);} });
+    ROOM.w = Math.min(12, Math.max(4, mx*2)); ROOM.d = Math.min(14, Math.max(4, md));
+  }
+
+  function drawGrid(){
+    if(!layers.grid) return;
+    var w=ROOM.w, d=ROOM.d, step=0.5;
+    ctx.lineWidth=1;
+    // depth lines (run away from camera) — brighter; center line accented
+    for(var x=-w/2; x<=w/2+1e-6; x+=step){
+      var a=project(x,0,0), b=project(x,0,d);
+      ctx.strokeStyle='rgba(10,255,200,'+(x===0?0.55:0.18)+')';
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    }
+    // cross lines (parallel to camera) — fade with depth
+    for(var z=0; z<=d+1e-6; z+=step){
+      var c=project(-w/2,0,z), e2=project(w/2,0,z);
+      ctx.strokeStyle='rgba(10,255,200,'+(0.08+0.16*(1-z/d))+')';
+      ctx.beginPath(); ctx.moveTo(c.x,c.y); ctx.lineTo(e2.x,e2.y); ctx.stroke();
+    }
+  }
+
+  function drawWalls(){
+    if(!layers.walls) return;
+    var w=ROOM.w/2, d=ROOM.d, h=ROOM.h;
+    ctx.lineWidth=1;
+    function seg(p1,p2,a){
+      ctx.strokeStyle='rgba(0,204,255,'+a+')';
+      var A=project(p1[0],p1[1],p1[2]),B=project(p2[0],p2[1],p2[2]);
+      ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+    }
+    // Subtle room hint: back wall + receding top edges only. The near corners
+    // project off-screen by design, so we draw the back frame (the "horizon room")
+    // and the two receding ceiling edges — enough to read as a room, not a box.
+    seg([-w,0,d],[ w,0,d], 0.16);   // back wall base
+    seg([-w,0,d],[-w,h,d], 0.16);   // back-left vertical
+    seg([ w,0,d],[ w,h,d], 0.16);   // back-right vertical
+    seg([-w,h,d],[ w,h,d], 0.16);   // back wall top
+    seg([-w,h,0],[-w,h,d], 0.07);   // receding top-left edge
+    seg([ w,h,0],[ w,h,d], 0.07);   // receding top-right edge
+  }
+
+  function drawTrails(){
+    if(!layers.trails) return;
+    var ids=Object.keys(trails);
+    ids.forEach(function(id){
+      var pts=trails[id]; if(pts.length<2) return;
+      var hue=(hashHue(id));
+      for(var i=1;i<pts.length;i++){
+        var a=project(pts[i-1].x,0.05,pts[i-1].z), b=project(pts[i].x,0.05,pts[i].z);
+        var alpha=0.12+0.6*(i/pts.length);
+        ctx.strokeStyle='hsla('+hue+',100%,60%,'+alpha+')';
+        ctx.lineWidth=1.6;
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+      }
+    });
+  }
+  function hashHue(s){var h=0;for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;return h;}
+
+  function drawRelations(ents){
+    if(!layers.relations || !scene || !scene.relations) return;
+    var byId={}; ents.forEach(function(e){byId[e.entity_id]=e;});
+    ctx.lineWidth=1;
+    scene.relations.forEach(function(r){
+      var a=byId[r.source_entity_id], b=byId[r.target_entity_id];
+      if(!a||!b||r.source_entity_id===r.target_entity_id) return;
+      var pa=resolvePos(a), pb=resolvePos(b); if(!pa||!pb) return;
+      var A=project(pa.x,pa.y||0.4,pa.z), B=project(pb.x,pb.y||0.4,pb.z);
+      ctx.strokeStyle='rgba(255,43,214,0.30)'; ctx.setLineDash([4,4]);
+      ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke(); ctx.setLineDash([]);
+    });
+  }
+
+  function drawObjects(ents){
+    if(!layers.objects) return;
+    // place only entities that resolve to a real position (live or remembered) — never invent
+    var placed=[];
+    ents.forEach(function(e){ var c=classify(e); if(c.kind!=='dock') placed.push({e:e,c:c}); });
+    placed.sort(function(a,b){return b.c.pos.z-a.c.pos.z;});   // far-to-near so near draw on top
+    placed.forEach(function(o){
+      var e=o.e, p=o.c.pos, col=epi(e), ghost=(o.c.kind==='ghost');
+      var foot=project(p.x,0,p.z), top=project(p.x,Math.max(0.3,p.y||0.4),p.z);
+      // vertical pole to floor (depth cue) — dashed + fainter when remembered
+      ctx.strokeStyle=col.c; ctx.lineWidth=1; ctx.globalAlpha=ghost?0.18:0.35;
+      if(ghost) ctx.setLineDash([3,4]);
+      ctx.beginPath(); ctx.moveTo(foot.x,foot.y); ctx.lineTo(top.x,top.y); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha=1;
+      // floor footprint ring
+      ctx.strokeStyle=col.c; ctx.globalAlpha=ghost?0.26:0.4;
+      if(ghost) ctx.setLineDash([3,4]);
+      ctx.beginPath(); ctx.ellipse(foot.x,foot.y,18/Math.max(0.6,top.d),6/Math.max(0.6,top.d),0,0,2*Math.PI); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha=1;
+      // node marker (diamond): FILLED + glow when live, HOLLOW when remembered
+      var r=Math.max(4, 11/Math.max(0.7,top.d));
+      ctx.beginPath(); ctx.moveTo(top.x,top.y-r); ctx.lineTo(top.x+r,top.y); ctx.lineTo(top.x,top.y+r); ctx.lineTo(top.x-r,top.y); ctx.closePath();
+      if(ghost){
+        ctx.globalAlpha=0.6; ctx.lineWidth=1.4; ctx.strokeStyle=col.c; ctx.stroke(); ctx.globalAlpha=1;
+      } else {
+        ctx.shadowColor=col.glow; ctx.shadowBlur=10*(e.confidence||0.5);
+        ctx.fillStyle=col.c; ctx.fill(); ctx.shadowBlur=0;
+      }
+      // label
+      if(layers.labels){
+        ctx.globalAlpha=ghost?0.82:1;
+        ctx.fillStyle=col.c; ctx.font="bold 11px 'JetBrains Mono', ui-monospace, monospace"; ctx.textAlign='center';
+        ctx.fillText((e.label||e.entity_id||'?').toUpperCase(), top.x, top.y-r-12);
+        ctx.fillStyle='rgba(120,140,150,0.9)'; ctx.font="9px 'JetBrains Mono', ui-monospace, monospace";
+        var tag = ghost ? ('↺ '+age(e.last_seen_ts)+' · '+(e.state||'remembered'))
+                        : (Math.round((e.confidence||0)*100)+'% · '+(e.state||''));
+        ctx.fillText(tag, top.x, top.y-r-2);
+        ctx.globalAlpha=1;
+      }
+    });
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    var ents=(scene && scene.entities)?scene.entities:[];
+    growRoom(ents);
+    drawGrid(); drawWalls(); drawTrails(); drawRelations(ents); drawObjects(ents);
+  }
+
+  // bottom-left readout: entities ON THE FLOOR (live + remembered). Unplaced ones live in the dock.
+  function updateReadout(){
+    var ents=(scene && scene.entities)?scene.entities:[];
+    var rows=[];
+    ents.forEach(function(e){ var c=classify(e); if(c.kind!=='dock') rows.push({e:e,c:c}); });
+    rows.sort(function(a,b){return (b.e.confidence||0)-(a.e.confidence||0);});
+    var html=rows.slice(0,8).map(function(o){
+      var e=o.e, col=epi(e), p=o.c.pos, ghost=(o.c.kind==='ghost');
+      var pos='x '+p.x.toFixed(1)+'  z '+p.z.toFixed(1)+'m';
+      return '<div class="obj'+(ghost?' ghost':'')+'" style="border-left-color:'+col.c+'">'+
+        '<span class="l" style="color:'+col.c+'">'+(e.label||e.entity_id||'?').toUpperCase()+'</span> '+
+        '<span class="m">'+Math.round((e.confidence||0)*100)+'%</span>'+
+        (ghost?' <span class="m">↺ '+age(e.last_seen_ts)+'</span>':'')+'<br>'+
+        '<span class="m">'+pos+' · '+(e.state||'?')+' · '+(e.region||'')+(ghost?' · last-known pos':'')+'</span></div>';
+    }).join('');
+    document.getElementById('readout').innerHTML =
+      '<div class="hdr">ON THE FLOOR ('+rows.length+')</div>'+
+      (html || '<div class="obj"><span class="m">nothing placed</span></div>');
+  }
+
+  // top-right dock: entities JARVIS believes are present but has NEVER localized.
+  // Listed honestly OFF the floor — no position was computed, so none is shown.
+  function updateDock(){
+    var ents=(scene && scene.entities)?scene.entities:[];
+    var rows=ents.filter(function(e){return classify(e).kind==='dock';});
+    rows.sort(function(a,b){return (b.confidence||0)-(a.confidence||0);});
+    var el=document.getElementById('unplaced');
+    if(!rows.length){ el.innerHTML=''; return; }
+    var html=rows.map(function(e){
+      var col=epi(e);
+      return '<div class="uitem" style="border-left-color:'+col.c+'">'+
+        '<span class="dot" style="color:'+col.c+';background:'+col.c+'"></span>'+
+        '<span class="l" style="color:'+col.c+'">'+(e.label||'?').toUpperCase()+'</span>'+
+        '<span class="m"> '+Math.round((e.confidence||0)*100)+'% · '+(e.state||'?')+' · '+age(e.last_seen_ts)+'</span></div>';
+    }).join('');
+    el.innerHTML='<div class="hdr">BELIEVED PRESENT · UNPLACED ('+rows.length+')</div>'+
+      '<div class="note">recognized but never localized — no room position computed, so not drawn on the floor</div>'+html;
+  }
+
+  function fetchJSON(u){return fetch(u).then(function(r){if(!r.ok)throw new Error(u+' '+r.status);return r.json();});}
+
+  // ingest a scene (live or historical) for trails + last-known-position memory.
+  // Called oldest->newest so the freshest real position wins for each id.
+  function pushTrails(s){
+    var t=(s&&s.timestamp)||(s&&s.tick)||(Date.now()/1000);
+    (s.entities||[]).forEach(function(e){
+      var p=posOf(e); if(!p) return;
+      (trails[e.entity_id]=trails[e.entity_id]||[]).push({x:p.x,z:p.z,t:t});
+      if(trails[e.entity_id].length>40) trails[e.entity_id].shift();
+      lastKnownPos[e.entity_id]={x:p.x, y:p.y, z:p.z, ts:e.last_seen_ts||t, label:e.label};
+    });
+  }
+
+  function refresh(){
+    if(paused) return;
+    fetchJSON('/api/hrr/scene').then(function(s){
+      scene=s; pushTrails(s); updateReadout(); updateDock();
+      var ents=s.entities||[], nDock=0, nGhost=0, nSolid=0;
+      ents.forEach(function(e){ var k=classify(e).kind; if(k==='dock')nDock++; else if(k==='ghost')nGhost++; else nSolid++; });
+      var st=document.getElementById('stat');
+      st.innerHTML='entities '+ents.length+' · live '+nSolid+' · remembered '+nGhost+' · unplaced '+nDock+
+        '<br>relations '+((s.relations||[]).length)+' · calib v'+(((s.source||{}).calibration_version)||0)+' · tick '+(s.tick||0)+
+        '<br>'+new Date().toLocaleTimeString();
+    }).catch(function(err){ document.getElementById('stat').textContent='offline: '+err.message; });
+  }
+
+  // seed trails + last-known positions from recent history once.
+  // NOTE: the endpoint returns {scenes:[...]}, not a bare array — the old
+  // `(hist||[]).forEach` silently threw into .catch, so seeding never ran.
+  fetchJSON('/api/hrr/scene/history?limit=40').then(function(hist){
+    var frames=(hist && hist.scenes)||[];
+    frames.forEach(pushTrails);
+    if(scene){ updateReadout(); updateDock(); }   // re-render now that ghosts have positions
+  }).catch(function(){});
+
+  // layer toggles
+  document.querySelectorAll('[data-layer]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var k=b.getAttribute('data-layer'); layers[k]=!layers[k];
+      b.classList.toggle('on', layers[k]); render();
+    });
+  });
+  document.getElementById('pauseBtn').addEventListener('click', function(){
+    paused=!paused; this.textContent=paused?'▶ resume':'⏸ pause'; this.classList.toggle('on',paused);
+  });
+
+  function loop(){ render(); requestAnimationFrame(loop); }
+  refresh(); timer=setInterval(refresh, POLL_MS); loop();
+})();
+</script>
+</body>
+</html>

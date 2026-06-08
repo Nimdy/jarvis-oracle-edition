@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Identity &amp; Perception (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .verdict{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:2px 0 8px;}
+    .verdict .name{font-size:30px;font-weight:700;letter-spacing:.02em;}
+    .verdict .why{font-size:10px;color:var(--muted);}
+    .signals{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px;}
+    .sig{border:1px solid var(--line);border-radius:5px;padding:9px 11px;background:rgba(3,8,14,.5);}
+    .sig .sh{font-size:9.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;}
+    .sig .sv{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:4px;}
+    .sig .sm{font-size:9.5px;color:var(--dim);margin-top:3px;}
+    .cand{border:1px solid var(--line);border-radius:5px;padding:10px 12px;background:rgba(3,8,14,.5);margin-top:4px;}
+    .cand .ct{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+    .cand .cn{font-size:18px;font-weight:700;}
+    .weight{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--cyan);}
+    .evid{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+    .bio{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px;}
+    .bigstat{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .sensors{display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;margin:2px 0 8px;}
+    .sensors .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .scenefoot{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;}
+    .scenefoot b{color:var(--text);}
+    /* operator actions (add-only) */
+    .opgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:4px;}
+    @media(max-width:900px){.opgrid{grid-template-columns:1fr;}}
+    .opblk{border:1px solid var(--line);border-radius:5px;padding:10px 12px;background:rgba(3,8,14,.5);}
+    .opblk .opt{font-size:9.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:7px;}
+    .opblk .opd{font-size:9.5px;color:var(--dim);margin-bottom:8px;line-height:1.5;}
+    .opfield{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+    .opfield .v2-field{flex:1;min-width:120px;width:auto;margin:0;}
+    .modrow{display:flex;gap:6px;align-items:center;margin:8px 0;}
+    .modrow .v2-field{flex:1;width:auto;margin:0;}
+    .recnote{font-size:10px;color:var(--dim);margin-top:8px;line-height:1.5;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · IDENTITY &amp; PERCEPTION</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Who JARVIS thinks it is talking to right now (live voice+face fusion, fail-CLOSED) versus who it durably knows (persistent biometric registry) — kept strictly apart.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col7">
+      <h2>Fused Identity — Live</h2>
+      <div class="note">The fusion verdict <em>right now</em>. With no active voice or face signal it must read <b>no active signals</b>, never "0% confidence" — absence is not a low score. The last-known name is a fading snapshot, not the current resolution.</div>
+      <div class="verdict" id="fuse-verdict"></div>
+      <div class="kv" id="fuse-kv"></div>
+      <div class="scenefoot" id="fuse-lastknown"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Voice &amp; Face Signals</h2>
+      <div class="note">The two raw biometric streams feeding fusion. A signal older than its staleness floor (voice 30s, face 90s) is marked <b>stale</b> and must not count as live evidence.</div>
+      <div class="signals" id="signals"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Persistent Candidate Registry</h2>
+      <div class="note">Durable identity, disk-backed, independent of live recognition. The score is a cumulative <b>evidence weight</b> (promotion threshold 1.5) — <b>not</b> a 0–1 confidence, so it is never drawn as a percent.</div>
+      <div id="candidates"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Biometric Enrollment</h2>
+      <div class="note">Enrolled samples and lifetime match counts. Counts are production recognition events, <b>not</b> a model-accuracy score — biometric quality is unverified without a live test.</div>
+      <div class="bio" id="bio"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Sensor Health &amp; Scene Perception</h2>
+      <div class="note">The Pi5 senses node and the scene tracker. STANDBY is expected while no user is present. Scene perception describes <b>surfaces and objects</b> — it is never used to infer who the user is; that is fusion's job alone.</div>
+      <div class="sensors" id="sensors"></div>
+      <div class="bars" id="scene-bars"></div>
+      <div class="scenefoot" id="scene-foot"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Operator Actions</h2>
+      <div class="note">Human-initiated writes to the biometric registry and live fusion. These fire <b>only</b> when you click — never automatically. Enrollment quality is unverified until a live match; removals and forget-all are destructive and irreversible (typed gate).</div>
+      <div class="opgrid">
+        <div class="opblk">
+          <div class="opt">Enrollment</div>
+          <div class="opd">Add a person's voice (mic clips) or face (camera frame) to the durable registry. Quick voice-enroll uses the last buffered audio.</div>
+          <div class="actrow">
+            <button class="btn-act" id="op-enroll-speaker">Enroll Speaker</button>
+            <button class="btn-act" id="op-enroll-face">Enroll Face</button>
+          </div>
+        </div>
+        <div class="opblk">
+          <div class="opt">Candidates</div>
+          <div class="opd">Override the automatic promotion gate: force a candidate to persistent identity, or reject and discard one.</div>
+          <div class="actrow">
+            <button class="btn-act" id="op-promote">Promote Candidate</button>
+            <button class="btn-act" id="op-reject">Reject Candidate</button>
+          </div>
+        </div>
+        <div class="opblk">
+          <div class="opt">Fusion / Registry</div>
+          <div class="opd">Toggle live face recognition, remove a single enrolled profile, or wipe ALL biometric data for a person.</div>
+          <div class="actrow">
+            <button class="btn-act" id="op-toggle-face">Toggle Face Recognition</button>
+            <button class="btn-danger" id="op-remove-speaker">Remove Speaker</button>
+            <button class="btn-danger" id="op-remove-face">Remove Face</button>
+            <button class="btn-danger" id="op-forget-all">Forget ALL Identity</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, cap=V2.cap, tag=V2.tag, barRow=V2.barRow;
+  var ID=null, CAND=null, SPK=null, FACE=null, SENS=null, SCENE=null, lastOkTs=0;
+  var STALE_VOICE_S=30, STALE_FACE_S=90;
+  V2.renderNav('/static/v2/identity.html');
+
+  function offline(id,msg){ el(id).innerHTML='<div class="offline">'+msg+'</div>'; }
+
+  function renderFusion(){
+    if(!ID){ offline('fuse-verdict','/api/identity offline'); el('fuse-kv').innerHTML=''; el('fuse-lastknown').innerHTML=''; return; }
+    var fz=ID.fusion||{};
+    var present=fz.user_present===true;
+    var conf=num(fz.confidence);
+    // fail-CLOSED: absence/no_signal is NOT a low score.
+    var noSignal = (!present) || fz.method==='no_signal' || fz.recognition_state==='absent';
+    var nm, nmColor, why;
+    if(noSignal){ nm='no active signals'; nmColor='var(--amber)'; why='user_present=false · method='+(fz.method||'—')+' · recognition_state='+(fz.recognition_state||'—'); }
+    else if(fz.conflict===true){ nm='conflict'; nmColor='var(--red)'; why='signals disagree · basis='+(fz.resolution_basis||'—'); }
+    else { nm=(fz.identity&&fz.identity!=='unknown')?fz.identity:'unknown'; nmColor=fz.is_known===true?'var(--green)':'var(--amber)';
+           why='method='+(fz.method||'—')+' · confidence '+(conf===null?'—':(conf*100).toFixed(0)+'%')+' · basis='+(fz.resolution_basis||'—'); }
+    el('fuse-verdict').innerHTML='<span class="name" style="color:'+nmColor+'">'+nm+'</span>'+
+      tag('grounded','live fusion')+'<span class="why">'+why+'</span>';
+    // voice-trust gate (fail-CLOSED: only 'stable' is ok)
+    var vts=fz.voice_trust_state||'unknown';
+    var vtsCls=vts==='stable'?'s-ok':((vts==='degraded'||vts==='conflicted')?'s-fail':'s-unk');
+    el('fuse-kv').innerHTML=
+      '<span>voice-trust <b class="'+vtsCls+'">'+vts+'</b></span>'+
+      '<span>reason <b>'+(fz.trust_reason||'—')+'</b></span>'+
+      '<span>visible persons <b>'+(num(fz.visible_person_count)===null?'—':fz.visible_person_count)+'</b></span>'+
+      '<span>flips <b>'+(num(fz.flip_count)===null?'—':fz.flip_count)+'</b></span>'+
+      '<span>fusion <b class="'+(fz.enabled===true?'s-ok':'s-unk')+'">'+(fz.enabled===true?'enabled':'—')+'</b></span>';
+    // last-known snapshot — explicitly aged, not current
+    var lk=fz.last_known_identity, lkc=num(fz.last_known_confidence), snapAge=num(fz.snapshot_age_s);
+    el('fuse-lastknown').innerHTML= lk
+      ? 'Last known: <b>'+lk+'</b> @ '+(lkc===null?'—':(lkc*100).toFixed(0)+'%')+' confidence, snapshot '+
+        (snapAge===null?'—':(snapAge>=90?(snapAge/60).toFixed(0)+'m':snapAge.toFixed(0)+'s')+' old')+
+        ' <span class="unpop">persisted snapshot — not a current recognition</span>'
+      : 'No persisted last-known identity.';
+  }
+
+  function renderSignals(){
+    if(!ID){ offline('signals','/api/identity offline'); return; }
+    var fz=ID.fusion||{}, v=fz.voice_signal||{}, f=fz.face_signal||{};
+    function card(title, sig, staleFloor){
+      var nm=sig.name, conf=num(sig.confidence), age=num(sig.age_s);
+      var hasName = nm && nm!=='unknown';
+      var stale = age!==null && age>staleFloor;
+      var note, color, tagHtml='';
+      if(!hasName){ note='detector ran, no '+title.toLowerCase()+' matched'; color='var(--amber)'; }
+      else if(stale){ note='STALE — '+ (age>=90?(age/60).toFixed(0)+'m':age.toFixed(0)+'s')+' old (>'+staleFloor+'s floor), not live evidence'; color='var(--amber)'; tagHtml='<span class="chip blk">stale</span>'; }
+      else { note='fresh '+(age===null?'—':age.toFixed(0)+'s')+' (≤'+staleFloor+'s)'; color='var(--green)'; }
+      var shown = hasName ? nm : 'unknown';
+      return '<div class="sig"><div class="sh"><span>'+title+'</span>'+tagHtml+'</div>'+
+        '<div class="sv" style="color:'+color+'">'+shown+'</div>'+
+        '<div class="sm">conf '+(conf===null?'—':(conf*100).toFixed(0)+'%')+' · age '+(age===null?'—':age.toFixed(0)+'s')+'</div>'+
+        '<div class="sm">'+note+'</div></div>';
+    }
+    el('signals').innerHTML = card('Voice', v, STALE_VOICE_S) + card('Face', f, STALE_FACE_S);
+  }
+
+  function renderCandidates(){
+    if(!CAND){ offline('candidates','/api/identity/candidates offline'); return; }
+    var list=CAND.candidates||[], tc=CAND.tier_counts||{}, names=CAND.persistent_names||[];
+    var head='<div class="kv" style="margin-bottom:8px">'+
+      '<span>persistent <b class="'+(num(tc.persistent)>0?'s-ok':'s-unk')+'">'+(num(tc.persistent)||0)+'</b></span>'+
+      '<span>provisional <b>'+(num(tc.provisional)||0)+'</b></span>'+
+      '<span>candidate <b>'+(num(tc.candidate)||0)+'</b></span>'+
+      '<span>total <b>'+(num(CAND.total_candidates)||0)+'</b></span>'+
+      '<span>trusted names <b>'+(names.length?names.join(', '):'—')+'</b></span></div>';
+    if(!list.length){ el('candidates').innerHTML=head+'<div class="unpop">no candidates registered — recovery debt if recently rebooted</div>'; return; }
+    var rows=list.map(function(c){
+      var score=num(c.score), contra=num(c.contradiction_score), promoted=c.promoted===true;
+      var tierCls=c.tier==='persistent'?'s-ok':(c.tier==='provisional'?'s-unk':'');
+      var ev=(c.evidence_types||[]).map(function(e){ return '<span class="chip">'+cap(e)+'</span>'; }).join('');
+      return '<div class="cand"><div class="ct">'+
+        '<span class="cn">'+c.name+'</span>'+
+        '<span class="chip '+(c.tier==='persistent'?'reg':'')+'">tier '+(c.tier||'—')+'</span>'+
+        (promoted?'<span class="chip reg">promoted</span>':'')+
+        '<span style="margin-left:auto" class="unpop">evidence weight (not %)</span>'+
+        '<span class="weight">'+(score===null?'—':f2(score))+'</span></div>'+
+        '<div class="kv" style="margin-top:6px">'+
+          '<span>observations <b>'+(num(c.observation_count)||0)+'</b></span>'+
+          '<span>contradiction <b class="'+(contra!==null&&contra<0.5?'s-ok':'s-unk')+'">'+(contra===null?'—':f2(contra))+'</b><span class="unpop"> (&lt;0.5 gate)</span></span>'+
+          '<span>last seen <b>'+ago(c.last_seen)+'</b></span>'+
+        '</div>'+
+        '<div class="evid">'+ev+'</div></div>';
+    }).join('');
+    el('candidates').innerHTML=head+rows;
+  }
+
+  function bioCard(title, obj, sampleKey, sampleLabel, available){
+    if(!obj){ return '<div class="sig"><div class="sh"><span>'+title+'</span></div><div class="sv" style="color:var(--amber)">—</div><div class="sm">not enrolled / offline</div></div>'; }
+    var samples=num(obj[sampleKey]);
+    var sampleColor = samples===null?'var(--dim)':(samples>=5?'var(--green)':'var(--amber)');
+    return '<div class="sig"><div class="sh"><span>'+title+'</span>'+(available===true?'<span class="chip reg">enrolled</span>':'')+'</div>'+
+      '<div class="sv">'+obj.name+'</div>'+
+      '<div class="kv" style="margin-top:6px;font-size:10px">'+
+        '<span>'+sampleLabel+' <b style="color:'+sampleColor+'">'+(samples===null?'—':samples)+'</b></span>'+
+        '<span>matches <b>'+(num(obj.interaction_count)||0)+'</b></span>'+
+      '</div>'+
+      '<div class="sm">enrolled '+ago(obj.registered)+' · last match '+ago(obj.last_seen)+'</div></div>';
+  }
+
+  function renderBio(){
+    var v = SPK ? (SPK.speakers||[])[0] : undefined;
+    var f = FACE ? (FACE.faces||[])[0] : undefined;
+    var voiceCard = SPK ? bioCard('Voice (speaker)', v, 'enrollment_clips', 'clips', SPK.available)
+                        : '<div class="sig"><div class="sh"><span>Voice (speaker)</span></div><div class="sv offline">offline</div></div>';
+    var faceCard = FACE ? bioCard('Face', f, 'enrollment_crops', 'crops', FACE.available)
+                        : '<div class="sig"><div class="sh"><span>Face</span></div><div class="sv offline">offline</div></div>';
+    el('bio').innerHTML = voiceCard + faceCard;
+  }
+
+  function renderSensors(){
+    if(!SENS || !SENS['pi5-senses']){ offline('sensors','/api/sensor-health offline'); }
+    else {
+      var p=SENS['pi5-senses'];
+      var temp=num(p.cpu_temp_c), thr=p.throttled, fps=num(p.camera_fps);
+      var tempColor = temp===null?'var(--dim)':(temp<70?'var(--green)':(temp<80?'var(--amber)':'var(--red)'));
+      var thrOk = thr==='0x0';
+      var fpsColor = fps===null?'var(--dim)':(fps>=12?'var(--green)':(fps>=5?'var(--amber)':'var(--red)'));
+      var lastAge = ago(p.last_update);
+      el('sensors').innerHTML=
+        '<span><div class="k">phase</div><span class="bigstat" style="color:var(--cyan)">'+(p.phase||'—')+'</span></span>'+
+        '<span><div class="k">cpu temp</div><span class="bigstat" style="color:'+tempColor+'">'+(temp===null?'—':f2(temp)+'°C')+'</span></span>'+
+        '<span><div class="k">throttled</div><span class="bigstat" style="color:'+(thrOk?'var(--green)':'var(--red)')+'">'+(thr||'—')+'</span></span>'+
+        '<span><div class="k">camera fps</div><span class="bigstat" style="color:'+fpsColor+'">'+(fps===null?'—':fps)+'</span></span>'+
+        '<span><div class="k">cpu %</div><span class="bigstat">'+(num(p.cpu_percent)===null?'—':f2(p.cpu_percent))+'</span></span>'+
+        '<span><div class="k">mem</div><span class="bigstat">'+(num(p.mem_used_mb)===null?'—':(p.mem_used_mb/1024).toFixed(1)+'G')+'</span></span>'+
+        '<span><div class="k">as of</div><span class="asof">'+lastAge+'</span></span>';
+    }
+    // scene region visibility (occlusion map) as bars
+    if(!SCENE){ el('scene-bars').innerHTML=''; el('scene-foot').innerHTML='<span class="offline">/api/scene offline</span>'; return; }
+    var rv=SCENE.region_visibility||{};
+    var keys=Object.keys(rv);
+    el('scene-bars').innerHTML = keys.length
+      ? '<div class="note" style="margin:4px 0 2px">region visibility (1.0 = fully visible, lower = occluded)</div>'+
+        keys.map(function(k){ var val=num(rv[k]); return barRow(cap(k), val===null?null:val*100, val===null?'—':(val*100).toFixed(0)+'%', bandColor(val,0.8,0.4)); }).join('')
+      : '<div class="unpop">no region visibility reported</div>';
+    // scene summary + display-content activity (NOT identity)
+    var vis=num(SCENE.visible_count), ent=num(SCENE.entity_count), stable=num(SCENE.stable_count);
+    var dc=(SCENE.display_content||[]);
+    var act = dc.length ? dc.map(function(d){ return cap(d.activity_label)+' ('+(num(d.activity_confidence)===null?'—':(d.activity_confidence*100).toFixed(0)+'%')+')'; }).join(', ') : '—';
+    el('scene-foot').innerHTML=
+      '<b>'+(vis===null?'—':vis)+'</b> visible / <b>'+(ent===null?'—':ent)+'</b> tracked entities, <b>'+(stable===null?'—':stable)+'</b> stable. '+
+      'Display activity: <b>'+act+'</b> '+tag('derived','scene infers activity')+' '+
+      '<span class="unpop">activity is observed on a surface — it is NOT used to infer who the user is.</span>';
+  }
+
+  function renderBanner(){
+    var present = ID && ID.fusion && ID.fusion.user_present===true;
+    var phase = SENS && SENS['pi5-senses'] ? SENS['pi5-senses'].phase : null;
+    el('mode').textContent = 'present ' + (ID?(present?'yes':'no'):'—') + (phase?(' · '+phase):'');
+  }
+
+  function renderRecovery(){
+    var box=el('recovery');
+    // recovery framing: persistent registry exists but no live signal => standby/recovery, not broken
+    var hasRegistry = CAND && (num((CAND.tier_counts||{}).persistent)>0 || (CAND.persistent_names||[]).length>0);
+    var present = ID && ID.fusion && ID.fusion.user_present===true;
+    if(ID && hasRegistry && !present){
+      box.style.display='block';
+      box.innerHTML='<b>No active user — standby</b>, not a failure. The persistent registry is intact ('+
+        ((CAND.persistent_names||[]).join(', ')||'—')+'); live voice/face fusion simply has no signal right now. '+
+        '<span class="why">Brain rebooted several times today — empty live signals and low fps are recovery debt, not lost identity.</span>';
+    } else { box.style.display='none'; }
+  }
+
+  function renderAll(){ renderBanner(); renderRecovery(); renderFusion(); renderSignals(); renderCandidates(); renderBio(); renderSensors(); }
+
+  function refresh(){
+    Promise.allSettled([
+      fetchJSON('/api/identity'),
+      fetchJSON('/api/identity/candidates'),
+      fetchJSON('/api/speakers'),
+      fetchJSON('/api/faces'),
+      fetchJSON('/api/sensor-health'),
+      fetchJSON('/api/scene')
+    ]).then(function(r){
+      ID    = r[0].status==='fulfilled' ? r[0].value : null;
+      CAND  = r[1].status==='fulfilled' ? r[1].value : null;
+      SPK   = r[2].status==='fulfilled' ? r[2].value : null;
+      FACE  = r[3].status==='fulfilled' ? r[3].value : null;
+      SENS  = r[4].status==='fulfilled' ? r[4].value : null;
+      SCENE = r[5].status==='fulfilled' ? r[5].value : null;
+      if(r.some(function(x){ return x.status==='fulfilled'; })) lastOkTs=Date.now();
+      renderAll();
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+
+  // ===== OPERATOR ACTIONS (add-only) — writes fire ONLY on a human click =====
+  // Endpoints/bodies ported verbatim from v1 interactives.js + brain/dashboard/app.py.
+  // V2.post/V2.del are NEVER called at top level or on load — only inside handlers.
+  function _statusLine(node, msg, ok){ if(!node) return; node.textContent=msg; node.style.color=ok===false?'var(--red)':(ok===true?'var(--green)':'var(--amber)'); }
+
+  // ---- Enroll Speaker: getUserMedia mic -> MediaRecorder -> base64 clips ----
+  // POST /api/speakers/enroll {name, clips:[b64...]}  (quick-enroll = clips:[])
+  var _spkRecorder=null;
+  function openEnrollSpeaker(){
+    var bd=V2.modal('Enroll Speaker',
+      '<div class="modrow"><input id="es-name" class="v2-field" autocomplete="off" placeholder="Person name"></div>'+
+      '<div class="actrow">'+
+        '<button class="btn-act" id="es-quick">Quick Enroll (last audio)</button>'+
+        '<button class="btn-act" id="es-record">Record 8s</button>'+
+      '</div>'+
+      '<div class="recnote">Quick Enroll uses the last buffered audio on the brain. Record captures 8s from this browser’s mic and ships it as a base64 clip. Click Record again to stop early.</div>'+
+      '<div id="es-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#es-name'), st=bd.querySelector('#es-status');
+    nameEl.focus();
+    function postEnroll(clips){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name first', false); return; }
+      _statusLine(st, clips.length? 'Enrolling from recorded clip…' : 'Enrolling from last audio…', null);
+      V2.act(V2.post('/api/speakers/enroll', {name:name, clips:clips}), 'speaker enroll submitted')
+        .then(function(d){
+          if(d && d.status==='enrolled'){ _statusLine(st, 'Enrolled: '+d.name+(d.clips!=null?(' ('+d.clips+' clips)'):''), true); refresh(); }
+          else { _statusLine(st, (d&&(d.detail||d.error))||'Failed', false); }
+        }).catch(function(e){ _statusLine(st, e.message, false); });
+    }
+    bd.querySelector('#es-quick').addEventListener('click', function(){ postEnroll([]); });
+    bd.querySelector('#es-record').addEventListener('click', function(){
+      if(_spkRecorder){ _spkRecorder.stop(); _statusLine(st,'Processing…',null); return; }
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name first', false); return; }
+      navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+        _statusLine(st,'Recording 8 seconds…',null);
+        var recorder=new MediaRecorder(stream,{mimeType:'audio/webm'}), chunks=[];
+        recorder.ondataavailable=function(e){ chunks.push(e.data); };
+        recorder.onstop=function(){
+          _spkRecorder=null; stream.getTracks().forEach(function(t){ t.stop(); });
+          var blob=new Blob(chunks,{type:'audio/webm'}), reader=new FileReader();
+          reader.onload=function(){ postEnroll([reader.result.split(',')[1]]); };
+          reader.readAsDataURL(blob);
+        };
+        recorder.start(); _spkRecorder=recorder;
+        setTimeout(function(){ if(_spkRecorder) _spkRecorder.stop(); }, 8000);
+      }).catch(function(err){ _statusLine(st,'Mic error: '+err.message, false); });
+    });
+  }
+
+  // ---- Enroll Face: video frame -> canvas -> base64 crop ----
+  // POST /api/faces/enroll {name, crops:[b64...]}  (also supports crops:[] quick)
+  var _faceStream=null;
+  function _stopFaceStream(){ if(_faceStream){ _faceStream.getTracks().forEach(function(t){ t.stop(); }); _faceStream=null; } }
+  function openEnrollFace(){
+    var bd=V2.modal('Enroll Face',
+      '<div class="modrow"><input id="ef-name" class="v2-field" autocomplete="off" placeholder="Person name"></div>'+
+      '<video id="ef-video" autoplay playsinline muted style="width:100%;border:1px solid var(--line);border-radius:4px;background:#000;max-height:240px"></video>'+
+      '<div class="actrow">'+
+        '<button class="btn-act" id="ef-capture">Capture Frame</button>'+
+        '<button class="btn-act" id="ef-quick">Quick Enroll (no crop)</button>'+
+      '</div>'+
+      '<div class="recnote">Capture grabs the current camera frame from this browser, encodes it as a base64 JPEG crop, and ships it. Quick Enroll registers the name with no crop (server-side capture).</div>'+
+      '<div id="ef-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#ef-name'), vid=bd.querySelector('#ef-video'), st=bd.querySelector('#ef-status');
+    nameEl.focus();
+    navigator.mediaDevices.getUserMedia({video:true}).then(function(stream){ _faceStream=stream; vid.srcObject=stream; })
+      .catch(function(err){ _statusLine(st,'Camera error: '+err.message+' — Quick Enroll still works.', false); });
+    // stop the camera when the modal closes
+    var ov=document.getElementById('v2-overlay');
+    if(ov){ var onClose=function(){ _stopFaceStream(); }; ov.addEventListener('click', onClose, {once:false}); ov.querySelector('#v2-modal-x').addEventListener('click', onClose, {once:false}); }
+    function postFace(crops){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name first', false); return; }
+      _statusLine(st, crops.length?'Enrolling captured frame…':'Enrolling (server capture)…', null);
+      V2.act(V2.post('/api/faces/enroll', {name:name, crops:crops}), 'face enroll submitted')
+        .then(function(d){
+          if(d && d.status==='enrolled'){ _statusLine(st,'Face enrolled: '+d.name, true); _stopFaceStream(); refresh(); }
+          else { _statusLine(st,(d&&(d.detail||d.error))||'Failed', false); }
+        }).catch(function(e){ _statusLine(st, e.message, false); });
+    }
+    bd.querySelector('#ef-capture').addEventListener('click', function(){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name first', false); return; }
+      if(!vid.videoWidth){ _statusLine(st,'Camera not ready', false); return; }
+      var cv=document.createElement('canvas'); cv.width=vid.videoWidth; cv.height=vid.videoHeight;
+      cv.getContext('2d').drawImage(vid,0,0,cv.width,cv.height);
+      postFace([cv.toDataURL('image/jpeg',0.92).split(',')[1]]);
+    });
+    bd.querySelector('#ef-quick').addEventListener('click', function(){ postFace([]); });
+  }
+
+  // ---- name-prompt form helper for candidate promote/reject ----
+  function openNamePrompt(title, label, btnLabel, onSubmit){
+    var prefill = CAND && (CAND.candidates||[])[0] ? (CAND.candidates[0].name||'') : '';
+    var bd=V2.modal(title,
+      '<div class="recnote" style="margin-top:0">'+label+'</div>'+
+      '<div class="modrow"><input id="np-name" class="v2-field" autocomplete="off" placeholder="Candidate name" value="'+prefill+'">'+
+      '<button class="btn-act" id="np-go">'+btnLabel+'</button></div>'+
+      '<div id="np-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#np-name'), st=bd.querySelector('#np-status');
+    nameEl.focus();
+    bd.querySelector('#np-go').addEventListener('click', function(){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name', false); return; }
+      onSubmit(name, st);
+    });
+  }
+
+  // POST /api/identity/candidates/promote {name}
+  function openPromote(){
+    openNamePrompt('Promote Candidate', 'Force-promote a candidate to persistent identity, bypassing the automatic evidence gate.', 'Promote', function(name, st){
+      _statusLine(st,'Promoting…',null);
+      V2.act(V2.post('/api/identity/candidates/promote', {name:name}), 'candidate promoted')
+        .then(function(){ _statusLine(st,'Promoted: '+name, true); refresh(); })
+        .catch(function(e){ _statusLine(st, e.message, false); });
+    });
+  }
+  // POST /api/identity/candidates/reject {name}
+  function openReject(){
+    openNamePrompt('Reject Candidate', 'Reject and discard a candidate. This drops its accumulated evidence.', 'Reject', function(name, st){
+      _statusLine(st,'Rejecting…',null);
+      V2.act(V2.post('/api/identity/candidates/reject', {name:name}), 'candidate rejected')
+        .then(function(){ _statusLine(st,'Rejected: '+name, true); refresh(); })
+        .catch(function(e){ _statusLine(st, e.message, false); });
+    });
+  }
+
+  // POST /api/identity/toggle-face {enabled}
+  function openToggleFace(){
+    var faceOn = (FACE && FACE.available===true) || (ID && ID.fusion && ID.fusion.face_signal && ID.fusion.enabled===true);
+    var next = !faceOn;
+    var bd=V2.modal('Toggle Face Recognition',
+      '<div class="recnote" style="margin-top:0">Face recognition currently looks <b>'+(faceOn?'enabled':'disabled/unknown')+'</b>. This will set it to <b>'+(next?'enabled':'disabled')+'</b> for live fusion.</div>'+
+      '<div class="actrow">'+
+        '<button class="btn-act" id="tf-enable">Enable</button>'+
+        '<button class="btn-act" id="tf-disable">Disable</button>'+
+      '</div>'+
+      '<div id="tf-status" class="recnote"></div>');
+    var st=bd.querySelector('#tf-status');
+    function send(enabled){
+      _statusLine(st,(enabled?'Enabling…':'Disabling…'),null);
+      V2.act(V2.post('/api/identity/toggle-face', {enabled:enabled}), 'face recognition '+(enabled?'enabled':'disabled'))
+        .then(function(d){ _statusLine(st,'face_enabled='+(d&&d.face_enabled!=null?d.face_enabled:enabled), true); refresh(); })
+        .catch(function(e){ _statusLine(st, e.message, false); });
+    }
+    bd.querySelector('#tf-enable').addEventListener('click', function(){ send(true); });
+    bd.querySelector('#tf-disable').addEventListener('click', function(){ send(false); });
+  }
+
+  // DELETE /api/speakers/{name}  — destructive, typed REMOVE gate
+  function openRemoveSpeaker(){
+    var prefill = SPK && (SPK.speakers||[])[0] ? (SPK.speakers[0].name||'') : '';
+    var bd=V2.modal('Remove Speaker',
+      '<div class="recnote" style="margin-top:0">Delete a single enrolled <b>voice</b> profile. The face profile (if any) is kept.</div>'+
+      '<div class="modrow"><input id="rs-name" class="v2-field" autocomplete="off" placeholder="Speaker name" value="'+prefill+'">'+
+      '<button class="btn-danger" id="rs-go">Remove…</button></div>'+
+      '<div id="rs-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#rs-name'), st=bd.querySelector('#rs-status');
+    nameEl.focus();
+    bd.querySelector('#rs-go').addEventListener('click', function(){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name', false); return; }
+      V2.confirm('Remove Speaker', 'Permanently remove the voice profile for <b>'+name+'</b>? This cannot be undone.', function(){
+        V2.act(V2.del('/api/speakers/'+encodeURIComponent(name)), 'speaker removed: '+name)
+          .then(function(){ refresh(); }).catch(function(){});
+      }, {typed:'REMOVE', yesLabel:'Remove Speaker'});
+    });
+  }
+
+  // DELETE /api/faces/{name}  — destructive, typed REMOVE gate
+  function openRemoveFace(){
+    var prefill = FACE && (FACE.faces||[])[0] ? (FACE.faces[0].name||'') : '';
+    var bd=V2.modal('Remove Face',
+      '<div class="recnote" style="margin-top:0">Delete a single enrolled <b>face</b> profile. The voice profile (if any) is kept.</div>'+
+      '<div class="modrow"><input id="rf-name" class="v2-field" autocomplete="off" placeholder="Face name" value="'+prefill+'">'+
+      '<button class="btn-danger" id="rf-go">Remove…</button></div>'+
+      '<div id="rf-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#rf-name'), st=bd.querySelector('#rf-status');
+    nameEl.focus();
+    bd.querySelector('#rf-go').addEventListener('click', function(){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name', false); return; }
+      V2.confirm('Remove Face', 'Permanently remove the face profile for <b>'+name+'</b>? This cannot be undone.', function(){
+        V2.act(V2.del('/api/faces/'+encodeURIComponent(name)), 'face removed: '+name)
+          .then(function(){ refresh(); }).catch(function(){});
+      }, {typed:'REMOVE', yesLabel:'Remove Face'});
+    });
+  }
+
+  // POST /api/identity/forget-all {name}  — DANGER, typed FORGET gate
+  function openForgetAll(){
+    var bd=V2.modal('Forget ALL Identity',
+      '<div class="recnote" style="margin-top:0">Wipe <b>both</b> voice and face biometrics for a person. This is irreversible — re-enrollment is required to recognize them again.</div>'+
+      '<div class="modrow"><input id="fa-name" class="v2-field" autocomplete="off" placeholder="Name to forget">'+
+      '<button class="btn-danger" id="fa-go">Forget…</button></div>'+
+      '<div id="fa-status" class="recnote"></div>');
+    var nameEl=bd.querySelector('#fa-name'), st=bd.querySelector('#fa-status');
+    nameEl.focus();
+    bd.querySelector('#fa-go').addEventListener('click', function(){
+      var name=nameEl.value.trim();
+      if(!name){ _statusLine(st,'Enter a name', false); return; }
+      V2.confirm('Forget ALL Identity', 'Permanently forget ALL biometric data (voice + face) for <b>'+name+'</b>? This DANGER action cannot be undone.', function(){
+        V2.act(V2.post('/api/identity/forget-all', {name:name}), 'forgot all identity for '+name)
+          .then(function(d){ V2.toast('voice='+(d&&d.voice_removed)+' face='+(d&&d.face_removed), true); refresh(); })
+          .catch(function(){});
+      }, {typed:'FORGET', yesLabel:'Forget ALL'});
+    });
+  }
+
+  function wireOps(){
+    var map={
+      'op-enroll-speaker':openEnrollSpeaker, 'op-enroll-face':openEnrollFace,
+      'op-promote':openPromote, 'op-reject':openReject,
+      'op-toggle-face':openToggleFace, 'op-remove-speaker':openRemoveSpeaker,
+      'op-remove-face':openRemoveFace, 'op-forget-all':openForgetAll
+    };
+    Object.keys(map).forEach(function(id){ var b=el(id); if(b) b.addEventListener('click', map[id]); });
+  }
+  wireOps();
+  // ===========================================================================
+
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

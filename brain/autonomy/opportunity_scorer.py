@@ -296,6 +296,7 @@ class OpportunityScorer:
     def _compute_impact(self, intent: ResearchIntent) -> float:
         source = intent.source_event.split(":")[0] if intent.source_event else ""
         tag_set = {t.lower() for t in intent.tag_cluster}
+        full_source = intent.source_event or ""
 
         # Goal-linked intents outrank everything
         if getattr(intent, "goal_id", ""):
@@ -304,13 +305,20 @@ class OpportunityScorer:
         if source == "metric":
             return 0.8
 
+        # SPARK §2.4 / §3 component 1: grounding intents (drive:grounding) ask a
+        # question answerable ONLY externally and grounding a wrong belief is
+        # user-relevant. They get a fixed high impact (~0.7) and are NEVER
+        # penalized as existential (they do not take the drive:curiosity/
+        # coherence/play 0.15 path below).
+        if full_source == "drive:grounding":
+            return 0.7
+
         base = {"thought": 0.4, "existential": 0.3, "emergence": 0.5,
                 "gap": 0.7, "learning_protocol": 0.4}.get(source, 0.3)
 
         # Existential penalty: unfocused philosophical research without goal alignment
         is_existential = source == "existential"
         if not is_existential:
-            full_source = intent.source_event or ""
             is_existential = full_source in (
                 "drive:curiosity", "drive:coherence", "drive:play",
             )

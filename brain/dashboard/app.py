@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+from collections import deque
 import logging
 import os
 import secrets
@@ -21,7 +23,7 @@ import time
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Depends, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -51,6 +53,8 @@ from consciousness.events import (
     KERNEL_ERROR,
     CONSCIOUSNESS_ANALYSIS,
     AUTONOMY_L3_ACTIVATION_DENIED,
+    KERNEL_THOUGHT,
+    MEMORY_WRITE,
 )
 from consciousness.modes import mode_manager, MODE_CHANGE
 from reasoning.response import ResponseGenerator
@@ -124,7 +128,53 @@ class _HealthCounters:
         }
 
 
+class _EventStream:
+    """Bounded ring of recent event-bus events for the cockpit SSE feed.
+
+    A READ-ONLY tap: each handler is bulletproof (never raises) so it cannot trip
+    the EventBus per-handler circuit breaker for real consumers. Captures a curated
+    set of event types into a fixed ring; the /api/events/stream route streams new
+    entries to the dashboard's Live Cognition Cockpit.
+    """
+
+    _STREAM_TYPES = (
+        KERNEL_THOUGHT, MEMORY_WRITE, MODE_CHANGE, CONSCIOUSNESS_ANALYSIS,
+        CONVERSATION_RESPONSE, KERNEL_ERROR, AUTONOMY_L3_ACTIVATION_DENIED,
+        PERCEPTION_BARGE_IN,
+    )
+
+    def __init__(self, maxlen: int = 300) -> None:
+        self._ring: deque = deque(maxlen=maxlen)
+        self._seq = 0
+        self._lock = threading.Lock()
+
+    def start(self) -> None:
+        for et in self._STREAM_TYPES:
+            event_bus.on(et, self._make(et))
+
+    def _make(self, etype: str) -> Callable[..., None]:
+        def _handler(**kwargs: Any) -> None:
+            try:
+                with self._lock:
+                    self._seq += 1
+                    seq = self._seq
+                summ: dict[str, Any] = {}
+                for k, v in list(kwargs.items())[:6]:
+                    summ[k] = v if isinstance(v, (int, float, bool, type(None))) else str(v)[:140]
+                self._ring.append({"seq": seq, "ts": time.time(), "type": etype, "data": summ})
+            except Exception:  # NEVER raise inside emit() — would trip the bus circuit breaker
+                pass
+        return _handler
+
+    def head(self) -> int:
+        return self._seq
+
+    def since(self, cursor: int) -> list[dict[str, Any]]:
+        return [e for e in list(self._ring) if e["seq"] > cursor]
+
+
 _health = _HealthCounters()
+_events = _EventStream()
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
@@ -253,6 +303,18 @@ def _build_cache() -> dict[str, Any]:
         _cache = snapshot
         _cache_hash = new_hash
         _cache_time = time.time()
+        # Keep the Operational Self-View snapshot fresh on the cache timer (read-only),
+        # so the conversation handler can answer self-questions from it without rebuilding.
+        try:
+            from cognition.self_view import build_self_view, save_self_view
+            save_self_view(build_self_view(
+                engine=_engine,
+                eval_snapshot=snapshot.get("eval", {}),
+                skills_summary=snapshot.get("skills", {}),
+                snapshot=snapshot,
+            ))
+        except Exception:
+            logger.debug("self-view snapshot refresh failed", exc_info=True)
     return snapshot
 
 
@@ -346,6 +408,72 @@ def _create_app() -> FastAPI:
         with open(hrr_scene_path) as f:
             return HTMLResponse(f.read())
 
+    @app.get("/mind", response_class=HTMLResponse)
+    async def mind_page():
+        """Mind's-eye Matrix world view — the world JARVIS *believes* is here.
+
+        Purely observational — the page polls ``/api/hrr/scene`` and
+        ``/api/hrr/scene/history`` on a timer and renders the mental-world
+        scene graph as a 2.5D wireframe room with epistemic-colored object
+        markers and motion trails. Estimated (monocular) positions, not a
+        depth scan; a dense depth mesh is a future phase. Zero authority.
+        """
+        mind_path = os.path.join(_STATIC_DIR, "mind.html")
+        with open(mind_path) as f:
+            return HTMLResponse(f.read())
+
+    @app.get("/v2/integrity", response_class=HTMLResponse)
+    async def v2_integrity_page():
+        """dashboardV2 — Evidence Integrity Cockpit (tracer-bullet page).
+
+        A new PARALLEL dashboard surface (own ``/v2`` namespace); the v1
+        dashboard is untouched. Purely observational — polls the existing
+        read-only ``/api/eval/snapshot`` + ``/api/self-test`` and renders an
+        honest instrument: self-scored vs grounded vs earned scorers, the
+        unpopulated 7-category scoreboard (shown as 'not measured', not zero),
+        soul-integrity mean AND floor, and a fail-CLOSED gate strip. No new
+        endpoints, zero authority — cannot write any state.
+        """
+        v2_integrity_path = os.path.join(_STATIC_DIR, "v2", "integrity.html")
+        with open(v2_integrity_path) as f:
+            return HTMLResponse(f.read())
+
+    @app.get("/v2/maturity", response_class=HTMLResponse)
+    async def v2_maturity_page():
+        """dashboardV2 — Maturity Ladder (page 2).
+
+        Per-subsystem gate lifecycle from ``/api/eval/snapshot`` maturity_tracker:
+        each gate's current value beside its ever-proven high-water (``ever_met``,
+        ``best_current``, ``ever_met_ts``), so a gate below threshold after a
+        restart reads as *recovering*, not broken, and high-water is never shown
+        as current. Plus a real gate-crossing timeline from ``ever_met_ts``.
+        Read-only, zero authority.
+        """
+        v2_maturity_path = os.path.join(_STATIC_DIR, "v2", "maturity.html")
+        with open(v2_maturity_path) as f:
+            return HTMLResponse(f.read())
+
+    @app.get("/v2/matrix", response_class=HTMLResponse)
+    async def v2_matrix_page():
+        """dashboardV2 — Matrix Protocol Tier-2 lifecycle (observability).
+
+        Renders the read-only ``/api/matrix`` view: the candidate_birth →
+        promoted ladder, per-focus signal accumulation toward autonomous birth,
+        each born specialist's next gate (have/need/met), and the broadcast
+        slots. The proving-ground surface for Matrix v2 (Capability Domains).
+        Zero authority — cannot write any state.
+        """
+        v2_matrix_path = os.path.join(_STATIC_DIR, "v2", "matrix.html")
+        with open(v2_matrix_path) as f:
+            return HTMLResponse(f.read())
+
+    @app.get("/v2/domains", response_class=HTMLResponse)
+    async def v2_domains_page():
+        """dashboardV2 — Matrix v2 Capability Domains (read-only registry view)."""
+        v2_domains_path = os.path.join(_STATIC_DIR, "v2", "domains.html")
+        with open(v2_domains_path) as f:
+            return HTMLResponse(f.read())
+
     @app.get("/eval")
     async def eval_page():
         from fastapi.responses import RedirectResponse
@@ -354,6 +482,56 @@ def _create_app() -> FastAPI:
     @app.get("/api/eval/snapshot")
     async def api_eval_snapshot():
         return _cache.get("eval", {})
+
+    # ── SPARK_DESIGN §6 / §8 P4 — async Grounding Queue (read-only) ──────────
+    @app.get("/api/grounding/queue")
+    async def api_grounding_queue():
+        """Read-only Grounding Queue: pending validation questions (ranked by
+        tension × graph-leverage × staleness), the grounding-ring metrics
+        (external_validation_rate, grounded:inferred, orphan_rate,
+        avg_chain_length), the per-mechanism advisory promotion levels, and the
+        input-starvation state. Answering is operator-gated (POST below); nothing
+        here auto-fires. Falls back to the cached grounding_ring if the live
+        queue singleton is unavailable."""
+        out: dict[str, Any] = {
+            "grounding_ring": _cache.get("grounding_ring", {}),
+        }
+        try:
+            from autonomy.grounding_queue import GroundingQueue
+            GroundingQueue.get_instance().expire_stale()
+            out["queue"] = GroundingQueue.get_instance().get_status(limit=80)
+        except Exception:
+            out["queue"] = _cache.get("grounding_ring", {}).get("queue", {})
+        return out
+
+    @app.post("/api/grounding/queue/answer", dependencies=[Depends(_require_api_key)])
+    async def api_grounding_queue_answer(request: Request):
+        """OPERATOR-GATED answer to a pending grounding question (SPARK §6 / §7).
+
+        Records the operator's answer as an external-validation outcome (never
+        self-scored): a "no/wrong" still counts as grounded=True (being corrected
+        is success). View-only on the belief graph — the belief mutation is the
+        P5 active closure; here we only record the external touch on the durable
+        queue + the external-only promotion gates. Never auto-fired: this runs
+        only on an explicit operator POST with the api_key.
+
+        Body JSON: {"question_id": str, "answer": str}
+        """
+        body = await request.json()
+        question_id = str(body.get("question_id", "") or "").strip()
+        answer = str(body.get("answer", "") or "")
+        if not question_id:
+            raise HTTPException(400, "question_id required")
+        if not answer.strip():
+            raise HTTPException(400, "answer required")
+        try:
+            from autonomy.grounding_queue import GroundingQueue
+            result = GroundingQueue.get_instance().answer(question_id, answer)
+        except Exception as exc:
+            raise HTTPException(500, f"grounding answer failed: {exc}")
+        if not result.get("ok"):
+            raise HTTPException(404, result.get("error", "question_not_found"))
+        return result
 
     @app.get("/api/eval/benchmark")
     async def api_eval_benchmark():
@@ -440,6 +618,37 @@ def _create_app() -> FastAPI:
         if cs and cs._world_model:
             return cs._world_model.get_diagnostics()
         return {"error": "World model not available"}
+
+    @app.get("/api/self-view")
+    async def api_self_view():
+        """Operational Self-View (OSV P0) — read-only, provenance-honest self-model.
+
+        Shadow/observability: synthesizes a fused self-model from existing readouts and
+        persists the snapshot. No canonical writes, no LLM, no behavior change.
+        """
+        from cognition.self_view import build_self_view, save_self_view, load_self_view
+        try:
+            model = build_self_view(
+                engine=_engine,
+                eval_snapshot=_cache.get("eval", {}),
+                skills_summary=_cache.get("skills", {}),
+                snapshot=_cache,
+            )
+            save_self_view(model)
+            # P2 voice-grounding telemetry (shadow): what the grounding pass has seen /
+            # would repair across recent conversational turns.
+            try:
+                from conversation_handler import get_self_grounding_stats
+                model["p2_grounding"] = get_self_grounding_stats()
+            except Exception:
+                pass
+            return model
+        except Exception as exc:  # honest degradation to last snapshot
+            last = load_self_view()
+            if last is not None:
+                last["_stale"] = True
+                return last
+            return {"error": "self-view unavailable", "detail": str(exc)}
 
     @app.get("/api/spatial/diagnostics")
     async def api_spatial_diagnostics():
@@ -777,6 +986,94 @@ def _create_app() -> FastAPI:
         si = _cache.get("self_improve", {})
         return si.get("specialists", {})
 
+    @app.get("/api/matrix")
+    async def api_matrix():
+        """Tier-2 Matrix Protocol specialist lifecycle (observability).
+
+        Per matrix-eligible specialist: stage, gate metrics, and the next gate to
+        clear. `not_born` lists eligible focuses with no specialist yet (visible,
+        not silent). Read-only — no mutation, no promotion.
+        """
+        if not _engine:
+            return JSONResponse({"error": "Not ready"}, status_code=503)
+        try:
+            report = _engine.get_matrix_report()
+            if report is None:
+                return {"available": False, "reason": "hemisphere orchestrator not enabled"}
+            return {"available": True, **report}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.get("/api/domains")
+    async def api_domains():
+        """Matrix v2 — Capability Domains (Phase 1 isolation substrate).
+
+        Read-only registry view: each isolated, deletable domain's status + tallies
+        (no filesystem paths leaked). Zero authority — cannot create/delete here.
+        """
+        try:
+            from cognition.capability_domains import get_capability_domain_registry
+            return {"available": True, **get_capability_domain_registry().status()}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.post("/api/domains", dependencies=[Depends(_require_api_key)])
+    async def api_domains_create(request: Request):
+        """Create an isolated Capability Domain. Governed write (API key)."""
+        try:
+            body = await request.json()
+            name = (body.get("name") or "").strip()
+            if not name:
+                return JSONResponse({"error": "name is required"}, status_code=400)
+            kind = body.get("kind", "document")
+            from cognition.capability_domains import get_capability_domain_registry
+            dom = get_capability_domain_registry().create(name, kind=kind)
+            return {"created": True, "domain": dom.public_view()}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.post("/api/domains/{domain_id}/ingest", dependencies=[Depends(_require_api_key)])
+    async def api_domains_ingest(domain_id: str, request: Request):
+        """Ingest knowledge into a domain's isolated store (text or a folder path).
+
+        Body: {"title","content"} for inline text, or {"folder": "/path"} to ingest
+        a directory. Tagged provenance=ingested ("know about", never "can do").
+        """
+        try:
+            body = await request.json()
+            from cognition.capability_domains import (
+                get_capability_domain_registry, ingest_text, ingest_folder,
+            )
+            reg = get_capability_domain_registry()
+            dom = reg.get(domain_id)
+            if dom is None:
+                return JSONResponse({"error": "unknown domain"}, status_code=404)
+            if body.get("folder"):
+                summary = ingest_folder(reg, dom, str(body["folder"]))
+            else:
+                content = body.get("content") or ""
+                if not content.strip():
+                    return JSONResponse({"error": "content or folder required"}, status_code=400)
+                n = ingest_text(reg, dom, body.get("title", "source"), content)
+                summary = {"chunks": n, "domain_id": domain_id}
+            return {"ingested": True, "summary": summary,
+                    "domain": reg.get(domain_id).public_view()}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.delete("/api/domains/{domain_id}", dependencies=[Depends(_require_api_key)])
+    async def api_domains_delete(domain_id: str):
+        """Clean ablation: delete a domain (its isolated store/memory/NN) with zero
+        residue elsewhere. Governed write (API key)."""
+        try:
+            from cognition.capability_domains import get_capability_domain_registry
+            ok = get_capability_domain_registry().delete(domain_id)
+            if not ok:
+                return JSONResponse({"error": "unknown domain"}, status_code=404)
+            return {"deleted": True, "domain_id": domain_id}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
     @app.get("/api/skills")
     async def api_skills():
         return {
@@ -939,6 +1236,36 @@ def _create_app() -> FastAPI:
             return JSONResponse(result, status_code=400)
         return {"status": "retried", "skill_id": skill_id, "job_id": job_id, **result}
 
+    @app.post("/api/skills/{skill_id}/recover", dependencies=[Depends(_require_api_key)])
+    async def api_skill_recover(skill_id: str, request: Request):
+        """Recover a blocked/failed learning job so it re-runs (e.g. after a
+        contract/fixture fix). Resets the job to active/assess; idempotent phases
+        re-advance and verify re-checks against any now-active plugin. Operator
+        action — needed because a blocked job is otherwise only restartable by
+        re-issuing the (voice-only) learn command."""
+        try:
+            from skills.registry import skill_registry
+            rec = skill_registry.get(skill_id)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+        if rec is None:
+            return JSONResponse({"error": f"Skill '{skill_id}' not found"}, status_code=404)
+        body = {}
+        try:
+            body = await request.json() if await request.body() else {}
+        except Exception:
+            body = {}
+        job_id = (body.get("job_id") or rec.learning_job_id or "").strip()
+        if not job_id:
+            return JSONResponse({"error": "No learning job linked to this skill"}, status_code=404)
+        orch = _engine._learning_job_orchestrator if _engine and hasattr(_engine, '_learning_job_orchestrator') else None
+        if orch is None:
+            return JSONResponse({"error": "Learning job orchestrator not available"}, status_code=503)
+        ok = orch.recover_blocked_job(job_id)
+        if not ok:
+            return JSONResponse({"error": "Job not blocked/failed, or not found"}, status_code=400)
+        return {"status": "recovered", "skill_id": skill_id, "job_id": job_id}
+
     @app.delete("/api/skills/{skill_id}", dependencies=[Depends(_require_api_key)])
     async def api_skill_remove(skill_id: str, confirm_default: bool = False):
         """Remove a skill record from the registry.
@@ -1093,6 +1420,39 @@ def _create_app() -> FastAPI:
         """Single endpoint the frontend can use instead of N parallel fetches."""
         return _cache
 
+    @app.get("/api/events/stream")
+    async def api_events_stream(request: Request):
+        """SSE live feed of recent event-bus events for the cockpit Flow Map.
+
+        Read-only tap on _events (a bounded ring filled by bulletproof bus
+        handlers). Streams each new event as it fires; exits on client disconnect.
+        Sends periodic keepalive comments so proxies don't drop the connection.
+        """
+        async def _gen():
+            cursor = _events.head()
+            yield "retry: 3000\n\n"
+            yield "data: " + json.dumps({"hello": True, "head": cursor}) + "\n\n"
+            idle = 0
+            while True:
+                if await request.is_disconnected():
+                    break
+                new = _events.since(cursor)
+                if new:
+                    idle = 0
+                    for e in new:
+                        cursor = e["seq"]
+                        yield "data: " + json.dumps(e) + "\n\n"
+                else:
+                    idle += 1
+                    if idle >= 20:  # ~8s keepalive
+                        idle = 0
+                        yield ": keepalive\n\n"
+                await asyncio.sleep(0.4)
+        return StreamingResponse(
+            _gen(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+        )
+
     @app.get("/api/language-kernel")
     async def api_language_kernel():
         """Read-only state of the Phase E language kernel artifact
@@ -1199,6 +1559,130 @@ def _create_app() -> FastAPI:
                 {"error": type(exc).__name__, "detail": str(exc)},
                 status_code=500,
             )
+
+    # ---- P5 spatial-episodic "album" — read-only observability (Stone 2) ----
+    # Lets the dashboard page the durable worlds Jarvis has stored and re-walk a
+    # stored world in its mind's-eye. All three are READ-ONLY, vector-stripped,
+    # and authority-pinned: they read the album store + run the pure
+    # mental_navigation ops, never writing canonical state.
+
+    @app.get("/api/hrr/scene/sessions")
+    async def api_hrr_album_sessions():
+        """List stored spatial-episodic album sessions (record counts + mtimes)."""
+        try:
+            from memory.spatial_episodic_store import SpatialEpisodicStore, AUTHORITY_FLAGS
+            store = SpatialEpisodicStore()
+            return {
+                "sessions": store.list_sessions(),
+                "status": "PRE-MATURE",
+                "lane": "spatial_hrr_mental_world",
+                **AUTHORITY_FLAGS,
+            }
+        except Exception as exc:
+            logger.exception("hrr album sessions failed")
+            return JSONResponse({"error": type(exc).__name__, "detail": str(exc)}, status_code=500)
+
+    @app.get("/api/hrr/scene/episode")
+    async def api_hrr_album_episode(session: str, limit: int = 200):
+        """Stored worlds for one album session (newest last), vector-free."""
+        try:
+            from memory.spatial_episodic_store import (
+                SpatialEpisodicStore, AUTHORITY_FLAGS, _strip_vectors,
+            )
+            store = SpatialEpisodicStore()
+            limit = max(1, min(2000, int(limit)))
+            worlds = [_strip_vectors(r) for r in store.load_session(session)[-limit:]]
+            return {
+                "session_id": session,
+                "count": len(worlds),
+                "worlds": worlds,
+                "status": "PRE-MATURE",
+                "lane": "spatial_hrr_mental_world",
+                **AUTHORITY_FLAGS,
+            }
+        except Exception as exc:
+            logger.exception("hrr album episode failed")
+            return JSONResponse({"error": type(exc).__name__, "detail": str(exc)}, status_code=500)
+
+    @app.get("/api/hrr/scene/explore")
+    async def api_hrr_album_explore(world_id: str):
+        """Re-walk a STORED world in the mind's-eye.
+
+        Loads the stored world and runs the read-only mental-navigation ops over
+        it (turn-left -> move-forward -> turn-right), returning the imagined-step
+        traces — "what JARVIS would see as it looks around this remembered place."
+        Pure simulation: zero authority, no canonical writes, no HRR vectors.
+        """
+        try:
+            from memory.spatial_episodic_store import (
+                SpatialEpisodicStore, AUTHORITY_FLAGS, _strip_vectors,
+            )
+            from cognition.mental_navigation import (
+                simulate_turn_left, simulate_move_forward, simulate_turn_right,
+            )
+            from cognition.spatial_scene_graph import (
+                MentalWorldEntity, MentalWorldRelation, MentalWorldSceneGraph,
+            )
+
+            store = SpatialEpisodicStore()
+            rec = store.load_world(world_id)
+            if rec is None:
+                return JSONResponse({"error": "not_found", "world_id": world_id}, status_code=404)
+
+            w = rec.get("world") or {}
+            entities = tuple(
+                MentalWorldEntity(
+                    entity_id=str(e.get("entity_id", "")),
+                    label=str(e.get("label", "")),
+                    state=str(e.get("state", "")),
+                    region=str(e.get("region", "")),
+                    position_room_m=tuple(e["position_room_m"]) if e.get("position_room_m") else None,
+                    confidence=float(e.get("confidence", 0.0) or 0.0),
+                    last_seen_ts=float(e.get("last_seen_ts", 0.0) or 0.0),
+                    is_display_surface=bool(e.get("is_display_surface", False)),
+                )
+                for e in (w.get("entities") or [])
+            )
+            relations = tuple(
+                MentalWorldRelation(
+                    source_entity_id=str(r.get("source_entity_id", "")),
+                    target_entity_id=str(r.get("target_entity_id", "")),
+                    relation_type=str(r.get("relation_type", "")),
+                    value_m=r.get("value_m"),
+                    confidence=float(r.get("confidence", 0.0) or 0.0),
+                )
+                for r in (w.get("relations") or [])
+            )
+            src = w.get("source") or {}
+            graph = MentalWorldSceneGraph(
+                timestamp=float(w.get("timestamp", 0.0) or 0.0),
+                entities=entities,
+                relations=relations,
+                source_scene_update_count=int(src.get("scene_update_count", 0) or 0),
+                source_track_count=int(src.get("track_count", 0) or 0),
+                source_anchor_count=int(src.get("anchor_count", 0) or 0),
+                source_calibration_version=int(src.get("calibration_version", 0) or 0),
+                reason=w.get("reason"),
+            )
+
+            traces = []
+            g = graph
+            for op in (simulate_turn_left, simulate_move_forward, simulate_turn_right):
+                g, t = op(g)
+                traces.append(t.to_dict())
+
+            return {
+                "world_id": world_id,
+                "world": _strip_vectors(rec),
+                "explore_traces": traces,
+                "loaded_from_store": True,
+                "status": "PRE-MATURE",
+                "lane": "spatial_hrr_mental_world",
+                **AUTHORITY_FLAGS,
+            }
+        except Exception as exc:
+            logger.exception("hrr album explore failed")
+            return JSONResponse({"error": type(exc).__name__, "detail": str(exc)}, status_code=500)
 
     @app.get("/api/intent-shadow")
     async def api_intent_shadow():
@@ -1474,17 +1958,94 @@ def _create_app() -> FastAPI:
             for m in memories
         ]
 
+    @app.get("/api/memories/search")
+    async def api_memory_search(q: str = "", tag: str = "", type: str = "",
+                                limit: int = 20):
+        """Search/filter memories by keyword, tag, or type.
+
+        Declared BEFORE /api/memories/{memory_id} so FastAPI matches the literal
+        /search path instead of capturing "search" as a memory id (the bug that
+        kept this endpoint permanently shadowed -> always 404).
+
+        For a text query this uses the real semantic-retrieval pipeline
+        (``memory.search.semantic_search``: vector search -> identity pre-filter
+        -> learned ranker rerank, provenance-boosted, through the MemoryGate)
+        rather than a recent-200 substring scan. The old implementation only
+        looked at the 200 newest memories and matched a raw substring, so most of
+        a 1000+ memory corpus was invisible and the epistemic ranking/provenance
+        layer was bypassed entirely.
+
+        Tag/type-only filtering (no ``q``) scans the corpus directly, since those
+        are structured-field filters, not meaning queries.
+        """
+        if not _engine:
+            return []
+
+        def _shape(m, score=None):
+            payload_str = m.payload if isinstance(m.payload, str) else str(m.payload)
+            row = {
+                "id": m.id,
+                "type": m.type,
+                "payload": payload_str[:300],
+                "weight": round(getattr(m, "weight", 0.0) or 0.0, 3),
+                "tags": list(getattr(m, "tags", []) or []),
+                "timestamp": getattr(m, "timestamp", None),
+            }
+            if score is not None:
+                row["relevance"] = round(float(score), 3)
+            return row
+
+        results: list[dict[str, Any]] = []
+        if q:
+            # Meaning query -> full gated/ranked retrieval pipeline.
+            try:
+                from memory.search import semantic_search
+                hits = semantic_search(q, top_k=max(limit, 20))
+                for m in hits:
+                    if tag and tag not in (getattr(m, "tags", []) or []):
+                        continue
+                    if type and m.type != type:
+                        continue
+                    results.append(_shape(m, getattr(m, "weight", None)))
+                    if len(results) >= limit:
+                        break
+            except Exception:
+                logger.exception("semantic memory search failed; falling back to recent scan")
+                results = []
+
+        if not results:
+            # No query (tag/type browse) or semantic path unavailable:
+            # structured scan over the full corpus via the storage singleton.
+            from memory.storage import memory_storage
+            corpus = memory_storage.get_all() if not q else memory_storage.get_recent(200)
+            for m in corpus:
+                if tag and tag not in (getattr(m, "tags", []) or []):
+                    continue
+                if type and m.type != type:
+                    continue
+                payload_str = m.payload if isinstance(m.payload, str) else str(m.payload)
+                if q and q.lower() not in payload_str.lower():
+                    continue
+                results.append(_shape(m))
+                if len(results) >= limit:
+                    break
+        return results
+
     @app.get("/api/memories/{memory_id}")
     async def api_memory_detail(memory_id: str):
         if not _engine:
             return JSONResponse({"error": "Not ready"}, status_code=503)
         try:
-            mem = _engine.memory_storage.get(memory_id)
+            # memory_storage is a module-level singleton (memory/storage.py),
+            # NOT an attribute of the engine — reaching for _engine.memory_storage
+            # raised AttributeError and broke this endpoint. Use the singleton.
+            from memory.storage import memory_storage
+            mem = memory_storage.get(memory_id)
             if not mem:
                 return JSONResponse({"error": "Not found"}, status_code=404)
             assoc_ids = []
             try:
-                assoc_ids = list(_engine.memory_storage.get_associations(memory_id))[:20]
+                assoc_ids = list(memory_storage.get_associations(memory_id))[:20]
             except Exception:
                 pass
             return {
@@ -2171,33 +2732,11 @@ def _create_app() -> FastAPI:
 
     # -- memory browser ------------------------------------------------------
 
-    @app.get("/api/memories/search")
-    async def api_memory_search(q: str = "", tag: str = "", type: str = "",
-                                limit: int = 20):
-        """Search/filter memories by keyword, tag, or type."""
-        if not _engine:
-            return []
-        memories = _engine.get_recent_memories(200)
-        results = []
-        for m in memories:
-            if tag and tag not in m.tags:
-                continue
-            if type and m.type != type:
-                continue
-            payload_str = m.payload if isinstance(m.payload, str) else str(m.payload)
-            if q and q.lower() not in payload_str.lower():
-                continue
-            results.append({
-                "id": m.id,
-                "type": m.type,
-                "payload": payload_str[:300],
-                "weight": round(m.weight, 3),
-                "tags": list(m.tags),
-                "timestamp": m.timestamp,
-            })
-            if len(results) >= limit:
-                break
-        return results
+    # NOTE: /api/memories/search is declared ABOVE /api/memories/{memory_id}
+    # (search the file upward). FastAPI matches routes in declaration order, so a
+    # literal path like /search MUST precede the /{memory_id} catch-all or it gets
+    # captured as memory_id="search" and 404s. This was the real reason memory
+    # search never worked.
 
     # -- library ingest ------------------------------------------------------
 
@@ -2339,6 +2878,27 @@ def _create_app() -> FastAPI:
             }
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.get("/api/audio/barge-in")
+    async def api_barge_in_debug():
+        """Live barge-in tuning telemetry: the actual mic RMS seen WHILE JARVIS
+        is speaking (candidate interrupt audio), so the threshold can be tuned to
+        the operator's real mic levels instead of guessed. Read-only."""
+        a = getattr(_perc_orch, "audio_stream", None) if _perc_orch else None
+        if a is None:
+            return {"available": False}
+        return {
+            "available": True,
+            "enabled": getattr(a, "_barge_in_on_speech", None),
+            "threshold_rms": getattr(a, "_barge_in_energy_rms", None),
+            "hits_required": getattr(a, "_barge_in_hits_required", None),
+            "current_hits": getattr(a, "_barge_in_energy_hits", None),
+            "peak_rms_while_speaking": round(getattr(a, "_barge_in_peak_rms_speaking", 0.0), 1),
+            "last_rms_while_speaking": round(getattr(a, "_barge_in_last_rms_speaking", 0.0), 1),
+            "fired_count": getattr(a, "_barge_in_fired_count", 0),
+            "silence_duration_s": getattr(a, "_silence_duration_s", None),
+            "hint": "Talk over JARVIS, then read peak_rms_while_speaking. Set threshold_rms ~60-70% of that.",
+        }
 
     # -- speaker management --------------------------------------------------
 
@@ -2722,6 +3282,21 @@ def _create_app() -> FastAPI:
             correct = sum(1 for s in resolved if s.get("correct") is True)
             accuracy = correct / len(resolved) if resolved else 0.0
 
+            # Weight-Room P1 (lived-before-synthetic): the HONEST live-shadow accuracy
+            # counts ONLY predictions made in a live session — a synthetic-session
+            # prediction is telemetry, never a lived rep a promotion gate could read.
+            # And it stays None until min-N lived samples accrue (no fake 0% off 1-2).
+            # The pooled `shadow_accuracy` above is kept for context but is NOT the
+            # gate-relevant number. (Old artifacts lack `origin` -> default "live".)
+            from hemisphere.distillation import live_shadow_accuracy as _lsa
+            resolved_live = [
+                s for s in resolved
+                if not str(s.get("origin", "live")).lower().startswith("synthetic")
+            ]
+            live_correct = sum(1 for s in resolved_live if s.get("correct") is True)
+            live_shadow = _lsa(live_correct, len(resolved_live))
+            synthetic_resolved = len(resolved) - len(resolved_live)
+
             # maturity bands based on resolved sample count
             n_resolved = len(resolved)
             if n_resolved < 15:
@@ -2775,8 +3350,20 @@ def _create_app() -> FastAPI:
                 "sample_count": sample_count,
                 "shadow_predictions_total": total,
                 "shadow_predictions_resolved": n_resolved,
-                "shadow_accuracy": round(accuracy, 4),
+                "shadow_accuracy": round(accuracy, 4),  # pooled (context only — NOT gate-relevant)
                 "correct_count": correct,
+                # Weight-Room P1 — the honest, synthetic-firewalled, min-N-gated number
+                # (None until 10 lived samples). This is the live-shadow accuracy a
+                # promotion gate would read; the pooled shadow_accuracy above is not.
+                "live_shadow_accuracy": live_shadow["live_shadow_accuracy"],
+                "live_shadow_resolved": live_shadow["live_shadow_total"],
+                "live_shadow_correct": live_shadow["live_shadow_correct"],
+                "live_shadow_sufficient_data": live_shadow["sufficient_data"],
+                "live_accuracy_status": (
+                    "measured" if live_shadow["live_shadow_accuracy"] is not None
+                    else "unmeasured_insufficient_live_samples"
+                ),
+                "synthetic_resolved_excluded": synthetic_resolved,
                 "verdict_distribution": verdict_dist,
                 "accuracy_by_risk_tier": by_risk_tier,
                 "accuracy_by_outcome_class": by_outcome_class,
@@ -2908,17 +3495,47 @@ def _create_app() -> FastAPI:
 
     @app.post("/api/acquisition/{acquisition_id}/cancel", dependencies=[Depends(_require_api_key)])
     async def api_acquisition_cancel(acquisition_id: str, request: Request):
-        """Cancel and remove an acquisition job (any state)."""
+        """Remove an acquisition job (active OR terminal) with safe artifact cleanup.
+
+        Returns a cleanup report: which per-job artifacts were deleted and whether the
+        shared per-plugin venv/dir were cleaned or PROTECTED (live / shared by a sibling)."""
         body = await request.json() if await request.body() else {}
-        reason = body.get("reason", "operator_cancelled")
+        reason = body.get("reason", "operator_removed")
         try:
             orch = _get_acquisition_orchestrator()
             if orch is None:
                 return JSONResponse({"error": "Acquisition pipeline not enabled"}, status_code=400)
-            ok = orch.cancel_job(acquisition_id, reason=reason)
+            ok, report = orch.remove_job(acquisition_id, reason=reason)
             if ok:
-                return {"status": "cancelled", "acquisition_id": acquisition_id}
+                return {"status": "removed", "acquisition_id": acquisition_id, "cleanup": report}
             return JSONResponse({"error": "Job not found"}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.post("/api/acquisition/{acquisition_id}/improve", dependencies=[Depends(_require_api_key)])
+    async def api_acquisition_improve(acquisition_id: str, request: Request):
+        """Pillar 3: re-enter the pipeline to improve a prior capability with operator
+        feedback. Seeds a NEW governed acquisition (trust never inherited)."""
+        body = await request.json() if await request.body() else {}
+        feedback = (body.get("feedback") or "").strip()
+        if not feedback:
+            return JSONResponse({"error": "feedback is required"}, status_code=400)
+        try:
+            orch = _get_acquisition_orchestrator()
+            if orch is None:
+                return JSONResponse({"error": "Acquisition pipeline not enabled"}, status_code=400)
+            job = orch.improve_capability(
+                acquisition_id, feedback,
+                requested_by={"source": "dashboard_api", "improves": acquisition_id},
+            )
+            return {
+                "status": "improvement_started",
+                "acquisition_id": job.acquisition_id,
+                "revision_of": acquisition_id,
+                "revision_generation": job.revision_generation,
+            }
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
 
@@ -3041,6 +3658,43 @@ def _create_app() -> FastAPI:
                 rec = reg.get_record(name)
                 return {"status": "promoted", "name": name, "new_state": rec.state if rec else "unknown"}
             return JSONResponse({"error": "Cannot promote"}, status_code=400)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.post("/api/plugins/{name}/make-authoritative", dependencies=[Depends(_require_api_key)])
+    async def api_plugin_make_authoritative(name: str, request: Request):
+        """Capability authority (owner-gated): make this version the ACTIVE one for its
+        skill. Atomic — demotes the current active to shadow and records it as the floor."""
+        body = await request.json() if await request.body() else {}
+        try:
+            from tools.plugin_registry import get_plugin_registry
+            reg = get_plugin_registry()
+            ok = reg.make_authoritative(
+                name, approved_by=body.get("approved_by", "owner"),
+                reason=body.get("reason", "made authoritative via dashboard"),
+            )
+            if ok:
+                rec = reg.get_record(name)
+                return {"status": "active", "name": name,
+                        "skill_id": getattr(rec, "skill_id", "") if rec else "",
+                        "floor": getattr(rec, "prior_authoritative", "") if rec else ""}
+            return JSONResponse({"error": "Cannot make authoritative (must be shadow/supervised/active)"}, status_code=400)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.post("/api/plugins/{name}/demote", dependencies=[Depends(_require_api_key)])
+    async def api_plugin_demote(name: str, request: Request):
+        """Capability authority: demote a live capability active/supervised -> shadow
+        (reversible circuit breaker). Restores the known-good floor, or goes dormant."""
+        body = await request.json() if await request.body() else {}
+        try:
+            from tools.plugin_registry import get_plugin_registry
+            reg = get_plugin_registry()
+            report = reg.demote(name, reason=body.get("reason", "demoted via dashboard"),
+                                 actor=body.get("actor", "owner"))
+            if report.get("ok"):
+                return {"status": "demoted", "name": name, **report}
+            return JSONResponse({"error": report.get("error", "cannot demote")}, status_code=400)
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
 
@@ -3576,6 +4230,41 @@ def _create_app() -> FastAPI:
             "live_overlay": live,
         }
 
+    @app.get("/api/playbook")
+    async def api_playbook():
+        """Raw companion-training playbook markdown (read-only).
+
+        Lets the training dashboard deep-link to the Manual Gate Work Tracker
+        so the live coach and the written playbook stay one source of truth.
+        Returns the raw markdown plus mtime so the page can render/anchor it.
+        """
+        repo_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..")
+        )
+        path = os.path.join(repo_root, "docs", "COMPANION_TRAINING_PLAYBOOK.md")
+        if not os.path.exists(path):
+            return {
+                "source": "docs/COMPANION_TRAINING_PLAYBOOK.md",
+                "exists": False,
+                "markdown": "",
+            }
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read()
+            st = os.stat(path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": type(exc).__name__, "detail": str(exc)},
+                status_code=500,
+            )
+        return {
+            "source": "docs/COMPANION_TRAINING_PLAYBOOK.md",
+            "exists": True,
+            "mtime": st.st_mtime,
+            "size": st.st_size,
+            "markdown": text,
+        }
+
     @app.get("/maturity", response_class=HTMLResponse)
     async def serve_maturity_page():
         path = os.path.join(
@@ -3918,6 +4607,7 @@ async def create_dashboard(
     _perc_orch = perc_orch
 
     _health.start()
+    _events.start()
 
     app = _create_app()
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")

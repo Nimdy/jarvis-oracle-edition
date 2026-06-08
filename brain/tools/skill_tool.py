@@ -478,17 +478,13 @@ def handle_skill_request_structured(
                         f"job {job.job_id} is in phase '{job.phase}' (status: {job.status})."
                     ),
                 }
-        return {
-            "outcome": "restart_learning",
-            "status": existing.status,
-            "skill_id": existing.skill_id,
-            "skill_name": existing.name,
-            "capability_type": existing.capability_type,
-            "message": (
-                f"'{existing.name}' is marked as learning but has no active job. "
-                f"Let me start a new one."
-            ),
-        }
+        # "learning" status but no active job = a previous job blocked/died and
+        # detached. Don't dead-end with a promise — FALL THROUGH to create_job
+        # below so a fresh job actually starts. (Previously this returned early
+        # with "Let me start a new one" but never created the job, so a blocked
+        # skill could never be restarted by voice.)
+        logger.info("Skill %s is 'learning' with no active job — restarting via new job",
+                    existing.skill_id)
 
     registered_this_request = False
     if existing is None:

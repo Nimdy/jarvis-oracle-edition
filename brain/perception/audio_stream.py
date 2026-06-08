@@ -58,6 +58,9 @@ class AudioStreamProcessor:
         silence_duration_s: float = 1.5,
         max_record_s: float = 15.0,
         follow_up_timeout_s: float = 4.0,
+        barge_in_on_speech: bool = True,
+        barge_in_energy_rms: float = 900.0,
+        barge_in_hits_required: int = 4,
         on_wake: Callable | None = None,
         on_speech_ready: Callable[[np.ndarray, str], None] | None = None,
         on_barge_in: Callable[[str], None] | None = None,
@@ -71,6 +74,18 @@ class AudioStreamProcessor:
         self._silence_duration_s = silence_duration_s
         self._max_record_s = max_record_s
         self._follow_up_timeout_s = follow_up_timeout_s
+        # Conversational barge-in: interrupt on sustained user speech energy
+        # during playback (no wake word required).
+        self._barge_in_on_speech = barge_in_on_speech
+        self._barge_in_energy_rms = barge_in_energy_rms
+        self._barge_in_hits_required = barge_in_hits_required
+        self._barge_in_energy_hits = 0
+        # Telemetry to tune the threshold: peak/recent RMS seen WHILE speaking
+        # (i.e. candidate barge-in audio) + how many barge-ins fired. Surfaced so
+        # we can see the operator's actual mic levels instead of guessing.
+        self._barge_in_peak_rms_speaking = 0.0
+        self._barge_in_last_rms_speaking = 0.0
+        self._barge_in_fired_count = 0
 
         self._on_wake = on_wake
         self._on_speech_ready = on_speech_ready
@@ -300,6 +315,52 @@ class AudioStreamProcessor:
             return False
 
     def _process_wake_word(self, audio_i16: np.ndarray) -> None:
+        now = time.monotonic()
+        speaking = self.is_speaking
+
+        # --- Conversational barge-in: interrupt on sustained USER SPEECH during
+        # playback, no wake word required ("just talk over it" / a stop-word).
+        # Energy-gated + consecutive-hits so JARVIS's own voice tail / brief room
+        # noise doesn't self-interrupt. Runs BEFORE the wake-word model so a plain
+        # spoken interruption works; the wake-word barge-in below still applies.
+        if speaking and self._barge_in_on_speech:
+            try:
+                rms = float(np.sqrt(np.mean(audio_i16.astype(np.float32) ** 2)))
+            except Exception:
+                rms = 0.0
+            # telemetry: track what mic levels actually look like during playback
+            self._barge_in_last_rms_speaking = rms
+            if rms > self._barge_in_peak_rms_speaking:
+                self._barge_in_peak_rms_speaking = rms
+            if rms >= self._barge_in_energy_rms:
+                self._barge_in_energy_hits += 1
+                if self._barge_in_energy_hits >= self._barge_in_hits_required:
+                    self._barge_in_fired_count += 1
+                    logger.info(
+                        "Barge-in (speech energy): rms=%.0f >= %.0f [%d hits] — "
+                        "interrupting + disregarding in-flight reply",
+                        rms, self._barge_in_energy_rms, self._barge_in_energy_hits,
+                    )
+                    self._barge_in_energy_hits = 0
+                    conv_id = self._conversation_id
+                    if self._on_barge_in:
+                        try:
+                            self._on_barge_in(conv_id)
+                        except Exception as exc:
+                            logger.error("on_barge_in callback error: %s", exc)
+                    # Open a follow-up listen window so the words you're ALREADY
+                    # speaking (your correction) are captured as the next turn —
+                    # no need to say the wake word again. The in-flight reply was
+                    # cancelled + disregarded by _on_barge_in.
+                    self.set_follow_up()
+                    return
+            else:
+                # decay toward zero so only SUSTAINED speech counts, not a blip
+                if self._barge_in_energy_hits > 0:
+                    self._barge_in_energy_hits -= 1
+        elif not speaking and self._barge_in_energy_hits:
+            self._barge_in_energy_hits = 0
+
         if not self._oww_model:
             if not self._try_load_oww_model():
                 return
@@ -307,8 +368,6 @@ class AudioStreamProcessor:
         if not self._wake_armed:
             return
 
-        now = time.monotonic()
-        speaking = self.is_speaking
         if not speaking and now - self._last_detection_time < self._cooldown_s:
             return
 

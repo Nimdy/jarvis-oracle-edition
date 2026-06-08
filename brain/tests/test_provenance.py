@@ -27,11 +27,15 @@ from memory.core import CreateMemoryData, memory_core
 def test_provenance_type_values():
     expected = {
         "observed", "user_claim", "conversation", "model_inference",
-        "external_source", "experiment_result", "derived_pattern",
+        "external_source", "web_scrap", "experiment_result", "derived_pattern",
         "seed", "unknown",
     }
     assert set(PROVENANCE_BOOST.keys()) == expected
     assert set(PROVENANCE_ORDINAL.keys()) == expected
+    # Data-flow firewall: untrusted scraped web data earns NO confidence boost,
+    # unlike cited external_source (+0.10). The firewall's epistemic teeth.
+    assert PROVENANCE_BOOST["web_scrap"] == 0.0
+    assert PROVENANCE_BOOST["web_scrap"] < PROVENANCE_BOOST["external_source"]
     print("  PASS: provenance type values")
 
 

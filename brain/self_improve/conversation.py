@@ -166,6 +166,15 @@ Jarvis runs on Python 3.11+. Plugins are self-contained Python modules with a ha
 Plugins CANNOT import subprocess, os.system, exec, eval, or access credentials.
 Plugins CAN use standard library modules and any pure-Python logic.
 
+REAL DATA, NEVER SIMULATED. For capabilities that need EXTERNAL data (web scraping, HTTP,
+REST APIs), real network fetching with urllib.request IS available — such plugins run
+sandboxed in an isolated subprocess, so real HTTP is expected, not forbidden. NEVER simulate,
+mock, fabricate, or "synthesize" external data, and never write a plan that derives fake
+results from the input string. A capability that invents the data it was asked to fetch is a
+confabulation — worse than useless, and a betrayal of the user who trusts it. If the request
+is to scrape or fetch, the plugin MUST actually fetch the real resource and parse the real
+response; design it that way.
+
 Produce a technical design in EXACTLY this format. Every section MUST be present and non-empty.
 Be specific and practical — reference actual Python modules, functions, and data structures.
 
@@ -185,7 +194,16 @@ TEST CASES:
 <Numbered list of 3-5 specific test scenarios with expected behavior>
 
 RISK ANALYSIS:
-<What could go wrong. Edge cases. Failure modes. Security considerations.>"""
+<What could go wrong. Edge cases. Failure modes. Security considerations.>
+
+GOVERNANCE:
+<Data-flow firewall. Reason about how this capability's output must be governed so it
+cannot silently pollute Jarvis's memory or beliefs. Answer each on its own line:
+READS_EXTERNAL: yes/no — does it fetch data from outside the system (web, http, scraping, an API)?
+EGRESS: <one short phrase naming what the plugin outputs, e.g. "structured scraped web content">
+MAY_TOUCH_MEMORY: no — plugin output must NOT be written to long-term memory/beliefs without explicit human consent. Answer no.
+PROVENANCE_TAG: web_scrap if it produces external/scraped data (untrusted until cross-validated against peer-reviewed sources), otherwise none
+REQUIRES_SAVE_CONSENT: yes/no — must Jarvis ask the operator before persisting any of its output? Default yes for anything external.>"""
 
 CODER_SYSTEM_PROMPT = """You are Jarvis's code generation engine. You receive:
 1. A plan describing what to change

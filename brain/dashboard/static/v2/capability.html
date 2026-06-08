@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Capability &amp; Self-Modification (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .gaterow{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 2px;}
+    .bigstat{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .statline{display:flex;gap:20px;flex-wrap:wrap;align-items:baseline;margin:4px 0 8px;}
+    .statline .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .contrast{font-size:10px;color:var(--muted);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;line-height:1.5;}
+    .contrast b{color:var(--text);}
+    .spec{display:grid;grid-template-columns:1.3fr 1fr auto auto;gap:6px 12px;align-items:center;font-size:10.5px;border-bottom:1px solid var(--line);padding:6px 0;}
+    .spec:last-child{border-bottom:none;}
+    .spec .focus{color:var(--text);font-weight:600;}
+    .spec .mat{font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+    .spec .acc{font-variant-numeric:tabular-nums;text-align:right;}
+    .spec .sig{font-variant-numeric:tabular-nums;color:var(--muted);text-align:right;font-size:9.5px;}
+    .prop{border:1px solid var(--line);border-radius:4px;padding:7px 10px;margin:6px 0;font-size:10px;}
+    .prop .ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+    .prop .pt{color:var(--text);font-weight:600;font-size:10.5px;}
+    .prop .pm{color:var(--muted);margin-top:3px;font-family:var(--mono,monospace);font-size:9px;}
+    .ni{margin-top:8px;border:1px dashed var(--line);border-radius:4px;padding:10px 12px;font-size:10.5px;color:var(--muted);line-height:1.55;}
+    .ni b{color:#ffd27a;}
+    .barwrap{margin-top:8px;}
+    /* operator actions (add-only) */
+    .opsec .note{margin-bottom:4px;}
+    .opgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+    @media(max-width:1000px){.opgrid{grid-template-columns:1fr;}}
+    .opblk{border:1px solid var(--line);border-radius:5px;padding:9px 11px;}
+    .opblk h4{margin:0 0 7px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+    .opblk .opnote{font-size:9px;color:var(--dim);line-height:1.5;margin-top:6px;}
+    .opblk .v2-field{margin:4px 0;}
+    .stagebtns{display:flex;gap:6px;flex-wrap:wrap;}
+    /* skill learning + registry */
+    .floorpill{font-size:9px;border:1px solid var(--line);border-radius:10px;padding:1px 8px;color:var(--muted);font-weight:600;}
+    .skl{border:1px solid var(--amber);border-radius:6px;padding:10px 12px;margin:8px 0;background:rgba(20,14,3,.32);cursor:pointer;}
+    .skl.done{border-color:var(--green);background:rgba(3,20,12,.28);}
+    .skl:hover{border-color:var(--cyan);}
+    .skl .sh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+    .skl .snm{font-weight:700;color:var(--text);font-size:12px;}
+    .skl .sid{font-family:var(--mono,monospace);font-size:9px;color:var(--muted);}
+    .skl .sbadge{font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:1px 7px;border-radius:3px;}
+    .skl .asked{margin:6px 0;padding:5px 9px;border-left:2px solid var(--cyan);background:rgba(3,8,20,.5);font-size:10px;color:var(--text);font-style:italic;}
+    .skl .asked b{font-style:normal;color:var(--cyan);}
+    .ladder{display:flex;gap:4px;margin:8px 0 5px;flex-wrap:wrap;}
+    .lphase{flex:1;min-width:64px;border:1px solid var(--line);border-radius:4px;padding:4px 6px;font-size:9px;text-align:center;color:var(--muted);}
+    .lphase.cur{border-color:var(--amber);color:var(--amber);background:rgba(20,14,3,.5);font-weight:700;}
+    .lphase.past{border-color:var(--green);color:var(--green);}
+    .lphase .pexit{display:block;font-size:8px;color:var(--dim);margin-top:2px;font-family:var(--mono,monospace);}
+    .skl .smeta{font-size:9.5px;color:var(--muted);line-height:1.6;margin-top:4px;}
+    .skl .smeta .rt{color:var(--cyan);font-family:var(--mono,monospace);}
+    .skl .claim-unv{color:var(--amber);font-weight:700;}
+    .skl .claim-ver{color:var(--green);font-weight:700;}
+    .reg{display:grid;grid-template-columns:1.4fr auto auto;gap:4px 12px;align-items:center;font-size:10px;border-bottom:1px solid var(--line);padding:5px 0;cursor:pointer;}
+    .reg:last-child{border-bottom:none;}
+    .reg:hover{background:rgba(0,200,255,.05);}
+    .reg .rnm{color:var(--text);}
+    .reg .rst{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;text-align:right;}
+    /* skill audit-packet drill-down (parity with old dashboard modal) */
+    .skl .aud-why{margin:6px 0;padding:5px 9px;border-left:2px solid var(--amber);background:rgba(20,14,3,.4);font-size:10px;color:var(--text);}
+    .skl .aud-sec{margin-top:7px;}
+    .skl .aud-h{font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;font-weight:600;}
+    .skl .aud-miss{font-size:9.5px;color:var(--red);line-height:1.5;}
+    .skl .aud-ec{display:flex;flex-wrap:wrap;gap:4px;}
+    .skl .ec-chip{font-size:8.5px;padding:1px 6px;border-radius:3px;}
+    .skl .ec-y{background:rgba(0,255,150,.12);color:var(--green);}
+    .skl .ec-n{background:rgba(120,130,150,.12);color:var(--muted);}
+    .skl .aud-tl{font-size:9px;color:var(--muted);line-height:1.6;font-family:var(--mono,monospace);}
+    .skl .aud-tl .aud-ts{color:var(--cyan);}
+    /* Capability Deliberation (acquisition lane) */
+    .acqd{border:1px solid var(--line);border-radius:6px;padding:9px 11px;margin:8px 0;background:rgba(255,255,255,.012);}
+    .acqd .acqd-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;}
+    .acqd .acqd-ttl{font-weight:600;font-size:12px;color:var(--text);}
+    .acqd .acqd-id{font-size:9px;color:var(--dim);font-family:var(--mono,monospace);}
+    .acqd .acqd-badge{font-size:8.5px;padding:1px 7px;border-radius:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;}
+    .acqd .b-ok{background:rgba(20,40,20,.7);color:var(--green);} .acqd .b-run{background:rgba(40,30,3,.7);color:var(--amber);}
+    .acqd .b-fail{background:rgba(45,15,15,.7);color:var(--red);} .acqd .b-wait{background:rgba(10,28,40,.7);color:var(--cyan);} .acqd .b-dim{background:rgba(255,255,255,.05);color:var(--muted);}
+    .acqd .lanes{display:flex;gap:3px;margin:8px 0 4px;flex-wrap:wrap;}
+    .acqd .lane{flex:1 1 auto;min-width:58px;border:1px solid var(--line);border-radius:3px;padding:3px 4px;font-size:8px;text-align:center;color:var(--muted);}
+    .acqd .lane.l-ok{border-color:var(--green);color:var(--green);} .acqd .lane.l-run{border-color:var(--amber);color:var(--amber);background:rgba(20,14,3,.4);font-weight:700;}
+    .acqd .lane.l-fail{border-color:var(--red);color:var(--red);background:rgba(20,6,6,.4);} .acqd .lane.l-pend{opacity:.55;}
+    .acqd .delib{margin-top:8px;}
+    .acqd .delib-h{font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:7px 0 4px;font-weight:600;}
+    .acqd .round{border-left:2px solid var(--line);padding:3px 0 3px 8px;margin:3px 0;font-size:10px;}
+    .acqd .round.r-ok{border-color:var(--green);} .acqd .round.r-fail{border-color:var(--red);}
+    .acqd .round .r-hd{color:var(--text);font-weight:600;font-size:9.5px;}
+    .acqd .round .r-mm{font-size:9px;color:var(--muted);font-family:var(--mono,monospace);line-height:1.5;margin-top:2px;}
+    .acqd .round .r-mm .ex{color:var(--green);} .acqd .round .r-mm .ac{color:var(--red);}
+    .acqd .diag{font-size:9px;color:var(--muted);font-family:var(--mono,monospace);margin-top:6px;line-height:1.5;}
+    .acqd .gov{display:flex;gap:5px;flex-wrap:wrap;margin:3px 0 2px;}
+    .acqd .gov-chip{font-size:8.5px;padding:2px 8px;border-radius:9px;border:1px solid var(--line);font-weight:600;letter-spacing:.02em;}
+    .acqd .gov-chip.g-ok{border-color:var(--green);color:var(--green);background:rgba(20,40,20,.4);}
+    .acqd .gov-chip.g-warn{border-color:var(--amber);color:var(--amber);background:rgba(40,30,3,.4);}
+    .acqd .gov-chip.g-bad{border-color:var(--red);color:var(--red);background:rgba(45,15,15,.5);}
+    .acqd .gov-chip.g-dim{color:var(--muted);}
+    .capskill{border:1px solid var(--line);border-radius:6px;padding:9px 12px;margin:9px 0;background:rgba(255,255,255,.012);}
+    .capskill.capdormant{border-color:rgba(200,140,20,.4);background:rgba(40,30,3,.06);}
+    .capsk-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:7px;flex-wrap:wrap;}
+    .capsk-name{font-weight:700;font-size:13px;color:var(--text);font-family:var(--mono,monospace);}
+    .capstd{font-size:8.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--line);border-radius:7px;padding:1px 6px;}
+    .capsk-live{font-size:11px;color:var(--muted);}
+    .capv{display:flex;align-items:center;gap:11px;padding:6px 4px;border-top:1px solid rgba(255,255,255,.05);flex-wrap:wrap;}
+    .capv:first-of-type{border-top:none;}
+    .capv.caplive{background:rgba(20,40,20,.10);border-radius:5px;}
+    .capdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+    .capdot.on{background:var(--green);box-shadow:0 0 6px rgba(40,200,90,.7);} .capdot.off{background:var(--muted);opacity:.5;}
+    .caplabel{font-weight:700;font-size:12px;color:var(--text);min-width:120px;}
+    .capstate{font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:1px 8px;border-radius:9px;}
+    .capstate.st-live{background:rgba(20,40,20,.7);color:var(--green);} .capstate.st-shadow{background:rgba(10,28,40,.7);color:var(--cyan);}
+    .caphealth{font-size:10px;color:var(--muted);}
+    .capid{font-size:9px;color:var(--dim);font-family:var(--mono,monospace);}
+    .capacts{margin-left:auto;display:flex;gap:6px;}
+    .acqd .improve{margin-top:4px;}
+    .acqd .impv-in{width:100%;box-sizing:border-box;background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:inherit;font-size:10px;padding:5px 7px;resize:vertical;}
+    .acqd .impv-in:focus{border-color:var(--cyan);outline:none;}
+    .acqd .impv-row{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap;}
+    .acqd .impv-note{font-size:8.5px;color:var(--dim);}
+    .acqd .acqd-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;}
+    .acqd .drill{margin-top:7px;font-size:9.5px;color:var(--muted);line-height:1.55;display:none;}
+    .acqd .drill.open{display:block;}
+    .acqd .drill pre{white-space:pre-wrap;word-break:break-word;font-size:9px;color:var(--text);background:rgba(0,0,0,.25);padding:6px 8px;border-radius:4px;margin:3px 0;max-height:220px;overflow:auto;}
+    .acqd.alive{border-color:rgba(40,200,90,.4);background:rgba(20,40,20,.07);}
+    .acqd .live{font-size:8px;color:var(--green);font-weight:700;letter-spacing:.04em;animation:pulse 1.8s ease-in-out infinite;}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    .acqd .acqd-hd:hover{background:rgba(255,255,255,.025);}
+    .grp-h{font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:12px 0 4px;font-weight:600;}
+    .grp-toggle{cursor:pointer;user-select:none;} .grp-toggle:hover{color:var(--text);}
+    #past-builds.collapsed{display:none;}
+    .pausebtn{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--muted);font-size:10px;padding:2px 9px;border-radius:11px;cursor:pointer;margin-right:8px;font-family:inherit;}
+    .pausebtn:hover{color:var(--text);border-color:var(--muted);}
+    .pausebtn.on{background:rgba(40,30,3,.7);border-color:var(--amber);color:var(--amber);font-weight:700;}
+    body.paused .acqd .acqd-hd{cursor:pointer;}
+    .acqd .acqd-act .btn-danger{background:rgba(45,15,15,.6);border-color:rgba(180,40,40,.5);color:var(--red);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · CAPABILITY &amp; SELF-MODIFICATION</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Can JARVIS change itself? Self-improve runs at human-approval (stage 2); specialists train shadow-only; codegen is standby — nothing here auto-executes without a human in the loop.</span>
+    <span class="right"><button id="pausebtn" class="pausebtn" onclick="_togglePause()" title="Pause auto-refresh so open panels stay open while you read / act">⏸ Pause</button><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="recovery" class="banner-recovery"></div>
+
+  <main>
+    <section class="card col7">
+      <h2>Self-Improvement Pipeline</h2>
+      <div class="note">The closed loop: scan → propose → sandbox → <b>human approval</b> → merge. Stage gates whether patches can execute. Win-rates are zero until a full human-approval cycle completes — that is a cold loop, not a failure.</div>
+      <div class="gaterow" id="si-gates"></div>
+      <div class="statline" id="si-stats"></div>
+      <div class="contrast" id="si-contrast"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Codegen &amp; Coder Model</h2>
+      <div class="note">The local Qwen coder that writes patches. <b>infrastructure_only</b> authority means it can propose code but never auto-merge. Standby (not running) is normal — it cold-loads on first request.</div>
+      <div class="gaterow" id="cg-gates"></div>
+      <div class="statline" id="cg-stats"></div>
+      <div class="contrast" id="cg-contrast"></div>
+    </section>
+
+    <section class="card col7">
+      <h2>Specialist Hemisphere Learning</h2>
+      <div class="note">Per-domain neural specialists. Every one is <b>shadow-only</b> (live_influence=false) — telemetry, not live decisions. Accuracy here does <b>not</b> gate any live capability. Bootstrap accuracy of 0 is cold-start by design.</div>
+      <div id="spec-list"></div>
+      <div class="contrast" id="spec-contrast"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Acquisition &amp; Plugins</h2>
+      <div class="note">How JARVIS picks up new capabilities. Scheduler in <em>dreaming</em> mode = low-intensity background. Plan-evaluator is a shadow NN; its accuracy is hidden until maturity ≥ meaningful (no resolved predictions yet).</div>
+      <div class="gaterow" id="acq-gates"></div>
+      <div class="statline" id="acq-stats"></div>
+      <div class="barwrap" id="acq-bars"></div>
+      <div class="contrast" id="acq-contrast"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Capability Deliberation <span id="acqd-count" class="floorpill"></span></h2>
+      <div class="note">The internal think&rarr;code&rarr;validate of each plugin build, inline (no pivoting): the lane ladder, the codegen <b>repair rounds</b> (including what it caught and rejected), per-stage diagnostics, and the gate it's waiting on. Click a build to drill into its full plan.</div>
+      <div id="acq-deliberation"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Capability Authority <span id="cap-auth-count" class="floorpill"></span></h2>
+      <div class="note">Every acquired skill is born in <b>shadow</b>. Promotion to <b>active</b> is yours; demotion back to shadow is a reversible circuit breaker you &mdash; or JARVIS &mdash; can pull. The prior good version is kept as the <b>floor</b>: demoting the live version falls back to it. At most one version is authoritative per skill.</div>
+      <div id="cap-authority"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Escalation &amp; Attestation (L3 Authority)</h2>
+      <div class="note">The human-in-the-loop ledgers: L3 escalations awaiting review, and the attestation ledger of proven capabilities.</div>
+      <div class="statline" id="esc-stats"></div>
+      <div class="ni" id="esc-ni"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Skill Learning &amp; Registry <span id="skill-count" class="floorpill"></span></h2>
+      <div class="note">Every skill JARVIS is learning or has verified. <b>Active learning jobs</b> show the phase ladder (assess → collect → train → verify → register), live exit-condition progress, <b>what you asked it to learn</b> (so you can confirm the subject is true), and its claimability — a skill cannot claim a capability until held-out evidence passes. <b>Click any row</b> to load its id into the operator actions below.</div>
+      <div id="skill-learning"></div>
+      <div id="skill-registry"></div>
+    </section>
+
+    <section class="card col12 opsec">
+      <h2>Operator Actions</h2>
+      <div class="note">Human-in-the-loop write controls. Nothing here fires automatically — each runs only on your click, authenticated with the operator api_key. Destructive / authority-raising actions require a typed confirmation.</div>
+      <div class="opgrid">
+
+        <div class="opblk">
+          <h4>Self-Improve Pipeline</h4>
+          <div class="actrow">
+            <button class="btn-act" id="op-si-dryrun">Dry-run</button>
+            <button class="btn-danger" id="op-si-trigger">Trigger real attempt</button>
+          </div>
+          <div class="actrow">
+            <span class="opnote">Set stage:</span>
+            <span class="stagebtns">
+              <button class="btn-act sm" id="op-si-stage0">0 · frozen</button>
+              <button class="btn-act sm" id="op-si-stage1">1 · dry-run</button>
+              <button class="btn-danger sm" id="op-si-stage2">2 · human-approval</button>
+            </span>
+          </div>
+          <input id="op-si-patch" class="v2-field" autocomplete="off" placeholder="patch / request id for approve / reject">
+          <div class="actrow">
+            <button class="btn-act" id="op-si-approve">Approve patch</button>
+            <button class="btn-danger" id="op-si-reject">Reject patch</button>
+          </div>
+          <div class="opnote">Trigger queues a real (non-dry-run) Stage-2 patch for your approval. Raising to stage 2 is authority-raising and typed-gated. Approve/Reject act on the patch id from the pending-approvals queue.</div>
+        </div>
+
+        <div class="opblk">
+          <h4>Acquisition Job</h4>
+          <input id="op-acq-id" class="v2-field" autocomplete="off" placeholder="acquisition id">
+          <div class="actrow">
+            <button class="btn-act" id="op-acq-approve-plan">Approve plan</button>
+            <button class="btn-act" id="op-acq-approve-deploy">Approve deploy</button>
+            <button class="btn-danger" id="op-acq-cancel">Cancel job</button>
+          </div>
+          <div class="opnote">Approve-plan advances to implementation; approve-deploy activates the built plugin; cancel removes the job from the active set (typed-gated).</div>
+        </div>
+
+        <div class="opblk">
+          <h4>Plugin Lifecycle</h4>
+          <input id="op-plug-name" class="v2-field" autocomplete="off" placeholder="plugin name">
+          <div class="actrow">
+            <button class="btn-act" id="op-plug-activate">Activate</button>
+            <button class="btn-act" id="op-plug-promote">Promote</button>
+            <button class="btn-danger" id="op-plug-disable">Disable</button>
+            <button class="btn-danger" id="op-plug-rollback">Rollback</button>
+          </div>
+          <div class="opnote">Activate brings a quarantined/disabled plugin into shadow mode; promote raises supervision tier. Disable and rollback are typed-gated.</div>
+        </div>
+
+        <div class="opblk">
+          <h4>Specialist / Skill Handoff</h4>
+          <input id="op-skill-id" class="v2-field" autocomplete="off" placeholder="skill id">
+          <div class="actrow">
+            <button class="btn-act" id="op-skill-approve">Approve handoff</button>
+            <button class="btn-act" id="op-skill-reject">Reject handoff</button>
+            <button class="btn-act" id="op-skill-retry">Retry handoff</button>
+          </div>
+          <div class="actrow">
+            <button class="btn-danger" id="op-skill-delete">Delete skill</button>
+            <button class="btn-act" id="op-lj-cleanup">Cleanup learning jobs</button>
+          </div>
+          <div class="opnote">Approve lets JARVIS build an operational plugin/tool for a learned skill; reject sends it back. Delete forgets the skill entirely (typed DELETE gate).</div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, gateState=V2.gateState, cap=V2.cap;
+  var SI=null, SCAN=null, SPEC=null, ACQ=null, PE=null, PLUG=null, CG=null, ESC=null, ATT=null, SKILLS=null, lastOkTs=0;
+  V2.renderNav('/static/v2/capability.html');
+
+  // local HTML-escape (note: `esc` is used elsewhere as the escalation object, so use escH)
+  function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  var SKILL_PHASES=['assess','collect','train','verify','register'];
+
+  // a fail-CLOSED gate tile: ok=true => green, false => red, else => amber/unknown
+  function gate(label, v, detail){
+    var st=gateState(v);
+    var txt=(v===true?'OK':(v===false?'FAIL':'UNKNOWN'));
+    return '<div class="gate b-'+st+'"><div class="gk">'+label+'</div><div class="gs s-'+st+'">'+txt+'</div>'+
+      (detail?'<div class="gd">'+detail+'</div>':'')+'</div>';
+  }
+  // a value tile (not a boolean gate) — for counts/scores that fail to "—" not green.
+  function stat(label, val, color){
+    return '<span><div class="k">'+label+'</div><span class="bigstat"'+(color?' style="color:'+color+'"':'')+'>'+val+'</span></span>';
+  }
+
+  function renderSelfImprove(){
+    var si=SI||{};
+    var gates=si.safety_gates||{}, wr=si.win_rate||{};
+    var stage=num(si.stage);
+    var stageLbl=si.stage_label||'—';
+    var soul=num(gates.soul_integrity_index);
+    // gates: active loop, soul integrity, quarantine, reliable provider
+    el('si-gates').innerHTML=
+      gate('loop active', si.active===true?true:(si.active===false?false:null), 'auto_frozen='+(si.auto_frozen===true?'yes':'no'))+
+      gate('soul integrity', gates.soul_integrity_ok===true?true:(gates.soul_integrity_ok===false?false:null), 'index '+(soul===null?'—':soul.toFixed(3)))+
+      gate('quarantine ok', gates.quarantine_ok===true?true:(gates.quarantine_ok===false?false:null), 'composite '+f2(gates.quarantine_composite))+
+      gate('reliable provider', si.has_reliable_provider===true?true:(si.has_reliable_provider===false?false:null), 'local coder');
+    var stageColor = stage===null?'var(--dim)':(stage===0?'var(--red)':(stage===2?'var(--green)':'var(--amber)'));
+    el('si-stats').innerHTML=
+      stat('stage', (stage===null?'—':stage)+' · '+cap(stageLbl), stageColor)+
+      stat('pending approvals', (num(si.pending_approvals)||0), (num(si.pending_approvals)||0)>0?'var(--amber)':'var(--text)')+
+      stat('improvements', (num(si.total_improvements)||0))+
+      stat('rollbacks', (num(si.total_rollbacks)||0), (num(si.total_rollbacks)||0)>0?'var(--amber)':'var(--text)')+
+      stat('scanner today', (num((SCAN||{}).attempts_today)||0)+' / '+(num((SCAN||{}).max_attempts_per_day)||'—'));
+    // win-rate is a fraction; show it honestly with its raw denominator
+    var rar=num(wr.review_approval_rate), spr=num(wr.sandbox_pass_rate), tot=num(wr.total)||0;
+    el('si-contrast').innerHTML=
+      'Write policy: <b>'+cap(si.effective_write_policy||'—')+'</b>. '+
+      'Win-rates over <b>'+tot+'</b> resolved proposals — review-approval '+
+      (tot===0?'<b style="color:var(--dim)">n/a (no completed cycle)</b>':'<b>'+((rar||0)*100).toFixed(0)+'%</b>')+
+      ', sandbox-pass '+(tot===0?'<b style="color:var(--dim)">n/a</b>':'<b>'+((spr||0)*100).toFixed(0)+'%</b>')+'. '+
+      'Soul integrity <b>'+(soul===null?'—':soul.toFixed(3))+'</b> is passing but below 1.0 — recovery debt from today’s reboots, not a broken gate.';
+  }
+
+  function renderCodegen(){
+    var cg=CG||{};
+    var coder=cg.coder||{};
+    el('cg-gates').innerHTML=
+      gate('codegen enabled', cg.enabled===true?true:(cg.enabled===false?false:null), '')+
+      gate('coder available', coder.available===true?true:(coder.available===false?false:null), 'integrity '+(coder.model_integrity||'—'))+
+      gate('coder running', coder.running===true?true:(coder.running===false?false:null), coder.running===false?'standby — cold-loads on use':'');
+    var cons=cg.consumers||{};
+    el('cg-stats').innerHTML=
+      stat('authority', cap(cg.authority||'—'), cg.authority==='infrastructure_only'?'var(--cyan)':'var(--amber)')+
+      stat('generations', (num(cg.total_generations)||0))+
+      stat('failures', (num(cg.total_failures)||0), (num(cg.total_failures)||0)>0?'var(--red)':'var(--text)')+
+      stat('model', (num(coder.model_size_gb)===null?'—':coder.model_size_gb.toFixed(1)+' GB'));
+    el('cg-contrast').innerHTML=
+      'Consumers that may request code: '+
+      '<b>self_improve</b> '+(cons.self_improve===true?'✓':'—')+' · <b>acquisition</b> '+(cons.acquisition===true?'✓':'—')+'. '+
+      'Authority <b>'+cap(cg.authority||'—')+'</b> means generated code is proposed, never auto-executed. '+
+      'GPU layers '+(num(coder.gpu_layers)===null?'—':coder.gpu_layers)+' (CPU/standby). total_generations=<b>'+(num(coder.total_generations)||0)+'</b> is expected on a cold loop.';
+  }
+
+  function renderSpecialists(){
+    var list=(SPEC||{}).specialists||[];
+    var dist=(SPEC||{}).distillation||{};
+    if(!list.length){ el('spec-list').innerHTML='<div class="offline">specialists offline</div>'; return; }
+    var rows=list.map(function(s){
+      var mat=s.maturity||'—';
+      var acc=num(s.best_accuracy);
+      // only color accuracy meaningfully for non-bootstrap; bootstrap=cold-start, show dim
+      var accColor = (mat==='bootstrap')?'var(--dim)':bandColor(acc,0.75,0.6);
+      var accTxt = acc===null?'—':(acc.toFixed(3));
+      var sig=num(s.signals_total)||0;
+      var shadow = (s.shadow_only===true);
+      return '<div class="spec">'+
+        '<span class="focus">'+cap(s.focus)+' '+(shadow?V2.tag('self','shadow'):V2.tag('earned','live'))+'</span>'+
+        '<span class="mat" style="color:'+(mat==='stable'?'var(--green)':'var(--muted)')+'">'+mat+'</span>'+
+        '<span class="acc" style="color:'+accColor+'">'+accTxt+'<div class="k" style="font-size:8px">best acc</div></span>'+
+        '<span class="sig">'+sig+'<div class="k" style="font-size:8px">signals</div></span>'+
+      '</div>';
+    }).join('');
+    el('spec-list').innerHTML=rows;
+    el('spec-contrast').innerHTML=
+      'All specialists are <b>shadow — not live-scoring</b> (authority telemetry_only). '+
+      'Only <b>dream_synthesis</b> reached maturity <b>stable</b> (0.810 best acc, 522 signals); the rest are bootstrap cold-start where 0.000 accuracy is by design, not breakage. '+
+      'Distillation pool: <b>'+(num(dist.total_signals)||0)+'</b> signals system-wide ('+(num(dist.total_quarantined)||0)+' quarantined).';
+  }
+
+  function renderAcquisition(){
+    var acq=ACQ||{}, sch=acq.scheduler||{}, cls=acq.classifier||{}, pe=PE||{}, plug=PLUG||{};
+    el('acq-gates').innerHTML=
+      gate('acquisition', acq.enabled===true?true:(acq.enabled===false?false:null), 'mode '+(sch.current_mode||'—'))+
+      gate('classifier', cls.available===true?true:(cls.available===false?false:null), '')+
+      gate('plan-eval', pe.enabled===true?true:(pe.enabled===false?false:null), 'maturity '+(pe.maturity||'—'));
+    el('acq-stats').innerHTML=
+      stat('active jobs', (num(acq.active_count)||0))+
+      stat('completed', (num(acq.completed_count)||0))+
+      stat('failed', (num(acq.failed_count)||0), (num(acq.failed_count)||0)>0?'var(--red)':'var(--text)')+
+      stat('plugins', (num(plug.total_plugins)||0));
+    // plan-evaluator shadow accuracy: HIDE as a score until maturity>=meaningful & resolved>0
+    var resolved=num(pe.shadow_predictions_resolved)||0;
+    var matOk=(pe.maturity==='meaningful'||pe.maturity==='stable');
+    var paBar;
+    if(matOk && resolved>0){
+      paBar=V2.barRow('plan-eval shadow acc', (num(pe.shadow_accuracy)||0)*100, ((num(pe.shadow_accuracy)||0)*100).toFixed(0)+'% ('+resolved+' resolved)', bandColor(pe.shadow_accuracy,0.75,0.6));
+    } else {
+      // fail-closed: no resolved predictions => hatched UNKNOWN, never a green 0
+      paBar=V2.barRow('plan-eval shadow acc', null, 'n/a · '+resolved+' resolved', null);
+    }
+    el('acq-bars').innerHTML=paBar;
+    el('acq-contrast').innerHTML=
+      'Scheduler <b>'+(sch.current_mode||'—')+'</b>, pressure <b>'+cap(sch.pressure_level||'—')+'</b>. '+
+      (((num(acq.active_count)||0)+(num(acq.total_count)||0))===0
+        ? 'No acquisitions in flight — idle background state, not failure. '
+        : '')+
+      'Plan-evaluator is a <b>shadow NN</b> at maturity <b>'+(pe.maturity||'—')+'</b>; with <b>'+resolved+'</b> resolved predictions its accuracy is not yet meaningful, so it is rendered <b style="color:var(--dim)">n/a</b> rather than a misleading 0%. '+
+      'The one active plugin is the <b>load_test</b> fixture, not a production capability.';
+  }
+
+  function renderEscalation(){
+    var esc=ESC||{}, att=ATT||{};
+    var pend=Array.isArray(esc.pending)?esc.pending.length:null;
+    var recs=Array.isArray(att.records)?att.records.length:null;
+    el('esc-stats').innerHTML=
+      stat('pending escalations', (pend===null?'—':pend), pend===null?'var(--dim)':(pend>0?'var(--amber)':'var(--text)'))+
+      stat('attestation records', (recs===null?'—':recs), recs===null?'var(--dim)':'var(--text)');
+    var loaded=(esc.pending!==undefined && att.records!==undefined);
+    el('esc-ni').innerHTML=
+      (loaded
+        ? 'No pending L3 escalations and an <b>empty attestation ledger</b>. On this brain that is <b>recovery state</b> — rebooted today, the ledgers re-populate as it processes escalations and proves capabilities. Empty here is expected post-reboot, <b>not</b> "system broken".'
+        : '<b>endpoints offline</b> — ledger state unknown.')+
+      ' <span class="unpop">artifact_status (hash_verified / mismatch) is only present per-record; with zero records there is nothing to verify yet — not instrumented further.</span>';
+  }
+
+  function renderRecovery(){
+    // derive recovery signal honestly from real fields we have:
+    //  - scanner.detector_snapshot.skipped tells us uptime is below the 1800s warmup floor
+    //  - soul_integrity_index < 1.0 is recovery debt
+    var box=el('recovery');
+    var skip=((SCAN||{}).detector_snapshot||{}).skipped;
+    var soul=num(((SI||{}).safety_gates||{}).soul_integrity_index);
+    if(skip){
+      box.style.display='block';
+      box.innerHTML='<b>Recovering from restart</b> — detector warmup gated ('+skip+'). '+
+        '<span class="why">Self-improve scanner needs ~30 min uptime before it produces detector signals; soul integrity '+(soul===null?'—':soul.toFixed(3))+' is below 1.0 from today’s reboots. Low/empty counts here are recovery debt, not lost capability.</span>';
+    } else { box.style.display='none'; }
+  }
+
+  function renderMode(){
+    // no banner endpoint in this domain — derive an honest mode line from real fields.
+    var sch=((ACQ||{}).scheduler||{}).current_mode||'—';
+    var stage=num((SI||{}).stage);
+    el('mode').textContent='self-improve stage '+(stage===null?'—':stage)+' · acq '+sch;
+  }
+
+  function fillSkillId(id){ var f=el('op-skill-id'); if(f){ f.value=id; f.scrollIntoView({behavior:'smooth',block:'center'}); V2.toast('skill id loaded: '+id, true); } }
+  window._fillSkillId=fillSkillId;  // referenced from inline onclick
+
+  function _phaseLadder(curPhase){
+    var ci=SKILL_PHASES.indexOf(String(curPhase||'').toLowerCase());
+    return '<div class="ladder">'+SKILL_PHASES.map(function(p,i){
+      var cls=i<ci?'past':(i===ci?'cur':'');
+      var mark=i<ci?'✓ ':(i===ci?'▶ ':'');
+      return '<div class="lphase '+cls+'">'+mark+escH(p)+'</div>';
+    }).join('')+'</div>';
+  }
+
+  // JOBS holds learning-job detail keyed by skill_id, fetched lazily for learning skills.
+  var JOBS={};
+  function renderSkillLearning(){
+    var box=el('skill-learning'), reg=el('skill-registry'), cnt=el('skill-count');
+    var data=SKILLS&&SKILLS.registry;
+    if(!data){ box.innerHTML='<span style="color:var(--dim);font-size:10.5px">skills endpoint offline</span>'; reg.innerHTML=''; cnt.textContent=''; return; }
+    var skills=data.skills||[];
+    var learning=skills.filter(function(s){return String(s.status).toLowerCase()==='learning';});
+    var verified=skills.filter(function(s){return String(s.status).toLowerCase()!=='learning';});
+    cnt.textContent=(data.total||skills.length)+' skills · '+learning.length+' learning';
+    cnt.style.cssText=learning.length?'border-color:var(--amber);color:var(--amber)':'';
+
+    // --- active learning jobs (rich drill-down) ---
+    if(!learning.length){
+      box.innerHTML='<div style="font-size:10.5px;color:var(--muted);padding:4px 0">No skills currently in a learning job. Ask JARVIS (by voice) to learn a skill — it appears here with its plan, the request that triggered it, and live phase progress.</div>';
+    } else {
+      box.innerHTML=learning.map(function(s){
+        var job=JOBS[s.skill_id];           // may be undefined until detail fetch lands
+        var jb=(job&&job.learning_job)||{};
+        var sk=(job&&job.skill)||s;
+        var ap=(job&&job.audit_packet)||{};      // the rich audit packet (parity w/ old dashboard)
+        var asked=(jb.requested_by||(ap.request_context||{}))||{};
+        var phase=jb.phase||(ap.decision_summary||{}).current_phase||'—';
+        var plan=jb.plan||{};
+        var phases=plan.phases||[];
+        var curExit='';
+        phases.forEach(function(p){ if(String(p.name).toLowerCase()===String(phase).toLowerCase()) curExit=(p.exit_conditions||[]).join(', '); });
+        var ds=ap.decision_summary||{};
+        var missing=ap.missing_proof||[];
+        var ec=ap.evidence_classes||{};
+        var rc=ap.resolver_contract||{};
+        var tl=ap.timeline||[];
+        var ach=ap.acquisition_chain||{};
+        var oh=ap.operational_handoff||{};
+        var loading=(job===null||job===undefined);
+        return '<div class="skl" onclick="_fillSkillId(\''+escH(s.skill_id)+'\')" title="click to load into operator actions">'+
+          '<div class="sh"><span><span class="snm">'+escH(s.name||s.skill_id)+'</span> <span class="sid">'+escH(s.skill_id)+'</span></span>'+
+            '<span class="sbadge" style="background:rgba(255,176,0,.15);color:var(--amber)">'+escH(jb.status||sk.status||'learning')+' · '+escH(phase)+'</span></div>'+
+          (asked.user_text?('<div class="asked"><b>You asked:</b> “'+escH(asked.user_text)+'”'+(asked.speaker?(' <span style="color:var(--dim);font-style:normal">— '+escH(asked.speaker)+(asked.matrix_trigger?' · matrix':' · voice')+'</span>'):'')+'</div>'):'')+
+          (plan.summary?('<div class="smeta" style="color:var(--text)">'+escH(plan.summary)+'</div>'):'')+
+          _phaseLadder(phase)+
+          (curExit?('<div class="smeta">current exit: <span class="rt">'+escH(curExit)+'</span></div>'):'')+
+          // --- decision summary / why not verified ---
+          (ds.message?('<div class="aud-why">'+escH(ds.message)+(ds.missing_count!=null?(' <b style="color:var(--amber)">('+ds.missing_count+' missing)</b>'):'')+'</div>'):'')+
+          // --- missing proof (the "why not verified yet" list) ---
+          (missing.length?('<div class="aud-sec"><div class="aud-h">Why not verified yet</div>'+
+            missing.map(function(m){return '<div class="aud-miss">✗ <span class="rt">'+escH(m.name)+'</span> <span style="color:var(--dim)">— '+escH(m.reason||'')+'</span></div>';}).join('')+'</div>'):'')+
+          // --- evidence classes (which proof families are satisfied) ---
+          (Object.keys(ec).length?('<div class="aud-sec"><div class="aud-h">Evidence classes</div><div class="aud-ec">'+
+            Object.keys(ec).map(function(k){var ok=ec[k];return '<span class="ec-chip '+(ok?'ec-y':'ec-n')+'">'+(ok?'✓':'✗')+' '+escH(k.replace(/_evidence$/,'').replace(/_/g,' '))+'</span>';}).join('')+'</div></div>'):'')+
+          // --- resolver contract (required evidence, executor, acquisition) ---
+          (Object.keys(rc).length?('<div class="aud-sec"><div class="aud-h">Contract</div><div class="smeta">'+
+            (rc.capability_type?('type <span class="rt">'+escH(rc.capability_type)+'</span> · '):'')+
+            (rc.required_executor?('executor <span class="rt">'+escH(rc.required_executor)+'</span> · '):'')+
+            ('acquisition '+ (rc.acquisition_eligible?'<span style="color:var(--amber)">eligible</span>':'no'))+
+            ((rc.required_evidence&&rc.required_evidence.length)?('<br>must prove: <span class="rt">'+rc.required_evidence.map(escH).join(', ')+'</span>'):'')+
+          '</div></div>'):'')+
+          // --- operational handoff / acquisition chain (if any) ---
+          ((oh&&oh.status)?('<div class="smeta">operational handoff: <b style="color:var(--amber)">'+escH(oh.status)+'</b></div>'):'')+
+          ((ach&&(ach.status||ach.acquisition_id))?('<div class="smeta">acquisition proof: <span class="rt">'+escH(ach.status||ach.acquisition_id)+'</span></div>'):'')+
+          // --- live timeline (the phase ladder progress over time) ---
+          (tl.length?('<div class="aud-sec"><div class="aud-h">Timeline</div>'+
+            tl.slice(-6).map(function(t){return '<div class="aud-tl"><span class="aud-ts">'+escH((t.ts||'').replace('T',' ').replace('Z',''))+'</span> '+escH(t.message||t.type||'')+'</div>';}).join('')+'</div>'):
+            (loading?'<div class="smeta" style="color:var(--dim)">loading audit detail…</div>':''))+
+          '<div class="smeta" style="color:var(--dim)">job '+escH(jb.job_id||'—')+' · click row → loads id into Operator Actions below</div>'+
+        '</div>';
+      }).join('');
+      // lazily fetch full job detail for any learning skill we don't have yet
+      learning.forEach(function(s){
+        if(JOBS[s.skill_id]===undefined){
+          JOBS[s.skill_id]=null;  // mark in-flight
+          fetchJSON('/api/skills/'+encodeURIComponent(s.skill_id)).then(function(d){ JOBS[s.skill_id]=d; renderSkillLearning(); }).catch(function(){});
+        }
+      });
+    }
+
+    // --- verified registry (compact, click-to-load) ---
+    reg.innerHTML='<div style="font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin:10px 0 4px">Verified registry ('+verified.length+')</div>'+
+      verified.map(function(s){
+        var stc=String(s.status).toLowerCase()==='verified'?'var(--green)':'var(--muted)';
+        return '<div class="reg" onclick="_fillSkillId(\''+escH(s.skill_id)+'\')" title="click to load id">'+
+          '<span class="rnm">'+escH(s.name||s.skill_id)+' <span class="sid">'+escH(s.skill_id)+'</span></span>'+
+          '<span class="sid">'+escH(s.capability_type||'')+'</span>'+
+          '<span class="rst" style="color:'+stc+'">'+escH(s.status)+(s.has_evidence?' ✓':'')+'</span>'+
+        '</div>';
+      }).join('');
+  }
+
+  // ── Capability Deliberation (acquisition lane) ──────────────────
+  var ACQ_LANES=['evidence_grounding','doc_resolution','planning','plan_review','implementation','environment_setup','plugin_quarantine','verification','plugin_activation','deployment','truth'];
+  var ACQ_LANE_ABBR={evidence_grounding:'evid',doc_resolution:'docs',planning:'plan',plan_review:'review',implementation:'code',environment_setup:'venv',plugin_quarantine:'quar',verification:'verify',plugin_activation:'activ',deployment:'deploy',truth:'truth'};
+  var ACQ_TERMINAL_ST=['completed','failed','cancelled','deployed'];  // everything else is alive
+  var ACQDETAIL={};   // id -> full /api/acquisition/{id} (lazy)
+  var ACQREC={};      // id -> recent[] summary (lanes, repair_log) — survives re-render
+  var _acqOpen={};    // id -> true: open drill-downs, preserved across auto-refresh
+  var _pastOpen=null; // null=auto (expand when few); else manual bool
+  function _laneCls(st){ st=String(st||''); return st==='completed'?'l-ok':st==='running'?'l-run':st==='failed'?'l-fail':'l-pend'; }
+  function _isActive(a){ return ACQ_TERMINAL_ST.indexOf(String((a||{}).status||'').toLowerCase())<0; }
+  function _acqBadge(status){
+    var s=String(status||'').toLowerCase();
+    var c=(s==='deployed'||s==='completed')?'b-ok':(s==='failed'||s==='cancelled')?'b-fail':(s.indexOf('await')>=0)?'b-wait':(s==='executing'||s==='planning')?'b-run':'b-dim';
+    return '<span class="acqd-badge '+c+'">'+escH(status||'—')+'</span>';
+  }
+  function _repairRounds(diag){
+    var rl=(diag||{}).repair_log;
+    if(!Array.isArray(rl)||!rl.length) return '';
+    var h='<div class="delib-h">Codegen repair rounds ('+rl.length+')</div>';
+    rl.forEach(function(r){
+      var ok=r.passed===true;
+      h+='<div class="round '+(ok?'r-ok':'r-fail')+'"><div class="r-hd">Round '+escH(r.attempt)+' &middot; '+escH(r.stage)+' &middot; '+(ok?'✓ passed':'✗ failed')+'</div>';
+      if(!ok && Array.isArray(r.errors)){
+        r.errors.slice(0,3).forEach(function(m){
+          if(m && m.expected!==undefined){
+            h+='<div class="r-mm">'+escH(m.fixture||'fixture')+': expected <span class="ex">'+escH(JSON.stringify(m.expected))+'</span> &rarr; got <span class="ac">'+escH(JSON.stringify(m.actual))+'</span></div>';
+          } else { h+='<div class="r-mm">'+escH(JSON.stringify(m)).slice(0,160)+'</div>'; }
+        });
+      }
+      h+='</div>';
+    });
+    return h;
+  }
+  // Row-level actions: approve gates while alive; Remove ONLY when terminal (never an alive build).
+  function _acqActions(a){
+    var s=String(a.status||'').toLowerCase(), id=a.acquisition_id, b=[];
+    if(s==='awaiting_plan_review') b.push('<button class="btn-act" onclick="_acqApprovePlan(\''+id+'\')">Approve plan</button>');
+    if(s==='awaiting_approval') b.push('<button class="btn-act" onclick="_acqApproveDeploy(\''+id+'\')">Approve deploy</button>');
+    if(!_isActive(a)) b.push('<button class="btn-danger" onclick="_acqRemove(\''+id+'\')">Remove</button>');
+    return b.length?'<div class="acqd-act">'+b.join('')+'</div>':'';
+  }
+  // One compact row: header + badges + lane ladder + actions; the heavy deliberation lives in the drill.
+  function _rowHtml(a){
+    var id=a.acquisition_id, alive=_isActive(a), open=_acqOpen[id]===true, lanes=a.lanes||{};
+    var ladder='<div class="lanes">'+ACQ_LANES.map(function(ln){
+      var v=lanes[ln], st=(v&&v.status)||v||'';
+      return '<div class="lane '+_laneCls(st)+'" title="'+escH(ln+': '+st)+'">'+escH(ACQ_LANE_ABBR[ln]||ln)+'</div>';
+    }).join('')+'</div>';
+    return '<div class="acqd'+(alive?' alive':'')+'">'+
+      '<div class="acqd-hd" onclick="_acqDrill(\''+escH(id)+'\')">'+
+        '<span class="acqd-ttl">'+escH(a.title||id)+'</span>'+_acqBadge(a.status)+
+        '<span class="acqd-badge b-dim">T'+escH(a.risk_tier!=null?a.risk_tier:'?')+'</span>'+
+        ((a.revision_generation>0)?'<span class="acqd-badge b-wait" title="improvement of '+escH(String(a.revision_of||'').slice(-10))+'">↻ gen-'+escH(a.revision_generation)+'</span>':'')+
+        (alive?'<span class="live">● live</span>':'')+
+        '<span class="acqd-id">'+escH(String(id||'').slice(-10))+(open?' ▴':' ▾')+'</span>'+
+      '</div>'+ladder+
+      _acqActions(a)+
+      '<div class="drill'+(open?' open':'')+'" id="drill-'+escH(id)+'">'+(open?_drillHtml(id):'')+'</div>'+
+    '</div>';
+  }
+  // The "in the sand" detail: repair rounds, per-stage diagnostics, lane errors, plan.
+  function _drillHtml(id){
+    var a=ACQREC[id]||{}, full=ACQDETAIL[id];
+    var diag=a.codegen_prompt_diagnostics||{}, pdiag=a.planning_diagnostics||{}, h='';
+    h+=_repairRounds(diag);
+    var diagLine='';
+    if(pdiag.failure_reason) diagLine+='planning: '+escH(pdiag.failure_reason)+' &middot; ';
+    if(diag.repair_rounds!=null) diagLine+='repair_rounds: '+escH(diag.repair_rounds)+' &middot; ';
+    if(diag.prompt_version) diagLine+='prompt: '+escH(diag.prompt_version);
+    if(diagLine) h+='<div class="diag">'+diagLine+'</div>';
+    var lanes=a.lanes||{}, errs=[];
+    ACQ_LANES.forEach(function(ln){ var v=lanes[ln]; if(v&&v.error) errs.push(ln+': '+v.error); });
+    if(errs.length) h+='<div class="delib-h">Lane errors</div><pre>'+escH(errs.join('\n')).slice(0,1400)+'</pre>';
+    if(a.revision_feedback) h+='<div class="delib-h">Improvement request (this build)</div><pre>'+escH(a.revision_feedback)+'</pre>';
+    h+=_acqGovHtml(full||a);
+    h+=_acqPlanHtml(full||a);
+    if(!_isActive(a)) h+=_acqImproveBox(id);   // Pillar 3: feedback re-enters the pipeline
+    return h||'<span class="note">no deliberation detail recorded for this build.</span>';
+  }
+  // Governance verdict (data-flow firewall) — the egress policy decided DURING planning.
+  function _acqGovHtml(acq){
+    var p=(acq&&(acq.plan||acq.plan_summary))||{}, g=p.governance||{};
+    var hasG=(g.reads_external!==undefined)||g.egress||(g.provenance_tag!==undefined);
+    if(!hasG) return '';
+    var ext=!!g.reads_external, ptag=String(g.provenance_tag||'none'), scrap=(ptag==='web_scrap');
+    var mem=!!g.may_touch_memory, consent=!!g.requires_save_consent;
+    var chips=''
+      +'<span class="gov-chip '+(ext?'g-warn':'g-dim')+'">reads external: '+(ext?'yes':'no')+'</span>'
+      +'<span class="gov-chip '+(scrap?'g-warn':'g-dim')+'">provenance: '+escH(ptag)+(scrap?' · untrusted':'')+'</span>'
+      +'<span class="gov-chip '+(mem?'g-bad':'g-ok')+'">memory: '+(mem?'ALLOWED':'blocked · human-only')+'</span>'
+      +'<span class="gov-chip '+(consent?'g-warn':'g-dim')+'">save consent: '+(consent?'required':'n/a')+'</span>';
+    var h='<div class="delib-h">Governance — data-flow firewall</div><div class="gov">'+chips+'</div>';
+    if(g.egress) h+='<div class="diag">egress: '+escH(g.egress)+(g.source?' &middot; '+escH(g.source):'')+'</div>';
+    return h;
+  }
+  // Pillar 3 — operator feedback re-enters the pipeline as a NEW governed build.
+  function _acqImproveBox(id){
+    return '<div class="delib-h">Improve this capability</div>'+
+      '<div class="improve">'+
+        '<textarea id="impv-'+escH(id)+'" class="impv-in" rows="2" placeholder="What should the next version do better? e.g. \'also handle JS sites\', \'summary extraction is weak\'"></textarea>'+
+        '<div class="impv-row"><button class="btn-act" onclick="_acqImprove(\''+escH(id)+'\')">↻ Improve → new build</button>'+
+        '<span class="impv-note">seeds a NEW governed build with your feedback as revision context · the prior build is preserved · trust is not inherited</span></div>'+
+      '</div>';
+  }
+  window._acqImprove=function(id){
+    var ta=el('impv-'+id), fb=ta?ta.value.trim():'';
+    if(!fb){ V2.toast('enter what to improve first', false); return; }
+    V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/improve',{feedback:fb}),'improvement build started')
+      .then(function(){ if(ta) ta.value=''; delete _acqOpen[id]; refresh(true); }).catch(function(){});
+  };
+  function _acqPlanHtml(acq){
+    var p=(acq&&(acq.plan||acq.plan_summary))||{}, h='';
+    if(p.objective) h+='<div class="delib-h">Objective</div><pre>'+escH(p.objective)+'</pre>';
+    if(p.technical_approach) h+='<div class="delib-h">Technical approach</div><pre>'+escH(p.technical_approach)+'</pre>';
+    if(p.implementation_sketch) h+='<div class="delib-h">Implementation sketch</div><pre>'+escH(p.implementation_sketch)+'</pre>';
+    if(Array.isArray(p.test_cases)&&p.test_cases.length) h+='<div class="delib-h">Test cases</div><pre>'+escH(p.test_cases.join('\n'))+'</pre>';
+    return h;
+  }
+  function renderAcqDeliberation(){
+    var box=el('acq-deliberation'); if(!box) return;
+    var rec=((ACQ||{}).recent)||[];
+    var cnt=el('acqd-count'); if(cnt) cnt.textContent=rec.length+' build'+(rec.length===1?'':'s');
+    if(!rec.length){ box.innerHTML='<div class="note">No capability builds in flight or recent &mdash; idle background state, not failure.</div>'; return; }
+    // cache each summary by id so open drills survive auto-refresh re-renders
+    ACQREC={}; rec.forEach(function(a){ if(a&&a.acquisition_id) ACQREC[a.acquisition_id]=a; });
+    var active=rec.filter(_isActive), past=rec.filter(function(a){ return !_isActive(a); });
+    var showPast=(_pastOpen===null)?(past.length<=6):_pastOpen;
+    var h='';
+    if(active.length){ h+='<div class="grp-h">Active &middot; '+active.length+'</div>'+active.map(_rowHtml).join(''); }
+    else { h+='<div class="note">No active builds &mdash; nothing in flight right now.</div>'; }
+    if(past.length){
+      h+='<div class="grp-h grp-toggle" onclick="_togglePast()">'+(showPast?'▾':'▸')+' Past &middot; '+past.length+' (failed / cancelled / done)</div>'+
+         '<div id="past-builds"'+(showPast?'':' class="collapsed"')+'>'+past.map(_rowHtml).join('')+'</div>';
+    }
+    box.innerHTML=h;
+  }
+  window._togglePast=function(){
+    var past=(((ACQ||{}).recent)||[]).filter(function(a){ return !_isActive(a); });
+    var cur=(_pastOpen===null)?(past.length<=6):_pastOpen;
+    _pastOpen=!cur; renderAcqDeliberation();
+  };
+  window._acqDrill=function(id){
+    var open=!(_acqOpen[id]===true);
+    if(open){ _acqOpen[id]=true; } else { delete _acqOpen[id]; }
+    var d=el('drill-'+id); if(!d) return;
+    if(!open){ d.classList.remove('open'); d.innerHTML=''; return; }
+    d.classList.add('open'); d.innerHTML=_drillHtml(id);
+    // lazily enrich once with full detail (complete plan + verification artifacts)
+    if(ACQDETAIL[id]===undefined){
+      ACQDETAIL[id]=null;
+      fetchJSON('/api/acquisition/'+encodeURIComponent(id)).then(function(r){
+        ACQDETAIL[id]=(r&&r.acquisition)||r||{};
+        if(_acqOpen[id]){ var dd=el('drill-'+id); if(dd) dd.innerHTML=_drillHtml(id); }
+      }).catch(function(){});
+    }
+  };
+  window._acqApprovePlan=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan',{verdict:'approved'}),'plan approved').then(function(){ refresh(true); }).catch(function(){}); };
+  window._acqApproveDeploy=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-deploy',{approved:true}),'deploy approved').then(function(){ refresh(true); }).catch(function(){}); };
+  // Remove is gated twice: refuse if still alive, then a typed-free confirm. Deletes this
+  // build's OWN record + artifacts; the shared plugin venv/dir are kept if a live plugin
+  // (or another build) still needs them. The toast reports exactly what was cleaned/kept.
+  window._acqRemove=function(id){
+    var a=ACQREC[id]||{};
+    if(_isActive(a)){ V2.toast('refusing to remove an active build', false); return; }
+    V2.confirm('Remove this build',
+      'Delete build <b>'+escH(String(id).slice(-10))+'</b> ('+escH(a.status||'?')+')? This removes its record and its own artifacts (plan, code bundle, verification). The plugin\'s shared venv &amp; folder are kept if a live plugin or another build still uses them.',
+      function(){
+        V2.post('/api/acquisition/'+encodeURIComponent(id)+'/cancel',{reason:'operator_removed'})
+          .then(function(r){
+            var c=(r&&r.cleanup)||{};
+            var n=((c.artifacts_deleted)||[]).length;
+            var sh=c.shared||{}, rm=[]; if(sh.venv==='deleted')rm.push('venv'); if(sh.plugin_dir==='deleted')rm.push('dir');
+            var prot=((c.protected)||[]).length?' · plugin kept (live/shared)':'';
+            V2.toast('removed · '+n+' artifact'+(n===1?'':'s')+' cleaned'+(rm.length?' · '+rm.join('+')+' removed':'')+prot, true);
+            delete _acqOpen[id]; refresh(true);
+          })
+          .catch(function(e){ V2.toast('remove failed: '+((e&&e.message)||''), false); });
+      },
+      { yesLabel:'Remove' });
+  };
+
+  // ── Capability Authority (shadow-first, reversible) ─────────────
+  // A version's plain-English name: "Original" or "Improvement #N" (from generation,
+  // falling back to the plugin-name pattern) — never the cryptic machine name.
+  function _capLabel(v){
+    var g=v.generation;
+    if(typeof g==='number' && g>0) return 'Improvement #'+g;
+    var m=/improve[_-]gen[_-]?(\d+)/i.exec(String(v.name||''));
+    if(m) return 'Improvement #'+m[1];
+    return 'Original';
+  }
+  function renderCapabilityAuthority(){
+    var box=el('cap-authority'); if(!box) return;
+    var plugins=((PLUG||{}).plugins)||[];
+    var groups={};
+    plugins.forEach(function(p){
+      if(p.state==='quarantined'||p.state==='disabled') return;   // only live-or-shadow
+      var key=p.skill_id||('__'+p.name);
+      (groups[key]=groups[key]||{name:(p.skill_id||p.name), standalone:!p.skill_id, vers:[]}).vers.push(p);
+    });
+    var keys=Object.keys(groups).sort();
+    var cnt=el('cap-auth-count'); if(cnt) cnt.textContent=keys.length+' skill'+(keys.length===1?'':'s');
+    if(!keys.length){ box.innerHTML='<div class="note">No live or shadow capabilities yet &mdash; deploy a skill to activate authority control.</div>'; return; }
+    box.innerHTML=keys.map(function(k){
+      var g=groups[k];
+      var vers=g.vers.slice().sort(function(a,b){
+        if((a.state==='active')!==(b.state==='active')) return a.state==='active'?-1:1;   // live first
+        return (b.last_authoritative_at||0)-(a.last_authoritative_at||0)||(b.generation||0)-(a.generation||0);
+      });
+      var active=vers.filter(function(v){ return v.state==='active'; })[0];
+      var hasFloor=vers.some(function(v){ return v.state!=='active' && (v.last_authoritative_at||0)>0; });
+      var head='<div class="capsk-h"><span class="capsk-name">'+escH(g.name)+(g.standalone?' <span class="capstd">standalone</span>':'')+'</span>'+
+        '<span class="capsk-live">'+(active?('&#9654; serving: <b>'+escH(_capLabel(active))+'</b>'):'&#10073;&#10073; dormant &mdash; nothing live')+'</span></div>';
+      var rows=vers.map(function(v){
+        var live=v.state==='active';
+        var n=v.invocation_count||0;
+        var health=n?(Math.round(100*(v.success_rate!=null?v.success_rate:0))+'% ok · '+n+' call'+(n===1?'':'s')):'never used yet';
+        var btn;
+        if(!live){
+          btn='<button class="btn-act" onclick="_capActivate(\''+escH(v.name)+'\',\''+escH(_capLabel(v))+'\')">Make this live</button>';
+        } else if(hasFloor){
+          btn='<button class="btn-danger" onclick="_capDemote(\''+escH(v.name)+'\',true)">Roll back to previous</button>';
+        } else {
+          btn='<button class="btn-danger" onclick="_capDemote(\''+escH(v.name)+'\',false)">Take offline</button>';
+        }
+        return '<div class="capv'+(live?' caplive':'')+'">'+
+          '<span class="capdot '+(live?'on':'off')+'"></span>'+
+          '<span class="caplabel">'+escH(_capLabel(v))+'</span>'+
+          '<span class="capstate '+(live?'st-live':'st-shadow')+'">'+(live?'LIVE':'shadow &middot; candidate')+'</span>'+
+          '<span class="caphealth">'+escH(health)+'</span>'+
+          '<span class="capid" title="'+escH(v.name)+'">id&nbsp;'+escH(String(v.name).slice(-8))+'</span>'+
+          '<span class="capacts">'+btn+'</span>'+
+        '</div>';
+      }).join('');
+      return '<div class="capskill'+(active?'':' capdormant')+'">'+head+rows+'</div>';
+    }).join('');
+  }
+  window._capActivate=function(n, label){
+    V2.confirm('Make &ldquo;'+escH(label||'this version')+'&rdquo; the live version',
+      'This makes <b>'+escH(label||String(n).slice(-12))+'</b> the version that serves real requests. The current live version steps down to shadow and is kept as the fallback &mdash; you can roll back to it anytime. Nothing is deleted.',
+      function(){ V2.post('/api/plugins/'+encodeURIComponent(n)+'/make-authoritative',{approved_by:'owner'})
+        .then(function(){ V2.toast('&ldquo;'+(label||'version')+'&rdquo; is now live', true); refresh(true); })
+        .catch(function(e){ V2.toast('failed: '+((e&&e.message)||''), false); }); },
+      { yesLabel:'Make it live' });
+  };
+  window._capDemote=function(n, hasFloor){
+    var msg = hasFloor
+      ? 'Step the live version back to shadow and <b>restore the previous version</b> as live? Reversible &mdash; you can make it live again anytime. Nothing is deleted.'
+      : 'Take the live version back to shadow? There is <b>no earlier version</b> to fall back to, so this skill will be <b>dormant</b> (nothing serving) until you make a version live.';
+    V2.confirm('Demote the live version', msg, function(){
+      V2.post('/api/plugins/'+encodeURIComponent(n)+'/demote',{actor:'owner'})
+        .then(function(r){
+          var m=(r&&r.fell_back_to)?'rolled back &mdash; previous version is live again'
+                :((r&&r.dormant)?'skill is now dormant (nothing live)':'demoted to shadow');
+          V2.toast(m, true); refresh(true);
+        }).catch(function(e){ V2.toast('failed: '+((e&&e.message)||''), false); });
+    }, { yesLabel: hasFloor?'Roll back':'Take offline' });
+  };
+
+  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderAcqDeliberation(); renderCapabilityAuthority(); renderEscalation(); renderSkillLearning(); }
+
+  var _paused=false;
+  window._togglePause=function(){
+    _paused=!_paused;
+    var b=el('pausebtn');
+    if(b){ b.textContent=_paused?'▶ Resume':'⏸ Pause'; b.classList.toggle('on',_paused); }
+    document.body.classList.toggle('paused',_paused);
+    if(!_paused) refresh(true);   // catch up immediately on resume
+  };
+  function refresh(force){
+    if(_paused && !force) return;   // paused: skip the poll so open panels/interactions persist
+    Promise.allSettled([
+      fetchJSON('/api/self-improve'),
+      fetchJSON('/api/self-improve/scanner'),
+      fetchJSON('/api/self-improve/specialists'),
+      fetchJSON('/api/acquisition'),
+      fetchJSON('/api/acquisition/plan-evaluator'),
+      fetchJSON('/api/plugins'),
+      fetchJSON('/api/codegen'),
+      fetchJSON('/api/autonomy/escalations'),
+      fetchJSON('/api/autonomy/attestation'),
+      fetchJSON('/api/skills')
+    ]).then(function(r){
+      SI  = r[0].status==='fulfilled'?r[0].value:null;
+      SCAN= r[1].status==='fulfilled'?r[1].value:null;
+      SPEC= r[2].status==='fulfilled'?r[2].value:null;
+      ACQ = r[3].status==='fulfilled'?r[3].value:null;
+      PE  = r[4].status==='fulfilled'?r[4].value:null;
+      PLUG= r[5].status==='fulfilled'?r[5].value:null;
+      CG  = r[6].status==='fulfilled'?r[6].value:null;
+      ESC = r[7].status==='fulfilled'?r[7].value:null;
+      ATT = r[8].status==='fulfilled'?r[8].value:null;
+      SKILLS = r[9].status==='fulfilled'?r[9].value:null;
+      if(r.some(function(x){return x.status==='fulfilled';})) lastOkTs=Date.now();
+      renderAll();
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+
+  // ===== Operator actions (add-only) — bind click handlers only; never fire on load =====
+  // Each handler calls V2.post/del INSIDE the click, wraps with V2.act for toast, then
+  // re-runs the page's existing refresh() on success. Destructive / authority-raising
+  // actions go through V2.confirm with a typed gate.
+  function on(id, fn){ var b=el(id); if(b) b.addEventListener('click', fn); }
+  function val(id){ var i=el(id); return i?i.value.trim():''; }
+  function need(v, what){ if(!v){ V2.toast('enter a '+what+' first', false); return false; } return true; }
+  function done(){ refresh(); }
+
+  function wireOps(){
+    // ---- self-improve ----
+    on('op-si-dryrun', function(){
+      V2.act(V2.post('/api/self-improve/dry-run', {}), 'dry-run started').then(done).catch(function(){});
+    });
+    on('op-si-trigger', function(){
+      V2.confirm('Trigger real improvement attempt',
+        'This queues a <b>real (non-dry-run)</b> Stage-2 self-modification campaign. At stage 2 it enters the approval queue for your review before anything touches disk.',
+        function(){ V2.act(V2.post('/api/self-improve/trigger', {}), 'improvement attempt triggered').then(done).catch(function(){}); },
+        { typed:'TRIGGER', yesLabel:'Trigger' });
+    });
+    on('op-si-stage0', function(){ V2.act(V2.post('/api/self-improve/stage', {stage:0}), 'stage set to 0 (frozen)').then(done).catch(function(){}); });
+    on('op-si-stage1', function(){ V2.act(V2.post('/api/self-improve/stage', {stage:1}), 'stage set to 1 (dry-run)').then(done).catch(function(){}); });
+    on('op-si-stage2', function(){
+      V2.confirm('Raise to Stage 2 (human-approval)',
+        'Stage 2 lets auto-triggered patches enter the approval queue and be applied to disk after your explicit approval. This raises the self-modification authority of the system.',
+        function(){ V2.act(V2.post('/api/self-improve/stage', {stage:2}), 'stage set to 2 (human-approval)').then(done).catch(function(){}); },
+        { typed:'STAGE2', yesLabel:'Raise to Stage 2' });
+    });
+    on('op-si-approve', function(){
+      var id=val('op-si-patch'); if(!need(id,'patch id')) return;
+      V2.act(V2.post('/api/self-improve/approve', {patch_id:id, approved:true}), 'patch approved').then(done).catch(function(){});
+    });
+    on('op-si-reject', function(){
+      var id=val('op-si-patch'); if(!need(id,'patch id')) return;
+      V2.act(V2.post('/api/self-improve/approve', {patch_id:id, approved:false}), 'patch rejected').then(done).catch(function(){});
+    });
+
+    // ---- acquisition ----
+    on('op-acq-approve-plan', function(){
+      var id=val('op-acq-id'); if(!need(id,'acquisition id')) return;
+      V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan', {verdict:'approved'}), 'plan approved').then(done).catch(function(){});
+    });
+    on('op-acq-approve-deploy', function(){
+      var id=val('op-acq-id'); if(!need(id,'acquisition id')) return;
+      V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-deploy', {approved:true}), 'deploy approved').then(done).catch(function(){});
+    });
+    on('op-acq-cancel', function(){
+      var id=val('op-acq-id'); if(!need(id,'acquisition id')) return;
+      V2.confirm('Cancel acquisition job',
+        'Remove acquisition <b>'+id+'</b> from the active set. This cannot be undone.',
+        function(){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/cancel', {reason:'operator_removed'}), 'job removed').then(done).catch(function(){}); },
+        { typed:'CANCEL', yesLabel:'Cancel job' });
+    });
+
+    // ---- plugins ----
+    on('op-plug-activate', function(){
+      var n=val('op-plug-name'); if(!need(n,'plugin name')) return;
+      V2.act(V2.post('/api/plugins/'+encodeURIComponent(n)+'/activate', {supervision_mode:'shadow'}), 'plugin activated (shadow)').then(done).catch(function(){});
+    });
+    on('op-plug-promote', function(){
+      var n=val('op-plug-name'); if(!need(n,'plugin name')) return;
+      V2.act(V2.post('/api/plugins/'+encodeURIComponent(n)+'/promote', {}), 'plugin promoted').then(done).catch(function(){});
+    });
+    on('op-plug-disable', function(){
+      var n=val('op-plug-name'); if(!need(n,'plugin name')) return;
+      V2.confirm('Disable plugin',
+        'Disable plugin <b>'+n+'</b> (circuit-break it out of service).',
+        function(){ V2.act(V2.post('/api/plugins/'+encodeURIComponent(n)+'/disable', {}), 'plugin disabled').then(done).catch(function(){}); },
+        { typed:'DISABLE', yesLabel:'Disable' });
+    });
+    on('op-plug-rollback', function(){
+      var n=val('op-plug-name'); if(!need(n,'plugin name')) return;
+      V2.confirm('Rollback plugin',
+        'Roll plugin <b>'+n+'</b> back to its previous version.',
+        function(){ V2.act(V2.post('/api/plugins/'+encodeURIComponent(n)+'/rollback', {}), 'plugin rolled back').then(done).catch(function(){}); },
+        { typed:'ROLLBACK', yesLabel:'Rollback' });
+    });
+
+    // ---- skills / handoff ----
+    on('op-skill-approve', function(){
+      var id=val('op-skill-id'); if(!need(id,'skill id')) return;
+      V2.act(V2.post('/api/skills/'+encodeURIComponent(id)+'/handoff/approve', {approved_by:'dashboardV2', notes:'Operator approved operational proof build.'}), 'handoff approved').then(done).catch(function(){});
+    });
+    on('op-skill-reject', function(){
+      var id=val('op-skill-id'); if(!need(id,'skill id')) return;
+      var bd=V2.modal('Reject skill handoff',
+        '<div class="cfm-msg">Why reject the operational build for <b>'+id+'</b>? (required)</div>'+
+        '<input id="op-skill-reason" class="v2-field" autocomplete="off" placeholder="rejection reason">'+
+        '<div class="cfm-btns"><button class="btn-act" id="op-skill-reason-no">Cancel</button>'+
+        '<button class="btn-danger" id="op-skill-reason-yes">Reject</button></div>');
+      bd.querySelector('#op-skill-reason-no').addEventListener('click', V2.closeModal);
+      bd.querySelector('#op-skill-reason-yes').addEventListener('click', function(){
+        var reason=(bd.querySelector('#op-skill-reason').value||'').trim();
+        if(reason.length<5){ V2.toast('rejection reason is required', false); return; }
+        V2.closeModal();
+        V2.act(V2.post('/api/skills/'+encodeURIComponent(id)+'/handoff/reject', {rejected_by:'dashboardV2', reason:reason}), 'handoff rejected').then(done).catch(function(){});
+      });
+    });
+    on('op-skill-retry', function(){
+      var id=val('op-skill-id'); if(!need(id,'skill id')) return;
+      V2.act(V2.post('/api/skills/'+encodeURIComponent(id)+'/handoff/retry', {approved_by:'dashboardV2', notes:'Retry with a concrete implementation plan and sandbox-backed proof.'}), 'handoff retried').then(done).catch(function(){});
+    });
+    on('op-skill-delete', function(){
+      var id=val('op-skill-id'); if(!need(id,'skill id')) return;
+      V2.confirm('Delete skill',
+        'Forget skill <b>'+id+'</b> entirely. This removes its record and cannot be undone.',
+        function(){ V2.act(V2.del('/api/skills/'+encodeURIComponent(id)), 'skill deleted').then(done).catch(function(){}); },
+        { typed:'DELETE', yesLabel:'Delete skill' });
+    });
+    on('op-lj-cleanup', function(){
+      V2.act(V2.post('/api/learning-jobs/cleanup', {}), 'stale learning jobs cleaned').then(done).catch(function(){});
+    });
+  }
+  wireOps();
+
+  refresh(); setInterval(function(){ refresh(); }, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

@@ -61,6 +61,16 @@ class MetricSnapshot:
     belief_graph_coverage: float = 0.0
     contradiction_resolution_rate: float = 0.0
     friction_rate: float = 0.0
+    # --- SPARK_DESIGN §8 P0 · passive grounding-ring metrics (read-only) ---
+    # Observed-only baselines (3.3x grounded:inferred, 0.857 orphan_rate,
+    # ~1.0 avg_chain_length). These are NOT in _LOWER_BETTER / _HIGHER_BETTER,
+    # so they never enter attribution math — pure observability. Nothing acts
+    # on them in P0. Default-safe so persisted JSONL without them still loads.
+    orphan_rate: float = 0.0
+    inference_validation_gap: float = 0.0
+    external_validation_rate: float = 0.0
+    grounded_inferred_ratio: float = 0.0
+    avg_chain_length: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -77,6 +87,11 @@ class MetricSnapshot:
             "belief_graph_coverage": round(self.belief_graph_coverage, 4),
             "contradiction_resolution_rate": round(self.contradiction_resolution_rate, 4),
             "friction_rate": round(self.friction_rate, 4),
+            "orphan_rate": round(self.orphan_rate, 4),
+            "inference_validation_gap": round(self.inference_validation_gap, 4),
+            "external_validation_rate": round(self.external_validation_rate, 4),
+            "grounded_inferred_ratio": round(self.grounded_inferred_ratio, 4),
+            "avg_chain_length": round(self.avg_chain_length, 4),
         }
 
 
@@ -144,6 +159,31 @@ class DeltaTracker:
     def record_metrics(self, snapshot: MetricSnapshot) -> None:
         """Called periodically (~5s) to build the rolling metric buffer."""
         self._metric_ring.append(snapshot)
+
+    def orphan_rate_trending_down(self, min_samples: int = 12) -> bool:
+        """Read-only: is ``orphan_rate`` trending DOWN over the rolling ring?
+
+        SPARK §8 P5 gate input. Splits the ring's recent ``orphan_rate`` readings
+        into an older and a newer half and returns True only when the newer half's
+        mean is meaningfully below the older half's (the §9 success direction:
+        orphan_rate falling from 0.857). Conservative: insufficient data → False
+        (the gate stays shut). Never mutates anything.
+        """
+        vals = [
+            float(s.orphan_rate) for s in self._metric_ring
+            if getattr(s, "orphan_rate", 0.0)
+        ]
+        if len(vals) < min_samples:
+            return False
+        half = len(vals) // 2
+        older = vals[:half]
+        newer = vals[half:]
+        if not older or not newer:
+            return False
+        older_mean = sum(older) / len(older)
+        newer_mean = sum(newer) / len(newer)
+        # Require a non-trivial decrease (2% of the baseline) to count as "down".
+        return newer_mean < (older_mean - 0.02)
 
     def start_tracking(self, intent_id: str, source_event: str = "") -> MetricSnapshot:
         """Capture a baseline before a research job starts."""
@@ -312,6 +352,12 @@ class DeltaTracker:
                 belief_graph_coverage=baseline_dict.get("belief_graph_coverage", 0.0),
                 contradiction_resolution_rate=baseline_dict.get("contradiction_resolution_rate", 0.0),
                 friction_rate=baseline_dict.get("friction_rate", 0.0),
+                # P0 grounding-ring metrics — tolerate absence in legacy JSONL.
+                orphan_rate=baseline_dict.get("orphan_rate", 0.0),
+                inference_validation_gap=baseline_dict.get("inference_validation_gap", 0.0),
+                external_validation_rate=baseline_dict.get("external_validation_rate", 0.0),
+                grounded_inferred_ratio=baseline_dict.get("grounded_inferred_ratio", 0.0),
+                avg_chain_length=baseline_dict.get("avg_chain_length", 0.0),
             )
 
             if completion == 0.0:
@@ -550,4 +596,10 @@ class DeltaTracker:
             belief_graph_coverage=sum(r.belief_graph_coverage for r in readings) / n,
             contradiction_resolution_rate=sum(r.contradiction_resolution_rate for r in readings) / n,
             friction_rate=sum(r.friction_rate for r in readings) / n,
+            # P0 grounding-ring metrics — observability only, averaged through.
+            orphan_rate=sum(r.orphan_rate for r in readings) / n,
+            inference_validation_gap=sum(r.inference_validation_gap for r in readings) / n,
+            external_validation_rate=sum(r.external_validation_rate for r in readings) / n,
+            grounded_inferred_ratio=sum(r.grounded_inferred_ratio for r in readings) / n,
+            avg_chain_length=sum(r.avg_chain_length for r in readings) / n,
         )

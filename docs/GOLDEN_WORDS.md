@@ -87,6 +87,27 @@ Only the commands below are supported in runtime:
 - `Jarvis, GOLDEN COMMAND SELF IMPROVE EXECUTE CONFIRM`
 - `Jarvis, GOLDEN COMMAND ACQUIRE <intent text>`
 - `Jarvis, GOLDEN COMMAND ACQUISITION STATUS`
+- `Jarvis, GOLDEN COMMAND LEARN SKILL <intent text>`
+
+## Skill Learning
+
+`LEARN SKILL` is Golden-gated and routes deterministically to the SKILL
+learning-job lane at confidence 1.0 — bypassing natural-language routing, which
+otherwise misclassifies skill-creation requests (the words "skill"/"recognition"
+read as a *capability question* and route to capability_status instead of
+starting a job).
+
+- `LEARN SKILL <intent text>` starts a skill learning job. The text after
+  `LEARN SKILL` is both the **subject** and the **rationale** — it is captured as
+  the request intent and threaded into the skill so the design can reflect *why*
+  it was asked for. Say the subject first, then the why.
+- The resolver maps the subject to a skill plan (e.g. "speaker identification" →
+  the ECAPA-TDNN speaker-ID plan); the rationale is preserved on the request.
+
+Example:
+```
+Jarvis, GOLDEN COMMAND LEARN SKILL speaker identification so you can tell who is talking and only let my voice interrupt you
+```
 
 ## Capability Acquisition
 

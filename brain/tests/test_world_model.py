@@ -391,6 +391,37 @@ class TestPredictionValidation:
         assert acc["per_rule"]["r1"]["hits"] == 3
         assert acc["per_rule"]["r1"]["misses"] == 1
 
+    def test_synthetic_validations_excluded_from_lived_accuracy(self):
+        """Lived-before-synthetic firewall: predictive_accuracy_LIVE must count only
+        origin='live' reps. Synthetic reps still feed the pooled number (telemetry) but
+        can NEVER inflate the lived-only metric the eval scoreboard reads."""
+        engine = CausalEngine()
+
+        def _expired(rid: str, present: bool):
+            return CausalPrediction(
+                rule_id=rid, label="t",
+                predicted_delta={"user.present": present},
+                confidence=0.8, horizon_s=0.0,
+                created_at=time.time() - 10, expires_at=time.time() - 5,
+            )
+
+        ws = WorldState(user=UserState(present=True))
+
+        # One LIVE hit on a predictive (non-persistence) rule.
+        engine._predictions.append(_expired("r_pred", True))
+        engine.validate_predictions(ws, origin="live")
+
+        # One SYNTHETIC hit on the same rule — must NOT touch the lived mirror.
+        engine._predictions.append(_expired("r_pred", True))
+        engine.validate_predictions(ws, origin="synthetic")
+
+        acc = engine.get_accuracy()
+        # pooled counts BOTH reps...
+        assert acc["predictive_total"] == 2
+        # ...but the lived-only metric the scoreboard reads counts ONLY the live one.
+        assert acc["predictive_total_live"] == 1
+        assert acc["predictive_accuracy_live"] == 1.0
+
 
 # ---------------------------------------------------------------------------
 # Promotion

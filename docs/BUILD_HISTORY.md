@@ -5,6 +5,374 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
+## Matrix v2 — Capability Domains: Phase 0/1/2 PROVEN LIVE (2026-06-07, branch `thespark`)
+
+The first **isolated, deletable Capability Domain** — the core of Matrix v2 (EPIC #27),
+built on the proven Tier-2 lifecycle. Document tracer **proven end-to-end on the real brain**.
+
+| Phase | What shipped | Commit |
+| --- | --- | --- |
+| **0+1** substrate | `cognition/capability_domains/` — `CapabilityDomain` (isolated `root_dir`, per-domain `knowledge_db`+`memory_path`, status/envelope/provenance) + registry (create/list/get/update/**delete**) + **clean deletion (zero residue)** + `GET /api/domains` | `854a4f3` |
+| **2** store/recall | `DomainKnowledgeStore` (1 sqlite/domain, keyword search, topic_terms) + ingest_text/file/folder (.txt/.md/.pdf, provenance=ingested) + topic-routed `recall`/`recall_answer` (`claim_scope=know_about`, None on no-match=no confabulation) | `88d5415` |
+| **2** API | `POST /api/domains` create · `POST /api/domains/{id}/ingest` · `DELETE` — API-key-gated writes | `5130308` |
+| **2** voice | conversation recall hook — additive/fail-safe override → deterministic domain-scoped answer | `ff67990` |
+
+**Live proof:** created `dom_robot_arm_xarm6`, fed the spec (3 chunks), asked by voice
+*"what's the reach of the x-arm?"* → grounded recall *"Here's what I know about Robot Arm
+xArm6… six DOF… 700mm reach…"* (isolated, "know about" not "can do", no confab) → `DELETE`
+→ domain dir gone, `/api/domains` empty, **core `memories.json` intact** (clean ablation =
+the brain-injury analogy, real). Normal conversation unaffected (hook only fires on a clear
+topic match). 18 domain tests + 52 with router. Remaining: per-domain sub-consciousness NN
+(#32, enhancement — recall works without it). Memory: [[matrix-v2-capability-domains]].
+
+## Matrix Protocol — Phase M: Tier-2 lifecycle PROVEN end-to-end (2026-06-07, branch `thespark`)
+
+**The Tier-2 hemisphere specialist lane was completely dormant** — `create_probationary_specialist`
+had zero production callers, there was no training feed, and the per-focus tests passed only by
+*hand-flipping* lifecycle state. All 5 matrix-eligible focuses were `not_born` forever. Phase M
+(the proving ground for Matrix v2, EPIC #27 / #28) wired it end-to-end and **proved it live**:
+two specialists (`speaker_profile`, `temporal_pattern`) autonomously **birthed → trained → reached
+`PROMOTED`** on real signal (`PROMOTED 2/2`, the `EXPANSION_MIN_PROMOTED` gate).
+
+| Step | What shipped | Commit |
+| --- | --- | --- |
+| Observability | `matrix_report()` + `GET /api/matrix` + `/v2/matrix` dashboard page | `8b1e7b4`, `59a425e` |
+| **M1** birth | autonomous birth from accumulated encoder signal (`_observe_matrix_signals` + `_check_matrix_births`) | `08ea405` |
+| **M2** train | self-supervised distillation of each encoder into a 4-class regime NN (real accuracy ~0.85; sets `current_epoch`) + honesty guard (no training a constant) | `a20e70b` |
+| **M3** impact/READY | set `READY` on train (enters broadcast ranking → impact computed ~0.90) + protect specialists from generic cap-prune | `18bb3ed` |
+| **M3** sub-conscious lane | a SEPARATE matrix-vs-matrix broadcast lane (Tier-2 can't out-score Tier-1 for the main slots) — hold a lane slot `dwell≥10` ⇒ `PROMOTED`. David's design. | `72e1ca7` |
+| **M1.1** variation gate | only birth focuses with signal *variation* (≥2 regimes = something to learn), so un-trainable idle focuses can't fill the cap and starve trainable ones | `d57b58f` |
+
+**Live trajectory (proven):** signal 0→31 over ~1h → 2 born (variation-gated) → trained to acc ~0.86,
+impact 0.90 → `verified` → sub-conscious lane dwell 2→4→6→9→11 → **`PROMOTED ×2`**. `positive_memory`/
+`negative_memory`/`skill_transfer` stayed `not_born` — correct: no signal variation in an idle brain,
+they honestly wait for real lived events. Broadcast **expansion** (4→6) intentionally NOT triggered:
+beyond `promoted≥2` + `impact>0.05` it needs **7-day stability** (earned, not rushed).
+
+**Honesty held throughout:** advisory only, no behavior authority; accuracy is real (the NN genuinely
+learns its encoder); the guard refuses constant-fits; never-declare. The sub-conscious lane is the
+architectural seed of Matrix **v2**'s per-domain sub-consciousness broadcast. 13 matrix logic tests
+(torch training live/CI). Memory: [[matrix-protocol-verification]].
+
+## #9.3-A — goal grounding: metric-goal churn dampening (2026-06-07, branch `thespark`)
+
+**The defect: navel-gazing goal churn.** Live: 56 `system_health` (metric) goals vs 3
+`user_goal`, **52/59 abandoned (~88%)**. JARVIS manufactured low-value internal-repair goals
+on a *single* below-threshold sample, then auto-abandoned them (metric producers are
+observational-only → no execution → no progress → `_prune_stale` abandons at 2h). David's
+load-bearing reframe: #9.3-A should make JARVIS **stop manufacturing** low-value metric goals,
+not want more things. Direction A = **dampen the churn, then observe** (B/C deferred).
+
+What already existed (not rebuilt): per-key abandon-counts + permanent-suppress, cooldown,
+`MAX_NEW_GOALS_PER_HOUR`, `MAX_ACTIVE_GOALS`, promotion-needs-2-deficit-cycles.
+
+What A added:
+| Part | Change |
+| --- | --- |
+| **A.1 sustained gate** | `signal_producers.detect_metric_deficits`: the `health_report` + `calibration` loops now require a deficit on ≥2 consecutive ticks before emitting (mirrors the `active_deficits` duration gate). Recovery resets the streak, so flapping never qualifies. New `metric_sustained_skipped` counter. |
+| **A.2 per-kind cap** | `MAX_ACTIVE_SYSTEM_HEALTH=2` — metric goals can't fill all 5 active slots and crowd out user/world goals (user requests are never metric-capped). |
+| **A.3 source telemetry** | `GoalManager` tracks created/completed/abandoned **by source_scope** (+ derived `abandon_rate`), exposed at `/api/goals → source_lifecycle`, so the success metric is measurable. |
+
+**Deferred deliberately:** the "actionable repair path" gate (behavior policy — what JARVIS is
+allowed to chase) waits until the dampening's effect is observed, per the design's own
+"dampen-then-observe" ordering. **No autonomy promotion, no behavior authority change.** Tests:
+11 in `test_goal_grounding_9_3.py` + 287 goal-suite green. Success metric to watch live:
+metric abandon-rate ↓, user/world share ↑ organically.
+
+## Memory recall — relevance fix (2026-06-06, branch `thespark`)
+
+**The defect: recall ranked by memory *weight*, not query *similarity*.** The vector+ranker
+pipeline ranked correctly, but `tools/memory_tool` re-keyed every hit by `m.weight` and
+`search_memory` re-sorted by it — so high-weight boilerplate buried topical matches
+("what do you remember about Skylar?" led with "Good morning, ready to start the day").
+Separately, empty recall fell through to LLM free-narration, which confabulated a precise
+date for "first time you heard my voice". Diagnosed from the live retrieval log + an
+isolated in-process replay (NOT a cold ranker / not state — a reset would not have fixed it).
+
+| Fix | What changed | Commit |
+| --- | --- | --- |
+| **3a** | `semantic_search_scored` threads true cosine similarity out; memory_tool ranks+labels by similarity; keyword fallback re-mapped strictly below semantic | `1ad957a`, `784372e` |
+| **3b** | Explicit recall with no hits answers deterministically ("I don't have a specific memory recorded…") instead of confabulating | `1ad957a` |
+
+Verified live on the real store (voice→voice memory, Skylar→dog memory lead correctly). The
+"do you know who this is?" / "no camera access" deflection was traced to a *separate*
+ungrounded answer path (the camera + fusion are working: `verified_both`, David, 0.86) — not
+this fix, not a perception break.
+
+## Operational Self-View (OSV) — P2 voice grounding (2026-06-06, branch `thespark`)
+
+**Same disease, generalized: the LLM asserting things that contradict the system's grounded
+state** (memory ramble, "no camera access" while the camera sees you, consciousness drift).
+P2 binds DESCRIPTIVE self-claims in generated replies to the OSV. **Shipped shadow-first:**
+`cognition/self_view/grounding.py::ground_self_claims` detects self-claims and classifies each
+vs the OSV (supported / contradicted / unqualified-danger / unverified); wired into the turn
+finalization in `conversation_handler.py` running in **shadow** (records `self_grounding` per
+flight episode + `get_self_grounding_stats()`, exposed at `/api/self-view → p2_grounding`).
+Active repair (cut contradicted / §6-guard danger; never delete the merely-unverifiable, never
+touch ordinary content) is built + unit-tested but gated behind `OSV_P2_ACTIVE` until shadow
+logs prove no over-filtering. Complementary to `skills.capability_gate` (action/commitment
+claims). 10 tests (`tests/test_self_view_grounding.py`).
+
+## Operational Self-View (OSV) — P0 → P1 (2026-06-06, branch `thespark`)
+
+**The defect this fixed: JARVIS could not safely talk about itself.** Self-questions routed
+to a codebase symbol search (`Found 15 symbol(s)…`) or drifted through the LLM. The answer
+*source* now changed — self-question → INTROSPECTION → deterministic OSV articulation →
+provenance-bound answer. Design: `docs/SELF_VIEW_DESIGN.md` (GitHub #23). Read-only,
+shadow/earned, **no new behavior authority**.
+
+| Phase | What shipped | Commit |
+| --- | --- | --- |
+| **P0** | Self-model substrate: enum-like `Provenance` + `Fact` (is_measurement derived, can't be faked), pure read-only `SelfViewSynthesizer`, `GET /api/self-view`, persisted snapshot | `3185e87` |
+| **P0.5** | Sourced from the existing `build_cache` aggregator (80+ subsystems), not 7 hand-picked | `42b9479`, `806e071` |
+| **P0.6** | Bespoke per-subsystem adapters (one each, refuse-to-guess; no generic detector) | `3748b65`, `9c86fe8` |
+| **P1** | Self-introspection answers from the OSV (articulator + router override + danger guard) | `8e61f44`, `3ee0acc` |
+
+**Live, verified:** 19/19 subsystems classified — `measured: 13, shadow_only: 4,
+self_scored: 2`, zero unknown. "what new features?" → earned skill + code changeset (not a
+grep). "what can you do?" → active/measured vs shadow/zero-authority vs self-reported vs
+gaps. "are you conscious?" → balanced *"no measured basis to claim consciousness… recorded
+as observations, not proof."*
+
+**Contract held throughout (strict in claims, rich in capture):** no LLM-authored
+self-facts; no unearned consciousness claim (regression-tested danger guard); measured /
+shadow / self-scored / dormant / gap states stay distinct; emergence-like signal captured
+via `observer.observe_emergence`, never declared; no curiosity/self-improvement targeting,
+no goal creation, no gate tuning. Built on the #9 honesty foundation. Tests: 41 self-view +
+39 router. **Honest scope: necessary infrastructure for honest self-reference — NOT evidence
+of consciousness.** P2 (voice grounding) is the next, separate lane.
+
+---
+
+## Cognition Growth: CognitivePlanner + Counterfactual Engine (2026-06-06, branch `thespark`)
+
+Two new cognition subsystems landed — both **shadow-first, read-only, no-LLM, and
+data-gated**. Like the rest of the growth ladder they ship **dormant** and earn
+activation against a measured gate; neither grants behavior authority.
+
+### #16 — CognitivePlanner (Phase 8) — SHIPPED, dormant by gate
+
+`brain/cognition/planner.py`. Multi-step **path search** over the Mental Simulator:
+chains the simulator across an action sequence (each step's projected state feeds
+the next), scores whole paths, proposes the best + alternatives. Read-only,
+deterministic, no-LLM, bounded (beam=3, horizon=3, candidate-cap=4). Wired into the
+world-model shadow tick and surfaced at `get_state()["cognitive_planner"]`.
+
+- **Gate:** `MIN_VERIFIED_SIMULATIONS=100` mirrors `SimulatorPromotion.SIM_MIN_SIMULATIONS`;
+  runs only once the simulator is advisory (level ≥ 1). Dormant until then.
+- Commit `02d5ae2`. Tests: 16 new + 246 regression green. Verified live + dormant.
+
+### #17 — Counterfactual Evaluation Engine (Phase 10) — SHIPPED, dormant by gate
+
+`brain/epistemic/counterfactual/`. After autonomy decisions, evaluates the
+alternatives NOT taken: estimates the best historically-known tool for the
+decision's topic (from measured policy-history `net_delta`) and flags a
+**"missed opportunity"** when an alternative would have beaten the choice made.
+Surfaced via a new Layer-9 reflective-audit scanner (`missed_opportunity` category)
+that runs only in dream/sleep — i.e. "during dream cycles."
+
+- **Discipline:** counterfactual regret is SYNTHETIC, so it never writes live policy
+  reward — `live_influence=False` (shadow only). Promoting to live policy influence
+  is an earned + explicitly-enabled authority step.
+- **Gate:** `MIN_OUTCOMES=200` lived outcomes AND `MIN_BUFFER=500` distinct decisions
+  evaluated (the spec's "200+ outcomes, buffer >500"). Persisted dedup watermark →
+  each decision evaluated once, ever; restart-safe.
+- Commits `df31e08` (+ `faf20fb` test-isolation conftest). Tests: 15 new + 24
+  reflective-audit + 509 audit/policy regression green. Verified live + dormant.
+
+### Also this session
+
+- **First earned skill — `web_scraping_v1` VERIFIED end-to-end** through the live
+  learning-job pipeline (the other 13 verified skills are bootstrap re-registrations).
+  The growth loop closed for real: research → integrate → verify → register, with real
+  evidence (scraped Example Domain / HTTP 200) and the repair loop catching 4 fake
+  scrapers before one passed. `SKILL_LEARNING_COMPLETED` fired (recorded in the
+  attribution ledger). Honest scope: evidentiary, not a maturation-gate flip.
+- **Edge VLM** (Qwen2-VL-2B on Hailo, Pi-side, idle-gated, person-free room captions)
+  and **Fidelity hardening** (#8/#11/#12/#13: self-improve health-gate fail-closed,
+  silent-`except` sweep on epistemic emit paths, event/route count reconcile) landed
+  earlier in the session.
+
+---
+
+## The Spark Branch — Grounding Ring + Weight-Room Discipline + Companion-Cognition P0 (2026-05-31, branch `thespark`)
+
+This branch is an **observability-and-honesty landing, not a behavior-authority landing**.
+The arc is the transition from **background cognition** (thoughts that log but change nothing)
+toward **live companion cognition** (a read that shapes behavior, learned over time) — but
+*nothing here grants behavior authority yet*. Everything that touches *behavior* is
+shadow-first / zero-authority / gate-earned; even the first companion-cognition code
+(**P0, the situational read**) is strictly logged-only — it changes no behavior, writes no
+beliefs, and asks nothing. The read→behavior loop (P1+) remains **designed, not built**.
+Scope is reaffirmed **one JARVIS, one primary companion, household-aware — not multi-tenant**.
+
+### A) Grounding Ring (the "spark") — SHIPPED, shadow-only
+
+Curiosity pointed OUTWARD to validate beliefs against external truth = the audit's
+keystone fix = `SyntheticSoul §5/§6.5`. Plan in `docs/SPARK_DESIGN.md`.
+
+| Area | Change | Evidence |
+| --- | --- | --- |
+| P0 passive metrics | Read-only grounding-ring baselines + `SparkPromotion` gate (default shadow); ProvenanceScorer is view-only | `autonomy/spark_metrics.py`, `epistemic/provenance_scorer.py` |
+| P1 shadow observability | Affect readout (3 scalars + provenance + cannot-lie clamp), would-have grounding questions, confabulation ledger — all surfaced read-only on `grounding.html` | `consciousness/affect_state.py`, `dashboard/snapshot.py` (commit `5b8d680`) |
+| `grounded:inferred` honesty | The keystone metric corrected through 3 fixes: narrow denominator (vs its 3.3× baseline), re-based to belief-graph reality (~20× = 4 grounded of 583), and a memory-store access-path fix | commits `88303d1` → `4cbe8dc` → `1d66e33` |
+| Grounding-drive selector | Soak showed 8/8 INWARD targets, fixated on one self-log. Fixed in ProvenanceScorer (view-only): outward bias (self/operational/meta ×0.2, world ×1.0) + anti-fixation (rotate, don't re-ask) | commits `e1c3ad3`, `3b1e41b` |
+
+### B) Belief-graph honesty — SHIPPED
+
+The spark soak traced the inward-belief pollution to its source: `reflection.py` minted a
+self-activity log per conversation (`interaction_review`, weight 0.3) that **leaked past the
+`weight < 0.30` eligibility gate at exactly 0.30** and became an identity-type belief — ~219
+of 220 inferred beliefs were these self-logs. Fix: `interaction_review` is categorically
+belief-ineligible (stays an episodic memory; never an epistemic belief). Honest framing —
+this grounds nothing new; it stops miscounting telemetry as beliefs.
+`epistemic/contradiction_engine.py` (commit `bfe6686`).
+
+### C) Weight-room discipline — P0 SHIPPED, P1+ designed
+
+The synthetic "weight room" (`synthetic/*.py`) is good, but "earn promotion on real reps,
+not faked" was doc-only. Design (`docs/WEIGHT_ROOM_DESIGN.md`): an **asymmetric** gate —
+block *authority* (promotion / broadcast-slot / `is_active`), never *training*. P0 SHIPPED:
+origin telemetry (`DistillationCollector` per-origin lived/synthetic counts) + **closed a
+real synthetic→promotion leak** (`world_model`/`simulator` `record_outcome` now tags origin
+from the synthetic-session gate, so synthetic predictions can't inflate promotion accuracy).
+`cognition/promotion.py`, `cognition/world_model.py`, `hemisphere/distillation.py`
+(commit `64ceb63`).
+
+### D) Grounding observability fix — SHIPPED
+
+Starvation banner falsely reported "no Pi signal" with the Pi connected. Three-layer fix:
+bogus proxy → only-recomputed-at-advisory (stale at shadow) → wrong perception attr. Now a
+live readout from `ctx.perception.get_connected_sensors()`. Verified `pi_signal_available:
+true`. `autonomy/orchestrator.py`, `dashboard/snapshot.py` (commits `0edce24` → `530c973`).
+
+### E) dashboardV2 maturation panels — SHIPPED (frontend, sync-no-restart)
+
+| Panel | Page | Surfaces |
+| --- | --- | --- |
+| Distillation Flow & Metrics | `v2/lab.html` | teacher streams (total/quarantined%/buffer/last-seen), lived/synthetic split, tier-1 gating, skill-acquisition maturation | (commit `2709dc5`) |
+| Language Evidence & Native Voice | `v2/training.html` | 7 evidence gates vs thresholds, `native_usage_rate` (the "outgrow-the-LLM" metric), + a live "What to Say Next" guide keyed off red gates | (commit `a1ed762`) |
+| Manual Gate Work Needed | `v2/training.html` | per-class lived-example progress (e.g. 6/30) + exact prompt decks — what the operator must say to unlock maturity | (commit `e9662e8`) |
+
+### F) Companion Cognition — P0 SHIPPED (shadow / logged-only); P1+ designed (`docs/COMPANION_COGNITION_DESIGN.md`)
+
+The next chapter (Iron Man JARVIS / Cortana): a live internal **read** during conversation,
+**theory-of-mind held as hypotheses** (never asserted), a **read→behavior ladder**
+(tone/depth/pace/pivot/disengage, crawl→walk→run, gated shadow→advisory→active), asking that
+**feeds the existing `CuriosityQuestionBuffer`** (no new ask-path — inherits the rate-limit /
+dedup / annoyance-learning that already powers the desk-object & unknown-voice questions),
+and **crystallization that rides existing gates** (eligibility + `TensionRecord` maturation +
+calibration — beliefs revisable, personality a separate slow 0.7-inertia track). Anti-chatterbox
+spine: the read fires **only when salience/affect trips**.
+
+**P0 SHIPPED — the situational read** (`commit 27076b0`, verified live + adversarially reviewed
+clean). After every voice turn, JARVIS logs an internal read of the just-finished exchange:
+what it thinks is happening (engagement / user sentiment), a self-check on its own turn (e.g.
+"may be overexplaining"), a confidence score, the **named evidence** that produced the read,
+and — gated on a salience threshold — what it **would have done if it had the authority**. It
+**changes no behavior, writes no beliefs, asks nothing**; the salience gate is *recorded but
+inert* (the anti-chatterbox spine, validated against real conversation before it can ever
+steer). Pure-stdlib, O(1) per turn, runs dead-last in `handle_transcription` (cannot perturb
+the turn), double exception-wrapped. Surfaced read-only as the **Situational Read** panel on
+`v2/grounding.html`, beside the affect readout. `consciousness/situational_read.py`,
+`conversation_handler.py` (tail hook), `dashboard/snapshot.py` (`companion_read`). A 13-agent
+adversarial review (behavior-leak / path-safety / honesty / correctness) found **zero real
+defects**. P1+ (theory-of-mind, read→behavior ladder, crystallization, companion-learning)
+remain **designed, not built**.
+
+### Cumulative invariants at branch state
+
+| Invariant | State |
+| --- | --- |
+| Companion-cognition code | **P0 situational read SHIPPED** (logged-only / shadow / changes no behavior); P1+ designed |
+| Spark / affect / grounding drive | **shadow / zero-authority** (drives no lever) |
+| Weight-room promotion gate | P0 telemetry only; **no authority gate live yet** |
+| `grounded:inferred` keystone | measured **honestly** (belief-graph ~20×, not the flattering 3.3×) |
+| Synthetic→promotion leak | **closed** (origin-tagged) |
+| Scope | one JARVIS, one primary companion, household-aware (**not** multi-tenant) |
+
+---
+
+## Evidence-Integrity Triad + Spatial Mind's-Eye Stones 1/1.5/2 + `/mind` Matrix View (2026-05-30, SHIPPED)
+
+Branch `aliceinwonderland`.  Two threads, both verified live on the running
+brain.  (A) Made three internal self-scoring metrics honest — the symbolic /
+perception / epistemic substrate is genuinely real, but the two LEARNED
+"intelligence" claims (policy-NN superiority and world-model foresight) were
+largely self-scoring artifacts and are now measured honestly.  (B) Laid raw
+baseline foundations for a persistent, revisitable spatial world-memory (P5):
+PRE-MATURE, shadow-only, ZERO-AUTHORITY, default-OFF.
+
+### A) Evidence-integrity triad (commit `9f1503c`, SHIPPED)
+
+| Area | Change | Evidence |
+| --- | --- | --- |
+| Calibration diet rebalance | Truth-calibration window was ~98% world-model self-predictions — a ~50:1 firehose that evicted real signal (corrections/attributions) within hours.  Added per-provenance retention + a balanced working set capping any single provenance to 50% of the headline Brier/ECE/over-/under-confidence | `epistemic/calibration/confidence_calibrator.py` |
+| Policy win-rate de-circularization | Removed the stable-state "diversity bonus" that handed the NN a "win" just for deviating while the system was healthy (inflated win-rate to ~99.2%).  A win now requires the NN's divergence to coincide with a MEASURED reward change; stable operation = tie.  Does NOT affect NN training, does NOT demote already-promoted live features | `policy/evaluator.py` |
+| World-model persistence-vs-predictive split | Headline ~99.8% accuracy was dominated by near-tautological "X persists / stable stays stable" rules.  `get_accuracy()` now reports `predictive_accuracy` (genuine event-triggered foresight) SEPARATELY from `persistence_accuracy`; the Oracle benchmark scores the honest predictive number | `cognition/causal_engine.py`, `jarvis_eval/oracle_benchmark.py`, `cognition/world_model.py` |
+
+Verified live:
+- Calibration — world-model share of the calibration window 98.8% -> ~50%, attribution retention 6 -> 250, headline Brier 0.0328 (masked) -> 0.0546 (real signal now registers).
+- Policy — win-rate 99.2% -> 0.0 over 3000+ shadow decisions: evaluated honestly, the policy NN shows NO demonstrable advantage over the kernel (honest "unproven").
+- World-model — pooled 0.92 -> persistence 0.97 vs PREDICTIVE 0.20; Oracle composite 92.0 Gold -> 86.6 Silver (honest re-score).
+
+### B) Spatial mind's-eye — persistent mental world (P5, PRE-MATURE / shadow-only / ZERO-AUTHORITY / default-OFF)
+
+Raw baseline foundations toward a mobile, HRR-encoded, revisitable spatial
+world-memory.  Safety-audited: forbidden-import scans green, dashboard
+truth-probe clean (0 fail/warn/info), no canonical-memory pollution, no raw
+HRR vectors ever written to disk.
+
+| Stone | Change | Evidence |
+| --- | --- | --- |
+| Stone 1 — the Album (commit `8c46153`) | NEW `memory/spatial_episodic_store.py` — a durable, append-only, zero-authority spatial-episodic store.  The HRR mind's-eye previously computed a world each sampled tick and discarded it; it now persists the vector-free scene graph + a provenance envelope (`world_id`, `authority`=all-false, `status`=PRE-MATURE, `calibration_version`, `hrr_config{dim,seed,vocab_version}`, `loaded_from_store`) to `~/.jarvis/spatial/episodic/<session>.jsonl`.  New `VOCAB_VERSION` constant; new default-OFF `ENABLE_HRR_SPATIAL_ALBUM` sub-gate (`album_active`).  HRR encode is deterministic from the scene graph, so the world re-encodes losslessly and NO vector is stored.  NO promotion path in this stone = structurally cannot create/pollute canonical memory | `memory/spatial_episodic_store.py` |
+| Stone 1.5 — dedup (commit `bd9a30d`) | Content-fingerprint dedup (entity ids+states + coarse 0.5 m positions + relations) skips storing a world identical to the last STORED one.  A static scene is kept once; jitter ignored; only real change stored.  Verified live: 11 samples -> 6 distinct worlds | `memory/spatial_episodic_store.py` |
+| Stone 2 — observability (commit `f8008a6`) | 3 read-only, vector-free, authority-pinned endpoints + a "Mental-World Album" panel on the `/hrr-scene` page (session picker + timeline scrubber rendering a stored world on the existing canvas, pausing live polling; Explore overlay; provenance strip) | see API endpoints below |
+
+#### New API endpoints (all GET, read-only, authority-pinned — all authority flags false, `no_raw_vectors_in_api` true, vector-free)
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/hrr/scene/sessions` | `{sessions:[{session_id,records,mtime}], status:"PRE-MATURE", authority...}` — list stored sessions |
+| `GET /api/hrr/scene/episode?session=<id>&limit=<n>` | `{session_id,count,worlds:[<stored world records>], ...}` — page stored worlds |
+| `GET /api/hrr/scene/explore?world_id=<id>` | `{world_id, world, explore_traces:[<nav trace>], loaded_from_store:true, ...}` — re-walk a stored world via the pure `mental_navigation` ops (turn-left -> move-forward -> turn-right), returning imagined-step traces |
+
+### C) Matrix world view — the `/mind` page (P5 visualization, commits `457b3f2` + `bc9f5b0` + `4dcdc5d`, SHIPPED)
+
+The "Matrix view": letting JARVIS *see what it sees / where it is* — a
+foundational prerequisite in the digital-consciousness theory (explicitly NOT a
+claim of consciousness). New `brain/dashboard/static/mind.html` + a `GET /mind`
+route in `brain/dashboard/app.py` (next to `/hrr-scene`). Read-only,
+ZERO-AUTHORITY — reuses `/api/hrr/scene` + `/api/hrr/scene/history`, no new
+endpoints, cannot write beliefs or affect the belief graph.
+
+| Aspect | Detail |
+| --- | --- |
+| Renderer | Perspective floor grid (hero) + subtle wireframe room shell; near floor edge pinned on-screen (camera reframed in `bc9f5b0` so the grid is the focus, not a boxy shell) |
+| Objects | Placed by `position_room_m`, **epistemic-colored**: green=live/visible, cyan=remembered, amber=occluded/inferred, red=missing/conflicting, gray=candidate/unknown; confidence drives marker glow; pole + floor ring give depth cues |
+| Motion | Colored trails seeded from `/api/hrr/scene/history` (object paths over time) |
+| Controls | HUD readout (top entities + positions + states), legend, layer toggles (grid/walls/objects/labels/trails/relations), pause |
+| Linked from | `/capability-pipeline#hrrresearch` (HRR Research tab) |
+
+Verified live: `/mind` HTTP 200; scene lane `enabled=True`; live scene ~10 entities / 3 relations / calibration_version 17.
+
+**Phase 1.5 — ghost layer + honest "unplaced" dock (commit `4dcdc5d`, SHIPPED).** The Phase 1.5 plan was "render the occluded/remembered entities (desk/monitor/cat/keyboard/mouse) at their last-known position." **A live-data check killed that premise:** those entities have *never* been localized — `position_room_m` is null in the live scene **and** in every retained `/api/hrr/scene/history` frame; they only ever reach state `candidate`/`occluded` in region `unknown`. There is no last-seen *position* to place them at, and placing them would fabricate coordinates the system never computed (forbidden). So `/mind` now classifies every scene entity into three honest buckets:
+- **solid (live):** `state=visible` AND a current `position_room_m` → filled diamond + glow (unchanged Phase-1 look).
+- **ghost (remembered/inferred):** has a position (current or last-known) but is not live-confirmed (occluded/removed/missing) → dashed hollow diamond, dimmed pole/ring, `↺ <age> · <state>` tag — shows where JARVIS last saw it.
+- **dock (believed-but-unplaced):** in the belief set but no position anywhere → listed in a new off-floor **"BELIEVED PRESENT · UNPLACED"** panel, *not* drawn on the grid. The floor stays strictly truthful.
+
+Last-known positions come from a `lastKnownPos` map seeded once from history and updated from every live frame; `resolvePos()` never invents a position. **Drive-by fix:** history seeding had been silently dead — the endpoint returns `{scenes:[...]}` but the code called `(hist||[]).forEach(...)` on the response object, which threw straight into the `.catch`, so trail seeding from history never ran. Now reads `hist.scenes`. Readout split to "ON THE FLOOR" (placed only); stat line reports live/remembered/unplaced counts; `age()` uses the server scene timestamp to avoid client/server clock skew. Verified: classification reproduced against live data (2 solid / 1 ghost / 7 dock at check time); script syntax validated.
+
+**Honest Phase-1 limitation (still true for the dense look):** only entities with a resolved `position_room_m` are *placed on the floor* (monocular estimate; resolves for some confirmed detections). The dense triangulated room mesh + flowing point cloud aesthetic (the reference image) is **Phase 2** — it needs dense per-pixel depth the system does not have yet (path: a monocular depth model on the brain GPU → point cloud → mesh; tradeoff is the Pi must stream frames/keyframes). `/mind` is built so that layer drops in later.
+
+### Future (not yet built)
+
+- `/mind` Phase 2 = monocular depth (Depth Anything v2 / MiDaS) → dense mesh (the reference-image aesthetic). Needs Pi frame/keyframe streaming or a depth camera.
+- Stone 3 = room-stitcher (room extent / coverage / "what's still unseen"; metric scale needs an extrinsic calibration step — intrinsics are at `calibration_version=17`).
+- Stone 4 = human-reviewed `SpatialMemoryGate` promotion of rare, high-confidence, human-relevant changes to compact STRING memories only ("you left X at Y"), never coordinates.
+
+---
+
 ## Research Quality and Codebase Study Fix (2026-05-09, SHIPPED)
 
 Tightened intake quality for the autonomy research pipeline and codebase

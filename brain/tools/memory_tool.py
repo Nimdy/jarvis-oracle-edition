@@ -244,9 +244,19 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
             referenced_entities=referenced_entities,
         )
         seen = {preview for _, preview in results}
-        for score, preview in kw_results:
+        # Keyword is a lexical FALLBACK, scored by memory weight (not query
+        # similarity, and sometimes >1.0 for core memories). Re-map it onto the
+        # 0..1 relevance scale STRICTLY below the weakest semantic hit so the
+        # similarity-ranked semantic results always lead — otherwise a
+        # high-weight core/boilerplate memory could outrank a real topical
+        # match in the downstream renderer (same weight-as-relevance bug).
+        sem_floor = min((s for s, _ in results), default=0.30)
+        kw_base = min(sem_floor, 0.30)
+        rank = 0
+        for _, preview in kw_results:
             if preview not in seen:
-                results.append((score, preview))
+                rank += 1
+                results.append((max(0.0, kw_base - 0.01 * rank), preview))
                 seen.add(preview)
 
     if not results:
@@ -258,7 +268,11 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
         )
         return f"No memories found for this query."
 
-    results.sort(key=lambda x: x[0], reverse=True)
+    # Do NOT globally re-sort: semantic hits already arrive in ranker order
+    # (learned relevance) keyed by true query SIMILARITY, and keyword fill is
+    # appended after as the lower-priority fallback. Re-sorting by raw score
+    # here was part of the recall bug — it mixed similarity (0..1) with the
+    # keyword path's weight-based score and let boilerplate float to the top.
     types: dict[str, int] = {}
     for _, preview in results[:limit]:
         t = _extract_type_from_preview(preview)
@@ -270,8 +284,8 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
         types=types,
     )
     lines = [f"Found {len(results)} relevant memory(ies):"]
-    for weight, preview in results[:limit]:
-        lines.append(f"  - (relevance={weight:.2f}) {preview}")
+    for score, preview in results[:limit]:
+        lines.append(f"  - (relevance={score:.2f}) {preview}")
     return "\n".join(lines)
 
 
@@ -282,11 +296,19 @@ def _semantic_search(
     identity_context: object | None = None,
     referenced_entities: set[str] | None = None,
 ) -> list[tuple[float, str]]:
-    """Primary search path using embeddings."""
+    """Primary search path using embeddings.
+
+    Returns ``(similarity, preview)`` pairs. The score is the raw vector
+    similarity (cosine 0..1) from the ranked pipeline — NOT memory weight.
+    Using weight here was the recall bug: it re-sorted topical matches
+    beneath high-weight boilerplate ("User's name is David", library chunks),
+    so "what do you remember about Skylar" surfaced identity facts instead of
+    the dog. Relevance must be query-similarity, not intrinsic importance.
+    """
     try:
-        from memory.search import semantic_search
+        from memory.search import semantic_search_scored
         is_personal_activity = _is_personal_activity_query(query)
-        hits = semantic_search(
+        hits = semantic_search_scored(
             query,
             top_k=limit,
             speaker=speaker,
@@ -294,11 +316,11 @@ def _semantic_search(
             referenced_entities=referenced_entities,
         )
         results = []
-        for m in hits:
+        for sim, m in hits:
             if is_personal_activity and _is_system_self_memory(m):
                 continue
             payload_str = _format_payload_preview(m)
-            results.append((m.weight, f"[{m.type}] {payload_str[:200]}"))
+            results.append((float(sim), f"[{m.type}] {payload_str[:200]}"))
         return results
     except Exception:
         return []

@@ -327,6 +327,14 @@ class MentalSimulator:
             "avg_depth": round(avg_depth, 2),
             "avg_confidence": round(avg_confidence, 3),
             "avg_elapsed_ms": round(avg_ms, 2),
+            # #9 labeling sweep: avg_confidence is the simulator's OWN projected
+            # confidence, not validated against outcomes — never a measurement.
+            "provenance": {
+                "avg_confidence": {
+                    "is_measurement": False, "kind": "internally_scored",
+                    "note": "the simulator's own projected confidence, not validated against "
+                            "reality; the simulator is shadow/advisory-gated"},
+            },
         }
 
     def _get_rule_priority(self, rule_id: str) -> int:

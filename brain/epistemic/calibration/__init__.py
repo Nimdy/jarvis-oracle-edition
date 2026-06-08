@@ -358,7 +358,7 @@ class TruthCalibrationEngine:
                 from consciousness.events import event_bus, CALIBRATION_CORRECTION_DETECTED
                 event_bus.emit(CALIBRATION_CORRECTION_DETECTED, **result)
             except Exception:
-                pass
+                logger.debug("CALIBRATION_CORRECTION_DETECTED emit failed", exc_info=True)  # #11: surfaced, not swallowed
             try:
                 from epistemic.contradiction_engine import ContradictionEngine
                 from epistemic.belief_record import DEBT_USER_CORRECTION

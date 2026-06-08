@@ -40,6 +40,15 @@ class VisionConfig(BaseModel):
     face_threshold: float = 0.4
     enable_tracking: bool = True
     enable_expressions: bool = False
+    # Edge VLM scene captioning (Qwen2-VL-2B on the Hailo-10H). OFF by default —
+    # shares the detector's Hailo with 15fps person detection, so it is opt-in,
+    # low-cadence, and auto-disables if detection fps degrades. See scene_captioner.py.
+    edge_caption_enabled: bool = os.getenv("EDGE_CAPTION", "0") == "1"  # test: EDGE_CAPTION=1 ./start.sh
+    edge_caption_interval_s: float = float(os.getenv("EDGE_CAPTION_INTERVAL_S", "60"))
+    edge_caption_hef: str = "/usr/local/hailo/resources/models/hailo10h/Qwen2-VL-2B-Instruct.hef"
+    edge_caption_max_tokens: int = 48
+    edge_caption_min_det_fps: float = 6.0  # (legacy) detection-fps observability floor
+    edge_caption_sustained_idle_s: float = 12.0  # require this many seconds of continuous absence before captioning (flicker-proof)
 
 
 class AudioConfig(BaseModel):

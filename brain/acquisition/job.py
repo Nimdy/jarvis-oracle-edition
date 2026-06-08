@@ -139,6 +139,14 @@ class CapabilityAcquisitionJob:
     approved_by: str = ""
     approval_timestamp: float = 0.0
 
+    # Iterative improvement (Pillar 3): an operator-driven re-entry of a prior
+    # (completed/failed) capability. The feedback rides as planning+codegen revision
+    # context; the new job goes through the SAME governed lifecycle — trust is never
+    # inherited from the prior version.
+    revision_of: str = ""              # prior acquisition_id this improves
+    revision_feedback: str = ""        # the operator's "do better" note
+    revision_generation: int = 0       # how many improvement rounds deep
+
     # Lifecycle
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
@@ -295,6 +303,16 @@ class AcquisitionPlan:
     dependencies: list[str] = field(default_factory=list)
     test_cases: list[str] = field(default_factory=list)
     risk_analysis: str = ""
+
+    # Data-flow firewall (Pillar 2): the capability's governed egress policy,
+    # reasoned about DURING planning (not post-hoc). Keys:
+    #   reads_external (bool)        — fetches data from outside the system
+    #   egress (str)                 — one phrase naming what the plugin outputs
+    #   may_touch_memory (bool)      — may its output be written to memory/beliefs (default False)
+    #   provenance_tag (str)         — "web_scrap" for untrusted external data, else "none"
+    #   requires_save_consent (bool) — Jarvis must ask the operator before persisting output
+    #   source (str)                 — "deterministic_floor" | "planner_stated" | "merged"
+    governance: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -580,6 +598,30 @@ class AcquisitionStore:
         result.sort(key=lambda j: j.created_at, reverse=True)
         return result
 
+    def delete_job(self, acquisition_id: str) -> bool:
+        """Hard-delete a job's JSON record. Returns True if a file was removed."""
+        p = self._path("jobs", acquisition_id)
+        try:
+            if p.exists():
+                p.unlink()
+                return True
+        except Exception as exc:
+            logger.warning("delete_job failed for %s: %s", acquisition_id, exc)
+        return False
+
+    def delete_artifact(self, category: str, obj_id: str) -> bool:
+        """Hard-delete one artifact JSON (plan/review/code_bundle/…). Safe no-op if absent."""
+        if not obj_id or category not in _SUBDIRS:
+            return False
+        p = self._path(category, obj_id)
+        try:
+            if p.exists():
+                p.unlink()
+                return True
+        except Exception as exc:
+            logger.warning("delete_artifact failed for %s/%s: %s", category, obj_id, exc)
+        return False
+
     # ── plan CRUD ──────────────────────────────────────────────────────
 
     def save_plan(self, plan: AcquisitionPlan) -> None:
@@ -683,6 +725,9 @@ class AcquisitionStore:
                 "plugin_id": j.plugin_id,
                 "planning_diagnostics": j.planning_diagnostics or {},
                 "codegen_prompt_diagnostics": j.codegen_prompt_diagnostics or {},
+                "revision_of": getattr(j, "revision_of", "") or "",
+                "revision_feedback": getattr(j, "revision_feedback", "") or "",
+                "revision_generation": int(getattr(j, "revision_generation", 0) or 0),
             }
             for k, v in j.lanes.items():
                 entry["lanes"][k] = {
@@ -701,6 +746,7 @@ class AcquisitionStore:
                         "dependencies": plan.dependencies or [],
                         "test_cases": plan.test_cases or [],
                         "implementation_sketch": plan.implementation_sketch or "",
+                        "governance": getattr(plan, "governance", {}) or {},
                     }
             if j.code_bundle_id:
                 bundle = self.load_code_bundle(j.code_bundle_id)
