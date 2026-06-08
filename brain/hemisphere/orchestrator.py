@@ -173,6 +173,12 @@ class HemisphereOrchestrator:
         self._dynamic_focuses: dict[str, DynamicFocus] = {}
         self._build_lock = threading.Lock()
         self._networks_lock = threading.Lock()
+        # Reload last-known-good specialist weights from disk so a restart rebuilds
+        # fast instead of retraining from zero. Fail-safe — never breaks boot.
+        try:
+            self._restore_persisted_specialists()
+        except Exception:
+            logger.warning("Specialist weight restore failed (non-critical)", exc_info=True)
         self._last_migration_check: float = 0.0
         self._cycle_count = 0
         self._enabled = True
@@ -226,6 +232,64 @@ class HemisphereOrchestrator:
     # ------------------------------------------------------------------
     # Research consultation
     # ------------------------------------------------------------------
+
+    def _restore_persisted_specialists(self) -> None:
+        """Reload last-known-good specialist WEIGHTS from the registry on boot.
+
+        Weights persist (fast rebuild — no retrain from zero). AUTHORITY does NOT:
+        P0 restores only shadow distillation / Tier-1 specialists, which carry no
+        Tier-2 broadcast authority — there is nothing to smuggle. Authority-bearing
+        Matrix Tier-2 specialists (MATRIX_ELIGIBLE_FOCUSES) are deliberately SKIPPED
+        — restoring their broadcast standing across a reset would violate the
+        lived-only firewall; they re-birth and re-earn on live reps.
+
+        Fully fail-safe: a corrupt or topology-incompatible checkpoint is skipped
+        and discarded (so it stops poisoning future boots); restore never breaks
+        boot. Restored networks are looked up by focus, so the normal training path
+        reuses them instead of rebuilding from scratch.
+        """
+        from hemisphere.types import (
+            MATRIX_ELIGIBLE_FOCUSES, PerformanceMetrics, TrainingProgress,
+        )
+        from hemisphere.registry import _dict_to_topology
+
+        restored = 0
+        for focus_key in self._registry.foci():
+            try:
+                focus = HemisphereFocus(focus_key)
+            except ValueError:
+                continue  # unknown/legacy focus key — leave its checkpoint alone
+            if focus in MATRIX_ELIGIBLE_FOCUSES:
+                continue  # authority-bearing — re-earn on live reps, do not restore (P1)
+            mv = self._registry.best_version(focus_key)
+            if mv is None:
+                continue
+            try:
+                topology = _dict_to_topology(mv.topology_json)
+                self._engine.load_model(mv.network_id, topology, mv.path)
+            except Exception:
+                logger.warning("Discarding incompatible checkpoint %s v%d on boot",
+                               focus_key, mv.version, exc_info=True)
+                try:
+                    self._registry.discard_version(
+                        focus_key, mv.version, delete_weights=False,
+                        reason="incompatible_on_boot")
+                except Exception:
+                    pass
+                continue
+            net = NetworkArchitecture(
+                id=mv.network_id, name=mv.name or focus_key, focus=focus,
+                topology=topology,
+                performance=PerformanceMetrics(accuracy=mv.accuracy),
+                training_progress=TrainingProgress(),
+                status=NetworkStatus.READY,
+            )
+            with self._networks_lock:
+                self._networks[net.id] = net
+            restored += 1
+        if restored:
+            logger.info("Restored %d persisted specialist(s) from last-known-good "
+                        "weights (shadow/Tier-1 only; authority re-earns)", restored)
 
     def _refresh_research_priors(self) -> None:
         """Query memory for NN-related research and feed it to the architect.

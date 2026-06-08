@@ -18,6 +18,7 @@ from hemisphere.types import (
     HemisphereFocus,
     HemisphereSnapshot,
     HemisphereState,
+    LayerDefinition,
     NetworkArchitecture,
     NetworkTopology,
     PerformanceMetrics,
@@ -116,6 +117,24 @@ class HemisphereRegistry:
             if v.is_active:
                 return v
         return None
+
+    def foci(self) -> list[str]:
+        """All focus keys that have at least one persisted version."""
+        return [f for f, vs in self._versions.items() if vs]
+
+    def best_version(self, focus: str) -> ModelVersion | None:
+        """The version to restore on boot: the active one if marked, else the
+        highest-accuracy version (ties broken by most recent). None if no
+        restorable (weights present + topology known) version exists.
+        """
+        versions = [v for v in self._versions.get(focus, [])
+                    if v.topology_json and os.path.exists(v.path)]
+        if not versions:
+            return None
+        active = next((v for v in versions if v.is_active), None)
+        if active is not None:
+            return active
+        return max(versions, key=lambda v: (v.accuracy, v.created_at))
 
     def deactivate(self, focus: str, network_id: str | None = None) -> bool:
         """Clear the active flag for a focus, optionally only for one network."""
@@ -352,3 +371,28 @@ def _topology_to_dict(t: NetworkTopology) -> dict[str, Any]:
             for la in t.layers
         ],
     }
+
+
+def _dict_to_topology(d: dict[str, Any]) -> NetworkTopology:
+    """Rebuild a NetworkTopology from persisted topology_json (symmetric to
+    _topology_to_dict). activation_functions isn't stored — it's derivable from
+    the per-layer activations. Raises on a malformed dict so the caller can
+    discard an incompatible checkpoint rather than load a wrong architecture.
+    """
+    layers = tuple(
+        LayerDefinition(
+            id=la["id"],
+            layer_type=la["layer_type"],
+            node_count=int(la["node_count"]),
+            activation=la["activation"],
+            dropout=float(la.get("dropout", 0.0)),
+        )
+        for la in d["layers"]
+    )
+    return NetworkTopology(
+        input_size=int(d["input_size"]),
+        layers=layers,
+        output_size=int(d["output_size"]),
+        total_parameters=int(d.get("total_parameters", 0)),
+        activation_functions=tuple(la.activation for la in layers),
+    )
