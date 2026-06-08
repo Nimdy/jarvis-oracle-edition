@@ -49,6 +49,17 @@ _MODE_ORDINALS = {
     "deep_learning": 1.0,
 }
 
+# Evolution stage is a stage *name* on the live path (evolution.current_stage)
+# but an int level in synthetic exercises. Map the canonical ladder
+# (consciousness_evolution.STAGE_ORDER) to ordinals; see _stage_value.
+_EVOLUTION_STAGE_ORDINALS = {
+    "basic_awareness": 0,
+    "self_reflective": 1,
+    "philosophical": 2,
+    "recursive_self_modeling": 3,
+    "integrative": 4,
+}
+
 
 def _clamp(v: float) -> float:
     if v < 0.0:
@@ -56,6 +67,29 @@ def _clamp(v: float) -> float:
     if v > 1.0:
         return 1.0
     return v
+
+
+def _stage_value(raw: Any, ordinals: dict[str, int] | None = None) -> float:
+    """Coerce a stage value to a number without ever raising.
+
+    The live context passes a stage *name* (str, e.g. "basic_awareness");
+    synthetic exercises pass an int level. Map known names via `ordinals`,
+    accept numeric values/strings directly, and fall back to 0.0 for anything
+    unrecognized — a bad value must not kill the whole diagnostic feature
+    vector (which silently starved the DIAGNOSTIC specialist's training feed).
+    """
+    if isinstance(raw, bool):  # bool is an int subclass — treat as its int value
+        return float(raw)
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        if ordinals and raw in ordinals:
+            return float(ordinals[raw])
+        try:
+            return float(raw)
+        except ValueError:
+            return 0.0
+    return 0.0
 
 
 class DiagnosticEncoder:
@@ -118,8 +152,8 @@ class DiagnosticEncoder:
         vec[12] = _clamp(context.get("quarantine_pressure", 0.0))
         vec[13] = _clamp(context.get("soul_integrity", 1.0))
         vec[14] = _clamp(_MODE_ORDINALS.get(context.get("mode", "passive"), 0.125))
-        vec[15] = _clamp(context.get("evolution_stage", 0) / 5.0)
-        vec[16] = _clamp(context.get("consciousness_stage", 0) / 4.0)
+        vec[15] = _clamp(_stage_value(context.get("evolution_stage", 0), _EVOLUTION_STAGE_ORDINALS) / 5.0)
+        vec[16] = _clamp(_stage_value(context.get("consciousness_stage", 0)) / 4.0)
         vec[17] = _clamp((context.get("health_trend_slope", 0.0) + 1.0) / 2.0)
         vec[18] = _clamp(context.get("mutations_last_hour", 0) / 12.0)
         vec[19] = _clamp(context.get("active_learning_jobs", 0) / 5.0)

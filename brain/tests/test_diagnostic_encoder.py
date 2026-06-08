@@ -307,3 +307,50 @@ class TestDiagnosticEncoderNoOpportunityLabel:
         })
         neg_label, _ = DiagnosticEncoder.encode_no_opportunity_label()
         assert len(neg_label) == len(pos_label)
+
+
+class TestDiagnosticEncoderStageCoercion:
+    """Regression: live context passes evolution_stage as a stage NAME (str),
+    not an int level. Dividing a str by a float used to raise TypeError, which
+    was swallowed and silently starved the DIAGNOSTIC specialist's feed."""
+
+    @pytest.mark.parametrize("stage,expected_idx", [
+        ("basic_awareness", 0),
+        ("self_reflective", 1),
+        ("philosophical", 2),
+        ("recursive_self_modeling", 3),
+        ("integrative", 4),
+    ])
+    def test_string_evolution_stage_maps_to_ordinal(self, stage, expected_idx):
+        ctx = _full_context()
+        ctx["evolution_stage"] = stage  # the live-path type (str)
+        vec = DiagnosticEncoder.encode(_full_snapshot(), [], ctx)
+        assert len(vec) == FEATURE_DIM
+        assert vec[15] == pytest.approx(expected_idx / 5.0)
+
+    def test_live_style_string_stage_does_not_raise(self):
+        # exactly the live shape: current_stage is a str, no consciousness_level
+        ctx = {"evolution_stage": "basic_awareness"}
+        vec = DiagnosticEncoder.encode({}, [], ctx)
+        assert len(vec) == FEATURE_DIM
+        for i, v in enumerate(vec):
+            assert 0.0 <= v <= 1.0, f"dim {i} out of range: {v}"
+
+    def test_int_evolution_stage_still_works(self):
+        # synthetic exercises pass an int level — must remain unchanged
+        ctx = _full_context()
+        ctx["evolution_stage"] = 2
+        vec = DiagnosticEncoder.encode(_full_snapshot(), [], ctx)
+        assert vec[15] == pytest.approx(2 / 5.0)
+
+    def test_unknown_stage_name_falls_back_to_zero(self):
+        ctx = _full_context()
+        ctx["evolution_stage"] = "not_a_real_stage"
+        vec = DiagnosticEncoder.encode(_full_snapshot(), [], ctx)
+        assert vec[15] == 0.0
+
+    def test_string_consciousness_stage_does_not_raise(self):
+        ctx = _full_context()
+        ctx["consciousness_stage"] = "some_string"
+        vec = DiagnosticEncoder.encode(_full_snapshot(), [], ctx)
+        assert vec[16] == 0.0
