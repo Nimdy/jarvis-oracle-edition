@@ -282,6 +282,7 @@ _cache_time: float = 0.0
 
 
 from dashboard.snapshot import build_cache as _build_snapshot, SnapshotContext
+from dashboard.pi5_devices import derive_pi5_devices
 
 
 def _build_cache() -> dict[str, Any]:
@@ -472,6 +473,13 @@ def _create_app() -> FastAPI:
         """dashboardV2 — Matrix v2 Capability Domains (read-only registry view)."""
         v2_domains_path = os.path.join(_STATIC_DIR, "v2", "domains.html")
         with open(v2_domains_path) as f:
+            return HTMLResponse(f.read())
+
+    @app.get("/v2/pi5", response_class=HTMLResponse)
+    async def v2_pi5_page():
+        """dashboardV2 — Pi5 / nervous-system operational view (sensors + LIDAR)."""
+        v2_pi5_path = os.path.join(_STATIC_DIR, "v2", "pi5.html")
+        with open(v2_pi5_path) as f:
             return HTMLResponse(f.read())
 
     @app.get("/eval")
@@ -1073,6 +1081,22 @@ def _create_app() -> FastAPI:
             return {"deleted": True, "domain_id": domain_id}
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.get("/api/pi5")
+    async def api_pi5():
+        """Pi5 / nervous-system operational view: connected sensors, per-sensor
+        health (temp/throttle/fps/uptime), brain<->Pi link health (the afferent
+        event stream), derived per-device operational status, and 2D LIDAR sector
+        telemetry (telemetry-only, never beliefs). Read-only — for seeing JARVIS's
+        body + confirming plugged-in equipment is actually operational.
+        """
+        return {
+            "sensors": _cache.get("sensors", []),
+            "sensor_health": _cache.get("sensor_health", {}),
+            "lidar": _cache.get("lidar", {}),
+            "link": _cache.get("link", {}),
+            "devices": derive_pi5_devices(_cache),
+        }
 
     @app.get("/api/skills")
     async def api_skills():

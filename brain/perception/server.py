@@ -126,6 +126,19 @@ class PerceptionServer:
         self._face_identifier: Any = None
         self._synthetic_sensors: set[str] = set()
         self._sensor_health: dict[str, dict] = {}
+        # 2D spatial telemetry (e.g. RPLIDAR sector summaries). Telemetry-only —
+        # never written into beliefs/memory; surfaced for the world model + dashboard.
+        self._lidar_telemetry: dict[str, dict] = {}
+        # Link / nervous-system telemetry. Brain-stamped receipt times so event
+        # rate + last-seen are reliable even when a sensor sends timestamp=0.
+        self._event_recv_log: deque[tuple[float, str]] = deque(maxlen=2000)
+        self._event_counts: dict[str, int] = {}
+        self._connect_count: int = 0
+        self._disconnect_count: int = 0
+        # Raw-audio receipt (the mic stream rides the bytes path, NOT _process_event,
+        # so track it separately for mic liveness on the operational dashboard).
+        self._audio_chunk_count: int = 0
+        self._last_audio_recv: float = 0.0
 
     def set_face_identifier(self, identifier: Any) -> None:
         self._face_identifier = identifier
@@ -133,6 +146,59 @@ class PerceptionServer:
     def get_sensor_health(self) -> dict[str, dict]:
         """Return latest health telemetry from all sensors."""
         return dict(self._sensor_health)
+
+    def get_lidar_telemetry(self) -> dict[str, dict]:
+        """Return latest 2D LIDAR sector telemetry per sensor (telemetry-only).
+
+        This is spatial telemetry, NOT belief/memory — it never writes beliefs
+        (writes_beliefs=False is enforced at the source; we just surface it).
+        """
+        return dict(self._lidar_telemetry)
+
+    def get_link_health(self, window_s: float = 60.0) -> dict[str, Any]:
+        """Brain<->Pi link / nervous-system telemetry (read-only snapshot).
+
+        Computed from brain-stamped receipt times, so event rate + last-seen are
+        reliable regardless of what timestamp a sensor sends. Per-type `rate_hz`
+        is over the last `window_s` seconds; `last_seen_age_s` is age since the
+        most recent event of that type. This is the afferent-stream view for the
+        operational dashboard — pure observability, no mutation.
+        """
+        now = time.time()
+        log = list(self._event_recv_log)
+        last_seen: dict[str, float] = {}
+        windowed: dict[str, int] = {}
+        for ts, etype in log:
+            if ts > last_seen.get(etype, 0.0):
+                last_seen[etype] = ts
+            if now - ts <= window_s:
+                windowed[etype] = windowed.get(etype, 0) + 1
+        types: dict[str, dict] = {}
+        for etype, total in sorted(self._event_counts.items()):
+            seen = last_seen.get(etype)
+            types[etype] = {
+                "total": total,
+                "last_seen_age_s": round(now - seen, 1) if seen else None,
+                "rate_hz": round(windowed.get(etype, 0) / window_s, 3),
+            }
+        last_overall = max((ts for ts, _ in log), default=0.0)
+        return {
+            "connected": sorted(self._connections.keys()),
+            "connected_count": len(self._connections),
+            "connect_count": self._connect_count,
+            "disconnect_count": self._disconnect_count,
+            "last_connect_age_s": round(now - self._last_sensor_connect, 1) if self._last_sensor_connect else None,
+            "last_disconnect_age_s": round(now - self._last_sensor_disconnect, 1) if self._last_sensor_disconnect else None,
+            "last_event_age_s": round(now - last_overall, 1) if last_overall else None,
+            "total_events": sum(self._event_counts.values()),
+            "events_in_window": sum(windowed.values()),
+            "window_s": window_s,
+            "types": types,
+            "audio": {
+                "chunks": self._audio_chunk_count,
+                "last_recv_age_s": round(now - self._last_audio_recv, 1) if self._last_audio_recv else None,
+            },
+        }
 
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -270,11 +336,14 @@ class PerceptionServer:
         self._connections[sensor_id] = websocket
         self._last_sensor_connect = time.time()
         self._had_sensor = True
+        self._connect_count += 1
 
         try:
             async for raw in websocket:
                 if isinstance(raw, bytes):
                     event_bus.emit(PERCEPTION_RAW_AUDIO, pcm_bytes=raw, sensor_id=sensor_id)
+                    self._audio_chunk_count += 1
+                    self._last_audio_recv = time.time()
                     continue
                 try:
                     data = json.loads(raw)
@@ -293,6 +362,7 @@ class PerceptionServer:
             pass
         finally:
             logger.info("Sensor disconnected: %s", sensor_id)
+            self._disconnect_count += 1
             self._connections.pop(sensor_id, None)
             if sensor_id in self._synthetic_sensors:
                 self._synthetic_sensors.discard(sensor_id)
@@ -304,6 +374,8 @@ class PerceptionServer:
 
     def _process_event(self, event: PerceptionEvent, sensor_id: str) -> None:
         self._event_buffer.append(event)
+        self._event_recv_log.append((time.time(), event.type))
+        self._event_counts[event.type] = self._event_counts.get(event.type, 0) + 1
         event_bus.emit(PERCEPTION_EVENT, event=event)
 
         match event.type:
@@ -388,6 +460,23 @@ class PerceptionServer:
                 if throttle_hex and throttle_hex != "0x0":
                     logger.warning("Pi %s throttle detected: %s (temp=%.1f°C)",
                                    sensor_id, throttle_hex, health_data["cpu_temp_c"])
+            case "lidar_scan" | "scan_2d":
+                # 2D spatial telemetry (RPLIDAR sector summary). TELEMETRY-ONLY:
+                # we store + surface the sector shape; we do NOT write beliefs or
+                # claim object identity. The world model may derive nearest-by-sector
+                # / open-space / room-outline from this; nothing canonical.
+                self._lidar_telemetry[sensor_id] = {
+                    "sensor": event.data.get("sensor", "lidar"),
+                    "scan_hz": event.data.get("scan_hz", 0),
+                    "points": event.data.get("points", 0),
+                    "range_max_m": event.data.get("range_max_m", 0),
+                    "sectors": event.data.get("sectors", {}),
+                    "open_sectors": event.data.get("open_sectors", []),
+                    "scan_quality": event.data.get("scan_quality", "unknown"),
+                    "authority": "spatial_telemetry_only",
+                    "writes_beliefs": False,
+                    "last_update": time.time(),
+                }
             case "synthetic_exercise_start":
                 logger.info("Synthetic exercise started from sensor %s", sensor_id)
                 self._synthetic_sensors.add(sensor_id)

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Pi5 Body & Senses (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    .sens{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:8px 0;}
+    .sens .sh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;}
+    .sens .sn{font-size:13px;font-weight:700;color:var(--text);}
+    .sens .stats{display:flex;gap:16px;flex-wrap:wrap;font-size:9.5px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:5px;}
+    .sens .stats b{color:var(--text);}
+    .tag2{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line);border-radius:9px;padding:1px 7px;color:var(--muted);}
+    .lidar{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px;}
+    .lsec{border:1px solid var(--line);border-radius:5px;padding:7px 9px;text-align:center;}
+    .lsec .ln{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+    .lsec .lv{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px;}
+    .devgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;}
+    .dev{border:1px solid var(--line);border-radius:6px;padding:9px 11px;display:flex;flex-direction:column;gap:3px;}
+    .dev .dh{display:flex;align-items:center;gap:7px;}
+    .dev .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:var(--dim);}
+    .dev .dn{font-size:12px;font-weight:700;color:var(--text);}
+    .dev .ds{font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-left:auto;}
+    .dev .dd{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;}
+    .dev .note{font-size:8.5px;color:var(--dim);font-style:italic;}
+    .ok{background:#3fb950!important;} .warn{background:#f0a500!important;} .bad{background:#f85149!important;} .idle{background:#8b949e!important;}
+    .lrow{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--line);font-size:10px;font-variant-numeric:tabular-nums;}
+    .lrow:last-child{border-bottom:none;}
+    .lrow .lt{color:var(--text);font-weight:600;} .lrow .lm{color:var(--muted);display:flex;gap:14px;}
+    .linkhdr{display:flex;gap:18px;flex-wrap:wrap;font-size:10px;color:var(--muted);margin-bottom:6px;font-variant-numeric:tabular-nums;}
+    .linkhdr b{color:var(--text);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · PI5 BODY &amp; SENSES</h1><span class="v2">dashboardV2</span>
+    <span class="sub">JARVIS's body — the Pi5 sense node + connected equipment. Camera/Hailo tells it what it sees; the RPLIDAR tells it the 2D spatial shape around it. New sensors register as new <b>senses</b>, telemetry-only (no belief/memory authority until earned).</span>
+    <span class="right"><button id="pausebtn" class="pausebtn" onclick="_togglePause()">⏸ Pause</button><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <main>
+    <section class="card col12">
+      <h2>Devices <span style="font-size:9px;color:var(--muted)">(plugged-in &amp; operational)</span></h2>
+      <div class="note">Each light is backed by telemetry that actually flows — fps, inference-event recency, audio device. The Hailo is <i>inferred</i> from inference events (direct temp/util is next); the mic has no direct telemetry yet and says so. No fabricated green lights.</div>
+      <div id="devices"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Nervous System <span style="font-size:9px;color:var(--muted)">(brain ↔ Pi link · afferent event stream)</span></h2>
+      <div class="note">The live event stream from the Pi's senses into the brain. Rate is over the last minute; "last seen" is age since the most recent event of that type. This is how you tell the body is actually talking to the brain.</div>
+      <div id="link"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Connected Senses</h2>
+      <div class="note">Sensors connected to the brain over the perception bus, with live health. If you just plugged something in, it should appear here — that's how you confirm new equipment is wired correctly.</div>
+      <div id="sensors"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>RPLIDAR · 2D Spatial Shape <span style="font-size:9px;color:var(--muted)">(telemetry only)</span></h2>
+      <div class="note">Nearest obstacle per sector + scan health. <b>Spatial telemetry only</b> — it informs nearest/open-space, never "I know what that object is" or canonical spatial memory.</div>
+      <div id="lidar"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+  var PAUSED=false;
+  function _togglePause(){ PAUSED=!PAUSED; var b=document.getElementById('pausebtn'); b.textContent=PAUSED?'▶ Resume':'⏸ Pause'; b.classList.toggle('on',PAUSED); }
+  V2.renderNav('/static/v2/pi5.html');
+
+  function renderSensors(d){
+    var sensors=d.sensors||[], health=d.sensor_health||{};
+    if(!sensors.length){ V2.el('sensors').innerHTML='<div style="color:var(--dim);padding:8px;">No sensors connected. (Pi senses node offline?)</div>'; return; }
+    V2.el('sensors').innerHTML=sensors.map(function(sid){
+      var h=health[sid]||{};
+      var thr=h.throttled && h.throttled!=='0x0';
+      return '<div class="sens"><div class="sh"><span class="sn">'+sid+'</span>'+
+        '<span class="tag2" style="'+(thr?'color:#f85149;border-color:#f85149':'')+'">'+(thr?'THROTTLED '+h.throttled:'healthy')+'</span></div>'+
+        '<div class="stats"><span>cpu <b>'+V2.f2(h.cpu_temp_c)+'°C</b></span><span>cpu% <b>'+V2.f2(h.cpu_percent)+'</b></span>'+
+        '<span>mem <b>'+(h.mem_used_mb||0)+'/'+(h.mem_total_mb||0)+'MB</b></span><span>cam <b>'+V2.f2(h.camera_fps)+'fps</b></span>'+
+        '<span>uptime <b>'+V2.fmtUptime(h.uptime_s)+'</b></span><span>phase <b>'+(h.phase||'—')+'</b></span></div></div>';
+    }).join('');
+  }
+
+  function renderLidar(d){
+    var lid=d.lidar||{};
+    var keys=Object.keys(lid);
+    if(!keys.length){ V2.el('lidar').innerHTML='<div style="color:var(--dim);padding:8px;">No LIDAR telemetry yet. (RPLIDAR not publishing — start the Pi reader.)</div>'; return; }
+    V2.el('lidar').innerHTML=keys.map(function(sid){
+      var L=lid[sid]||{}, sec=L.sectors||{};
+      var cells=['front','front_left','left','right','back','front_right'].filter(function(k){return k in sec;}).map(function(k){
+        var v=sec[k]; var col=(v!==null&&v<1.0)?'#f0a500':(v!==null&&v<0.5?'#f85149':'var(--text)');
+        return '<div class="lsec"><div class="ln">'+k.replace(/_/g,' ')+'</div><div class="lv" style="color:'+col+'">'+(v==null?'—':V2.f2(v)+'m')+'</div></div>';
+      }).join('');
+      var q=L.scan_quality||'unknown';
+      return '<div class="sens"><div class="sh"><span class="sn">'+(L.sensor||'lidar')+' <span style="font-size:9px;color:var(--muted)">('+sid+')</span></span>'+
+        '<span class="tag2">'+q+' · '+(L.authority||'telemetry')+'</span></div>'+
+        '<div class="stats"><span>scan <b>'+V2.f2(L.scan_hz)+'Hz</b></span><span>points <b>'+(L.points||0)+'</b></span>'+
+        '<span>range_max <b>'+(L.range_max_m||0)+'m</b></span><span>open sectors <b>'+((L.open_sectors||[]).length)+'</b></span>'+
+        '<span>writes_beliefs <b>'+(L.writes_beliefs?'yes':'no')+'</b></span></div>'+
+        '<div class="lidar">'+(cells||'<span style="color:var(--dim)">no sector data</span>')+'</div></div>';
+    }).join('');
+  }
+
+  var _STATUS_DOT={operational:'ok',up:'ok',available:'ok',playing:'ok',stale:'warn',telemetry_pending:'idle',unknown:'idle',absent:'idle',down:'bad'};
+  function renderDevices(d){
+    var devs=d.devices||[];
+    if(!devs.length){ V2.el('devices').innerHTML='<div style="color:var(--dim);padding:8px;">No device telemetry yet.</div>'; return; }
+    V2.el('devices').innerHTML='<div class="devgrid">'+devs.map(function(x){
+      var dot=x.present?(_STATUS_DOT[x.status]||'idle'):'bad';
+      var det=x.detail||{}; var bits=[];
+      if(det.fps!=null) bits.push(V2.f2(det.fps)+'fps');
+      if(det.last_inference_age_s!=null) bits.push('infer '+V2.f2(det.last_inference_age_s)+'s ago');
+      if(det.last_frame_event_age_s!=null) bits.push('frame '+V2.f2(det.last_frame_event_age_s)+'s ago');
+      if(det.last_audio_age_s!=null) bits.push('audio '+V2.f2(det.last_audio_age_s)+'s ago');
+      if(det.chunks!=null) bits.push(det.chunks+' chunks');
+      if(det.uptime_s!=null) bits.push('up '+V2.fmtUptime(det.uptime_s));
+      if(det.current) bits.push(det.current);
+      if(det.sensors&&det.sensors.length) bits.push(det.sensors.join(','));
+      return '<div class="dev"><div class="dh"><span class="dot '+dot+'"></span><span class="dn">'+x.name+'</span>'+
+        '<span class="ds">'+(x.present?x.status.replace(/_/g,' '):'absent')+'</span></div>'+
+        (bits.length?'<div class="dd">'+bits.join(' · ')+'</div>':'')+
+        (x.note?'<div class="note">'+x.note+'</div>':'')+'</div>';
+    }).join('')+'</div>';
+  }
+
+  function renderLink(d){
+    var L=d.link||{}; var types=L.types||{}; var tk=Object.keys(types);
+    if(!tk.length && !L.connected_count){ V2.el('link').innerHTML='<div style="color:var(--dim);padding:8px;">No link activity yet. (Pi senses node not connected.)</div>'; return; }
+    var hdr='<div class="linkhdr"><span>connected <b>'+(L.connected_count||0)+'</b></span>'+
+      '<span>'+((L.connected||[]).join(', ')||'—')+'</span>'+
+      '<span>events <b>'+(L.total_events||0)+'</b></span>'+
+      '<span>last event <b>'+(L.last_event_age_s==null?'—':V2.f2(L.last_event_age_s)+'s ago')+'</b></span>'+
+      '<span>reconnects <b>'+(L.connect_count||0)+'</b></span><span>drops <b>'+(L.disconnect_count||0)+'</b></span></div>';
+    var rows=tk.sort(function(a,b){return (types[b].rate_hz||0)-(types[a].rate_hz||0);}).map(function(t){
+      var T=types[t]; var age=T.last_seen_age_s; var stale=(age!=null&&age>30);
+      return '<div class="lrow"><span class="lt" style="'+(stale?'color:var(--muted)':'')+'">'+t+'</span>'+
+        '<span class="lm"><span>'+V2.f3(T.rate_hz||0)+' Hz</span><span>'+(T.total||0)+' total</span>'+
+        '<span style="'+(stale?'color:#f0a500':'')+'">'+(age==null?'—':V2.f2(age)+'s ago')+'</span></span></div>';
+    }).join('');
+    V2.el('link').innerHTML=hdr+rows;
+  }
+
+  function tick(){
+    document.getElementById('clock').textContent=new Date().toLocaleTimeString();
+    if(PAUSED) return;
+    V2.fetchJSON('/api/pi5').then(function(d){
+      document.getElementById('mode').textContent=(d.sensors&&d.sensors.length)?'live':'no sensors';
+      renderDevices(d); renderLink(d); renderSensors(d); renderLidar(d);
+    }).catch(function(){ document.getElementById('mode').textContent='error'; });
+  }
+  tick(); setInterval(tick, 5000);
+</script>
+</body>
+</html>
