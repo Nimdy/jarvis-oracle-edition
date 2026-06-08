@@ -44,6 +44,7 @@ window.V2 = (function(){
     ['/static/v2/ops.html','ops'],
     ['/static/v2/training.html','training'],
     ['/static/v2/matrix.html','matrix'],
+    ['/static/v2/domains.html','domains'],
     ['#sep','lab'],
     ['/static/v2/lab.html','lab'],
     ['#sep','insight'],

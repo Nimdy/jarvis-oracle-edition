@@ -467,6 +467,13 @@ def _create_app() -> FastAPI:
         with open(v2_matrix_path) as f:
             return HTMLResponse(f.read())
 
+    @app.get("/v2/domains", response_class=HTMLResponse)
+    async def v2_domains_page():
+        """dashboardV2 — Matrix v2 Capability Domains (read-only registry view)."""
+        v2_domains_path = os.path.join(_STATIC_DIR, "v2", "domains.html")
+        with open(v2_domains_path) as f:
+            return HTMLResponse(f.read())
+
     @app.get("/eval")
     async def eval_page():
         from fastapi.responses import RedirectResponse

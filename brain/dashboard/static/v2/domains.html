@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Capability Domains (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    .dom{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:8px 0;}
+    .dom .dh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;}
+    .dom .dn{font-size:13px;font-weight:700;color:var(--text);}
+    .dom .dstats{display:flex;gap:16px;flex-wrap:wrap;font-size:9.5px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:5px;}
+    .dom .dstats b{color:var(--text);}
+    .kind{font-size:8.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:9px;padding:1px 7px;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · CAPABILITY DOMAINS</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Matrix v2 — isolated, deletable knowledge/skill domains. Each is its own bundle (own store + memory + sub-consciousness); recall is domain-scoped ("I know about X", never "I can do X"); deleting one is a clean ablation (zero residue). Read-only here.</span>
+    <span class="right"><button id="pausebtn" class="pausebtn" onclick="_togglePause()">⏸ Pause</button><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <main>
+    <section class="card col12">
+      <h2>Domains</h2>
+      <div class="note">Create/feed/delete via the API (key-gated): <code>POST /api/domains</code>, <code>POST /api/domains/{id}/ingest</code>, <code>DELETE /api/domains/{id}</code>. Provenance is tagged: <b>ingested</b> (know-about) vs lived/synthetic.</div>
+      <div class="statline" id="summary"></div>
+      <div id="domains"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+  var PAUSED=false;
+  function _togglePause(){ PAUSED=!PAUSED; var b=document.getElementById('pausebtn'); b.textContent=PAUSED?'▶ Resume':'⏸ Pause'; b.classList.toggle('on',PAUSED); }
+  V2.renderNav('/static/v2/domains.html');
+
+  function render(d){
+    document.getElementById('mode').textContent=(d.available===false)?'unavailable':'live';
+    V2.el('summary').innerHTML='<div><div class="k" style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;">domains</div><div style="font-size:30px;font-weight:700;">'+(d.count||0)+'</div></div>';
+    var doms=d.domains||[];
+    if(!doms.length){ V2.el('domains').innerHTML='<div style="color:var(--dim);padding:8px;">No domains yet. Teach one: <code>POST /api/domains</code> then <code>/ingest</code>.</div>'; return; }
+    V2.el('domains').innerHTML=doms.map(function(x){
+      var p=x.provenance||{};
+      return '<div class="dom"><div class="dh"><span class="dn">'+V2.cap(x.name||'—')+'</span>'+
+        '<span class="kind">'+(x.kind||'document')+' · '+(x.status||'—')+'</span></div>'+
+        '<div class="dstats"><span>chunks <b>'+(x.chunk_count||0)+'</b></span><span>sources <b>'+(x.source_count||0)+'</b></span>'+
+        '<span>ingested <b>'+(p.ingested||0)+'</b></span><span>lived <b>'+(p.lived||0)+'</b></span><span>synthetic <b>'+(p.synthetic||0)+'</b></span>'+
+        '<span>NN <b>'+(x.nn_focus||'—')+'</b></span></div>'+
+        '<div style="font-size:8.5px;color:var(--dim);margin-top:4px;font-family:var(--mono,monospace);">'+x.domain_id+'</div></div>';
+    }).join('');
+  }
+
+  function tick(){
+    document.getElementById('clock').textContent=new Date().toLocaleTimeString();
+    if(PAUSED) return;
+    V2.fetchJSON('/api/domains').then(render).catch(function(){ document.getElementById('mode').textContent='error'; });
+  }
+  tick(); setInterval(tick, 10000);
+</script>
+</body>
+</html>
