@@ -53,3 +53,44 @@ def test_none_provenance_bucketed_as_unknown():
     d = MemoryStorage.get_provenance_distribution(_stub([None, None]))
     cls = {c["provenance"]: c["count"] for c in d["classes"]}
     assert cls.get("unknown") == 2
+
+
+# --- regression: "recent" must be by TIMESTAMP, not list position -------------
+import time as _time
+
+
+def _tmem(ts, mid="m", payload="p", prov="user_claim"):
+    return SimpleNamespace(timestamp=ts, id=mid * 14, type="x",
+                           provenance=prov, weight=0.5, payload=payload)
+
+
+def _store(mems):
+    return SimpleNamespace(_memories=mems, _lock=threading.Lock())
+
+
+def test_get_recent_sorts_by_timestamp_not_list_order():
+    # the list is OUT of time order — a newer write sits mid-list, old ones at the tail
+    # (exactly the dream/consolidation-artifact bug: [-count:] would return the OLD tail)
+    s = _store([_tmem(100, "a"), _tmem(500, "new"), _tmem(50, "b"), _tmem(10, "old")])
+    out = MemoryStorage.get_recent(s, 2)
+    # the 2 newest by timestamp are 500 and 100 (NOT the list tail [50, 10])
+    assert sorted(m.timestamp for m in out) == [100, 500]
+
+
+def test_recent_with_provenance_is_newest_first():
+    now = _time.time()
+    s = _store([
+        _tmem(now - 1000, "o", "old", "conversation"),
+        _tmem(now - 10, "n", "new", "casual_conversation"),
+        _tmem(now - 5000, "x", "older", "seed"),
+    ])
+    out = MemoryStorage.get_recent_with_provenance(s, 3)
+    assert out[0]["provenance"] == "casual_conversation"      # the newest
+    assert out[0]["age_s"] <= out[1]["age_s"] <= out[2]["age_s"]
+
+
+def test_recent_with_provenance_preview_widened():
+    long = "x" * 300
+    s = _store([_tmem(1.0, "a", long)])
+    out = MemoryStorage.get_recent_with_provenance(s, 1)
+    assert len(out[0]["payload_preview"]) == 140  # was 60
