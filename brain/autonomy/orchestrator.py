@@ -2373,7 +2373,7 @@ class AutonomyOrchestrator:
 
         verb = "asked the operator" if action.tool_hint == "introspection" else "researched"
 
-        # ── SHADOW (level 0, default) — select-only, never reach operator ──────
+        # ── SHADOW (level 0, default) — telemetry + the async OPERATOR-PULL queue ──
         if gate is not None:
             try:
                 gate.note_shadow_selection(
@@ -2387,10 +2387,31 @@ class AutonomyOrchestrator:
             except Exception:
                 pass
 
+        # Operator-PULL grounding queue (SPARK §6 — the "single biggest efficiency
+        # win"). Amendment to the strict P2 "enqueue nothing": the async PULL queue
+        # is operator-gated review (answered at /v2/grounding at leisure), NOT a TTS
+        # interrupt and NOT a belief mutation — those stay gated to P4/P5. Real
+        # operator answers feed the promotion gates (external-only), so the ring
+        # earns its way to advisory honestly instead of starving in shadow. The
+        # queue self-caps + dedups by belief_id, so frequent selection can't flood.
+        if belief_id:
+            try:
+                from autonomy.grounding_queue import GroundingQueue, route_channel
+                GroundingQueue.get_instance().enqueue(
+                    belief_id=belief_id,
+                    question_text=(action.question or ""),
+                    facet=facet,
+                    channel=route_channel(facet),
+                    grounding_tension=float(getattr(action, "urgency", 0.0) or 0.0),
+                    asked_synchronously=False,  # operator-pull only — never auto-fired
+                )
+            except Exception:
+                logger.debug("shadow grounding-queue (pull) enqueue failed", exc_info=True)
+
         logger.info(
-            "Grounding drive (SHADOW, zero authority): would have %s via %s "
+            "Grounding drive (SHADOW): queued for operator review via %s "
             "[facet=%s belief=%s urgency=%.2f] — Q: %s",
-            verb, channel_label, facet, belief_id or "n/a",
+            channel_label, facet, belief_id or "n/a",
             action.urgency, (action.question or "")[:120],
         )
         return True
