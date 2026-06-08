@@ -637,6 +637,36 @@ class MemoryStorage:
             for m in reversed(recent)
         ]
 
+    def get_provenance_distribution(self) -> dict[str, Any]:
+        """Provenance trust-class distribution for the memory-integrity dashboard.
+
+        Surfaces the banter firewall at work: how memories are tagged, how many
+        are banter-protected (casual_conversation, 0.0 trust) vs trusted vs
+        externally validated. Read-only; pure observability (no fabricated gauges).
+        """
+        try:
+            from consciousness.events import PROVENANCE_BOOST
+        except Exception:
+            PROVENANCE_BOOST = {}
+        with self._lock:
+            provs = [getattr(m, "provenance", "unknown") or "unknown" for m in self._memories]
+        counts: dict[str, int] = {}
+        for p in provs:
+            counts[p] = counts.get(p, 0) + 1
+        classes = [
+            {"provenance": p, "count": c, "trust_boost": round(PROVENANCE_BOOST.get(p, 0.0), 3)}
+            for p, c in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        ]
+        return {
+            "total": len(provs),
+            "classes": classes,
+            "banter_protected": counts.get("casual_conversation", 0),
+            "user_claims": counts.get("user_claim", 0),
+            "from_conversation": counts.get("conversation", 0),
+            "validated_external": counts.get("external_source", 0),
+            "observed": counts.get("observed", 0),
+        }
+
     def get_tag_frequency(self) -> dict[str, int]:
         with self._lock:
             freq: dict[str, int] = {}

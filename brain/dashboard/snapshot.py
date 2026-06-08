@@ -853,6 +853,7 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         from memory.storage import memory_storage as _ms
         snapshot["memory_provenance"] = {
             "recent_creations": _ms.get_recent_with_provenance(20),
+            "distribution": _ms.get_provenance_distribution(),
         }
     except Exception:
         logger.warning("Snapshot: memory provenance failed", exc_info=True)
