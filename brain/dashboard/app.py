@@ -282,6 +282,7 @@ _cache_time: float = 0.0
 
 
 from dashboard.snapshot import build_cache as _build_snapshot, SnapshotContext
+from dashboard.pi5_devices import derive_pi5_devices
 
 
 def _build_cache() -> dict[str, Any]:
@@ -1084,14 +1085,17 @@ def _create_app() -> FastAPI:
     @app.get("/api/pi5")
     async def api_pi5():
         """Pi5 / nervous-system operational view: connected sensors, per-sensor
-        health (temp/throttle/fps/uptime), and 2D LIDAR sector telemetry
-        (telemetry-only, never beliefs). Read-only — for seeing JARVIS's body +
-        confirming new equipment is connected correctly.
+        health (temp/throttle/fps/uptime), brain<->Pi link health (the afferent
+        event stream), derived per-device operational status, and 2D LIDAR sector
+        telemetry (telemetry-only, never beliefs). Read-only — for seeing JARVIS's
+        body + confirming plugged-in equipment is actually operational.
         """
         return {
             "sensors": _cache.get("sensors", []),
             "sensor_health": _cache.get("sensor_health", {}),
             "lidar": _cache.get("lidar", {}),
+            "link": _cache.get("link", {}),
+            "devices": derive_pi5_devices(_cache),
         }
 
     @app.get("/api/skills")

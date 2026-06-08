@@ -651,6 +651,8 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
 
         "lidar": ctx.perception.get_lidar_telemetry() if ctx.perception else {},
 
+        "link": ctx.perception.get_link_health() if ctx.perception else {},
+
         "speakers": {
             "available": bool(ctx.perc_orch and ctx.perc_orch.speaker_id and ctx.perc_orch.speaker_id.available),
             "current": ctx.perc_orch._current_speaker.get("name", "unknown") if ctx.perc_orch else "unknown",

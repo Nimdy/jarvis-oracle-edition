@@ -16,6 +16,20 @@
     .lsec{border:1px solid var(--line);border-radius:5px;padding:7px 9px;text-align:center;}
     .lsec .ln{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
     .lsec .lv{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px;}
+    .devgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;}
+    .dev{border:1px solid var(--line);border-radius:6px;padding:9px 11px;display:flex;flex-direction:column;gap:3px;}
+    .dev .dh{display:flex;align-items:center;gap:7px;}
+    .dev .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:var(--dim);}
+    .dev .dn{font-size:12px;font-weight:700;color:var(--text);}
+    .dev .ds{font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-left:auto;}
+    .dev .dd{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;}
+    .dev .note{font-size:8.5px;color:var(--dim);font-style:italic;}
+    .ok{background:#3fb950!important;} .warn{background:#f0a500!important;} .bad{background:#f85149!important;} .idle{background:#8b949e!important;}
+    .lrow{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--line);font-size:10px;font-variant-numeric:tabular-nums;}
+    .lrow:last-child{border-bottom:none;}
+    .lrow .lt{color:var(--text);font-weight:600;} .lrow .lm{color:var(--muted);display:flex;gap:14px;}
+    .linkhdr{display:flex;gap:18px;flex-wrap:wrap;font-size:10px;color:var(--muted);margin-bottom:6px;font-variant-numeric:tabular-nums;}
+    .linkhdr b{color:var(--text);}
   </style>
 </head>
 <body>
@@ -27,6 +41,18 @@
   <nav id="v2nav"></nav>
 
   <main>
+    <section class="card col12">
+      <h2>Devices <span style="font-size:9px;color:var(--muted)">(plugged-in &amp; operational)</span></h2>
+      <div class="note">Each light is backed by telemetry that actually flows — fps, inference-event recency, audio device. The Hailo is <i>inferred</i> from inference events (direct temp/util is next); the mic has no direct telemetry yet and says so. No fabricated green lights.</div>
+      <div id="devices"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Nervous System <span style="font-size:9px;color:var(--muted)">(brain ↔ Pi link · afferent event stream)</span></h2>
+      <div class="note">The live event stream from the Pi's senses into the brain. Rate is over the last minute; "last seen" is age since the most recent event of that type. This is how you tell the body is actually talking to the brain.</div>
+      <div id="link"></div>
+    </section>
+
     <section class="card col12">
       <h2>Connected Senses</h2>
       <div class="note">Sensors connected to the brain over the perception bus, with live health. If you just plugged something in, it should appear here — that's how you confirm new equipment is wired correctly.</div>
@@ -80,12 +106,49 @@
     }).join('');
   }
 
+  var _STATUS_DOT={operational:'ok',up:'ok',available:'ok',playing:'ok',stale:'warn',telemetry_pending:'idle',unknown:'idle',absent:'idle',down:'bad'};
+  function renderDevices(d){
+    var devs=d.devices||[];
+    if(!devs.length){ V2.el('devices').innerHTML='<div style="color:var(--dim);padding:8px;">No device telemetry yet.</div>'; return; }
+    V2.el('devices').innerHTML='<div class="devgrid">'+devs.map(function(x){
+      var dot=x.present?(_STATUS_DOT[x.status]||'idle'):'bad';
+      var det=x.detail||{}; var bits=[];
+      if(det.fps!=null) bits.push(V2.f2(det.fps)+'fps');
+      if(det.last_inference_age_s!=null) bits.push('infer '+V2.f2(det.last_inference_age_s)+'s ago');
+      if(det.last_frame_event_age_s!=null) bits.push('frame '+V2.f2(det.last_frame_event_age_s)+'s ago');
+      if(det.uptime_s!=null) bits.push('up '+V2.fmtUptime(det.uptime_s));
+      if(det.current) bits.push(det.current);
+      if(det.sensors&&det.sensors.length) bits.push(det.sensors.join(','));
+      return '<div class="dev"><div class="dh"><span class="dot '+dot+'"></span><span class="dn">'+x.name+'</span>'+
+        '<span class="ds">'+(x.present?x.status.replace(/_/g,' '):'absent')+'</span></div>'+
+        (bits.length?'<div class="dd">'+bits.join(' · ')+'</div>':'')+
+        (x.note?'<div class="note">'+x.note+'</div>':'')+'</div>';
+    }).join('')+'</div>';
+  }
+
+  function renderLink(d){
+    var L=d.link||{}; var types=L.types||{}; var tk=Object.keys(types);
+    if(!tk.length && !L.connected_count){ V2.el('link').innerHTML='<div style="color:var(--dim);padding:8px;">No link activity yet. (Pi senses node not connected.)</div>'; return; }
+    var hdr='<div class="linkhdr"><span>connected <b>'+(L.connected_count||0)+'</b></span>'+
+      '<span>'+((L.connected||[]).join(', ')||'—')+'</span>'+
+      '<span>events <b>'+(L.total_events||0)+'</b></span>'+
+      '<span>last event <b>'+(L.last_event_age_s==null?'—':V2.f2(L.last_event_age_s)+'s ago')+'</b></span>'+
+      '<span>reconnects <b>'+(L.connect_count||0)+'</b></span><span>drops <b>'+(L.disconnect_count||0)+'</b></span></div>';
+    var rows=tk.sort(function(a,b){return (types[b].rate_hz||0)-(types[a].rate_hz||0);}).map(function(t){
+      var T=types[t]; var age=T.last_seen_age_s; var stale=(age!=null&&age>30);
+      return '<div class="lrow"><span class="lt" style="'+(stale?'color:var(--muted)':'')+'">'+t+'</span>'+
+        '<span class="lm"><span>'+V2.f3(T.rate_hz||0)+' Hz</span><span>'+(T.total||0)+' total</span>'+
+        '<span style="'+(stale?'color:#f0a500':'')+'">'+(age==null?'—':V2.f2(age)+'s ago')+'</span></span></div>';
+    }).join('');
+    V2.el('link').innerHTML=hdr+rows;
+  }
+
   function tick(){
     document.getElementById('clock').textContent=new Date().toLocaleTimeString();
     if(PAUSED) return;
     V2.fetchJSON('/api/pi5').then(function(d){
       document.getElementById('mode').textContent=(d.sensors&&d.sensors.length)?'live':'no sensors';
-      renderSensors(d); renderLidar(d);
+      renderDevices(d); renderLink(d); renderSensors(d); renderLidar(d);
     }).catch(function(){ document.getElementById('mode').textContent='error'; });
   }
   tick(); setInterval(tick, 5000);

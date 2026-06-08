@@ -22,7 +22,8 @@ def _ev(data):
 
 
 def test_lidar_scan_stored_telemetry_only():
-    stub = SimpleNamespace(_event_buffer=deque(maxlen=10), _lidar_telemetry={})
+    stub = SimpleNamespace(_event_buffer=deque(maxlen=10), _lidar_telemetry={},
+                           _event_recv_log=deque(maxlen=10), _event_counts={})
     PerceptionServer._process_event(stub, _ev({
         "sensor": "rplidar_a1m8", "scan_hz": 5.5, "points": 700, "range_max_m": 12,
         "sectors": {"front": 1.42, "left": 0.88, "right": 2.31},
@@ -37,7 +38,8 @@ def test_lidar_scan_stored_telemetry_only():
 
 
 def test_scan_2d_alias_also_handled():
-    stub = SimpleNamespace(_event_buffer=deque(maxlen=10), _lidar_telemetry={})
+    stub = SimpleNamespace(_event_buffer=deque(maxlen=10), _lidar_telemetry={},
+                           _event_recv_log=deque(maxlen=10), _event_counts={})
     ev = PerceptionEvent(source="system", type="scan_2d", timestamp=1.0,
                          data={"sensor": "rplidar_a1m8", "sectors": {"front": 2.0}})
     PerceptionServer._process_event(stub, ev, "rplidar-a1m8")
