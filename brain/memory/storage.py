@@ -137,8 +137,11 @@ class MemoryStorage:
             return list(self._memories)
 
     def get_recent(self, count: int) -> list[Memory]:
+        # Sort by timestamp — the list is NOT reliably time-ordered (in-place
+        # updates + dream/consolidation artifacts append out of order), so a bare
+        # [-count:] returned stale/jumbled "recent" memories into cognition.
         with self._lock:
-            return list(self._memories[-count:])
+            return sorted(self._memories, key=lambda m: getattr(m, "timestamp", 0.0))[-count:]
 
     def get_by_type(self, mem_type: str) -> list[Memory]:
         with self._lock:
@@ -621,9 +624,13 @@ class MemoryStorage:
         }
 
     def get_recent_with_provenance(self, count: int = 20) -> list[dict[str, Any]]:
-        """Return recent memories with provenance for dashboard observability."""
+        """Return recent memories with provenance for dashboard observability.
+
+        Sorted by timestamp (newest first) — the underlying list is not reliably
+        time-ordered, so a bare [-count:] showed old/jumbled writes as "recent".
+        """
         with self._lock:
-            recent = self._memories[-count:]
+            recent = sorted(self._memories, key=lambda m: getattr(m, "timestamp", 0.0))[-count:]
         return [
             {
                 "id": m.id[:12],
@@ -631,8 +638,8 @@ class MemoryStorage:
                 "provenance": getattr(m, "provenance", "unknown"),
                 "weight": round(m.weight, 3),
                 "age_s": round(_time.time() - m.timestamp),
-                "payload_preview": (m.payload[:60] if isinstance(m.payload, str)
-                                    else str(m.payload)[:60]),
+                "payload_preview": (m.payload[:140] if isinstance(m.payload, str)
+                                    else str(m.payload)[:140]),
             }
             for m in reversed(recent)
         ]
