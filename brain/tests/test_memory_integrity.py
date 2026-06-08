@@ -94,3 +94,17 @@ def test_recent_with_provenance_preview_widened():
     s = _store([_tmem(1.0, "a", long)])
     out = MemoryStorage.get_recent_with_provenance(s, 1)
     assert len(out[0]["payload_preview"]) == 140  # was 60
+
+
+def test_recent_episodes_by_time_not_list_order():
+    from memory.episodes import EpisodicMemory
+
+    def ep(ended):
+        e = SimpleNamespace(is_active=False, ended_at=ended, started_at=ended - 10)
+        e.turn_count = lambda: 100  # comfortably above MIN_TURNS_FOR_EPISODE
+        return e
+
+    # list order is jumbled; newest (300) sits mid-list
+    stub = SimpleNamespace(_episodes=[ep(100), ep(300), ep(50), ep(200)])
+    out = EpisodicMemory.get_recent_episodes(stub, 2)
+    assert [e.ended_at for e in out] == [200, 300]  # 2 newest by time, ascending
