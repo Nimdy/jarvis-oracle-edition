@@ -43,6 +43,8 @@ ProvenanceType = Literal[
     "web_scrap",            # Raw scraped web content — UNTRUSTED until cross-validated (data-flow firewall)
     "experiment_result",    # Self-improvement outcomes, learning job results
     "derived_pattern",      # Pattern recognition (clustering, association, analytics)
+    "casual_conversation",  # Playful/banter chatter — LOWEST trust; never asserted as fact
+                            # unless a golden command authorizes it or curiosity validates it
     "seed",                 # Birth/gestation seed memories
     "unknown",              # Legacy or unclassified
 ]
@@ -55,6 +57,7 @@ PROVENANCE_BOOST: dict[str, float] = {
     "conversation": 0.02,
     "model_inference": 0.0,
     "web_scrap": 0.0,        # untrusted scraped web data earns NO confidence boost
+    "casual_conversation": 0.0,  # banter earns NO trust — can't pollute beliefs
     "derived_pattern": 0.0,
     "seed": 0.0,
     "unknown": 0.0,
@@ -128,8 +131,36 @@ def resolve_provenance_boost(mem: Memory) -> float:
 PROVENANCE_ORDINAL: dict[str, int] = {
     "observed": 0, "user_claim": 1, "conversation": 2, "model_inference": 3,
     "external_source": 4, "experiment_result": 5, "derived_pattern": 6,
-    "seed": 7, "unknown": 8, "web_scrap": 9,
+    "seed": 7, "unknown": 8, "web_scrap": 9, "casual_conversation": 10,
 }
+
+
+def resolve_write_provenance(
+    base_provenance: str,
+    *,
+    is_golden_command: bool = False,
+    tone: str = "",
+) -> str:
+    """Decide the provenance a conversational memory is WRITTEN with — the banter
+    firewall that stops casual chatter from polluting beliefs/memory.
+
+    Rule (David's golden-command authority model):
+      1. A GOLDEN COMMAND is the write-authority. It keeps the base provenance
+         (e.g. ``user_claim``) regardless of tone — the user explicitly meant it,
+         even mid-banter ("Jarvis, remember that…").
+      2. Otherwise, PLAYFUL/CASUAL banter is downgraded to ``casual_conversation``
+         (0.0 trust) — a joke ("I love dirt on pizza") can never be asserted as a
+         fact. It is still stored + recallable, and curiosity/grounding may later
+         promote it via external validation.
+      3. Otherwise (serious/neutral passive mention) the base provenance stands.
+
+    Strictly NON-elevating: only ever lowers trust, never raises it.
+    """
+    if is_golden_command:
+        return base_provenance
+    if tone in ("playful", "casual"):
+        return "casual_conversation"
+    return base_provenance
 
 
 # ---------------------------------------------------------------------------
