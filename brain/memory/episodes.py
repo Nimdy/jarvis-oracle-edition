@@ -263,7 +263,9 @@ class EpisodicMemory:
 
     def get_recent_episodes(self, count: int = 5) -> list[Episode]:
         completed = [e for e in self._episodes if not e.is_active and e.turn_count() >= MIN_TURNS_FOR_EPISODE]
-        return list(completed)[-count:]
+        # recent-by-time, not list position (robust to load/append ordering)
+        completed.sort(key=lambda e: e.ended_at or e.started_at)
+        return completed[-count:]
 
     def find_episodes_about(self, topic: str, limit: int = 3) -> list[Episode]:
         """Find past episodes related to a topic (keyword match)."""

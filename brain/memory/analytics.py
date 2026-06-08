@@ -191,7 +191,9 @@ class MemoryAnalytics:
         volatility = min(1.0, variety / len(mood_tags)) if mood_tags else 0.0
 
         recent_count = max(1, len(memories) // 5)
-        recent = memories[-recent_count:]
+        # "recent" must mean recent-by-time — callers may pass an unsorted list
+        # (storage order != timestamp order; see memory_storage.get_recent).
+        recent = sorted(memories, key=lambda m: getattr(m, "timestamp", 0.0))[-recent_count:]
         positive_tags = {"excited", "focused", "playful", "inspired", "calm"}
         negative_tags = {"melancholy", "urgent", "contemplative"}
 
