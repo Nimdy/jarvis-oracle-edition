@@ -126,6 +126,9 @@ class PerceptionServer:
         self._face_identifier: Any = None
         self._synthetic_sensors: set[str] = set()
         self._sensor_health: dict[str, dict] = {}
+        # 2D spatial telemetry (e.g. RPLIDAR sector summaries). Telemetry-only —
+        # never written into beliefs/memory; surfaced for the world model + dashboard.
+        self._lidar_telemetry: dict[str, dict] = {}
 
     def set_face_identifier(self, identifier: Any) -> None:
         self._face_identifier = identifier
@@ -133,6 +136,14 @@ class PerceptionServer:
     def get_sensor_health(self) -> dict[str, dict]:
         """Return latest health telemetry from all sensors."""
         return dict(self._sensor_health)
+
+    def get_lidar_telemetry(self) -> dict[str, dict]:
+        """Return latest 2D LIDAR sector telemetry per sensor (telemetry-only).
+
+        This is spatial telemetry, NOT belief/memory — it never writes beliefs
+        (writes_beliefs=False is enforced at the source; we just surface it).
+        """
+        return dict(self._lidar_telemetry)
 
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -388,6 +399,23 @@ class PerceptionServer:
                 if throttle_hex and throttle_hex != "0x0":
                     logger.warning("Pi %s throttle detected: %s (temp=%.1f°C)",
                                    sensor_id, throttle_hex, health_data["cpu_temp_c"])
+            case "lidar_scan" | "scan_2d":
+                # 2D spatial telemetry (RPLIDAR sector summary). TELEMETRY-ONLY:
+                # we store + surface the sector shape; we do NOT write beliefs or
+                # claim object identity. The world model may derive nearest-by-sector
+                # / open-space / room-outline from this; nothing canonical.
+                self._lidar_telemetry[sensor_id] = {
+                    "sensor": event.data.get("sensor", "lidar"),
+                    "scan_hz": event.data.get("scan_hz", 0),
+                    "points": event.data.get("points", 0),
+                    "range_max_m": event.data.get("range_max_m", 0),
+                    "sectors": event.data.get("sectors", {}),
+                    "open_sectors": event.data.get("open_sectors", []),
+                    "scan_quality": event.data.get("scan_quality", "unknown"),
+                    "authority": "spatial_telemetry_only",
+                    "writes_beliefs": False,
+                    "last_update": time.time(),
+                }
             case "synthetic_exercise_start":
                 logger.info("Synthetic exercise started from sensor %s", sensor_id)
                 self._synthetic_sensors.add(sensor_id)

@@ -474,6 +474,13 @@ def _create_app() -> FastAPI:
         with open(v2_domains_path) as f:
             return HTMLResponse(f.read())
 
+    @app.get("/v2/pi5", response_class=HTMLResponse)
+    async def v2_pi5_page():
+        """dashboardV2 — Pi5 / nervous-system operational view (sensors + LIDAR)."""
+        v2_pi5_path = os.path.join(_STATIC_DIR, "v2", "pi5.html")
+        with open(v2_pi5_path) as f:
+            return HTMLResponse(f.read())
+
     @app.get("/eval")
     async def eval_page():
         from fastapi.responses import RedirectResponse
@@ -1073,6 +1080,19 @@ def _create_app() -> FastAPI:
             return {"deleted": True, "domain_id": domain_id}
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @app.get("/api/pi5")
+    async def api_pi5():
+        """Pi5 / nervous-system operational view: connected sensors, per-sensor
+        health (temp/throttle/fps/uptime), and 2D LIDAR sector telemetry
+        (telemetry-only, never beliefs). Read-only — for seeing JARVIS's body +
+        confirming new equipment is connected correctly.
+        """
+        return {
+            "sensors": _cache.get("sensors", []),
+            "sensor_health": _cache.get("sensor_health", {}),
+            "lidar": _cache.get("lidar", {}),
+        }
 
     @app.get("/api/skills")
     async def api_skills():
