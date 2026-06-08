@@ -5,6 +5,26 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
+## Matrix v2 — Capability Domains: Phase 0/1/2 PROVEN LIVE (2026-06-07, branch `thespark`)
+
+The first **isolated, deletable Capability Domain** — the core of Matrix v2 (EPIC #27),
+built on the proven Tier-2 lifecycle. Document tracer **proven end-to-end on the real brain**.
+
+| Phase | What shipped | Commit |
+| --- | --- | --- |
+| **0+1** substrate | `cognition/capability_domains/` — `CapabilityDomain` (isolated `root_dir`, per-domain `knowledge_db`+`memory_path`, status/envelope/provenance) + registry (create/list/get/update/**delete**) + **clean deletion (zero residue)** + `GET /api/domains` | `854a4f3` |
+| **2** store/recall | `DomainKnowledgeStore` (1 sqlite/domain, keyword search, topic_terms) + ingest_text/file/folder (.txt/.md/.pdf, provenance=ingested) + topic-routed `recall`/`recall_answer` (`claim_scope=know_about`, None on no-match=no confabulation) | `88d5415` |
+| **2** API | `POST /api/domains` create · `POST /api/domains/{id}/ingest` · `DELETE` — API-key-gated writes | `5130308` |
+| **2** voice | conversation recall hook — additive/fail-safe override → deterministic domain-scoped answer | `ff67990` |
+
+**Live proof:** created `dom_robot_arm_xarm6`, fed the spec (3 chunks), asked by voice
+*"what's the reach of the x-arm?"* → grounded recall *"Here's what I know about Robot Arm
+xArm6… six DOF… 700mm reach…"* (isolated, "know about" not "can do", no confab) → `DELETE`
+→ domain dir gone, `/api/domains` empty, **core `memories.json` intact** (clean ablation =
+the brain-injury analogy, real). Normal conversation unaffected (hook only fires on a clear
+topic match). 18 domain tests + 52 with router. Remaining: per-domain sub-consciousness NN
+(#32, enhancement — recall works without it). Memory: [[matrix-v2-capability-domains]].
+
 ## Matrix Protocol — Phase M: Tier-2 lifecycle PROVEN end-to-end (2026-06-07, branch `thespark`)
 
 **The Tier-2 hemisphere specialist lane was completely dormant** — `create_probationary_specialist`
