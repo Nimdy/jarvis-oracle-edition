@@ -65,7 +65,7 @@ These are built and running in shadow mode. They need long-run soak data and ope
 | Intention Resolver (Stage 1) | Shadow-only | 50 verdicts at 60% accuracy, then operator gate |
 | Language Phase C/D | Shadow-only, default OFF | Telemetry review, operator canary-enable |
 | 6 Tier-1 Hemisphere Specialists | Shadow-only | Accuracy floors, no pipeline gating yet |
-| 5 Tier-2 Matrix Specialists | CANDIDATE_BIRTH | Full lifecycle ladder to promotion; need data |
+| 5 Tier-2 Matrix Specialists | Lifecycle PROVEN | Autonomous birth → train → PROMOTED on real signal via the sub-conscious broadcast lane (2 promoted live); fresh brains accumulate from zero, variation-gated |
 | Voice Intent NN | Future scope | Currently 100% hardcoded routing |
 
 ### Areas Where Code Contributions Help Most
@@ -93,9 +93,11 @@ These are built and running in shadow mode. They need long-run soak data and ope
 
 ## Current State
 
-**Status date:** May 2026
+**Status date:** June 2026
 
 The system has been running continuously since the March 2026 brain reset. It has matured through real interaction, autonomous research, synthetic training, and self-driven learning.
+
+**Recent (June 2026):** the **Matrix Protocol** Tier-2 specialist lifecycle was wired + proven end-to-end (autonomous birth → self-supervised training → PROMOTED on real signal, via a separate "sub-conscious" broadcast lane), and **Matrix v2 — Capability Domains** landed: isolated, deletable knowledge domains a user can teach JARVIS ("learn this folder about X"), recalled on topic ("I know about X", never "I can do X"), with clean ablation (delete a domain → zero residue, core untouched). Also shipped: the Operational Self-View (provenance-honest self-model + grounded self-introspection), memory-recall relevance + identity-recognition grounding fixes, and goal-grounding churn dampening. See `docs/BUILD_HISTORY.md`.
 
 ---
 
@@ -118,6 +120,9 @@ The system has been running continuously since the March 2026 brain reset. It ha
 | Voice pipeline | End-to-end | Wake, VAD, STT, Speaker ID, Emotion, Routing, TTS |
 | Identity fusion | Voice + Face | ECAPA-TDNN + MobileFaceNet, enrollment, reconciliation |
 | Synthetic training suite | Operational | Safe parallel data generation for claim classifier, diagnostic encoder, plan evaluator, memory ranker, world model, contradiction detection, commitment extraction |
+| Matrix Protocol (Tier-2) | Lifecycle proven | Autonomous birth → self-supervised train → PROMOTED on real signal via the sub-conscious broadcast lane; advisory only, variation-gated, `/api/matrix` + `/v2/matrix` |
+| Matrix v2 — Capability Domains | Document tracer proven live | Teach an isolated, deletable knowledge domain ("learn this folder about X") → topic-routed grounded recall ("know about", not "can do") → clean ablation (zero residue); `/api/domains` |
+| Operational Self-View (OSV) | P0–P2 shipped | Provenance-honest self-model; self-introspection answers from the model (not a code grep); P2 voice-grounding (shadow); `/api/self-view` |
 
 **Codebase:** ~190K lines of Python, ~470 source files, ~3,660 tests.
 
@@ -416,6 +421,9 @@ JARVIS only works if we stay grounded.
 | `docs/MATURITY_GATES_REFERENCE.md` | Timing gates and evidence thresholds |
 | `docs/FIRST_HOUR_AS_A_RESEARCHER.md` | Engineering walkthrough |
 | `docs/SKILL_LEARNING_GUIDE.md` | Skill acquisition pipeline |
+| `docs/MATRIX_PROTOCOL_GUIDE.md` | Matrix Protocol (Tier-2 specialists) + the Skill vs Matrix vs Library hard line |
+| `docs/MATRIX_V2_CAPABILITY_DOMAINS.md` | Matrix v2 — isolated, deletable Capability Domains (design + phases) |
+| `docs/SELF_VIEW_DESIGN.md` | Operational Self-View (provenance-honest self-model) |
 | `docs/MASTER_ROADMAP.md` | Full roadmap |
 | `docs/BUILD_HISTORY.md` | Shipped changelog |
 | `docs/SyntheticSoul.md` | Design principles paper |
