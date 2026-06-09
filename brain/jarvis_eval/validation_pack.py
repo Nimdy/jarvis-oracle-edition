@@ -215,6 +215,7 @@ _HRR_MODULE_ROOTS: tuple[str, ...] = (
     "cognition/mental_world.py",
     "cognition/mental_navigation.py",
     "cognition/spatial_scene_graph.py",
+    "cognition/lidar_room.py",
     "memory/hrr_recall_advisor.py",
     "hemisphere/hrr_specialist.py",
     "synthetic/hrr_exercise.py",
