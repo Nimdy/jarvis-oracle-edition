@@ -48,7 +48,7 @@ rsync -avz --delete $DRY_RUN $EXCLUDE_ARGS \
     "$SCRIPT_DIR/brain/" "$PI_HOST:~/duafoo/brain/"
 
 echo "=== Syncing root files ==="
-for f in AGENTS.md ARCHITECTURE.md PROCESS_ARCHITECTURE.md TODO.md README.md requirements.txt; do
+for f in AGENTS.md ARCHITECTURE.md PROCESS_ARCHITECTURE.md README.md requirements.txt; do
     if [[ -f "$SCRIPT_DIR/$f" ]]; then
         rsync -avz $DRY_RUN \
             -e "ssh $SSH_OPTS" \
