@@ -312,6 +312,20 @@ def ingest_codebase_source(
     if not content or not content.strip():
         return IngestResult(success=False, error="No content provided")
 
+    # Junk/test guard (operator directive: JARVIS must NEVER study test or junk
+    # files — they pollute the belief graph, e.g. a stray "test is discard" belief
+    # that surfaced in the grounding queue). Refuse them at the ingest boundary so
+    # no scan path, present or future, can leak them into self-knowledge.
+    _segs = file_path.replace("\\", "/").lower().split("/")
+    _name = _segs[-1] if _segs else ""
+    _JUNK_DIRS = {"tests", "test", "__pycache__", ".git", "node_modules",
+                  ".venv", "venv", "build", "dist", ".pytest_cache", ".mypy_cache"}
+    if (_name.startswith("test_") or _name.endswith("_test.py")
+            or _name.endswith(".pyc") or _name == "conftest.py"
+            or any(seg in _JUNK_DIRS for seg in _segs)
+            or any(seg.endswith(".egg-info") for seg in _segs)):
+        return IngestResult(success=False, error="skipped: test/junk file (never studied)")
+
     if not content_hash:
         content_hash = hashlib.sha256(content.encode("utf-8", errors="replace")).hexdigest()[:32]
 
