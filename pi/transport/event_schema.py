@@ -74,6 +74,20 @@ def pose_detected(keypoints: list, gesture: str, confidence: float) -> Perceptio
     )
 
 
+def lidar_scan(sensor: str, scan_hz: float, points: int, range_max_m: float,
+               sectors: dict, open_sectors: list, scan_quality: str) -> PerceptionEvent:
+    """2D RPLIDAR sector summary (telemetry-only — the brain stores the spatial shape,
+    never beliefs/object identity). source='system'; the brain routes by event.type."""
+    return PerceptionEvent(
+        source="system", type="scan_2d",
+        data={
+            "sensor": sensor, "scan_hz": scan_hz, "points": points,
+            "range_max_m": range_max_m, "sectors": sectors,
+            "open_sectors": open_sectors, "scan_quality": scan_quality,
+        },
+    )
+
+
 def face_crop_event(crop_b64: str, track_id: int, confidence: float) -> PerceptionEvent:
     """Face crop extracted for identity matching on brain."""
     return PerceptionEvent(
