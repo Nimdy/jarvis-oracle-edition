@@ -102,6 +102,11 @@ MATRIX_TRAIN_MIN_SAMPLES = 20
 MATRIX_TRAIN_EPOCHS = 20
 MATRIX_TRAIN_OUTPUT_CLASSES = 4
 MATRIX_TRAIN_MIN_DISTINCT_LABELS = 2
+# Mature (verified/broadcast/promoted) specialists keep LEARNING but re-train only
+# every N cycles — so the flywheel doesn't freeze at promotion, yet the broadcasting
+# signal isn't a moving target. Paired with snapshot/rollback (never degrade a
+# promoted specialist), this is stable continual learning.
+MATRIX_RETRAIN_COOLDOWN_CYCLES = 25
 
 # Phase M3 — the sub-conscious broadcast lane. Tier-2 matrix specialists do NOT
 # compete with the high-accuracy Tier-1 distilled specialists for the main
@@ -203,6 +208,10 @@ class HemisphereOrchestrator:
         self._tier1_cooldown_last_log: dict[str, float] = {}
         self._tier1_regression_cooldown_strikes: dict[str, int] = {}
         self._tier1_last_retrain_time: dict[str, float] = {}
+        # Mature matrix specialists re-train on a cooldown (continual learning) —
+        # track the last retrain cycle per focus so they refine periodically, not
+        # every tick, keeping the broadcasting signal stable between refinements.
+        self._matrix_last_retrain_cycle: dict[str, int] = {}
 
         # Tier-1 accuracy gating: tracks consecutive build failures per focus
         self._tier1_failure_counts: dict[str, int] = {}
@@ -999,16 +1008,25 @@ class HemisphereOrchestrator:
         from hemisphere.types import (
             MATRIX_ELIGIBLE_FOCUSES, SpecialistLifecycleStage as S,
         )
+        PROBATION = (S.CANDIDATE_BIRTH, S.PROBATIONARY_TRAINING)
+        MATURE = (S.VERIFIED_PROBATIONARY, S.BROADCAST_ELIGIBLE, S.PROMOTED)
         with self._networks_lock:
             trainees = [
                 n for n in self._networks.values()
                 if n.focus in MATRIX_ELIGIBLE_FOCUSES
-                and n.specialist_lifecycle in (
-                    S.CANDIDATE_BIRTH, S.PROBATIONARY_TRAINING,
-                )
+                and n.specialist_lifecycle in (PROBATION + MATURE)
             ]
         for net in trainees:
             try:
+                is_mature = net.specialist_lifecycle in MATURE
+                # Mature specialists keep LEARNING (the flywheel does not freeze at
+                # promotion) but only every MATRIX_RETRAIN_COOLDOWN_CYCLES cycles, so
+                # the broadcasting signal stays stable between refinements.
+                if is_mature:
+                    last = self._matrix_last_retrain_cycle.get(net.focus.value)
+                    if last is not None and (self._cycle_count - last) < MATRIX_RETRAIN_COOLDOWN_CYCLES:
+                        continue
+
                 buf = self._matrix_signal_buffers.get(net.focus.value)
                 if not buf or len(buf) < MATRIX_TRAIN_MIN_SAMPLES:
                     continue
@@ -1019,12 +1037,19 @@ class HemisphereOrchestrator:
                 if n_distinct < MATRIX_TRAIN_MIN_DISTINCT_LABELS:
                     continue
 
-                # Ensure a 4-class model is built + registered for this specialist.
+                # Ensure a 4-class model is built for this specialist.
                 if net.id not in self._engine._active_models or net.topology.output_size != MATRIX_TRAIN_OUTPUT_CLASSES:
                     topo = self._matrix_train_topology()
                     model = self._engine.build_model(topo)
                     self._engine._active_models[net.id] = model
                     net.topology = topo
+
+                # Continual-learning safety: for a mature (broadcasting) specialist,
+                # snapshot before re-training so we can ROLL BACK if the refinement
+                # made it worse — continual learning must never DEGRADE a promoted
+                # specialist (no regression-demotion, no broadcast destabilisation).
+                pre_acc = float(net.performance.accuracy or 0.0)
+                snapshot = self._snapshot_model_state(net.id) if is_mature else None
 
                 import torch
                 feats = torch.tensor(X, dtype=torch.float32)
@@ -1032,6 +1057,21 @@ class HemisphereOrchestrator:
                 self._engine.train_distillation(
                     net, feats, labels, loss_name="mse", epochs=MATRIX_TRAIN_EPOCHS,
                 )
+
+                if is_mature:
+                    self._matrix_last_retrain_cycle[net.focus.value] = self._cycle_count
+                    post_acc = float(net.performance.accuracy or 0.0)
+                    if post_acc < pre_acc - 1e-4 and snapshot is not None:
+                        # refinement regressed — restore the stable weights + metric;
+                        # leave epoch/lifecycle untouched and do NOT re-persist.
+                        self._restore_model_state(net.id, snapshot)
+                        net.performance.accuracy = pre_acc
+                        logger.info(
+                            "Matrix continual-train %s: rolled back (%.3f -> %.3f, kept %.3f)",
+                            net.focus.value, pre_acc, post_acc, pre_acc,
+                        )
+                        continue
+
                 # train_distillation updates accuracy but NOT current_epoch — the
                 # birth->probationary gate reads current_epoch, so set it here.
                 net.training_progress.current_epoch += MATRIX_TRAIN_EPOCHS
@@ -1039,7 +1079,10 @@ class HemisphereOrchestrator:
                 # ranking (_get_networks_for_focus filters to READY/ACTIVE). Without
                 # this it is excluded from get_hemisphere_signals, so its impact
                 # score is never computed and it stalls at verified_probationary.
-                net.status = NetworkStatus.READY
+                # Guard: never downgrade an already-broadcasting READY/ACTIVE
+                # specialist when it re-trains via the continual-learning path.
+                if net.status not in (NetworkStatus.READY, NetworkStatus.ACTIVE):
+                    net.status = NetworkStatus.READY
                 # PERSIST the trained Tier-2 weights to the registry (→ disk:
                 # ~/.jarvis/hemispheres/{focus}/). This was THE GAP: the Tier-2
                 # lifecycle only ever held its model in engine._active_models (RAM),
@@ -1054,9 +1097,10 @@ class HemisphereOrchestrator:
                     logger.debug("matrix specialist persist failed for %s",
                                  net.focus.value, exc_info=True)
                 logger.info(
-                    "Matrix train %s: acc=%.3f epoch=%d (samples=%d, distinct=%d) [persisted]",
+                    "Matrix train %s: acc=%.3f epoch=%d (samples=%d, distinct=%d)%s [persisted]",
                     net.focus.value, net.performance.accuracy,
                     net.training_progress.current_epoch, len(X), n_distinct,
+                    " [continual]" if is_mature else "",
                 )
             except Exception:
                 logger.debug("matrix train failed for %s", net.focus.value, exc_info=True)
