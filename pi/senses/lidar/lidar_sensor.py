@@ -69,8 +69,28 @@ class LidarSensor:
 
     # -- internals ---------------------------------------------------------
 
+    def _raw_recover(self) -> None:
+        """A reader that died without STOP leaves the S2 streaming a scan, so a fresh
+        connection lands mid-stream → "sync bytes mismatched" on the first command.
+        Send STOP + flush + RESET below pyrplidar (raw serial) to guarantee a clean
+        protocol state. Idempotent + best-effort."""
+        try:
+            import serial
+            s = serial.Serial(self._port, self._baud, timeout=1)
+            try:
+                s.write(b"\xA5\x25"); time.sleep(0.4)   # STOP scan
+                s.reset_input_buffer()                   # discard stale scan bytes
+                s.write(b"\xA5\x40"); time.sleep(3.0)    # RESET (reboot device)
+                s.reset_input_buffer()                   # discard boot banner
+            finally:
+                s.close()
+            time.sleep(0.6)
+        except Exception:
+            logger.debug("lidar raw-recovery skipped", exc_info=True)
+
     def _connect(self):
         from pyrplidar import PyRPlidar
+        self._raw_recover()            # guarantee a clean protocol state first
         lidar = PyRPlidar()
         lidar.connect(port=self._port, baudrate=self._baud, timeout=3)
         try:
