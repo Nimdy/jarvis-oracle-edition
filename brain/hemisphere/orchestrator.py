@@ -1040,8 +1040,21 @@ class HemisphereOrchestrator:
                 # this it is excluded from get_hemisphere_signals, so its impact
                 # score is never computed and it stalls at verified_probationary.
                 net.status = NetworkStatus.READY
+                # PERSIST the trained Tier-2 weights to the registry (→ disk:
+                # ~/.jarvis/hemispheres/{focus}/). This was THE GAP: the Tier-2
+                # lifecycle only ever held its model in engine._active_models (RAM),
+                # so every reboot wiped even PROMOTED specialists and weight-
+                # persistence P1 had nothing to restore. Registering here makes the
+                # weights survive restart; P1 reloads them at PROBATIONARY so the
+                # specialist rebuilds fast and re-earns authority (firewall intact).
+                # The registry dedups/prunes versions, so per-cycle saves don't bloat.
+                try:
+                    self._registry.register(net, save_fn=self._engine.save_model)
+                except Exception:
+                    logger.debug("matrix specialist persist failed for %s",
+                                 net.focus.value, exc_info=True)
                 logger.info(
-                    "Matrix train %s: acc=%.3f epoch=%d (samples=%d, distinct=%d)",
+                    "Matrix train %s: acc=%.3f epoch=%d (samples=%d, distinct=%d) [persisted]",
                     net.focus.value, net.performance.accuracy,
                     net.training_progress.current_epoch, len(X), n_distinct,
                 )
