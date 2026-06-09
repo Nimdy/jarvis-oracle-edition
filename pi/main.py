@@ -155,6 +155,12 @@ class SensesService:
         """Start the RPLIDAR S2 reader if the device is present. Auto-skips (no retry
         spam) when no lidar is plugged in. Telemetry-only — emits scan_2d sector
         summaries to the brain; never writes beliefs."""
+        # OFF by default: the in-thread reader desyncs at 1 Mbaud under the senses'
+        # CPU/GIL load (vision + audio starve the lidar thread). The lidar runs as a
+        # SEPARATE process instead (pi/lidar_node.py). Set ENABLE_LIDAR=1 to force the
+        # in-service reader (not recommended). See #21.
+        if os.environ.get("ENABLE_LIDAR", "0").lower() not in ("1", "true", "yes"):
+            return
         port = os.environ.get("LIDAR_PORT", "/dev/ttyUSB0")
         if not os.path.exists(port):
             logger.info("Lidar: no device at %s — skipping (plug in the S2 to enable)", port)
