@@ -59,7 +59,7 @@ rsync -avz $DRY_RUN $EXCLUDE_ARGS \
     "$SCRIPT_DIR/docs/" "$DESKTOP_HOST:~/duafoo/docs/"
 
 echo "=== Syncing root files ==="
-for f in AGENTS.md ARCHITECTURE.md PROCESS_ARCHITECTURE.md TODO.md TODO_V2.md \
+for f in AGENTS.md ARCHITECTURE.md PROCESS_ARCHITECTURE.md \
          README.md CONTRIBUTING.md LICENSE.md NOTICE.md THIRD_PARTY_LICENSES.md \
          About_JARVIS_ORACLE_EDITION_SCIENTIFIC_PAPER.md requirements.txt; do
     if [[ -f "$SCRIPT_DIR/$f" ]]; then

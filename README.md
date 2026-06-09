@@ -424,8 +424,8 @@ JARVIS only works if we stay grounded.
 | `docs/MATRIX_PROTOCOL_GUIDE.md` | Matrix Protocol (Tier-2 specialists) + the Skill vs Matrix vs Library hard line |
 | `docs/MATRIX_V2_CAPABILITY_DOMAINS.md` | Matrix v2 — isolated, deletable Capability Domains (design + phases) |
 | `docs/SELF_VIEW_DESIGN.md` | Operational Self-View (provenance-honest self-model) |
-| `docs/MASTER_ROADMAP.md` | Full roadmap |
-| `docs/BUILD_HISTORY.md` | Shipped changelog |
+| [GitHub Issues](https://github.com/Nimdy/jarvis-oracle-edition/issues) + [Releases](https://github.com/Nimdy/jarvis-oracle-edition/releases) | Forward roadmap + shipped changelog (single source of truth) |
+| `docs/BUILD_HISTORY.md` | Local changelog mirror (read by the self-view) |
 | `docs/SyntheticSoul.md` | Design principles paper |
 | `AGENTS.md` | AI agent guidance (architecture, patterns, constraints) |
 | `CONTRIBUTING.md` | Contribution guidelines |
