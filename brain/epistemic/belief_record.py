@@ -284,14 +284,17 @@ _TENSIONS_FILE = os.path.join(_JARVIS_DIR, "tensions.jsonl")
 class BeliefStore:
     def __init__(
         self,
-        beliefs_path: str = _BELIEFS_FILE,
-        tensions_path: str = _TENSIONS_FILE,
+        beliefs_path: str | None = None,
+        tensions_path: str | None = None,
         max_capacity: int = BELIEF_STORE_MAX_CAPACITY,
     ) -> None:
         self._beliefs: OrderedDict[str, BeliefRecord] = OrderedDict()
         self._tensions: dict[str, TensionRecord] = {}
-        self._beliefs_path = beliefs_path
-        self._tensions_path = tensions_path
+        # Resolve at call-time (not def-time) so tests can redirect _BELIEFS_FILE /
+        # _TENSIONS_FILE to a tmp path and keep test beliefs OUT of the live store —
+        # the root cause of the bel_test_98 leak that hit the grounding queue (#50).
+        self._beliefs_path = beliefs_path or _BELIEFS_FILE
+        self._tensions_path = tensions_path or _TENSIONS_FILE
         self._max_capacity = max_capacity
         self._lock = threading.Lock()
         self._subject_index: dict[str, set[str]] = {}
