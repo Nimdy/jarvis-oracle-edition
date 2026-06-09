@@ -604,6 +604,32 @@ def _get_existing_claims_for_source(memory_storage: Any, source_id: str) -> set[
         return set()
 
 
+# A study-claim's provenance must reflect the SOURCE's real origin — NOT a blanket
+# "external_source" (the +0.10 trusted-source boost). A hardcoded boost launders
+# web-scraped content into trusted self-knowledge, bypassing the web_scrap firewall
+# (the data-flow firewall lives in the knowledge integrator, not here). See GitHub #52.
+_STUDY_PROVENANCE_BY_SOURCE = {
+    "peer_reviewed": "external_source",   # validated academic / DOI — trusted (+0.10)
+    "codebase": "observed",               # JARVIS read its own source (inference, not external truth)
+    "internal_signal": "observed",        # its own memory / introspection
+    "user_note": "user_claim",
+    "local_file": "user_claim",
+    "manual_text": "user_claim",
+    "web": "web_scrap",                   # scraped — NO boost, ungrounded-until-validated
+}
+
+
+def _provenance_for_study_claim(source: Any) -> str:
+    """Trust-class for a studied claim, derived from the source's real origin.
+    Defaults conservatively to web_scrap (no boost) — never a blanket trusted boost."""
+    try:
+        from library.source import classify_effective_source_type
+        eff = classify_effective_source_type(source)
+    except Exception:
+        return "web_scrap"
+    return _STUDY_PROVENANCE_BY_SOURCE.get(eff, "web_scrap")
+
+
 def _create_claim_memories(source: Any, claims: list[Claim]) -> None:
     """Create pointer memories for each claim, referencing the source and chunks."""
     if not claims:
@@ -653,7 +679,7 @@ def _create_claim_memories(source: Any, claims: list[Claim]) -> None:
                 weight=0.45,
                 tags=tags,
                 decay_rate=0.003,
-                provenance="external_source",
+                provenance=_provenance_for_study_claim(source),
                 identity_owner="external",
                 identity_owner_type="library",
                 identity_subject="external",
