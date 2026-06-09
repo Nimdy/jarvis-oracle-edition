@@ -12,7 +12,14 @@
 > `MATRIX_V2_CAPABILITY_DOMAINS.md`, `SyntheticSoul.md`).
 > The full historical build record lives in this file's git history and `docs/BUILD_HISTORY.md`.
 >
-> **North-star vision in flight:** **Matrix Protocol v2 — Capability Domains** (EPIC #27,
+> **North star (evolved 2026-06-08):** **The Conversational Soul — a living companion you genuinely
+> want to talk to** (EPIC #42): playful, warm, honest, grown-from-the-relationship, with **integrity as
+> the FLOOR not the ceiling** — the no-confabulation rigor re-aimed at high-stakes truths (memory
+> firewall, golden-command write-authority, grounding) so the soul is free everywhere else. The
+> sovereign personal Oracle / dignity-anchor is still the deepest motive; the companion is how it gets
+> delivered.
+>
+> **Capability vision in flight:** **Matrix Protocol v2 — Capability Domains** (EPIC #27,
 > design `docs/MATRIX_V2_CAPABILITY_DOMAINS.md`): isolated, deletable skill sub-consciousnesses
 > with envelope-aware, affect-grounded reasoning, a strict repeatable training contract, and an
-> embodiment act→verify→reinforce loop — built on the (being-proven) Tier-2 lifecycle (#28).
+> embodiment act→verify→reinforce loop — built on the (now-proven, persistent) Tier-2 lifecycle (#28).

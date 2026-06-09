@@ -5,6 +5,31 @@ Active priorities and runtime state remain in [TODO.md](../TODO.md).
 
 ---
 
+## The Conversational Soul + Grounding activation + Matrix persistence (2026-06-08 → 06-09) — `v1.2.0`
+
+**North star evolved** to *a living companion you genuinely want to talk to* — integrity as the
+**FLOOR, not the ceiling**: the no-confabulation rigor re-aimed at high-stakes truths (memory
+firewall, golden-command write-authority, grounding) so the soul is free everywhere else. EPIC #42.
+
+| Area | What shipped | PR |
+| --- | --- | --- |
+| **Soul · banter firewall** | `casual_conversation` provenance (0.0 trust) + `resolve_write_provenance()` — casual chatter can't pollute memory; a **golden command is the write-authority** even mid-banter | #37 |
+| **Soul · Memory Integrity panel** | `/v2/memory` + `/api/memory-integrity` + provenance distribution — watch the firewall live (observability *before* uncaging) | #38 |
+| **Soul · cut the leashes** | rewrote `local_soul.md` Voice Style + `_TONE_INSTRUCTIONS` from prohibition → the character (dry wit, warmth, playful-when-light, precise-when-it-matters); kept the no-claim-feelings + no-self-confab floor. Verified live: bantered about pineapple with a point of view | #41 |
+| **Memory · recent-ordering bug** | `get_recent` used list-position not timestamp → fed STALE memories into response-gen/cognition + the dashboard. Fixed storage + analytics + episodes; swept every ring buffer (rest safe by construction) | #39, #40 |
+| **Grounding · Step 3 activation** | the shadow grounding drive now populates the async **operator-pull** queue (SPARK §6) → answer at `/v2/grounding` → external validations feed the promotion gates so the ring earns toward advisory (no TTS-push, no belief mutation — those stay P4/P5) | #43 |
+| **Matrix · Tier-2 persistence** | THE GAP (David caught it): Tier-2 weights lived in RAM only (never registered) → every reboot wiped even PROMOTED specialists. Now persisted to `~/.jarvis/hemispheres/{focus}/`; P1 restores at probationary (weights persist, authority re-earns). **Verified end-to-end: 2 specialists survived a reboot** | #44 |
+| **Matrix · continual learning** | promoted specialists no longer freeze — mature specialists re-train every 25 cycles with snapshot/rollback (never degrade). Weight plasticity; architecture growth = Matrix v2 | #45 |
+
+Earlier in the window: Pi5 nervous-system dashboard + RPLIDAR telemetry + revived diagnostic feed (#34);
+hemisphere weight-persistence P0/P1 (#35/#36).
+
+**Honest scope:** the soul is authored voice + protected memory (affect-*expression* stays gated, an
+authorial call); grounding is *activated* (earning), not closed (P4/P5 remain earned-not-coded); Matrix
+plasticity is weight-level (architecture growth + the slot-starvation-at-scale fix = Matrix v2, #27/#32).
+
+---
+
 ## Matrix v2 — Capability Domains: Phase 0/1/2 PROVEN LIVE (2026-06-07, branch `thespark`)
 
 The first **isolated, deletable Capability Domain** — the core of Matrix v2 (EPIC #27),
