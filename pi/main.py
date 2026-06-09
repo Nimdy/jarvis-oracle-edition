@@ -26,7 +26,7 @@ from transport.ws_client import TransportClient
 from transport.event_schema import (
     BrainMessage, PerceptionEvent, person_detected, person_lost,
     gesture_detected, face_expression, pose_detected, sensor_status,
-    face_crop_event, scene_summary, sensor_health, scene_caption,
+    face_crop_event, scene_summary, sensor_health, scene_caption, lidar_scan,
 )
 from senses.vision.detector import Detector
 from senses.vision.tracker import PersonTracker
@@ -97,6 +97,9 @@ class SensesService:
         )
         self._downsample_ratio: int = 1
 
+        # Lidar (RPLIDAR S2 — 2D spatial telemetry; auto-enabled if the device is present)
+        self._lidar = None
+
         # Brain audio pipe for seamless playback
         self._brain_pipe: subprocess.Popen | None = None
         self._brain_pipe_lock = threading.Lock()
@@ -123,6 +126,8 @@ class SensesService:
         if self._config.enable_audio:
             self._init_audio()
 
+        self._init_lidar()
+
         self._running = True
         logger.info("Senses service online — streaming audio to brain")
 
@@ -140,9 +145,31 @@ class SensesService:
             self._expression.stop()
         if self._pose:
             self._pose.stop()
+        if self._lidar:
+            self._lidar.stop()
 
         await self._transport.stop()
         logger.info("Senses stopped")
+
+    def _init_lidar(self) -> None:
+        """Start the RPLIDAR S2 reader if the device is present. Auto-skips (no retry
+        spam) when no lidar is plugged in. Telemetry-only — emits scan_2d sector
+        summaries to the brain; never writes beliefs."""
+        port = os.environ.get("LIDAR_PORT", "/dev/ttyUSB0")
+        if not os.path.exists(port):
+            logger.info("Lidar: no device at %s — skipping (plug in the S2 to enable)", port)
+            return
+        try:
+            from senses.lidar.lidar_sensor import LidarSensor
+            self._lidar = LidarSensor(
+                emit=lambda s: self._transport.send_event(lidar_scan(**s)),
+                port=port,
+            )
+            self._lidar.start()
+            logger.info("Lidar: RPLIDAR S2 reader started on %s", port)
+        except Exception as exc:
+            logger.warning("Lidar init failed: %s", exc)
+            self._lidar = None
 
     # --- Adaptive vision FPS ---
 

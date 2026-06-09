@@ -19,3 +19,6 @@ pydantic>=2.7
 
 # UI server
 aiohttp>=3.9
+
+# RPLIDAR S2 (2D spatial telemetry) — S-series needs pyrplidar @ 1 Mbaud Standard mode
+pyrplidar>=0.1.2
