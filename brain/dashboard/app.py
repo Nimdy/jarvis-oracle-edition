@@ -1086,14 +1086,16 @@ def _create_app() -> FastAPI:
     async def api_pi5():
         """Pi5 / nervous-system operational view: connected sensors, per-sensor
         health (temp/throttle/fps/uptime), brain<->Pi link health (the afferent
-        event stream), derived per-device operational status, and 2D LIDAR sector
-        telemetry (telemetry-only, never beliefs). Read-only — for seeing JARVIS's
-        body + confirming plugged-in equipment is actually operational.
+        event stream), derived per-device operational status, 2D LIDAR sector
+        telemetry, and the brain-derived LIDAR room model (polar profile, extracted
+        walls, dimensions — telemetry-only, never beliefs). Read-only — for seeing
+        JARVIS's body + confirming plugged-in equipment is actually operational.
         """
         return {
             "sensors": _cache.get("sensors", []),
             "sensor_health": _cache.get("sensor_health", {}),
             "lidar": _cache.get("lidar", {}),
+            "lidar_room": _cache.get("lidar_room", {}),
             "link": _cache.get("link", {}),
             "devices": derive_pi5_devices(_cache),
         }
