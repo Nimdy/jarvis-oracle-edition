@@ -110,6 +110,27 @@ class LidarExtrinsic:
         return out
 
 
+_EXTRINSIC_FILE = os.path.join(os.path.expanduser("~"), ".jarvis", "lidar_extrinsic.json")
+
+
 def load_extrinsic() -> LidarExtrinsic:
-    """The configured extrinsic (env-overridable). Identity until a mount is set."""
-    return LidarExtrinsic()
+    """The configured lidar→room extrinsic. Resolution (first wins, else identity):
+
+    1. ``~/.jarvis/lidar_extrinsic.json`` — per-instance mount config (persists across
+       restarts; this is where a specific rig's measured mount lives).
+    2. ``JARVIS_LIDAR_*`` env vars.
+    3. Identity — no mount configured (the product default for users with no lidar
+       or an un-calibrated one; the geometry simply isn't re-framed).
+    """
+    import json
+    try:
+        with open(_EXTRINSIC_FILE) as f:
+            c = json.load(f)
+        return LidarExtrinsic(
+            yaw_rad=float(c.get("yaw_rad", 0.0)),
+            tx_m=float(c.get("tx_m", 0.0)),
+            ty_m=float(c.get("ty_m", 0.0)),
+            tz_m=float(c.get("tz_m", 0.0)),
+        )
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return LidarExtrinsic()   # env-overridable, else identity
