@@ -51,6 +51,10 @@ kill_matching() {
 kill_matching "python.*main\.py" "python main.py"
 kill_matching "python3.*main\.py" "python3 main.py"
 
+# Lidar node (separate process — thin Pi → brain). Killed here so a restart relaunches
+# a fresh one that reconnects to the (possibly-restarted) brain.
+kill_matching "lidar_node\.py" "lidar node"
+
 # Any python loading our senses modules (catches mid-startup kills)
 kill_matching "python.*senses" "senses module"
 
@@ -176,6 +180,14 @@ fi
 # ONNX Runtime probes all DRM cards for GPUs and warns on missing vendor.
 # Suppress since we use Hailo NPU (PCIe), not GPU, for inference.
 export ORT_LOG_LEVEL=3  # 0=VERBOSE 1=INFO 2=WARNING 3=ERROR
+
+# Lidar node — separate process so the 1 Mbaud read is never GIL-starved by the
+# senses. Auto-recovers a stuck S2 on connect; reconnects to the brain on its own.
+# Detached + unbuffered log so it survives the foreground exec below and is debuggable.
+if [ -e /dev/ttyUSB0 ]; then
+    echo -e "${CYAN}=== Starting lidar node (pi-lidar) ===${NC}"
+    PYTHONUNBUFFERED=1 setsid ./.venv/bin/python lidar_node.py > /tmp/jarvis-lidar.log 2>&1 < /dev/null &
+fi
 
 echo ""
 echo -e "${CYAN}=== Starting Jarvis Senses ===${NC}"
