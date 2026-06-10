@@ -54,8 +54,8 @@
 <body>
   <header>
     <h1>JARVIS · SPATIAL CORE</h1><span class="v2">dashboardV2</span>
-    <span class="sub">JARVIS's live spatial perception — the 2D LIDAR room model, reconstructed as an
-      interactive 3D hologram. Drag to orbit. Telemetry-only: this is what JARVIS senses, not what it believes.</span>
+    <span class="sub">JARVIS's live spatial perception — the 2D LIDAR room, top-down with NORTH (lidar bearing-0)
+      pinned up; flip to the 3D hologram with the button. Telemetry-only: this is what JARVIS senses, not what it believes.</span>
     <span class="right"><span id="sensor">—</span><span id="clock">—</span></span>
   </header>
   <nav id="v2nav"></nav>
@@ -67,7 +67,7 @@
 
     <div class="hud tl">
       <div class="t">SPATIAL CORE</div>
-      <div class="s">LIVE 2D LIDAR → HOLOGRAPHIC ROOM RECONSTRUCTION</div>
+      <div class="s">LIVE 2D LIDAR → TOP-DOWN ROOM MAP · NORTH-UP · NO ROTATION</div>
       <div class="fw" id="fw">telemetry-only · writes_beliefs = false · single horizontal LIDAR plane · walls extruded to 2.5 m for viz (height synthetic)</div>
     </div>
     <div class="hud tr">
@@ -80,8 +80,8 @@
     <div class="hud br" id="meta"></div>
 
     <div class="ctl">
-      <button id="b_rot" class="on" onclick="toggleRot()">◷ auto-orbit</button>
-      <button id="b_reset" onclick="resetView()">⟲ reset view</button>
+      <button id="b_view" onclick="toggleView()">⬡ 3D view</button>
+      <button id="b_reset" onclick="resetView()">⟲ recentre</button>
     </div>
 
     <div id="empty">— awaiting LIDAR stream —<br><span style="font-size:10px;color:var(--dim)">start the Pi reader; the brain builds the room from raw points</span></div>
@@ -101,7 +101,8 @@ var COL = { hi:[0,255,153], lo:[255,176,0], cyan:[0,204,255], grid:[40,110,150],
 var cv = document.getElementById('stage');
 var ctx = cv.getContext('2d');
 var room = null, haveData = false;
-var theta = 0.84, elev = 1.0, autoRot = true, dragging = false, lastX = 0, lastY = 0;
+var theta = 0.84, elev = 1.0, autoRot = false, dragging = false, lastX = 0, lastY = 0;
+var viewMode = 'top';   // 'top' = readable floor-plan (lidar-north up, fixed) | '3d' = hologram
 var DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 var bloomCv = document.createElement('canvas');           // offscreen for the bloom pass
 var bloomCtx = bloomCv.getContext('2d');
@@ -221,8 +222,65 @@ function setData(d){
 function draw(){
   // belt-and-braces: one bad frame (malformed payload, transient state) must NEVER
   // kill the loop — always re-arm in finally so the hologram self-heals next poll.
-  try { renderFrame(); } catch(e){ /* swallow; next frame retries */ }
+  try { (viewMode === 'top' ? renderTopDown : renderFrame)(); } catch(e){ /* swallow; next frame retries */ }
   requestAnimationFrame(draw);
+}
+
+// ---- TOP-DOWN floor-plan: the readable default. Lidar-centred radar, NORTH (lidar
+//      bearing-0 / +Z) pinned UP, no rotation. Hand-hold the S2 and the room turns
+//      around the fixed centre. Crisp outlines (no tall slabs, no bloom). ----
+function renderTopDown(){
+  var Wc=cv.width, Hc=cv.height, cx=Wc/2, cy=Hc/2;
+  ctx.clearRect(0,0,Wc,Hc);
+  if(!haveData || !room){ return; }
+  var pm=room.points_m||[], i, maxr=1.0;
+  for(i=0;i<pm.length;i++) maxr=Math.max(maxr, Math.hypot(pm[i][0],pm[i][1]));
+  for(i=0;i<room.walls.length;i++){ var w0=room.walls[i]; if(!w0||!Array.isArray(w0.start_m)||!Array.isArray(w0.end_m)) continue;
+    maxr=Math.max(maxr, Math.hypot(w0.start_m[0],w0.start_m[1]), Math.hypot(w0.end_m[0],w0.end_m[1])); }
+  var scale=(Math.min(Wc,Hc)/2 - 48*DPR)/(maxr*1.08);
+  function P(x,z){ return [cx + x*scale, cy - z*scale]; }      // +Z up (north), +X right, lidar @ centre
+  var reach=maxr*scale;
+
+  ctx.lineCap='round'; ctx.lineJoin='round'; ctx.textBaseline='alphabetic';
+  // fixed cardinal cross
+  ctx.strokeStyle=rgba(COL.grid,0.30); ctx.lineWidth=1*DPR;
+  ctx.beginPath(); ctx.moveTo(cx,cy-reach*1.05); ctx.lineTo(cx,cy+reach*1.05);
+  ctx.moveTo(cx-reach*1.05,cy); ctx.lineTo(cx+reach*1.05,cy); ctx.stroke();
+  // range rings + metre labels
+  ctx.font=(12*DPR)+'px monospace';
+  for(var r=1;r<=Math.ceil(maxr);r++){
+    ctx.strokeStyle=rgba(COL.grid,0.55); ctx.lineWidth=1*DPR;
+    ctx.beginPath(); ctx.arc(cx,cy,r*scale,0,6.2832); ctx.stroke();
+    ctx.fillStyle=rgba(COL.grid,1); ctx.fillText(r+'m', cx+5*DPR, cy - r*scale - 4*DPR);
+  }
+  // footprint (room outline on the floor)
+  var fp=[]; for(i=0;i<pm.length;i++) fp.push(P(pm[i][0],pm[i][1]));
+  if(fp.length>2){
+    ctx.beginPath(); ctx.moveTo(fp[0][0],fp[0][1]); for(i=1;i<fp.length;i++) ctx.lineTo(fp[i][0],fp[i][1]); ctx.closePath();
+    ctx.fillStyle=rgba(COL.cyan,0.10); ctx.fill();
+    ctx.strokeStyle=rgba(COL.cyan,0.45); ctx.lineWidth=1.5*DPR; ctx.stroke();
+  }
+  // walls as crisp outlines, coloured by confidence
+  for(i=0;i<room.walls.length;i++){ var w=room.walls[i]; if(!w||!Array.isArray(w.start_m)||!Array.isArray(w.end_m)) continue;
+    var col=(w.confidence||0.5)>=0.85?COL.hi:COL.lo, a=P(w.start_m[0],w.start_m[1]), b=P(w.end_m[0],w.end_m[1]);
+    ctx.shadowColor=rgba(col,0.8); ctx.shadowBlur=7*DPR; ctx.strokeStyle=rgba(col,0.98); ctx.lineWidth=3*DPR;
+    ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); ctx.shadowBlur=0;
+  }
+  // lidar at centre
+  ctx.shadowColor=rgba(COL.cyan,0.95); ctx.shadowBlur=16*DPR;
+  ctx.fillStyle=rgba(COL.white,0.96); ctx.beginPath(); ctx.arc(cx,cy,4.5*DPR,0,6.2832); ctx.fill(); ctx.shadowBlur=0;
+  // NORTH marker (lidar bearing 0 = +Z = up)
+  var ny=cy - reach*0.94;
+  ctx.strokeStyle=rgba(COL.white,0.7); ctx.lineWidth=2*DPR;
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx,ny+15*DPR); ctx.stroke();
+  ctx.fillStyle=rgba(COL.white,0.95);
+  ctx.beginPath(); ctx.moveTo(cx,ny); ctx.lineTo(cx-7*DPR,ny+16*DPR); ctx.lineTo(cx+7*DPR,ny+16*DPR); ctx.closePath(); ctx.fill();
+  ctx.font='bold '+(17*DPR)+'px monospace'; ctx.fillText('N', cx-6*DPR, ny-7*DPR);
+  // E / W / S cardinal labels (fixed)
+  ctx.fillStyle=rgba(COL.grid,1); ctx.font=(13*DPR)+'px monospace';
+  ctx.fillText('E', cx+reach*1.05+5*DPR, cy+5*DPR);
+  ctx.fillText('W', cx-reach*1.05-17*DPR, cy+5*DPR);
+  ctx.fillText('S', cx-5*DPR, cy+reach*1.05+17*DPR);
 }
 
 function renderFrame(){
@@ -351,16 +409,19 @@ function renderFrame(){
 cv.addEventListener('mousedown', function(e){ dragging=true; cv.classList.add('drag'); lastX=e.clientX; lastY=e.clientY; });
 window.addEventListener('mouseup', function(){ dragging=false; cv.classList.remove('drag'); });
 window.addEventListener('mousemove', function(e){ if(!dragging) return;
+  if(viewMode!=='3d'){ lastX=e.clientX; lastY=e.clientY; return; }   // top-down is a fixed map
   theta -= (e.clientX-lastX)*0.008; elev = Math.max(0.25, Math.min(2.4, elev - (e.clientY-lastY)*0.004));
   lastX=e.clientX; lastY=e.clientY; });
 cv.addEventListener('touchstart', function(e){ if(e.touches.length){dragging=true; lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;} },{passive:true});
 cv.addEventListener('touchmove', function(e){ if(!dragging||!e.touches.length) return;
+  if(viewMode!=='3d'){ lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; return; }
   theta -= (e.touches[0].clientX-lastX)*0.008; elev=Math.max(0.25,Math.min(2.4, elev-(e.touches[0].clientY-lastY)*0.004));
   lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; },{passive:true});
 cv.addEventListener('touchend', function(){ dragging=false; },{passive:true});
-function toggleRot(){ autoRot=!autoRot; document.getElementById('b_rot').classList.toggle('on',autoRot); }
-function resetView(){ theta=0.84; elev=1.0; }
-window.toggleRot=toggleRot; window.resetView=resetView;
+function toggleView(){ viewMode = (viewMode==='top') ? '3d' : 'top';
+  document.getElementById('b_view').textContent = (viewMode==='top') ? '⬡ 3D view' : '⊞ top-down'; }
+function resetView(){ theta=0.84; elev=1.0; }   // recentre the 3D camera
+window.toggleView=toggleView; window.resetView=resetView;
 
 function clk(){ var n=new Date(); document.getElementById('clock').textContent=n.toLocaleTimeString(); }
 function tick(){
