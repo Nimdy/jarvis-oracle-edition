@@ -127,6 +127,10 @@ function renderInstr(r){
   pushHist(w, d, wc);
   var stab = Math.max(spread('w'), spread('d')) * 100;          // cm of drift over the window
   var stabCol = stab<5?'var(--green)':(stab<15?'var(--amber)':'var(--red)');
+  // honesty: a "30s" stability isn't valid until the window actually spans ~30s — until
+  // then show 'warming' (don't flash a false red right after a restart/rebuild).
+  var span = hist.length ? (hist[hist.length-1].t - hist[0].t) : 0;
+  var warming = span < 28000;
   var dmaxCol = (fs.dropped_max_range>0)?'var(--cyan)':'var(--muted)';   // cap engaging = good, not error
   var wcs = hist.map(function(h){return h.wc;});
   var wcMin = Math.min.apply(null, wcs), wcMax = Math.max.apply(null, wcs);
@@ -147,8 +151,10 @@ function renderInstr(r){
     row('room_width_m', m(w))+
     row('room_depth_m', m(d))+
     row('coverage_pct', ((fs.coverage_pct!=null)?fs.coverage_pct:Math.round((r.coverage_fraction||0)*100))+' %')+
-    '<div class="hero">'+row('stability_30s', '±'+stab.toFixed(1)+' cm '+
-      '<span style="color:var(--dim);font-weight:400">('+hist.length+'×)</span>', stabCol)+'</div>';
+    '<div class="hero">'+(warming
+      ? row('stability_30s', '<span style="color:var(--dim);font-weight:400">warming '+Math.round(span/1000)+'s ('+hist.length+'×)</span>')
+      : row('stability_30s', '±'+stab.toFixed(1)+' cm '+
+          '<span style="color:var(--dim);font-weight:400">('+hist.length+'×)</span>', stabCol))+'</div>';
 }
 
 function vsub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
