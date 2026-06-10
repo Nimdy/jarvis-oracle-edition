@@ -702,6 +702,40 @@ def _create_app() -> FastAPI:
         cal.verify()
         return {"ok": True, "calibration": cal.get_state()}
 
+    @app.get("/api/spatial/camera-calib")
+    async def api_camera_calib_get():
+        """Manual dense-cloud calibration state (~/.jarvis/camera_calib.json). Local-only."""
+        import json as _json, os as _os
+        try:
+            with open(_os.path.expanduser("~/.jarvis/camera_calib.json")) as f:
+                return _json.load(f)
+        except Exception:
+            return {"focal_px": 470.0, "yaw_deg": 10.0, "pitch_row_offset": 0, "manual": False}
+
+    @app.post("/api/spatial/camera-calib")
+    async def api_camera_calib_set(request: Request):
+        """Drive the Tier-3 dense-cloud sidecar's manual calibration (focal/yaw/pitch). Writes
+        ~/.jarvis/camera_calib.json which the sidecar reads each loop. Local-only (no belief
+        writes, pure telemetry calibration). Operator dials FOV/yaw until the cloud aligns."""
+        import json as _json, os as _os
+        body = await request.json()
+        path = _os.path.expanduser("~/.jarvis/camera_calib.json")
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
+        cur = {"focal_px": 470.0, "yaw_deg": 10.0, "pitch_row_offset": 0, "manual": False}
+        try:
+            with open(path) as f:
+                cur.update(_json.load(f))
+        except Exception:
+            pass
+        for k in ("focal_px", "yaw_deg", "pitch_row_offset", "manual"):
+            if k in body:
+                cur[k] = body[k]
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            _json.dump(cur, f)
+        _os.replace(tmp, path)
+        return {"ok": True, "camera_calib": cur}
+
     # -- lightweight endpoints: all read from _cache -------------------------
 
     @app.get("/api/status")

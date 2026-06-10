@@ -28,7 +28,7 @@ def _synthetic_row_and_profile(s_true, t_true, n_bins=360):
     for x in range(20, 620, 13):                 # spaced so each lands in a distinct bin
         disp = 0.4 + 0.002 * x                    # varies 0.44..1.64 → real spread
         theta = math.atan2(x - PX, F)
-        z = 1.0 / (s_true * disp + t_true)        # metric Z-depth
+        z = s_true * disp + t_true                # DEPTH-mode: metric Z = s·pred + t
         rng = z / math.cos(theta)                 # radial range the lidar would measure
         row[x] = disp
         prof[int((theta % TWO_PI) / bin_w) % n_bins] = rng
@@ -68,12 +68,12 @@ def test_anchor_is_telemetry_only():
 
 
 def test_depth_to_points_lifts_metric_geometry_and_keeps_holes():
-    # 4x4 maps; anchor scale=1, shift=0 ⇒ Z = 1/disp. yaw=0 ⇒ room == lidar frame.
+    # 4x4 maps; anchor scale=1, shift=0 ⇒ Z = pred (DEPTH-mode). yaw=0 ⇒ room == lidar frame.
     cam_h = 1.219
     anchor = AnchorResult(scale=1.0, shift=0.0, inlier_count=99, valid=True, rms=0.0, reason="ok")
-    disp = [[0.5 for _ in range(4)] for _ in range(4)]   # disp 0.5 → Z = 2.0 m everywhere
+    disp = [[2.0 for _ in range(4)] for _ in range(4)]   # pred 2.0 → Z = 2.0 m everywhere
     disp[0][0] = None                                     # an explicit hole
-    disp[1][1] = -5.0                                     # sky/invalid (inv ≤ 0) → hole
+    disp[1][1] = -5.0                                     # behind camera (Z ≤ 0) → hole
     rgb = [[(10, 20, 30) for _ in range(4)] for _ in range(4)]
     pts = depth_to_points(disp, rgb, anchor, focal_px=F, principal_x=1.5, principal_y=1.5,
                           camera_height_m=cam_h, yaw_rad=0.0, stride=1, max_points=999)
@@ -117,7 +117,7 @@ def test_no_forbidden_imports():
 
 
 def _row_profile(disp_fn, s_true, t_true, yaw_true=0.0, n_bins=360):
-    """Encode inv_metric = s_true*disp + t_true, with the lidar ranges stored as if the
+    """Encode DEPTH Z = s_true*disp + t_true, with the lidar ranges stored as if the
     true camera→lidar yaw is yaw_true (so the clean fit is only found at that yaw)."""
     row = [None] * 640
     prof = [None] * n_bins
@@ -127,11 +127,11 @@ def _row_profile(disp_fn, s_true, t_true, yaw_true=0.0, n_bins=360):
         th = math.atan2(x - PX, F)
         if math.cos(th) <= 0.1:
             continue
-        inv = s_true * disp + t_true
-        if inv <= 0:
+        z = s_true * disp + t_true
+        if z <= 0:
             continue
         row[x] = disp
-        prof[int(((th - yaw_true) % TWO_PI) / bw) % n_bins] = (1.0 / inv) / math.cos(th)
+        prof[int(((th - yaw_true) % TWO_PI) / bw) % n_bins] = z / math.cos(th)
     return row, prof
 
 
@@ -152,9 +152,9 @@ def test_anchor_rejects_weak_correlation():
         th = math.atan2(x - PX, F)
         if math.cos(th) <= 0.1:
             continue
-        inv = 0.3 * disp + 1.5 + 0.8 * math.sin(x * 1.7)   # trend + decorrelated noise
+        z = 0.3 * disp + 1.5 + 0.8 * math.sin(x * 1.7)     # depth trend + decorrelated noise
         row[x] = disp
-        prof[int((th % TWO_PI) / bw) % 360] = (1.0 / inv) / math.cos(th)
+        prof[int((th % TWO_PI) / bw) % 360] = z / math.cos(th)
     a = anchor_depth_affine(row, prof, yaw_rad=0.0, focal_px=F, principal_x=PX,
                             min_inliers=10, min_corr=0.4)
     assert not a.valid and a.reason == "weak_correlation" and abs(a.corr) < 0.4

@@ -97,10 +97,10 @@ def anchor_depth_affine(disparity_row: Sequence[Optional[float]],
         return AnchorResult(0.0, 0.0, 0, False, math.inf, "no_lidar_profile")
     bin_w = TWO_PI / n
     disp: list[float] = []
-    inv_metric: list[float] = []     # target: 1 / Z_metric (inverse Z-depth)
-    for x, d in enumerate(disparity_row):
-        if d is None or not math.isfinite(d) or d <= 0.0:
-            continue                                       # invalid / sky disparity
+    zmetric: list[float] = []     # target: Z_metric (pinhole depth). Depth-Anything outputs
+    for x, d in enumerate(disparity_row):                  # DEPTH (larger = FARTHER), so we fit
+        if d is None or not math.isfinite(d) or d <= 0.0:  # pred → Z directly (not 1/Z).
+            continue                                       # invalid / sky pixel
         theta = math.atan2(x - principal_x, focal_px)      # room bearing of this column
         cos_t = math.cos(theta)
         if cos_t <= 0.1:                                   # too oblique (near ±90°) — skip
@@ -110,39 +110,39 @@ def anchor_depth_affine(disparity_row: Sequence[Optional[float]],
             continue                                       # lidar saw nothing this bearing
         z = rng * cos_t                                    # radial range → pinhole Z-depth
         disp.append(float(d))
-        inv_metric.append(1.0 / z)
+        zmetric.append(z)
 
     if len(disp) < min_inliers:
         return AnchorResult(0.0, 0.0, len(disp), False, math.inf, "too_few_lidar_pixels")
     if (max(disp) - min(disp)) < min_disp_spread:
         return AnchorResult(0.0, 0.0, len(disp), False, math.inf, "degenerate_no_disp_spread")
 
-    fit = _ols(disp, inv_metric)
+    fit = _ols(disp, zmetric)
     if fit is None:
         return AnchorResult(0.0, 0.0, len(disp), False, math.inf, "unsolvable")
     s, t = fit
     # one robust re-solve: drop pixels whose residual exceeds mad_k · MAD
-    resid = [s * d + t - y for d, y in zip(disp, inv_metric)]
+    resid = [s * d + t - y for d, y in zip(disp, zmetric)]
     med = sorted(resid)[len(resid) // 2]
     mad = sorted(abs(r - med) for r in resid)[len(resid) // 2] or 1e-9
-    keep = [(d, y) for d, y, r in zip(disp, inv_metric, resid) if abs(r - med) <= mad_k * mad]
+    keep = [(d, y) for d, y, r in zip(disp, zmetric, resid) if abs(r - med) <= mad_k * mad]
     if len(keep) >= min_inliers:
         fit2 = _ols([d for d, _ in keep], [y for _, y in keep])
         if fit2 is not None:
             s, t = fit2
             disp = [d for d, _ in keep]
-            inv_metric = [y for _, y in keep]
+            zmetric = [y for _, y in keep]
 
-    rms = math.sqrt(sum((s * d + t - y) ** 2 for d, y in zip(disp, inv_metric)) / len(disp))
+    rms = math.sqrt(sum((s * d + t - y) ** 2 for d, y in zip(disp, zmetric)) / len(disp))
     # Pearson correlation over the final inliers — the anchor's honesty score
     n2 = len(disp)
     mx = sum(disp) / n2
-    my = sum(inv_metric) / n2
+    my = sum(zmetric) / n2
     sxx = sum((d - mx) ** 2 for d in disp)
-    syy = sum((y - my) ** 2 for y in inv_metric)
-    sxy = sum((d - mx) * (y - my) for d, y in zip(disp, inv_metric))
+    syy = sum((y - my) ** 2 for y in zmetric)
+    sxy = sum((d - mx) * (y - my) for d, y in zip(disp, zmetric))
     corr = sxy / math.sqrt(sxx * syy) if sxx > 0 and syy > 0 else 0.0
-    if s <= 0.0:                                  # non-physical: more disparity must be CLOSER
+    if s <= 0.0:                                  # non-physical: more predicted depth must be FARTHER
         return AnchorResult(s, t, n2, False, rms, "non_physical_scale", corr)
     if abs(corr) < min_corr:                      # depth & lidar don't really agree → refuse
         return AnchorResult(s, t, n2, False, rms, "weak_correlation", corr)
@@ -180,7 +180,7 @@ def depth_to_points(disparity_map: Sequence[Sequence[Optional[float]]],
                     focal_px: float, principal_x: float, principal_y: float,
                     camera_height_m: float, yaw_rad: float = 0.0,
                     stride: int = 4, max_points: int = 12000,
-                    max_depth_m: float = 12.0, min_inv: float = 1e-3
+                    max_depth_m: float = 12.0, min_depth_m: float = 0.1
                     ) -> list[tuple[float, float, float, int, int, int]]:
     """Lift an anchored disparity map to dense colored points in the LIDAR frame (so they
     overlay the lidar walls). Each kept pixel → (x, y, z, r, g, b). Sky / invalid depth
@@ -200,11 +200,8 @@ def depth_to_points(disparity_map: Sequence[Sequence[Optional[float]]],
             d = row[x]
             if d is None or not math.isfinite(d) or d <= 0.0:
                 continue
-            inv = s * d + t
-            if inv <= min_inv:                             # ≤0 ⇒ sky / behind camera → HOLE
-                continue
-            z = 1.0 / inv
-            if z <= 0.0 or z > max_depth_m:
+            z = s * d + t                                  # DEPTH: metric Z = scale·pred + shift
+            if z <= min_depth_m or z > max_depth_m:        # behind camera / sky-far → HOLE
                 continue
             x_room = (x - principal_x) * z / focal_px       # right
             y_room = camera_height_m - (y - principal_y) * z / focal_px   # up (image y down)
