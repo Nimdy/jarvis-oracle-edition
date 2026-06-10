@@ -41,7 +41,9 @@ REASON_INSUFFICIENT_COVERAGE = "insufficient_coverage"
 # --------------------------------------------------------------------------- config
 @dataclass(frozen=True)
 class LidarRoomConfig:
-    n_bins: int = 360                       # angular resolution (up to 720 @ 0.5°)
+    n_bins: int = 360                       # MUST match the Pi's RAW_BINS (it streams 360
+                                            # 1° points; raising this leaves bins permanently
+                                            # empty and breaks wall extraction)
     ring_len_K: int = 14                    # per-bin temporal window (= fixture revs)
     min_samples_per_bin: int = 3            # below this, a bin is "unknown"
     wall_inlier_floor_m: float = 0.05       # min RANSAC inlier band
@@ -69,7 +71,8 @@ class LidarScan:
 
     @staticmethod
     def from_dict(d: dict[str, Any]) -> "LidarScan":
-        pts = tuple((float(b), float(r)) for b, r in d.get("points", ()))
+        # tolerate dropout sentinels: a None/0 range is simply not a point this scan
+        pts = tuple((float(b), float(r)) for b, r in d.get("points", ()) if r is not None)
         return LidarScan(timestamp=float(d.get("timestamp", 0.0)), points=pts,
                          range_max_m=float(d.get("range_max_m", 12.0)),
                          quality=str(d.get("quality", "good")))
@@ -205,7 +208,9 @@ def denoise_bins(rings: Sequence[Sequence[float]], scan_count: int,
     for i in range(n):
         ring = [v for v in rings[i] if v is not None and v > 0.0]
         sc = len(ring)
-        vf = (sc / scan_count) if scan_count > 0 else 0.0
+        # window-relative: the ring is capped at ring_len_K but scan_count grows forever,
+        # so divide by the ring's actual depth (== min(scan_count, K)), not scan_count.
+        vf = sc / max(1, len(rings[i]))
         if sc >= config.min_samples_per_bin:
             r = float(median(ring))
             occ = "occupied"
@@ -295,10 +300,19 @@ def fit_walls(bins: Sequence[PolarBin], config: LidarRoomConfig) -> tuple[WallSe
     """Extract wall segments from the stable profile. Breaks runs at dropouts and at
     range discontinuities so a doorway never gets bridged by a phantom wall."""
     n = len(bins)
+    # Start the sweep at a NON-occupied bin so a wall straddling bearing 0 isn't split
+    # at the seam into two co-linear segments (which inflated wall_count). Bin bearings
+    # are absolute, so visiting them rotated leaves the cartesian geometry correct.
+    start0 = 0
+    for off in range(n):
+        if bins[off].r_stable_m is None or bins[off].occupancy != "occupied":
+            start0 = off
+            break  # found a gap to anchor the seam at
+    order = [(start0 + j) % n for j in range(n)]
     # contiguous runs of occupied bins with no big range jump
     runs: list[list[int]] = []
     cur: list[int] = []
-    for i in range(n):
+    for i in order:
         b = bins[i]
         if b.r_stable_m is None or b.occupancy != "occupied":
             if len(cur) >= 2:
@@ -370,7 +384,10 @@ def detect_openings(bins: Sequence[PolarBin], config: LidarRoomConfig) -> tuple[
         ang = len(run) * bin_w
         depth = 0.5 * (left.r_stable_m + right.r_stable_m)
         width = 2.0 * depth * math.sin(ang / 2.0)
-        center = ((run[0] + run[-1]) / 2.0 + 0.5) * bin_w
+        # run indices are sequential mod n; the midpoint is run[0]+(len-1)/2 in the
+        # UNWRAPPED sense — using run[-1] puts an opening that crosses bearing 0 on the
+        # opposite wall (e.g. a door dead-ahead reported at 180°).
+        center = ((run[0] + (len(run) - 1) / 2.0 + 0.5) * bin_w) % TWO_PI
         lo, hi = config.door_width_band_m
         kind = "door" if lo <= width <= hi else ("passage" if width > hi else "window")
         conf = 0.0 if is_shadow else max(0.0, min(1.0, 1.0 - abs(left.r_stable_m - right.r_stable_m)))
@@ -415,6 +432,7 @@ class LidarRoomModel:
         self._config = config
         self._rings: list[deque] = [deque(maxlen=config.ring_len_K) for _ in range(config.n_bins)]
         self._scan_count = 0
+        self._last_scan_ts = 0.0
         self._fstats: dict[str, Any] = self._zero_fstats()
 
     def _zero_fstats(self) -> dict[str, Any]:
@@ -435,7 +453,9 @@ class LidarRoomModel:
             nearest: list[Optional[float]] = [None] * n
             # hard indoor ceiling: a far return (open door/window/specular reflection) is
             # ghost geometry that inflates the room — cap it. Also drop too-close housing noise.
-            eff_max = min(scan.range_max_m or cfg.range_max_m, cfg.max_range_m)
+            # The ceiling is the CONFIG cap only — NOT the per-window observed max (which would
+            # self-gate the genuinely-farthest real return whenever rounding made it == the max).
+            eff_max = cfg.max_range_m
             rmin = cfg.min_range_m
             raw = d_zero = d_min = d_max = kept = 0
             o_min: Optional[float] = None
@@ -452,7 +472,7 @@ class LidarRoomModel:
                 if rng < rmin:                       # too-close housing reflection
                     d_min += 1
                     continue
-                if rng >= eff_max:                   # ghost beyond the indoor cap
+                if rng > eff_max:                    # ghost beyond the indoor cap
                     d_max += 1
                     continue
                 kept += 1
@@ -463,6 +483,9 @@ class LidarRoomModel:
                 # carry the per-rev nearest (or a dropout None) — NEVER back-fill 0/range_max
                 self._rings[i].append(nearest[i])
             self._scan_count += 1
+            ts = getattr(scan, "timestamp", 0.0)
+            if ts:
+                self._last_scan_ts = float(ts)        # freshness signal for the room model
             fs = self._fstats
             fs.update(raw_points=raw, dropped_zero=d_zero, dropped_min_range=d_min,
                       dropped_max_range=d_max, points_after_filter=kept,
@@ -488,6 +511,7 @@ class LidarRoomModel:
         for r in self._rings:
             r.clear()
         self._scan_count = 0
+        self._last_scan_ts = 0.0
         self._fstats = self._zero_fstats()
 
     @property
@@ -499,7 +523,7 @@ class LidarRoomModel:
 
     def room_model(self, *, timestamp: Optional[float] = None) -> RoomModel:
         cfg = self._config
-        ts = timestamp if timestamp is not None else 0.0
+        ts = timestamp if timestamp is not None else self._last_scan_ts
         rings = [list(r) for r in self._rings]
         bins = denoise_bins(rings, self._scan_count, cfg)
         coverage = self.coverage_fraction
