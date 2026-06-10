@@ -59,9 +59,11 @@ class FusedObject:
     """A camera label + a lidar measurement of where it is. TELEMETRY, never a belief."""
     label: str
     label_confidence: float           # CAMERA — a hypothesis, not a fact
-    bearing_rad: float                # room-frame bearing (camera optical frame)
+    bearing_rad: float                # ROOM/camera-frame bearing
+    lidar_bearing_rad: float          # LIDAR-frame bearing (= room − yaw; where the profile was sampled)
     range_m: Optional[float]          # LIDAR metric range (None = lidar saw nothing there)
-    position_room_m: Optional[tuple[float, float, float]]   # (x, y=mount height, z)
+    position_room_m: Optional[tuple[float, float, float]]    # (x, y=mount height, z), room frame
+    position_lidar_m: Optional[tuple[float, float, float]]   # same, LIDAR frame — for the radar overlay
     source_entity_id: str
     has_lidar_range: bool             # False ⇒ camera-only (no metric confirmation)
 
@@ -71,10 +73,13 @@ class FusedObject:
             "label_confidence": round(self.label_confidence, 3),
             "label_provenance": "camera_hypothesis",     # honest: a guess until verified
             "bearing_rad": round(self.bearing_rad, 5),
+            "lidar_bearing_rad": round(self.lidar_bearing_rad, 5),
             "range_m": None if self.range_m is None else round(self.range_m, 3),
             "range_provenance": "lidar_metric" if self.has_lidar_range else "none",
             "position_room_m": (None if self.position_room_m is None
                                 else [round(v, 3) for v in self.position_room_m]),
+            "position_lidar_m": (None if self.position_lidar_m is None
+                                 else [round(v, 3) for v in self.position_lidar_m]),
             "source_entity_id": self.source_entity_id,
             "has_lidar_range": self.has_lidar_range,
             "authority": "spatial_telemetry_only",
@@ -103,14 +108,17 @@ def fuse(camera_entities: Sequence[dict], lidar_profile: Sequence[Optional[float
         b_room = camera_bearing(bbox, principal_x, focal_px)          # camera = room frame
         b_lidar = (b_room - yaw_rad) % TWO_PI                          # where to look in the profile
         rng = lidar_range_at(lidar_profile, b_lidar, bin_w, window_bins)
-        pos = None
+        pos_room = pos_lidar = None
         if rng is not None:
-            pos = (round(rng * math.sin(b_room), 3), round(mount_height_m, 3),
-                   round(rng * math.cos(b_room), 3))                  # room position at the camera bearing
+            pos_room = (round(rng * math.sin(b_room), 3), round(mount_height_m, 3),
+                        round(rng * math.cos(b_room), 3))             # room frame (camera bearing)
+            pos_lidar = (round(rng * math.sin(b_lidar), 3), round(mount_height_m, 3),
+                         round(rng * math.cos(b_lidar), 3))           # lidar frame (sits on the return)
         out.append(FusedObject(
             label=str(e.get("label", "?")),
             label_confidence=float(e.get("confidence", 0.0) or 0.0),
-            bearing_rad=b_room, range_m=rng, position_room_m=pos,
+            bearing_rad=b_room, lidar_bearing_rad=b_lidar, range_m=rng,
+            position_room_m=pos_room, position_lidar_m=pos_lidar,
             source_entity_id=str(e.get("entity_id", "")),
             has_lidar_range=rng is not None,
         ))
