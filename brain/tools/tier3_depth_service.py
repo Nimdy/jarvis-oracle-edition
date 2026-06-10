@@ -21,7 +21,8 @@ import urllib.request
 import numpy as np
 
 sys.path.insert(0, "/home/duafoo/duafoo/brain")
-from cognition.lidar_depth import anchor_depth_affine, depth_to_points, lidar_plane_row
+from cognition.lidar_depth import (anchor_depth_affine, anchor_best_yaw, depth_to_points,
+                                    lidar_plane_row)
 from cognition.lidar_calibration import load_extrinsic
 
 PI_SNAPSHOT = "http://192.168.1.248:8080/snapshot"
@@ -29,8 +30,8 @@ BRAIN_PI5 = "http://localhost:9200/api/pi5"
 SLOT = os.path.expanduser("~/.jarvis/dense_points.json")
 FOCAL, PX, PY = 470.0, 320.0, 240.0
 INTERVAL_S = 4.0
-STRIDE = 7
-MAX_POINTS = 9000
+STRIDE = 5            # denser sample → fills the lattice gaps (~12k pts at 640x480)
+MAX_POINTS = 14000
 
 
 def log(*a):
@@ -74,8 +75,7 @@ def main():
         try:
             profile, room = live_lidar_profile()
             if sum(1 for r in profile if r) < 30:
-                write_slot({"ts": time.time(), "valid": False, "reason": "lidar_sparse", "points": []})
-                time.sleep(INTERVAL_S); continue
+                log("lidar sparse — keeping last good"); time.sleep(INTERVAL_S); continue
             rgb = grab_frame()
             pred = pipe(Image.fromarray(rgb))["predicted_depth"]
             pred = np.asarray(pred.detach().float().cpu().numpy() if hasattr(pred, "detach")
@@ -90,32 +90,33 @@ def main():
             cam_h = getattr(ex, "camera_height_m", 1.219)
             y_row = lidar_plane_row(cam_h, ex.ty_m, FOCAL, PY)
             row = [float(v) for v in pred[y_row]]
-            a = anchor_depth_affine(row, profile, yaw_rad=ex.yaw_rad, focal_px=FOCAL,
-                                    principal_x=PX, min_inliers=15)
+            # a single configured yaw can't capture the camera↔lidar mismatch → search the
+            # yaw window for the strongest PHYSICAL (scale>0) correlation; refuse if none.
+            a, yaw_used = anchor_best_yaw(row, profile, base_yaw_rad=ex.yaw_rad, focal_px=FOCAL,
+                                          principal_x=PX, search_deg=55.0, step_deg=2.0,
+                                          min_inliers=15, min_corr=0.4)
             if not a.valid:
-                write_slot({"ts": time.time(), "valid": False, "reason": a.reason, "points": []})
-                log(f"#{n} anchor refused ({a.reason})"); time.sleep(INTERVAL_S); continue
+                # KEEP the last good cloud (don't overwrite) — it goes stale at 20s on its own.
+                log(f"#{n} anchor refused ({a.reason}, corr={a.corr:+.2f}) — keeping last good")
+                time.sleep(INTERVAL_S); continue
 
             pts = depth_to_points(pred.tolist(), rgb.tolist(), a, focal_px=FOCAL, principal_x=PX,
-                                  principal_y=PY, camera_height_m=cam_h, yaw_rad=ex.yaw_rad,
+                                  principal_y=PY, camera_height_m=cam_h, yaw_rad=yaw_used,
                                   stride=STRIDE, max_points=MAX_POINTS)
             write_slot({
                 "ts": time.time(), "valid": True, "points": pts, "n": len(pts),
                 "scale": round(a.scale, 6), "shift": round(a.shift, 6),
-                "inliers": a.inlier_count, "rms": round(a.rms, 5),
+                "inliers": a.inlier_count, "rms": round(a.rms, 5), "corr": round(a.corr, 3),
+                "yaw_used_deg": round(math.degrees(yaw_used), 1),
                 "frame_wh": [w, h], "stride": STRIDE,
                 "authority": "spatial_telemetry_only", "writes_beliefs": False,
                 "provenance": "camera_depth_GUESS · scale_lidar_MEASURED",
             })
             n += 1
-            log(f"#{n} cloud {len(pts)}pts scale={a.scale:.4f} inliers={a.inlier_count} "
-                f"rms={a.rms:.4f} ({time.time()-t0:.2f}s)")
-        except Exception as e:        # never die — the dashboard just shows no cloud
-            log(f"loop error: {type(e).__name__}: {e}")
-            try:
-                write_slot({"ts": time.time(), "valid": False, "reason": "service_error", "points": []})
-            except Exception:
-                pass
+            log(f"#{n} cloud {len(pts)}pts scale={a.scale:.4f} corr={a.corr:+.2f} "
+                f"yaw={math.degrees(yaw_used):+.0f}° inliers={a.inlier_count} ({time.time()-t0:.2f}s)")
+        except Exception as e:        # never die — keep the last good cloud; it goes stale at 20s
+            log(f"loop error: {type(e).__name__}: {e} — keeping last good")
         dt = time.time() - t0
         if dt < INTERVAL_S:
             time.sleep(INTERVAL_S - dt)

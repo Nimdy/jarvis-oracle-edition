@@ -583,6 +583,7 @@ def _build_dense_points(ctx: "SnapshotContext") -> dict[str, Any]:
         return {
             "available": True, "points": d.get("points", []), "n": d.get("n", 0),
             "scale": d.get("scale"), "inliers": d.get("inliers"), "rms": d.get("rms"),
+            "corr": d.get("corr"), "yaw_used_deg": d.get("yaw_used_deg"),
             "age_s": round(age, 1), "provenance": d.get("provenance"),
             "authority": "spatial_telemetry_only", "writes_beliefs": False,
         }

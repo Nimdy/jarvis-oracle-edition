@@ -31,19 +31,25 @@ TWO_PI = 2.0 * math.pi
 @dataclass(frozen=True)
 class AnchorResult:
     """The affine (scale, shift) mapping disparity → inverse-metric-depth, plus the
-    evidence that earned it. ``valid=False`` ⇒ the solve was refused (don't use it)."""
+    evidence that earned it. ``valid=False`` ⇒ the solve was refused (don't use it).
+
+    A valid anchor MUST be physical (scale > 0: more disparity = closer = larger inverse
+    depth) and well-correlated (|corr| ≥ min_corr) — otherwise the depth and the lidar
+    aren't really agreeing and any cloud built from it is visually-aligned-not-measured.
+    """
     scale: float
     shift: float
     inlier_count: int
     valid: bool
     rms: float                      # rms residual in inverse-depth units (lower = tighter)
     reason: str                     # why it's invalid, when it is
+    corr: float = 0.0               # Pearson corr disp↔inverse-metric (the anchor's honesty)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "scale": round(self.scale, 6), "shift": round(self.shift, 6),
             "inlier_count": self.inlier_count, "valid": self.valid,
-            "rms": round(self.rms, 5), "reason": self.reason,
+            "rms": round(self.rms, 5), "corr": round(self.corr, 3), "reason": self.reason,
             "authority": "spatial_telemetry_only", "writes_beliefs": False,
         }
 
@@ -78,11 +84,13 @@ def anchor_depth_affine(disparity_row: Sequence[Optional[float]],
                         lidar_profile: Sequence[Optional[float]], *,
                         yaw_rad: float, focal_px: float, principal_x: float,
                         min_inliers: int = 20, mad_k: float = 3.0,
-                        min_disp_spread: float = 1e-3) -> AnchorResult:
+                        min_disp_spread: float = 1e-3, min_corr: float = 0.4) -> AnchorResult:
     """Solve the affine (scale, shift) so ``scale·disp + shift ≈ 1/Z_metric`` along the
     lidar scan row — the row's pixels paired with the lidar's measured range at the same
-    bearing. Robust (one MAD-filtered re-solve), and it REFUSES rather than fabricate when
-    the evidence is thin (too few lidar-backed pixels, or no disparity spread).
+    bearing. Robust (one MAD-filtered re-solve). REFUSES rather than fabricate when the
+    evidence is thin (few lidar pixels / no spread), NON-PHYSICAL (scale ≤ 0), or the depth
+    and lidar just don't agree (|corr| < min_corr) — the last two are how a single-yaw
+    co-located assumption fails and the cloud goes visually-aligned-not-measured.
     """
     n = len(lidar_profile)
     if n == 0:
@@ -126,7 +134,45 @@ def anchor_depth_affine(disparity_row: Sequence[Optional[float]],
             inv_metric = [y for _, y in keep]
 
     rms = math.sqrt(sum((s * d + t - y) ** 2 for d, y in zip(disp, inv_metric)) / len(disp))
-    return AnchorResult(s, t, len(disp), True, rms, "ok")
+    # Pearson correlation over the final inliers — the anchor's honesty score
+    n2 = len(disp)
+    mx = sum(disp) / n2
+    my = sum(inv_metric) / n2
+    sxx = sum((d - mx) ** 2 for d in disp)
+    syy = sum((y - my) ** 2 for y in inv_metric)
+    sxy = sum((d - mx) * (y - my) for d, y in zip(disp, inv_metric))
+    corr = sxy / math.sqrt(sxx * syy) if sxx > 0 and syy > 0 else 0.0
+    if s <= 0.0:                                  # non-physical: more disparity must be CLOSER
+        return AnchorResult(s, t, n2, False, rms, "non_physical_scale", corr)
+    if abs(corr) < min_corr:                      # depth & lidar don't really agree → refuse
+        return AnchorResult(s, t, n2, False, rms, "weak_correlation", corr)
+    return AnchorResult(s, t, n2, True, rms, "ok", corr)
+
+
+def anchor_best_yaw(disparity_row: Sequence[Optional[float]],
+                    lidar_profile: Sequence[Optional[float]], *,
+                    base_yaw_rad: float, focal_px: float, principal_x: float,
+                    search_deg: float = 30.0, step_deg: float = 2.0,
+                    min_inliers: int = 20, min_corr: float = 0.4) -> tuple[AnchorResult, float]:
+    """A single yaw can't capture the camera↔lidar mismatch, so search a bounded yaw window
+    and keep the PHYSICAL (scale > 0) fit with the strongest correlation. Returns
+    (best AnchorResult, chosen yaw). If nothing is physical, returns the base-yaw result so
+    the caller still sees an honest (invalid) verdict. Interim until a full extrinsic calib.
+    """
+    best: Optional[AnchorResult] = None
+    best_yaw = base_yaw_rad
+    steps = max(0, int(search_deg / step_deg))
+    for k in range(-steps, steps + 1):
+        yaw = base_yaw_rad + math.radians(k * step_deg)
+        a = anchor_depth_affine(disparity_row, lidar_profile, yaw_rad=yaw, focal_px=focal_px,
+                                principal_x=principal_x, min_inliers=min_inliers, min_corr=min_corr)
+        if a.scale > 0.0 and (best is None or a.corr > best.corr):
+            best, best_yaw = a, yaw
+    if best is None:
+        return anchor_depth_affine(disparity_row, lidar_profile, yaw_rad=base_yaw_rad,
+                                   focal_px=focal_px, principal_x=principal_x,
+                                   min_inliers=min_inliers, min_corr=min_corr), base_yaw_rad
+    return best, best_yaw
 
 
 def depth_to_points(disparity_map: Sequence[Sequence[Optional[float]]],
