@@ -3,8 +3,9 @@
 The S2 ``RoomModel`` geometry is in the **lidar_sensor frame**: a single horizontal
 slice where X = right (range·sin bearing), Z = forward (range·cos), sampled at the
 sensor's mount height. Camera entities + spatial anchors live in the **room frame**
-(right-handed: X = right, Y = up, Z = forward). To ever attach a camera label to a
-lidar wall, both must be expressed in the SAME frame. This module is that rigid
+(X = right, Y = up, Z = forward — a LEFT-handed / Unity-style frame, NOT OpenGL
+right-handed; a camera-fusion frame must match this, not assume Z = backward). To ever
+attach a camera label to a lidar wall, both must be expressed in the SAME frame. This module is that rigid
 transform — and nothing more.
 
 INERT BY DEFAULT. The identity extrinsic (all zeros) is a pass-through: room frame
@@ -87,14 +88,16 @@ class LidarExtrinsic:
         return out
 
     def transform_room(self, room: dict[str, Any]) -> dict[str, Any]:
-        """Express a ``RoomModel.to_dict()`` in the room frame (telemetry-only view).
+        """Add room-frame geometry to a ``RoomModel.to_dict()`` (telemetry-only view).
 
-        Additive + pure: original lidar-frame fields are preserved; room-frame
-        geometry is added alongside. Authority stays telemetry-only — a frame
-        change is never a belief.
+        Additive + pure. CRUCIAL: ``frame`` is left UNCHANGED — only the explicit
+        ``*_room_m`` fields are room-frame; ``points_m``/``profile``/``openings`` bearings/
+        ``nearest_per_sector_m``/walls' ``start_m``/``end_m`` all remain LIDAR-frame. A
+        consumer must read the room-frame fields explicitly; keying on ``frame`` to decide
+        the geometry's frame would rotate-corrupt the un-transformed fields by yaw.
         """
         out = dict(room)
-        out["frame"] = "room"
+        out["room_frame_available"] = True            # NOT 'frame' — the dict stays mixed-frame
         out["extrinsic"] = {
             "yaw_rad": round(self.yaw_rad, 5),
             "translation_m": [round(self.tx_m, 3), round(self.ty_m, 3), round(self.tz_m, 3)],
@@ -126,6 +129,8 @@ def load_extrinsic() -> LidarExtrinsic:
     try:
         with open(_EXTRINSIC_FILE) as f:
             c = json.load(f)
+        if not isinstance(c, dict):
+            return LidarExtrinsic()       # malformed (e.g. a JSON list) → identity, never crash
         return LidarExtrinsic(
             yaw_rad=float(c.get("yaw_rad", 0.0)),
             tx_m=float(c.get("tx_m", 0.0)),

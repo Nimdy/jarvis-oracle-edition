@@ -24,6 +24,24 @@ def _isolate_counterfactual_state(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_lidar_extrinsic(tmp_path, monkeypatch):
+    """Keep load_extrinsic() from reading the live rig's ~/.jarvis/lidar_extrinsic.json.
+
+    On a CALIBRATED machine (David's brain ships ty_m=1.092) the 'no mount → identity'
+    tests would otherwise fail because the per-instance config is present. Point the
+    module constant at a non-existent tmp path so tests see the product default.
+    """
+    try:
+        import cognition.lidar_calibration as lc
+        monkeypatch.setattr(lc, "_EXTRINSIC_FILE", str(tmp_path / "no_lidar_extrinsic.json"), raising=False)
+        for k in ("JARVIS_LIDAR_YAW_RAD", "JARVIS_LIDAR_TX_M", "JARVIS_LIDAR_MOUNT_HEIGHT_M", "JARVIS_LIDAR_TZ_M"):
+            monkeypatch.delenv(k, raising=False)
+    except Exception:
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _isolate_belief_store(tmp_path, monkeypatch):
     """Keep test-created beliefs/edges OUT of the live ~/.jarvis (GitHub #50).
 

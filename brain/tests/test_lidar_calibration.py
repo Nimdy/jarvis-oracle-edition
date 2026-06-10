@@ -65,7 +65,8 @@ def test_transform_room_is_additive_and_telemetry_only():
     # room-frame geometry added at mount height
     assert out["walls"][0]["start_room_m"] == [0.0, 1.5, 1.0]
     assert out["points_room_m"][0] == [0.0, 1.5, 1.0]
-    assert out["frame"] == "room"
+    # frame is NOT relabeled — the dict stays mixed-frame; only *_room_m are room-frame
+    assert out["frame"] == "lidar_sensor" and out["room_frame_available"] is True
     assert out["extrinsic"]["is_identity"] is False
     # a frame change is NEVER a belief
     assert out["authority"] == "spatial_telemetry_only"
@@ -117,3 +118,10 @@ def test_load_extrinsic_missing_file_is_identity(tmp_path, monkeypatch):
     for k in ("JARVIS_LIDAR_YAW_RAD", "JARVIS_LIDAR_TX_M", "JARVIS_LIDAR_MOUNT_HEIGHT_M", "JARVIS_LIDAR_TZ_M"):
         monkeypatch.delenv(k, raising=False)
     assert lc.load_extrinsic().is_identity     # product default: no mount => no-op
+
+
+def test_load_extrinsic_non_dict_json_is_identity(tmp_path, monkeypatch):
+    from cognition import lidar_calibration as lc
+    cfg = tmp_path / "bad.json"; cfg.write_text("[1, 2, 3]")   # valid JSON, wrong shape
+    monkeypatch.setattr(lc, "_EXTRINSIC_FILE", str(cfg))
+    assert lc.load_extrinsic().is_identity                      # malformed -> identity, no crash

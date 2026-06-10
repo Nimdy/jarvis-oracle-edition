@@ -16,6 +16,7 @@ import pytest
 from cognition.lidar_room import (
     LidarScan, LidarRoomConfig, LidarRoomModel, build_room_model,
     REASON_INSUFFICIENT_COVERAGE, polar_to_cartesian,
+    PolarBin, fit_walls, detect_openings,
 )
 
 _FIX = os.path.join(os.path.dirname(__file__), "fixtures", "lidar_scan_14rev.json")
@@ -232,3 +233,74 @@ def test_far_ghost_does_not_inflate_room():
     w, d = rm.dimensions_m
     assert w < 6.0 and d < 6.0                          # ~4 m box, never ~18 m from the ghost
     assert m.filter_stats()["cum_dropped_max_range"] == 14
+
+
+# ---- seam-correctness regression (bugs found pre-PR4 by the verification sweep) ----
+def _pb(i, n, r, occ):
+    bin_w = 2 * math.pi / n
+    return PolarBin(index=i, bearing_center_rad=(i + 0.5) * bin_w,
+                    r_stable_m=r, mad_m=0.0,
+                    sample_count=(14 if r is not None else 0),
+                    valid_fraction=(1.0 if r is not None else 0.0), occupancy=occ)
+
+
+def test_wall_crossing_bearing_zero_is_one_segment():
+    """A flat wall straddling bearing 0 must be ONE wall, not split at the seam."""
+    n = 360
+    bins = []
+    for i in range(n):
+        d = min(i, n - i)                      # angular distance (bins) from bearing 0
+        if d <= 10:                            # flat wall z=2 in front, crossing 0
+            bearing = (i + 0.5) * (2 * math.pi / n)
+            ang = bearing if bearing < math.pi else bearing - 2 * math.pi
+            bins.append(_pb(i, n, 2.0 / max(0.2, math.cos(ang)), "occupied"))
+        else:
+            bins.append(_pb(i, n, None, "free"))
+    walls = fit_walls(bins, LidarRoomConfig())
+    assert len(walls) == 1                     # was 2 before the seam-rotation fix
+
+
+def test_opening_crossing_bearing_zero_is_centred_near_zero():
+    """A doorway dead-ahead (crossing bearing 0) reports its centre near 0, not 180°."""
+    n = 360
+    bins = [_pb(i, n, (None if min(i, n - i) <= 6 else 3.0),
+                ("free" if min(i, n - i) <= 6 else "occupied")) for i in range(n)]
+    ops = detect_openings(bins, LidarRoomConfig())
+    assert len(ops) == 1
+    c = ops[0].center_bearing_rad
+    assert min(c, 2 * math.pi - c) < math.radians(15)   # near 0, not ~pi (was 180°)
+
+
+def test_valid_fraction_does_not_decay_over_time():
+    """valid_fraction is window-relative — it must stay ~1.0, not erode toward 0."""
+    m = LidarRoomModel()
+    pts = tuple((math.radians(i + 0.5), 2.0) for i in range(360))
+    for _ in range(200):
+        m.ingest(LidarScan(timestamp=1.0, points=pts, range_max_m=12.0))
+    rm = m.room_model()
+    vfs = [vf for (sc, vf, _mad) in rm.bin_quality if sc > 0]
+    assert vfs and min(vfs) > 0.9              # was ~0.07 (14/200) before the fix
+
+
+def test_room_model_timestamp_reflects_last_scan():
+    m = LidarRoomModel()
+    pts = tuple((math.radians(i + 0.5), 2.0) for i in range(360))
+    m.ingest(LidarScan(timestamp=1234.5, points=pts, range_max_m=12.0))
+    assert m.room_model().timestamp == 1234.5  # was always 0.0
+
+
+def test_farthest_in_cap_return_not_self_gated():
+    """A real return inside the 8 m cap must NOT be dropped because the Pi's rounded
+    per-window observed max happened to equal it."""
+    m = LidarRoomModel()
+    pts = ((math.radians(0.5), 7.123), (math.radians(90.5), 2.0),
+           (math.radians(180.5), 2.0), (math.radians(270.5), 2.0))
+    m.ingest(LidarScan(timestamp=1.0, points=pts, range_max_m=7.12))   # rounded observed max
+    fs = m.filter_stats()
+    assert fs["dropped_max_range"] == 0 and fs["points_after_filter"] == 4
+    assert fs["effective_max_m"] == 8.0        # the config cap, not the observed max
+
+
+def test_from_dict_tolerates_none_range():
+    s = LidarScan.from_dict({"timestamp": 1.0, "points": [[0.1, 2.0], [0.2, None], [0.3, 1.5]]})
+    assert len(s.points) == 2                  # the None dropout is skipped, not a crash
