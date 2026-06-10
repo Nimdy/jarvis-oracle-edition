@@ -1098,6 +1098,7 @@ def _create_app() -> FastAPI:
             "lidar_room": _cache.get("lidar_room", {}),
             "fused_objects": _cache.get("fused_objects", {}),
             "fusion_calibration": _cache.get("fusion_calibration", {}),
+            "dense_points": _cache.get("dense_points", {}),
             "link": _cache.get("link", {}),
             "devices": derive_pi5_devices(_cache),
         }

@@ -562,6 +562,34 @@ def _build_fused_objects(ctx: "SnapshotContext") -> dict[str, Any]:
         return {}
 
 
+def _build_dense_points(ctx: "SnapshotContext") -> dict[str, Any]:
+    """Tier-3 dense-3D cloud, produced by the depth SIDECAR (tools/tier3_depth_service.py)
+    and read from its slot file. Fresh + valid only — stale or refused ⇒ empty (no fake
+    geometry). Telemetry-only; the camera depth is a GUESS, the scale is lidar-MEASURED."""
+    try:
+        import json as _json
+        import os as _os
+        import time as _time
+        slot = _os.path.expanduser("~/.jarvis/dense_points.json")
+        if not _os.path.exists(slot):
+            return {}
+        with open(slot) as f:
+            d = _json.load(f)
+        age = _time.time() - float(d.get("ts", 0))
+        if age > 20.0:                      # sidecar dead/stale → show nothing
+            return {"available": False, "reason": "stale", "age_s": round(age, 1)}
+        if not d.get("valid"):
+            return {"available": False, "reason": d.get("reason", "no_anchor"), "age_s": round(age, 1)}
+        return {
+            "available": True, "points": d.get("points", []), "n": d.get("n", 0),
+            "scale": d.get("scale"), "inliers": d.get("inliers"), "rms": d.get("rms"),
+            "age_s": round(age, 1), "provenance": d.get("provenance"),
+            "authority": "spatial_telemetry_only", "writes_beliefs": False,
+        }
+    except Exception:
+        return {}
+
+
 def _build_fusion_calibration(ctx: "SnapshotContext") -> dict[str, Any]:
     """The yaw self-calibrator's current SUGGESTION per sensor (advisory telemetry)."""
     try:
@@ -717,6 +745,7 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         "lidar_room": ctx.perception.get_lidar_room_model() if ctx.perception else {},
         "fused_objects": _build_fused_objects(ctx),     # Tier-2 shadow: camera label + lidar range
         "fusion_calibration": _build_fusion_calibration(ctx),   # yaw self-cal suggestion (advisory)
+        "dense_points": _build_dense_points(ctx),       # Tier-3 shadow: lidar-anchored depth cloud
 
         "link": ctx.perception.get_link_health() if ctx.perception else {},
 
