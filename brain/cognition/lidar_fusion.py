@@ -160,6 +160,19 @@ class YawEstimator:
     def confidence(self) -> dict[str, Any]:
         return {"pairs": len(self._pairs), "ready": self.estimate() is not None}
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Visibility into WHY estimate() is/ isn't ready — the camera-bearing spread and
+        the raw median offset (even when spread is still below the gate)."""
+        if len(self._pairs) < 2:
+            return {"spread_deg": 0.0, "raw_median_deg": None, "need_spread_deg": round(math.degrees(self._min_spread), 1)}
+        room = [r for r, _ in self._pairs]
+        diffs = sorted(self._wrap(r - l) for r, l in self._pairs)
+        return {
+            "spread_deg": round(math.degrees(max(room) - min(room)), 1),
+            "raw_median_deg": round(math.degrees(diffs[len(diffs) // 2]), 1),
+            "need_spread_deg": round(math.degrees(self._min_spread), 1),
+        }
+
 
 class YawCalibrator:
     """Self-calibrate yaw from a MOVING object (a walking person), without needing a
@@ -198,6 +211,7 @@ class YawCalibrator:
             "suggested_yaw_deg": None if sy is None else round(math.degrees(sy), 1),
             "applies_automatically": False,          # advisory — operator/self-improve approves
             **self._est.confidence(),
+            **self._est.diagnostics(),
         }
 
 
