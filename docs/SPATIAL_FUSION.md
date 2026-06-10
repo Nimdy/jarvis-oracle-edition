@@ -82,7 +82,7 @@ structurally cannot write beliefs/memory/policy. `YawEstimator` self-calibrates 
 | 0 | keep the per-point **intensity/reflectivity** channel (currently discarded) | ⬜ |
 | 1 | **people-radar** — track a moving person via lidar change vs an empty-room baseline | ⬜ |
 | **2** | **object ranging** — camera label + lidar metric range, placed on the radar | ✅ live (#72/#73/#74/#75) |
-| 3 | 🚩 **flagship** — Hailo monocular depth (Depth-Anything) **anchored by the lidar 360° ring** → dense, metrically-true, colored 3D room | ⬜ (needs the depth model on Hailo) |
+| 3 | 🚩 **flagship** — monocular depth (Depth-Anything) **anchored by the lidar 360° ring** → dense, metrically-true, colored 3D room | 🟡 **brain-side, in build** (see §8) |
 | 4 | **4D spatial memory** — persistent, labeled, time-aware room JARVIS *remembers* (feeds the scene graph) | 🔒 |
 
 ## 6. What's shipped vs gated
@@ -102,7 +102,33 @@ hardening (seam wall/opening, range self-gate, valid_fraction, frame trap — PR
   camera-only path stays byte-identical.
 - **Tier-3 flagship** — the dense 3D reconstruction.
 
-## 7. Honesty guardrails (non-negotiable)
+## 7. Tier-3 flagship — the brain-side plan (dense colored 3D)
+
+Decided by a 5-agent recon (2026-06-10). The metric TRUTH comes from the lidar anchor, not
+the depth net — so the depth model is the cheap, swappable part and **the anchoring solve is
+the real IP**. The brain is an **RTX 4080 + Ryzen 9 7950X** with torch / onnxruntime-gpu /
+opencv / transformers already present (Depth-Anything-V2-Small ONNX runs ~10–15 FPS there),
+so the loop lives **brain-side**; the Pi stays thin (capture + JPEG only). The Hailo-10H
+(confirmed via `hailortcli`) has a precompiled `depth_anything_v2_vits` HEF — a **deferred,
+optional** on-device latency optimization, *not* the path to first light.
+
+Pipeline: Pi samples RGB keyframes → brain runs Depth-Anything (relative disparity) →
+**`lidar_depth.anchor_depth_affine` rescales it to metric using the lidar scan row** →
+`depth_to_points` lifts to a dense colored cloud (holes kept as holes) → `dense_points` on
+`/api/pi5` → rendered in `spatial-core.html`'s 3D view.
+
+| Phase | What | Status |
+|---|---|---|
+| **0** | `cognition/lidar_depth.py` — the anchoring core (affine scale+shift solve + point lift), refuses to fabricate, holes stay holes; 8 synthetic-depth tests | ✅ shipped (PR #78) |
+| 1 | Pi→brain keyframe transport — opt-in `vision_frame_sample` event (low-cadence, default OFF), brain single-slot receiver + drop telemetry | ⬜ next (the true blocker) |
+| 2 | brain-side Depth-Anything ONNX inference (lazy, off the kernel tick) + anchor against the live lidar; shadow telemetry (scale/inlier stability vs the wall ground-truth) | ⬜ gated on 1 + yaw |
+| 3 | `dense_points` → cache → `spatial-core` 3D render (decimated ≤10k, depth-sorted), honest "depth GUESS · scale lidar-MEASURED" banner | ⬜ gated on 1+2 |
+| 4 | **optional** on-device Hailo-10H depth (precompiled HEF, time-sliced) — re-anchored by the same solve; promote only if it measurably wins | 🔒 gated, optional |
+
+Honest status: **no real dense-3D *render* exists yet** — Phases 1–3 are the path. Phase 0
+(the truth-making math) is real, tested, and shippable today with zero frames/models.
+
+## 8. Honesty guardrails (non-negotiable)
 
 - Labels are **hypotheses** until verified; the overlay says so (`labels are camera GUESSES · ranges
   lidar-MEASURED`). A camera misdetection ("suitcase" = the tower) is shown *as* a hypothesis, not a fact.
