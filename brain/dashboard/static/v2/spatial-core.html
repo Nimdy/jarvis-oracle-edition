@@ -37,6 +37,15 @@
     .instr .hero{margin-top:5px;padding-top:5px;border-top:1px solid var(--line);}
     .instr .hero .k{color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
     .instr .hero .v{font-weight:700;font-size:12px;}
+    /* fused-object list (camera label + lidar range) — keeps labels off the cramped radar */
+    .objpanel{position:absolute;left:20px;top:210px;width:230px;pointer-events:none;
+      font-size:10px;line-height:1.5;border:1px solid var(--line);border-radius:6px;
+      padding:8px 10px;background:rgba(6,11,18,.66);backdrop-filter:blur(2px);}
+    .objpanel:empty{display:none;}
+    .objpanel h4{margin:0 0 5px;font-size:9px;letter-spacing:.13em;color:#ffb000;font-weight:700;}
+    .objpanel .row{display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums;}
+    .objpanel .row .k{color:var(--text);} .objpanel .row .v{color:#ffb000;}
+    .objpanel .note{margin-top:5px;padding-top:5px;border-top:1px solid var(--line);color:var(--dim);font-size:8.5px;}
     .ctl{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;}
     .ctl button{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--muted);
       background:rgba(8,15,23,.7);border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer;}
@@ -77,6 +86,7 @@
       <div class="leg"><span style="display:inline-block;width:8px;height:8px;transform:rotate(45deg);background:#ffb000;vertical-align:middle;margin-right:7px;"></span>object (camera label · lidar range)</div>
     </div>
     <div class="hud instr" id="instr"></div>
+    <div class="objpanel" id="objpanel"></div>
     <div class="hud bl" id="stats"></div>
     <div class="hud br" id="meta"></div>
 
@@ -121,6 +131,35 @@ function spread(key){ if(hist.length < 2) return 0;
   var lo=1e9, hi=-1e9; for(var i=0;i<hist.length;i++){ var v=hist[i][key]; if(v<lo)lo=v; if(v>hi)hi=v; } return hi-lo; }
 
 // S2 instrumentation strip — the validation gate. Every value is telemetry, never a belief.
+// merge duplicate detections of the same label that land within 0.5 m (keep the
+// higher-confidence one) so the radar + panel don't show "mouse" three times.
+function dedupeFused(arr){
+  var out=[];
+  for(var i=0;i<arr.length;i++){
+    var o=arr[i]; if(!o) continue; var dup=false;
+    for(var j=0;j<out.length;j++){
+      var p=out[j];
+      if(p.label===o.label && p.position_lidar_m && o.position_lidar_m){
+        var dx=p.position_lidar_m[0]-o.position_lidar_m[0], dz=p.position_lidar_m[2]-o.position_lidar_m[2];
+        if(Math.hypot(dx,dz)<0.5){ dup=true; if((o.label_confidence||0)>(p.label_confidence||0)) out[j]=o; break; }
+      }
+    }
+    if(!dup) out.push(o);
+  }
+  return out;
+}
+
+function renderObjPanel(){
+  var el=document.getElementById('objpanel'); if(!el) return;
+  var placed=fused.filter(function(o){ return o && o.position_lidar_m; });
+  if(!placed.length){ el.innerHTML=''; return; }
+  el.innerHTML='<h4>OBJECTS · camera + lidar</h4>'+placed.map(function(o,i){
+    return '<div class="row"><span class="k">'+(i+1)+'. '+(o.label||'?')+'</span>'+
+      '<span class="v">'+(o.range_m!=null?o.range_m.toFixed(2)+'m':'—')+
+      ' <span style="color:var(--dim)">'+Math.round((o.label_confidence||0)*100)+'%</span></span></div>';
+  }).join('')+'<div class="note">labels are camera GUESSES · ranges are lidar-MEASURED · telemetry-only</div>';
+}
+
 function renderInstr(r){
   var fs = r.filter_stats || {};
   var dm = r.dimensions_m || [0,0];
@@ -179,7 +218,7 @@ function setData(d){
   var r = keys.length ? lr[keys[0]] : null;
   // Tier-2 fused objects (camera label + lidar range), keyed by sensor
   var fo = (d && d.fused_objects) || {}; var fk = Object.keys(fo);
-  fused = fk.length ? (fo[fk[0]] || []) : [];
+  fused = dedupeFused(fk.length ? (fo[fk[0]] || []) : []);
   document.getElementById('sensor').textContent =
     keys.length ? (keys.length > 1 ? keys[0]+' (+'+(keys.length-1)+')' : keys[0]) : 'no lidar';
   // honest empty / degraded states
@@ -189,6 +228,7 @@ function setData(d){
   if (!ok){
     haveData = false; fused = [];
     document.getElementById('instr').innerHTML = ''; hist = [];   // no stale instrumentation
+    var op0=document.getElementById('objpanel'); if(op0) op0.innerHTML='';
     if (r && r.reason){
       em.innerHTML = '— room model warming up —<br><span style="font-size:10px;color:var(--dim)">'+
         String(r.reason).replace(/_/g,' ')+' · coverage '+Math.round((r.coverage_fraction||0)*100)+'%</span>';
@@ -222,6 +262,7 @@ function setData(d){
     'frame <b>'+(r.frame||'lidar_sensor')+'</b> · bins <b>'+(r.n_bins||0)+'</b><br>'+
     'inscribed r <b>'+(r.inscribed_radius_m||0).toFixed(2)+' m</b> · authority <b>'+(r.authority||'spatial_telemetry_only')+'</b>';
   renderInstr(r);
+  renderObjPanel();
 }
 
 function draw(){
@@ -238,11 +279,16 @@ function renderTopDown(){
   var Wc=cv.width, Hc=cv.height, cx=Wc/2, cy=Hc/2;
   ctx.clearRect(0,0,Wc,Hc);
   if(!haveData || !room){ return; }
-  var pm=room.points_m||[], i, maxr=1.0;
-  for(i=0;i<pm.length;i++) maxr=Math.max(maxr, Math.hypot(pm[i][0],pm[i][1]));
+  var pm=room.points_m||[], i;
+  // robust reach: the 95th-percentile point distance, so a lone far sightline doesn't
+  // shrink the whole room (zooms in to where the geometry actually is). Min 2 m.
+  var dists=[];
+  for(i=0;i<pm.length;i++) dists.push(Math.hypot(pm[i][0],pm[i][1]));
   for(i=0;i<room.walls.length;i++){ var w0=room.walls[i]; if(!w0||!Array.isArray(w0.start_m)||!Array.isArray(w0.end_m)) continue;
-    maxr=Math.max(maxr, Math.hypot(w0.start_m[0],w0.start_m[1]), Math.hypot(w0.end_m[0],w0.end_m[1])); }
-  var scale=(Math.min(Wc,Hc)/2 - 48*DPR)/(maxr*1.08);
+    dists.push(Math.hypot(w0.start_m[0],w0.start_m[1]), Math.hypot(w0.end_m[0],w0.end_m[1])); }
+  dists.sort(function(a,b){return a-b;});
+  var maxr = dists.length ? Math.max(2.0, dists[Math.floor(dists.length*0.95)]) : 3.0;
+  var scale=(Math.min(Wc,Hc)/2 - 48*DPR)/(maxr*1.12);
   function P(x,z){ return [cx + x*scale, cy - z*scale]; }      // +Z up (north), +X right, lidar @ centre
   var reach=maxr*scale;
 
@@ -287,22 +333,20 @@ function renderTopDown(){
   ctx.fillText('W', cx-reach*1.05-17*DPR, cy+5*DPR);
   ctx.fillText('S', cx-5*DPR, cy+reach*1.05+17*DPR);
 
-  // ---- Tier-2 fused objects: camera LABEL on the lidar geometry (amber = "named by
-  //      the camera, ranged by the lidar"; a hypothesis, not a belief) ----
+  // ---- Tier-2 fused objects: NUMBERED amber diamonds on the lidar geometry; the
+  //      readable label list lives in the side panel (#objpanel) to avoid label pile-up.
   var AMB=[255,176,0];
-  for(var oi=0; oi<fused.length; oi++){
-    var f=fused[oi], pl=f && f.position_lidar_m;
-    if(!pl) continue;                                  // camera-only (no lidar range) → not placeable
-    var sp=P(pl[0], pl[2]);
-    ctx.shadowColor=rgba(AMB,0.9); ctx.shadowBlur=8*DPR; ctx.fillStyle=rgba(AMB,0.96);
+  var placed = fused.filter(function(o){ return o && o.position_lidar_m; });
+  ctx.textAlign='left';
+  for(var oi=0; oi<placed.length; oi++){
+    var pl=placed[oi].position_lidar_m, sp=P(pl[0], pl[2]);
+    ctx.shadowColor=rgba(AMB,0.9); ctx.shadowBlur=7*DPR; ctx.fillStyle=rgba(AMB,0.96);
     ctx.beginPath();                                   // diamond marker
     ctx.moveTo(sp[0],sp[1]-5*DPR); ctx.lineTo(sp[0]+5*DPR,sp[1]);
     ctx.lineTo(sp[0],sp[1]+5*DPR); ctx.lineTo(sp[0]-5*DPR,sp[1]); ctx.closePath(); ctx.fill();
     ctx.shadowBlur=0;
-    ctx.fillStyle=rgba(AMB,0.96); ctx.font='bold '+(12*DPR)+'px monospace';
-    ctx.fillText((f.label||'?')+(f.range_m!=null?'  '+f.range_m.toFixed(2)+'m':''), sp[0]+9*DPR, sp[1]-5*DPR);
-    ctx.fillStyle=rgba([120,150,165],1); ctx.font=(9*DPR)+'px monospace';
-    ctx.fillText(Math.round((f.label_confidence||0)*100)+'% · camera', sp[0]+9*DPR, sp[1]+7*DPR);
+    ctx.fillStyle=rgba(AMB,0.98); ctx.font='bold '+(11*DPR)+'px monospace';
+    ctx.fillText(String(oi+1), sp[0]+7*DPR, sp[1]-4*DPR);   // just the index; details in the panel
   }
 }
 
