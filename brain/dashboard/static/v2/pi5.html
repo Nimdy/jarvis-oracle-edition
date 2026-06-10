@@ -92,10 +92,17 @@
     if(!keys.length){ V2.el('lidar').innerHTML='<div style="color:var(--dim);padding:8px;">No LIDAR telemetry yet. (RPLIDAR not publishing — start the Pi reader.)</div>'; return; }
     V2.el('lidar').innerHTML=keys.map(function(sid){
       var L=lid[sid]||{}, sec=L.sectors||{};
-      var cells=['front','front_left','left','right','back','front_right'].filter(function(k){return k in sec;}).map(function(k){
-        var v=sec[k]; var col=(v!==null&&v<1.0)?'#f0a500':(v!==null&&v<0.5?'#f85149':'var(--text)');
-        return '<div class="lsec"><div class="ln">'+k.replace(/_/g,' ')+'</div><div class="lv" style="color:'+col+'">'+(v==null?'—':V2.f2(v)+'m')+'</div></div>';
-      }).join('');
+      // Pi streams 12 numeric sectors (30° each); 0=N(front) 3=E(right) 6=S(back) 9=W(left).
+      var COMPASS=['N','NNE','ENE','E','ESE','SSE','S','SSW','WSW','W','WNW','NNW'];
+      var openS=L.open_sectors||[]; var cells=[];
+      for(var si=0; si<12; si++){
+        var v=(si in sec)?sec[si]:null, isOpen=openS.indexOf(si)>=0;
+        var col=(v==null)?'var(--dim)':(v<0.5?'#f85149':(v<1.0?'#f0a500':'var(--green)'));
+        var disp=(v==null)?(isOpen?'open':'—'):V2.f2(v)+'m';
+        cells.push('<div class="lsec"><div class="ln">'+COMPASS[si]+' <span style="color:var(--dim)">'+(si*30)+'°</span></div>'+
+          '<div class="lv" style="color:'+col+'">'+disp+'</div></div>');
+      }
+      cells=cells.join('');
       var q=L.scan_quality||'unknown';
       return '<div class="sens"><div class="sh"><span class="sn">'+(L.sensor||'lidar')+' <span style="font-size:9px;color:var(--muted)">('+sid+')</span></span>'+
         '<span class="tag2">'+q+' · '+(L.authority||'telemetry')+'</span></div>'+
