@@ -159,3 +159,61 @@ class YawEstimator:
 
     def confidence(self) -> dict[str, Any]:
         return {"pairs": len(self._pairs), "ready": self.estimate() is not None}
+
+
+class YawCalibrator:
+    """Self-calibrate yaw from a MOVING object (a walking person), without needing a
+    pre-known correspondence. Frame-to-frame, the lidar bin whose range CHANGED the most
+    is the moving thing; pair its bearing with the camera's person bearing and feed the
+    estimator. ADVISORY ONLY — it *suggests* a yaw; it never auto-overwrites the config.
+    """
+
+    def __init__(self, min_change_m: float = 0.25) -> None:
+        self._prev: Optional[list[Optional[float]]] = None
+        self._est = YawEstimator()
+        self._min_change = min_change_m
+
+    def update(self, person_camera_bearing_rad: float,
+               profile: Sequence[Optional[float]], bin_w: Optional[float] = None) -> None:
+        n = len(profile)
+        if n == 0:
+            return
+        bw = bin_w or (TWO_PI / n)
+        if self._prev is not None and len(self._prev) == n:
+            # the bin that got CLOSER (a − b > 0) is where the person now IS (the bin they
+            # LEFT got farther — same magnitude but the old position). Track the arrival.
+            best_i, best_d = -1, self._min_change
+            for i in range(n):
+                a, b = self._prev[i], profile[i]
+                if a is not None and b is not None and (a - b) > best_d:
+                    best_d, best_i = a - b, i
+            if best_i >= 0:                          # a real approach → a usable pair
+                self._est.observe(person_camera_bearing_rad, (best_i + 0.5) * bw)
+        self._prev = list(profile)
+
+    def state(self) -> dict[str, Any]:
+        sy = self._est.estimate()
+        return {
+            "suggested_yaw_rad": None if sy is None else round(sy, 5),
+            "suggested_yaw_deg": None if sy is None else round(math.degrees(sy), 1),
+            "applies_automatically": False,          # advisory — operator/self-improve approves
+            **self._est.confidence(),
+        }
+
+
+# per-sensor calibrators (mutable module state — pure logic, writes no belief/memory/policy)
+_calibrators: dict[str, YawCalibrator] = {}
+
+
+def feed_calibration(sensor_id: str, person_camera_bearing_rad: float,
+                     profile: Sequence[Optional[float]], bin_w: Optional[float] = None) -> None:
+    cal = _calibrators.get(sensor_id)
+    if cal is None:
+        cal = _calibrators[sensor_id] = YawCalibrator()
+    cal.update(person_camera_bearing_rad, profile, bin_w)
+
+
+def calibration_state(sensor_id: str) -> dict[str, Any]:
+    cal = _calibrators.get(sensor_id)
+    return cal.state() if cal else {"suggested_yaw_rad": None, "pairs": 0, "ready": False,
+                                     "applies_automatically": False}

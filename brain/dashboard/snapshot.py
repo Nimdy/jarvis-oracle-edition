@@ -537,6 +537,7 @@ def _build_fused_objects(ctx: "SnapshotContext") -> dict[str, Any]:
         intr = getattr(getattr(ctx.perc_orch, "_calibration_manager", None), "intrinsics", None)
         focal = float(getattr(intr, "focal_length_px", 800.0))
         px = float(getattr(intr, "principal_x", 960.0))
+        from cognition.lidar_fusion import feed_calibration
         out: dict[str, Any] = {}
         for sid, room in rooms.items():
             prof = room.get("profile") or []
@@ -544,8 +545,26 @@ def _build_fused_objects(ctx: "SnapshotContext") -> dict[str, Any]:
                 continue
             fused = fuse(cam, prof, yaw_rad=ex.yaw_rad, focal_px=focal,
                          principal_x=px, mount_height_m=ex.ty_m)
+            # yaw self-calibration: a detected person + a moving lidar return refine the
+            # yaw (advisory — it suggests, never auto-applies). Accumulates across snapshots.
+            for f in fused:
+                if f.label == "person":
+                    feed_calibration(sid, f.bearing_rad, prof)
+                    break
             out[sid] = [f.to_dict() for f in fused]
         return out
+    except Exception:
+        return {}
+
+
+def _build_fusion_calibration(ctx: "SnapshotContext") -> dict[str, Any]:
+    """The yaw self-calibrator's current SUGGESTION per sensor (advisory telemetry)."""
+    try:
+        if not ctx.perception:
+            return {}
+        from cognition.lidar_fusion import calibration_state
+        rooms = ctx.perception.get_lidar_room_model()
+        return {sid: calibration_state(sid) for sid in rooms} if rooms else {}
     except Exception:
         return {}
 
@@ -692,6 +711,7 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         "lidar": ctx.perception.get_lidar_telemetry() if ctx.perception else {},
         "lidar_room": ctx.perception.get_lidar_room_model() if ctx.perception else {},
         "fused_objects": _build_fused_objects(ctx),     # Tier-2 shadow: camera label + lidar range
+        "fusion_calibration": _build_fusion_calibration(ctx),   # yaw self-cal suggestion (advisory)
 
         "link": ctx.perception.get_link_health() if ctx.perception else {},
 

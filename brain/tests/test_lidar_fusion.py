@@ -112,3 +112,27 @@ def test_no_forbidden_imports():
     is_clean = result[0] if isinstance(result, tuple) else (
         result.get("is_clean", result.get("clean", True)) if isinstance(result, dict) else bool(result))
     assert is_clean
+
+
+def test_yaw_calibrator_suggests_yaw_from_moving_person():
+    from cognition.lidar_fusion import YawCalibrator
+    cal = YawCalibrator(min_change_m=0.2)
+    true_yaw = math.radians(10); n=360; bw=TWO_PI/n
+    # person walks: camera bearing sweeps; the lidar return is at (room − yaw), getting closer
+    for deg in range(-28, 29, 4):
+        rb = math.radians(deg)
+        pbin = int(((rb - true_yaw) % TWO_PI)/bw) % n
+        prof = [3.0]*n; prof[pbin] = 1.0                     # person bin is close (was 3.0 → got closer)
+        cal.update(rb, prof, bw)
+    st = cal.state()
+    assert st["suggested_yaw_rad"] is not None
+    assert abs(st["suggested_yaw_rad"] - true_yaw) < math.radians(1.0)
+    assert st["applies_automatically"] is False              # advisory, never auto-applied
+
+
+def test_yaw_calibrator_idle_suggests_nothing():
+    from cognition.lidar_fusion import YawCalibrator
+    cal = YawCalibrator()
+    for _ in range(20):
+        cal.update(0.0, [3.0]*360)                           # static scene, no motion
+    assert cal.state()["suggested_yaw_rad"] is None          # nothing to learn → honest None
