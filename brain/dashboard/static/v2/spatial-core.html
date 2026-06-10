@@ -12,6 +12,8 @@
       background:radial-gradient(ellipse at 50% 62%, #071018 0%, #03040a 70%);}
     #stage{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;}
     #stage.drag{cursor:grabbing;}
+    .vig{position:absolute;inset:0;pointer-events:none;
+      background:radial-gradient(ellipse at 50% 44%, rgba(2,4,8,0) 38%, rgba(2,4,8,.62) 100%);}
     .hud{position:absolute;pointer-events:none;font-variant-numeric:tabular-nums;}
     .hud.tl{top:16px;left:20px;}
     .hud.tl .t{font-size:22px;font-weight:700;letter-spacing:.14em;color:var(--text);}
@@ -50,6 +52,7 @@
 
   <div id="stagewrap">
     <canvas id="stage"></canvas>
+    <div class="vig"></div>
     <div class="corner a"></div><div class="corner b"></div><div class="corner c"></div><div class="corner d"></div>
 
     <div class="hud tl">
@@ -89,6 +92,8 @@ var ctx = cv.getContext('2d');
 var room = null, haveData = false;
 var theta = 0.84, elev = 1.0, autoRot = true, dragging = false, lastX = 0, lastY = 0;
 var DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+var bloomCv = document.createElement('canvas');           // offscreen for the bloom pass
+var bloomCtx = bloomCv.getContext('2d');
 
 // derived per data update
 var midx = 0, midz = 0, extent = 3;
@@ -102,6 +107,7 @@ function rgba(c,a){return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';}
 function resize(){
   var w = cv.clientWidth, h = cv.clientHeight;
   cv.width = Math.round(w*DPR); cv.height = Math.round(h*DPR);
+  bloomCv.width = cv.width; bloomCv.height = cv.height;
 }
 window.addEventListener('resize', resize);
 
@@ -159,86 +165,125 @@ function draw(){
 }
 
 function renderFrame(){
-  var Wc=cv.width, Hc=cv.height, cx=Wc/2, cy=Hc/2;
+  var Wc=cv.width, Hc=cv.height;
   ctx.clearRect(0,0,Wc,Hc);
   if(!haveData || !room){ return; }
 
-  var fov = 46*Math.PI/180, focal = (Hc/2)/Math.tan(fov/2);
-  var R = extent*1.85 + 2.2;
-  var cam = [midx + R*Math.sin(theta), WALL_H*1.55*elev, midz + R*Math.cos(theta)];
-  var target = [midx, WALL_H*0.32, midz];
+  var fov = 48*Math.PI/180, focal = (Hc/2)/Math.tan(fov/2);
+  var R = extent*1.7 + 2.0;
+  var cam = [midx + R*Math.sin(theta), WALL_H*1.9*elev, midz + R*Math.cos(theta)];
+  var target = [midx, WALL_H*0.28, midz];
   var f = vnorm(vsub(target,cam));
   var rt = vnorm(vcross(f,[0,1,0]));
   var up = vcross(rt,f);
-  function proj(p){
-    var rel=vsub(p,cam), xc=vdot(rel,rt), yc=vdot(rel,up), zc=vdot(rel,f);
-    if(zc<=0.05) return null;
-    return [cx + (xc/zc)*focal, cy - (yc/zc)*focal, zc];
-  }
+  function rawp(p){ var rel=vsub(p,cam), xc=vdot(rel,rt), yc=vdot(rel,up), zc=vdot(rel,f);
+    if(zc<=0.05) return null; return [xc/zc*focal, yc/zc*focal, zc]; }
 
-  // offscreen-free bloom: draw bright scene with additive 'lighter' + shadowBlur
+  // ---- auto-fit: project the geometry, then scale+centre so it fills the frame
+  //      on ANY aspect/screen (kills the dead-space) ----
+  var probe=[], i, w, s, e, r, pm=room.points_m||[];
+  for(i=0;i<room.walls.length;i++){ w=room.walls[i]; if(!w||!Array.isArray(w.start_m)||!Array.isArray(w.end_m)) continue;
+    s=w.start_m; e=w.end_m;
+    var vv=[[s[0],0,s[1]],[e[0],0,e[1]],[s[0],WALL_H,s[1]],[e[0],WALL_H,e[1]]];
+    for(var j=0;j<4;j++){ r=rawp(vv[j]); if(r) probe.push(r); } }
+  for(i=0;i<pm.length;i++){ r=rawp([pm[i][0],0,pm[i][1]]); if(r) probe.push(r); }
+  if(!probe.length) return;
+  var rxn=1e9,rxx=-1e9,ryn=1e9,ryx=-1e9;
+  for(i=0;i<probe.length;i++){ var pr=probe[i];
+    if(pr[0]<rxn)rxn=pr[0]; if(pr[0]>rxx)rxx=pr[0]; if(pr[1]<ryn)ryn=pr[1]; if(pr[1]>ryx)ryx=pr[1]; }
+  var bcx=(rxn+rxx)/2, bcy=(ryn+ryx)/2, bw=Math.max(rxx-rxn,1e-3), bh=Math.max(ryx-ryn,1e-3);
+  var fit=Math.min(0.82*Wc/bw, 0.72*Hc/bh);
+  function proj(p){ var q=rawp(p); if(!q) return null; return [Wc/2+(q[0]-bcx)*fit, Hc/2+(q[1]-bcy)*fit, q[2]]; }
+
   ctx.lineCap='round'; ctx.lineJoin='round';
-
-  // floor grid
   ctx.globalCompositeOperation='source-over';
-  var g0x=midx-extent*0.6-0.4, g1x=midx+extent*0.6+0.4, g0z=midz-extent*0.6-0.4, g1z=midz+extent*0.6+0.4;
-  var step=0.5, k;
-  ctx.lineWidth=1*DPR; ctx.strokeStyle=rgba(COL.grid,0.22);
-  for(k=g0x;k<=g1x+1e-6;k+=step){ line3(proj([k,0,g0z]),proj([k,0,g1z])); }
-  for(k=g0z;k<=g1z+1e-6;k+=step){ line3(proj([g0x,0,k]),proj([g1x,0,k])); }
-  // range rings (on lidar origin)
-  ctx.strokeStyle=rgba(COL.cyan,0.24);
+
+  // ---- floor grid (distance-faded) ----
+  var g0x=midx-extent*0.62-0.4, g1x=midx+extent*0.62+0.4, g0z=midz-extent*0.62-0.4, g1z=midz+extent*0.62+0.4, step=0.5, k;
+  ctx.lineWidth=1*DPR;
+  for(k=g0x;k<=g1x+1e-6;k+=step) gridline([k,0,g0z],[k,0,g1z]);
+  for(k=g0z;k<=g1z+1e-6;k+=step) gridline([g0x,0,k],[g1x,0,k]);
+  // range rings
+  ctx.strokeStyle=rgba(COL.cyan,0.16);
   for(var rad=1; rad<=Math.ceil(extent); rad++){
-    ctx.beginPath(); var started=false;
+    ctx.beginPath(); var st=false;
     for(var a=0;a<=360;a+=6){ var pp=proj([rad*Math.sin(a*Math.PI/180),0,rad*Math.cos(a*Math.PI/180)]);
-      if(!pp){started=false;continue;} if(!started){ctx.moveTo(pp[0],pp[1]);started=true;} else ctx.lineTo(pp[0],pp[1]); }
+      if(!pp){st=false;continue;} if(!st){ctx.moveTo(pp[0],pp[1]);st=true;} else ctx.lineTo(pp[0],pp[1]); }
     ctx.stroke();
   }
 
-  // walls — depth sorted far->near, bloom via shadowBlur + additive edges
+  // ---- ground glow under the lidar core ----
+  var o0=proj([0,0.02,0]);
+  if(o0){ ctx.globalCompositeOperation='lighter';
+    var gg=ctx.createRadialGradient(o0[0],o0[1],0,o0[0],o0[1],0.22*Math.min(Wc,Hc));
+    gg.addColorStop(0,rgba(COL.cyan,0.26)); gg.addColorStop(0.45,rgba(COL.cyan,0.08)); gg.addColorStop(1,rgba(COL.cyan,0));
+    ctx.fillStyle=gg; ctx.fillRect(0,0,Wc,Hc); }
+
+  // ---- glowing floor FOOTPRINT (the real room outline, ties the fragments into a room) ----
+  var fp=[]; for(i=0;i<pm.length;i++){ var fq=proj([pm[i][0],0,pm[i][1]]); if(fq) fp.push(fq); }
+  if(fp.length>2){ ctx.globalCompositeOperation='lighter';
+    ctx.beginPath(); ctx.moveTo(fp[0][0],fp[0][1]); for(i=1;i<fp.length;i++) ctx.lineTo(fp[i][0],fp[i][1]); ctx.closePath();
+    ctx.fillStyle=rgba(COL.cyan,0.07); ctx.fill();
+    ctx.strokeStyle=rgba(COL.cyan,0.5); ctx.lineWidth=2*DPR; ctx.stroke(); }
+
+  // ---- walls (depth sorted far->near): reflection + vertical gradient + glowing edges ----
   var quads=[];
-  for(var i=0;i<room.walls.length;i++){
-    var w=room.walls[i]; if(!w||!Array.isArray(w.start_m)||!Array.isArray(w.end_m)) continue;
-    var s=w.start_m, e=w.end_m, conf=w.confidence||0.5;
-    var col = conf>=0.85?COL.hi:COL.lo;
-    var v=[[s[0],0,s[1]],[e[0],0,e[1]],[e[0],WALL_H,e[1]],[s[0],WALL_H,s[1]]];
+  for(i=0;i<room.walls.length;i++){ w=room.walls[i]; if(!w||!Array.isArray(w.start_m)||!Array.isArray(w.end_m)) continue;
+    s=w.start_m; e=w.end_m; var cf=w.confidence||0.5;
     var cen=[(s[0]+e[0])/2,WALL_H/2,(s[1]+e[1])/2];
-    quads.push([Math.hypot(cen[0]-cam[0],cen[1]-cam[1],cen[2]-cam[2]), v, col, conf]);
-  }
+    quads.push([Math.hypot(cen[0]-cam[0],cen[1]-cam[1],cen[2]-cam[2]), s, e, (cf>=0.85?COL.hi:COL.lo), cf]); }
   quads.sort(function(a,b){return b[0]-a[0];});
-  for(var q=0;q<quads.length;q++){
-    var V=quads[q][1], col=quads[q][2], conf=quads[q][3];
-    var P=[proj(V[0]),proj(V[1]),proj(V[2]),proj(V[3])];
-    if(P[0]==null||P[1]==null||P[2]==null||P[3]==null) continue;
-    // translucent face
+  for(var qi=0; qi<quads.length; qi++){
+    var Q=quads[qi]; s=Q[1]; e=Q[2]; var col=Q[3], conf=Q[4];
+    var b0=proj([s[0],0,s[1]]), b1=proj([e[0],0,e[1]]),
+        t0=proj([s[0],WALL_H,s[1]]), t1=proj([e[0],WALL_H,e[1]]),
+        rf0=proj([s[0],-WALL_H,s[1]]), rf1=proj([e[0],-WALL_H,e[1]]);
+    if(!b0||!b1||!t0||!t1) continue;
+    // floor reflection (faded toward the mirror image below)
+    if(rf0&&rf1){ ctx.globalCompositeOperation='lighter';
+      var rg=ctx.createLinearGradient(b0[0],b0[1],rf0[0],rf0[1]);
+      rg.addColorStop(0,rgba(col,0.20*conf)); rg.addColorStop(1,rgba(col,0));
+      ctx.fillStyle=rg; quad(b0,b1,rf1,rf0); }
+    // wall face — vertical gradient (dim base → bright top rail)
     ctx.globalCompositeOperation='lighter';
-    ctx.beginPath(); ctx.moveTo(P[0][0],P[0][1]); ctx.lineTo(P[1][0],P[1][1]); ctx.lineTo(P[2][0],P[2][1]); ctx.lineTo(P[3][0],P[3][1]); ctx.closePath();
-    ctx.fillStyle=rgba(col, 0.10+0.16*conf); ctx.fill();
+    var bm=[(b0[0]+b1[0])/2,(b0[1]+b1[1])/2], tm=[(t0[0]+t1[0])/2,(t0[1]+t1[1])/2];
+    var fg=ctx.createLinearGradient(bm[0],bm[1],tm[0],tm[1]);
+    fg.addColorStop(0,rgba(col,0.05)); fg.addColorStop(1,rgba(col,0.10+0.22*conf));
+    ctx.fillStyle=fg; quad(b0,b1,t1,t0);
     // glowing edges
-    ctx.shadowColor=rgba(col,0.9); ctx.shadowBlur=14*DPR;
-    ctx.strokeStyle=rgba(col,0.95); ctx.lineWidth=3*DPR; line3(P[3],P[2]);            // top rail
-    ctx.lineWidth=2*DPR; ctx.strokeStyle=rgba(col,0.7);
-    line3(P[0],P[3]); line3(P[1],P[2]); line3(P[0],P[1]);
+    ctx.shadowColor=rgba(col,0.9); ctx.shadowBlur=12*DPR;
+    ctx.strokeStyle=rgba(col,0.98); ctx.lineWidth=3*DPR; seg(t0,t1);
+    ctx.lineWidth=2*DPR; ctx.strokeStyle=rgba(col,0.7); seg(b0,t0); seg(b1,t1);
+    ctx.lineWidth=1*DPR; ctx.strokeStyle=rgba(col,0.5); seg(b0,b1);
     ctx.shadowBlur=0;
   }
 
-  // lidar core + sweep beam + column
+  // ---- lidar core + sweep beam + column ----
   ctx.globalCompositeOperation='lighter';
   var sweep = theta*2.3 + performance.now()/700;
-  var o0=proj([0,0.02,0]);
-  var s1=proj([extent*0.92*Math.sin(sweep),0.02,extent*0.92*Math.cos(sweep)]);
-  var s2=proj([extent*0.92*Math.sin(sweep+0.22),0.02,extent*0.92*Math.cos(sweep+0.22)]);
-  if(o0&&s1&&s2){ ctx.beginPath(); ctx.moveTo(o0[0],o0[1]); ctx.lineTo(s1[0],s1[1]); ctx.lineTo(s2[0],s2[1]); ctx.closePath();
-    ctx.fillStyle=rgba(COL.cyan,0.16); ctx.fill(); }
+  var s1=proj([extent*0.9*Math.sin(sweep),0.02,extent*0.9*Math.cos(sweep)]);
+  var s2=proj([extent*0.9*Math.sin(sweep+0.2),0.02,extent*0.9*Math.cos(sweep+0.2)]);
+  if(o0&&s1&&s2){ ctx.fillStyle=rgba(COL.cyan,0.18); ctx.beginPath(); ctx.moveTo(o0[0],o0[1]); ctx.lineTo(s1[0],s1[1]); ctx.lineTo(s2[0],s2[1]); ctx.closePath(); ctx.fill(); }
   var otop=proj([0,WALL_H*0.95,0]);
-  if(o0&&otop){ ctx.strokeStyle=rgba(COL.white,0.5); ctx.lineWidth=2*DPR; line3(o0,otop); }
+  if(o0&&otop){ ctx.strokeStyle=rgba(COL.white,0.5); ctx.lineWidth=2*DPR; seg(o0,otop); }
   if(o0){ ctx.shadowColor=rgba(COL.cyan,0.95); ctx.shadowBlur=22*DPR;
     ctx.fillStyle=rgba(COL.white,0.95); ctx.beginPath(); ctx.arc(o0[0],o0[1],5*DPR,0,7); ctx.fill(); ctx.shadowBlur=0; }
+
+  // ---- bloom (safe offscreen blur-and-add) ----
+  if(bloomCtx && ('filter' in bloomCtx)){
+    bloomCtx.clearRect(0,0,Wc,Hc);
+    bloomCtx.filter='blur('+(6*DPR)+'px)'; bloomCtx.drawImage(cv,0,0); bloomCtx.filter='none';
+    ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.55; ctx.drawImage(bloomCv,0,0); ctx.globalAlpha=1;
+  }
 
   ctx.globalCompositeOperation='source-over';
   if(autoRot && !dragging) theta += 0.0045;
 
-  function line3(a,b){ if(!a||!b) return; ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); }
+  function gridline(a,b){ var pa=proj(a), pb=proj(b); if(!pa||!pb) return;
+    var dist=Math.hypot(a[0]-cam[0], a[2]-cam[2]), al=Math.max(0.03,(70-dist*7)/255);
+    ctx.strokeStyle=rgba(COL.grid,al); ctx.beginPath(); ctx.moveTo(pa[0],pa[1]); ctx.lineTo(pb[0],pb[1]); ctx.stroke(); }
+  function quad(a,b,c,dd){ ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.lineTo(c[0],c[1]); ctx.lineTo(dd[0],dd[1]); ctx.closePath(); ctx.fill(); }
+  function seg(a,b){ if(!a||!b) return; ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); }
 }
 
 // ---- interaction ----
