@@ -124,6 +124,7 @@ class LidarSensor:
         gen = self._lidar.start_scan()           # Standard / NORMAL mode
         sector_min: list[float | None] = [None] * SECTORS
         raw_min: list[float | None] = [None] * RAW_BINS   # raw per-1° nearest (brain room model)
+        raw_qual: list[float | None] = [None] * RAW_BINS  # reflectivity (S2 quality) of that nearest pt
         points = 0
         revolutions = 0
         range_max_mm = 0.0
@@ -151,16 +152,18 @@ class LidarSensor:
                 rb = int(ang // _RAW_DEG) % RAW_BINS
                 if raw_min[rb] is None or dist < raw_min[rb]:
                     raw_min[rb] = dist
+                    raw_qual[rb] = qual          # keep the reflectivity of the nearest return
                 if dist > range_max_mm:
                     range_max_mm = dist
                 points += 1
 
             now = time.time()
             if now - last_emit >= self._emit_interval:
-                self._emit_summary(sector_min, raw_min, points, revolutions, range_max_mm,
+                self._emit_summary(sector_min, raw_min, raw_qual, points, revolutions, range_max_mm,
                                    now - window_start, raw_n, dropped_quality, dropped_zero)
                 sector_min = [None] * SECTORS
                 raw_min = [None] * RAW_BINS
+                raw_qual = [None] * RAW_BINS
                 points = 0
                 revolutions = 0
                 range_max_mm = 0.0
@@ -168,7 +171,7 @@ class LidarSensor:
                 window_start = now
                 last_emit = now
 
-    def _emit_summary(self, sector_min, raw_min, points, revolutions, range_max_mm, dt,
+    def _emit_summary(self, sector_min, raw_min, raw_qual, points, revolutions, range_max_mm, dt,
                       raw_n=0, dropped_quality=0, dropped_zero=0) -> None:
         sectors = {}
         open_sectors = []
@@ -183,7 +186,8 @@ class LidarSensor:
         # deg→rad + mm→m converted ONCE here, bin-center bearing (the Pi stays thin —
         # just a 360-slot nearest array it already derives, no histogram/denoise/SLAM).
         points_polar = [
-            [round(math.radians(i * _RAW_DEG + 0.5 * _RAW_DEG), 5), round(d / 1000.0, 3)]
+            [round(math.radians(i * _RAW_DEG + 0.5 * _RAW_DEG), 5), round(d / 1000.0, 3),
+             round(raw_qual[i] or 0.0, 1)]                # reflectivity (S2 quality, ~0-255)
             for i, d in enumerate(raw_min) if d is not None
         ]
         scan_hz = round(revolutions / dt, 1) if dt > 0 else 0.0

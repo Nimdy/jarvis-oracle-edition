@@ -68,13 +68,21 @@ class LidarScan:
     points: tuple[tuple[float, float], ...]   # (bearing_rad, range_m)
     range_max_m: float = 12.0
     quality: str = "good"
+    intensities: tuple[float, ...] = ()       # per-point reflectivity (S2 quality), parallel to points
 
     @staticmethod
     def from_dict(d: dict[str, Any]) -> "LidarScan":
-        # tolerate dropout sentinels: a None/0 range is simply not a point this scan
-        pts = tuple((float(b), float(r)) for b, r in d.get("points", ()) if r is not None)
-        return LidarScan(timestamp=float(d.get("timestamp", 0.0)), points=pts,
-                         range_max_m=float(d.get("range_max_m", 12.0)),
+        # points are [bearing, range] OR [bearing, range, reflectivity] (back-compatible).
+        # tolerate dropout sentinels: a None/0 range is simply not a point this scan.
+        pts: list[tuple[float, float]] = []
+        ints: list[float] = []
+        for p in d.get("points", ()):
+            if not p or len(p) < 2 or p[1] is None:
+                continue
+            pts.append((float(p[0]), float(p[1])))
+            ints.append(float(p[2]) if len(p) > 2 and p[2] is not None else 0.0)
+        return LidarScan(timestamp=float(d.get("timestamp", 0.0)), points=tuple(pts),
+                         intensities=tuple(ints), range_max_m=float(d.get("range_max_m", 12.0)),
                          quality=str(d.get("quality", "good")))
 
 
@@ -160,6 +168,7 @@ class RoomModel:
     scan_count: int
     n_bins: int
     reason: Optional[str] = None
+    intensity: tuple[Optional[float], ...] = ()   # per-bin median reflectivity (S2 quality, ~0-255)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -171,6 +180,7 @@ class RoomModel:
             "scan_count": self.scan_count,
             "coverage_fraction": round(self.coverage_fraction, 3),
             "profile": [None if v is None else round(v, 3) for v in self.profile],
+            "intensity": [None if v is None else round(v, 1) for v in self.intensity],  # reflectivity
             "points_m": [[round(x, 3), round(z, 3)] for x, z in self.points_m],
             "walls": [w.to_dict() for w in self.walls],
             "openings": [o.to_dict() for o in self.openings],
@@ -431,6 +441,7 @@ class LidarRoomModel:
     def __init__(self, config: LidarRoomConfig = LidarRoomConfig()) -> None:
         self._config = config
         self._rings: list[deque] = [deque(maxlen=config.ring_len_K) for _ in range(config.n_bins)]
+        self._rings_q: list[deque] = [deque(maxlen=config.ring_len_K) for _ in range(config.n_bins)]
         self._scan_count = 0
         self._last_scan_ts = 0.0
         self._fstats: dict[str, Any] = self._zero_fstats()
@@ -451,6 +462,7 @@ class LidarRoomModel:
             n = cfg.n_bins
             bin_w = TWO_PI / n
             nearest: list[Optional[float]] = [None] * n
+            nearest_q: list[Optional[float]] = [None] * n   # reflectivity of the nearest return
             # hard indoor ceiling: a far return (open door/window/specular reflection) is
             # ghost geometry that inflates the room — cap it. Also drop too-close housing noise.
             # The ceiling is the CONFIG cap only — NOT the per-window observed max (which would
@@ -460,7 +472,8 @@ class LidarRoomModel:
             raw = d_zero = d_min = d_max = kept = 0
             o_min: Optional[float] = None
             o_max: Optional[float] = None
-            for bearing, rng in scan.points:
+            ints = scan.intensities
+            for idx, (bearing, rng) in enumerate(scan.points):
                 raw += 1
                 if rng is None or rng <= 0.0:
                     d_zero += 1
@@ -479,9 +492,11 @@ class LidarRoomModel:
                 b = int((bearing % TWO_PI) / bin_w) % n
                 if nearest[b] is None or rng < nearest[b]:
                     nearest[b] = rng
+                    nearest_q[b] = ints[idx] if idx < len(ints) else None
             for i in range(n):
                 # carry the per-rev nearest (or a dropout None) — NEVER back-fill 0/range_max
                 self._rings[i].append(nearest[i])
+                self._rings_q[i].append(nearest_q[i])
             self._scan_count += 1
             ts = getattr(scan, "timestamp", 0.0)
             if ts:
@@ -510,9 +525,20 @@ class LidarRoomModel:
     def reset(self) -> None:
         for r in self._rings:
             r.clear()
+        for r in self._rings_q:
+            r.clear()
         self._scan_count = 0
         self._last_scan_ts = 0.0
         self._fstats = self._zero_fstats()
+
+    def _intensity_profile(self) -> tuple[Optional[float], ...]:
+        """Per-bin median reflectivity (the S2 quality of the nearest return), parallel to
+        the range profile. None where the bin has no return — never fabricated."""
+        out: list[Optional[float]] = []
+        for r in self._rings_q:
+            vals = [v for v in r if v is not None and v > 0]
+            out.append(sorted(vals)[len(vals) // 2] if vals else None)
+        return tuple(out)
 
     @property
     def coverage_fraction(self) -> float:
@@ -526,6 +552,7 @@ class LidarRoomModel:
         ts = timestamp if timestamp is not None else self._last_scan_ts
         rings = [list(r) for r in self._rings]
         bins = denoise_bins(rings, self._scan_count, cfg)
+        intens = self._intensity_profile()
         coverage = self.coverage_fraction
         n_bins = cfg.n_bins
         if self._scan_count == 0 or coverage < cfg.min_coverage_fraction:
@@ -535,7 +562,7 @@ class LidarRoomModel:
                 dimensions_m=(0.0, 0.0), free_space_area_m2=0.0, inscribed_radius_m=0.0,
                 bin_quality=tuple((b.sample_count, b.valid_fraction, b.mad_m) for b in bins),
                 coverage_fraction=coverage, scan_count=self._scan_count, n_bins=n_bins,
-                reason=REASON_INSUFFICIENT_COVERAGE,
+                reason=REASON_INSUFFICIENT_COVERAGE, intensity=intens,
             )
         points = tuple(polar_to_cartesian(b.bearing_center_rad, b.r_stable_m)
                        for b in bins if b.r_stable_m is not None)
@@ -552,6 +579,7 @@ class LidarRoomModel:
             dimensions_m=dims, free_space_area_m2=area, inscribed_radius_m=inscribed,
             bin_quality=tuple((b.sample_count, b.valid_fraction, b.mad_m) for b in bins),
             coverage_fraction=coverage, scan_count=self._scan_count, n_bins=n_bins, reason=None,
+            intensity=intens,
         )
 
     def features(self) -> dict[str, Any]:

@@ -304,3 +304,25 @@ def test_farthest_in_cap_return_not_self_gated():
 def test_from_dict_tolerates_none_range():
     s = LidarScan.from_dict({"timestamp": 1.0, "points": [[0.1, 2.0], [0.2, None], [0.3, 1.5]]})
     assert len(s.points) == 2                  # the None dropout is skipped, not a crash
+
+
+def test_intensity_channel_flows_through(tmp_path):
+    # 3-element points [bearing, range, reflectivity] → per-bin median intensity profile
+    pts = [[math.radians(i + 0.5), 2.0, 50.0 + (i % 10)] for i in range(360)]
+    m = LidarRoomModel()
+    for _ in range(6):
+        m.ingest(LidarScan.from_dict({"timestamp": 1.0, "points": pts, "range_max_m": 12.0}))
+    d = m.room_model().to_dict()
+    assert "intensity" in d and len(d["intensity"]) == 360
+    lit = [v for v in d["intensity"] if v is not None]
+    assert lit and 50 <= min(lit) <= max(lit) <= 60        # real reflectivity carried through
+
+
+def test_intensity_absent_for_legacy_2element_points():
+    # back-compat: old [bearing, range] points → intensity present but all None (never fabricated)
+    pts = [[math.radians(i + 0.5), 2.0] for i in range(360)]
+    m = LidarRoomModel()
+    for _ in range(6):
+        m.ingest(LidarScan.from_dict({"timestamp": 1.0, "points": pts}))
+    d = m.room_model().to_dict()
+    assert all(v is None for v in d["intensity"])           # no reflectivity invented from nothing
