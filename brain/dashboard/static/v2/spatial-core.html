@@ -186,6 +186,10 @@ function drawReflPoints(proj){
 }
 function toggleMatrix(){ matrixMode=!matrixMode;
   var b=document.getElementById('b_matrix'); if(b) b.className=matrixMode?'on':''; }
+// matrix palette: map any colour to a green by its luminance (so walls + cloud + points all
+// turn into the code-rain glow when matrix mode is on). Pass-through otherwise.
+function mcol(c){ if(!matrixMode) return c;
+  var l=(c[0]+c[1]+c[2])/3; return [Math.round(l*0.10), Math.round(55+l*0.78), Math.round(l*0.22)]; }
 
 // de-dupe by stable TRACK ID (from the scene tracker) — distinct monitors are distinct
 // tracks, so we keep one entry per track_id (not per spatial cluster). Keeps the freshest.
@@ -392,7 +396,7 @@ function renderTopDown(){
   drawReflPoints(P);                 // S2 reflectivity: each bin coloured by material/return strength
   // walls as crisp outlines, coloured by confidence
   for(i=0;i<room.walls.length;i++){ var w=room.walls[i]; if(!w||!Array.isArray(w.start_m)||!Array.isArray(w.end_m)) continue;
-    var col=(w.confidence||0.5)>=0.85?COL.hi:COL.lo, a=P(w.start_m[0],w.start_m[1]), b=P(w.end_m[0],w.end_m[1]);
+    var col=mcol((w.confidence||0.5)>=0.85?COL.hi:COL.lo), a=P(w.start_m[0],w.start_m[1]), b=P(w.end_m[0],w.end_m[1]);
     ctx.shadowColor=rgba(col,0.8); ctx.shadowBlur=7*DPR; ctx.strokeStyle=rgba(col,0.98); ctx.lineWidth=3*DPR;
     ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); ctx.shadowBlur=0;
   }
@@ -502,7 +506,7 @@ function renderFrame(){
     quads.push([Math.hypot(cen[0]-cam[0],cen[1]-cam[1],cen[2]-cam[2]), s, e, (cf>=0.85?COL.hi:COL.lo), cf]); }
   quads.sort(function(a,b){return b[0]-a[0];});
   for(var qi=0; qi<quads.length; qi++){
-    var Q=quads[qi]; s=Q[1]; e=Q[2]; var col=Q[3], conf=Q[4];
+    var Q=quads[qi]; s=Q[1]; e=Q[2]; var col=mcol(Q[3]), conf=Q[4];
     var b0=proj([s[0],0,s[1]]), b1=proj([e[0],0,e[1]]),
         t0=proj([s[0],WALL_H,s[1]]), t1=proj([e[0],WALL_H,e[1]]),
         rf0=proj([s[0],-WALL_H,s[1]]), rf1=proj([e[0],-WALL_H,e[1]]);
@@ -537,7 +541,8 @@ function renderFrame(){
     dprj.sort(function(a,b){return b[0]-a[0];});           // far first (painter's order)
     var psz=2.2*DPR;
     for(i=0;i<dprj.length;i++){ var D=dprj[i];
-      ctx.fillStyle='rgb('+BRI[D[3]]+','+BRI[D[4]]+','+BRI[D[5]]+')';   // gently-lifted true colour
+      var mc=mcol([BRI[D[3]],BRI[D[4]],BRI[D[5]]]);                      // green in matrix mode
+      ctx.fillStyle='rgb('+mc[0]+','+mc[1]+','+mc[2]+')';
       ctx.fillRect(D[1]-psz*0.5, D[2]-psz*0.5, psz, psz); }
     ctx.globalAlpha=1;
   }
