@@ -75,15 +75,19 @@ def pose_detected(keypoints: list, gesture: str, confidence: float) -> Perceptio
 
 
 def lidar_scan(sensor: str, scan_hz: float, points: int, range_max_m: float,
-               sectors: dict, open_sectors: list, scan_quality: str) -> PerceptionEvent:
-    """2D RPLIDAR sector summary (telemetry-only — the brain stores the spatial shape,
-    never beliefs/object identity). source='system'; the brain routes by event.type."""
+               sectors: dict, open_sectors: list, scan_quality: str,
+               points_polar: list | None = None) -> PerceptionEvent:
+    """2D RPLIDAR sector summary + raw points (telemetry-only — the brain stores the
+    spatial shape, never beliefs/object identity). source='system'; brain routes by
+    event.type. points_polar = raw [[bearing_rad, range_m], ...] for the room model
+    (optional; an old Pi build omitting it degrades to the 12-sector summary)."""
     return PerceptionEvent(
         source="system", type="scan_2d",
         data={
             "sensor": sensor, "scan_hz": scan_hz, "points": points,
             "range_max_m": range_max_m, "sectors": sectors,
             "open_sectors": open_sectors, "scan_quality": scan_quality,
+            "points_polar": points_polar or [],
         },
     )
 

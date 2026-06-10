@@ -28,6 +28,8 @@ OPEN_SECTOR_MM = 1500              # a sector with nearest return > this (or emp
 EMIT_HZ = 5.0                      # summaries per second sent to the brain
 MIN_POINTS_GOOD = 120              # below this in a window → scan_quality "sparse"
 _SECTOR_DEG = 360.0 / SECTORS
+RAW_BINS = 360                     # raw per-1° nearest range, streamed for the brain room model
+_RAW_DEG = 360.0 / RAW_BINS
 
 
 class LidarSensor:
@@ -121,6 +123,7 @@ class LidarSensor:
     def _scan_loop(self) -> None:
         gen = self._lidar.start_scan()           # Standard / NORMAL mode
         sector_min: list[float | None] = [None] * SECTORS
+        raw_min: list[float | None] = [None] * RAW_BINS   # raw per-1° nearest (brain room model)
         points = 0
         revolutions = 0
         range_max_mm = 0.0
@@ -139,22 +142,26 @@ class LidarSensor:
                 s = int(ang // _SECTOR_DEG) % SECTORS
                 if sector_min[s] is None or dist < sector_min[s]:
                     sector_min[s] = dist
+                rb = int(ang // _RAW_DEG) % RAW_BINS
+                if raw_min[rb] is None or dist < raw_min[rb]:
+                    raw_min[rb] = dist
                 if dist > range_max_mm:
                     range_max_mm = dist
                 points += 1
 
             now = time.time()
             if now - last_emit >= self._emit_interval:
-                self._emit_summary(sector_min, points, revolutions, range_max_mm,
+                self._emit_summary(sector_min, raw_min, points, revolutions, range_max_mm,
                                    now - window_start)
                 sector_min = [None] * SECTORS
+                raw_min = [None] * RAW_BINS
                 points = 0
                 revolutions = 0
                 range_max_mm = 0.0
                 window_start = now
                 last_emit = now
 
-    def _emit_summary(self, sector_min, points, revolutions, range_max_mm, dt) -> None:
+    def _emit_summary(self, sector_min, raw_min, points, revolutions, range_max_mm, dt) -> None:
         sectors = {}
         open_sectors = []
         for i, d in enumerate(sector_min):
@@ -164,6 +171,13 @@ class LidarSensor:
             sectors[str(i)] = round(d / 1000.0, 2)  # nearest distance in metres
             if d > OPEN_SECTOR_MM:
                 open_sectors.append(i)
+        # Raw per-1°-bin nearest points in CANONICAL units for the brain room model:
+        # deg→rad + mm→m converted ONCE here, bin-center bearing (the Pi stays thin —
+        # just a 360-slot nearest array it already derives, no histogram/denoise/SLAM).
+        points_polar = [
+            [round(math.radians(i * _RAW_DEG + 0.5 * _RAW_DEG), 5), round(d / 1000.0, 3)]
+            for i, d in enumerate(raw_min) if d is not None
+        ]
         scan_hz = round(revolutions / dt, 1) if dt > 0 else 0.0
         quality = "good" if points >= MIN_POINTS_GOOD else "sparse"
         summary = {
@@ -174,6 +188,7 @@ class LidarSensor:
             "sectors": sectors,                   # {sector_idx: nearest_metres}
             "open_sectors": sorted(open_sectors),
             "scan_quality": quality,
+            "points_polar": points_polar,         # [[bearing_rad, range_m], ...]
         }
         try:
             self._emit(summary)
