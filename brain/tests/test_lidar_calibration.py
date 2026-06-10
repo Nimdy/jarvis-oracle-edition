@@ -96,3 +96,24 @@ def test_no_forbidden_imports():
     is_clean = result[0] if isinstance(result, tuple) else (
         result.get("is_clean", result.get("clean", True)) if isinstance(result, dict) else bool(result))
     assert is_clean
+
+
+# ---- per-instance mount config (load_extrinsic) -----------------------------
+def test_load_extrinsic_from_config_file(tmp_path, monkeypatch):
+    import json
+    from cognition import lidar_calibration as lc
+    cfg = tmp_path / "lidar_extrinsic.json"
+    cfg.write_text(json.dumps({"ty_m": 1.092, "yaw_rad": 0.0, "tx_m": 0.0, "tz_m": 0.0}))
+    monkeypatch.setattr(lc, "_EXTRINSIC_FILE", str(cfg))
+    ex = lc.load_extrinsic()
+    assert abs(ex.ty_m - 1.092) < 1e-9 and not ex.is_identity
+    # the configured mount height lands in the room Y (scan-plane height)
+    assert abs(ex.transform_xz(0.0, 0.0)[1] - 1.092) < 1e-9
+
+
+def test_load_extrinsic_missing_file_is_identity(tmp_path, monkeypatch):
+    from cognition import lidar_calibration as lc
+    monkeypatch.setattr(lc, "_EXTRINSIC_FILE", str(tmp_path / "nope.json"))
+    for k in ("JARVIS_LIDAR_YAW_RAD", "JARVIS_LIDAR_TX_M", "JARVIS_LIDAR_MOUNT_HEIGHT_M", "JARVIS_LIDAR_TZ_M"):
+        monkeypatch.delenv(k, raising=False)
+    assert lc.load_extrinsic().is_identity     # product default: no mount => no-op
