@@ -37,20 +37,51 @@ def derive_pi5_devices(cache: dict[str, Any]) -> list[dict[str, Any]]:
             return "unknown"
         return "operational" if age <= PI5_FRESH_S else "stale"
 
-    cam_age = _age("scene_summary", "scene_caption", "face_crop", "person_detected")
-    hailo_age = _age("scene_caption", "scene_summary", "pose_detected", "face_crop")
+    # --- per-stream heartbeats kept SEPARATE (don't collapse a quiet scene into a dead device) ---
+    senses_age = _age("sensor_health", "sensor_status")     # the Pi senses-loop heartbeat
+    senses_alive = senses_age is not None and senses_age <= PI5_FRESH_S
+    cam_fps = prim.get("camera_fps") or 0
+    scene_age = _age("scene_summary", "scene_caption", "face_crop", "person_detected")  # scene-pipeline ACTIVITY
+    infer_age = _age("scene_caption", "scene_summary", "pose_detected", "face_crop")     # last DETECTION event
+    pose_age = _age("pose_detected")
+    face_age = _age("face_crop")
+
+    # camera is ALIVE if it's capturing frames and the senses loop is heartbeating — scene
+    # events are activity-dependent (quiet room ⇒ no events ≠ dead camera).
+    if cam_fps > 0 and senses_alive:
+        cam_status = "operational"
+    elif scene_age is not None and scene_age <= PI5_FRESH_S:
+        cam_status = "operational"
+    elif cam_fps > 0 or scene_age is not None or senses_alive:
+        cam_status = "stale"
+    else:
+        cam_status = "unknown"
+
+    # the Hailo runs the detector once per camera frame, so a fresh detection event proves it;
+    # if the scene is quiet but the camera+loop are alive, it's running (idle), not stale.
+    if infer_age is not None and infer_age <= PI5_FRESH_S:
+        hailo_status = "operational"
+    elif senses_alive and cam_fps > 0:
+        hailo_status = "operational"
+    elif infer_age is not None or senses_alive:
+        hailo_status = "stale"
+    else:
+        hailo_status = "unknown"
+
     return [
         {"name": "Pi node", "kind": "node", "present": bool(sids),
          "status": "up" if sids else "down",
          "detail": {"sensor_id": sids[0] if sids else None, "uptime_s": prim.get("uptime_s")}},
         {"name": "Camera (imx519)", "kind": "camera",
-         "present": (prim.get("camera_fps") or 0) > 0 or cam_age is not None,
-         "status": _op(cam_age),
-         "detail": {"fps": prim.get("camera_fps"), "last_frame_event_age_s": cam_age}},
-        {"name": "Hailo-10H NPU", "kind": "npu", "present": hailo_age is not None,
-         "status": _op(hailo_age),
-         "detail": {"last_inference_age_s": hailo_age},
-         "note": "inferred from inference events; direct temp/util telemetry is phase 2"},
+         "present": cam_fps > 0 or scene_age is not None,
+         "status": cam_status,
+         "detail": {"fps": cam_fps, "senses_loop_age_s": senses_age,
+                    "scene_activity_age_s": scene_age, "face_age_s": face_age},
+         "note": "alive = capturing fps + senses-loop heartbeat; scene_activity is quiet when nothing changes (not a fault)"},
+        {"name": "Hailo-10H NPU", "kind": "npu", "present": infer_age is not None or (cam_fps > 0 and senses_alive),
+         "status": hailo_status,
+         "detail": {"last_inference_event_age_s": infer_age, "pose_age_s": pose_age, "camera_fps": cam_fps},
+         "note": "detector runs per camera frame; last_inference_event is the last DETECTION (quiet scene ⇒ running but no events)"},
         {"name": "Speaker", "kind": "speaker", "present": bool(speakers.get("available")),
          "status": ("playing" if prim.get("audio_playing")
                     else "available" if speakers.get("available") else "down"),
