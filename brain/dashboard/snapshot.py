@@ -531,6 +531,12 @@ def _build_fused_objects(ctx: "SnapshotContext") -> dict[str, Any]:
                for e in ents if getattr(e, "bbox", None)]
         if not cam:
             return {}
+        # tracking metadata from the EXISTING scene tracker (stable IDs, not raw per-frame
+        # detections) — so 'tv tv tv' resolves to distinct tracks + flickers are filtered.
+        emeta = {getattr(e, "entity_id", ""): {
+            "stable_cycles": getattr(e, "stable_cycles", 0), "state": getattr(e, "state", "candidate"),
+            "stable_for_s": round(max(0.0, getattr(e, "last_seen_ts", 0.0) - getattr(e, "first_seen_ts", 0.0)), 1),
+        } for e in ents}
         from cognition.lidar_fusion import fuse
         from cognition.lidar_calibration import load_extrinsic
         ex = load_extrinsic()
@@ -556,7 +562,20 @@ def _build_fused_objects(ctx: "SnapshotContext") -> dict[str, Any]:
             for pb in person_bboxes:
                 if pb and len(pb) >= 4:
                     feed_calibration(sid, camera_bearing(pb, px, focal), prof)
-            out[sid] = [f.to_dict() for f in fused]
+            # attach stable track identity + filter raw flickers (a candidate that hasn't
+            # survived a few frames is noise, not a tracked entity).
+            objs = []
+            for f in fused:
+                m = emeta.get(f.source_entity_id, {})
+                if m.get("state", "candidate") == "candidate" and m.get("stable_cycles", 0) < 2:
+                    continue
+                d = f.to_dict()
+                d["track_id"] = (f.source_entity_id or "?")[:8]
+                d["stable_cycles"] = m.get("stable_cycles", 0)
+                d["state"] = m.get("state", "candidate")
+                d["stable_for_s"] = m.get("stable_for_s", 0.0)
+                objs.append(d)
+            out[sid] = objs
         return out
     except Exception:
         return {}

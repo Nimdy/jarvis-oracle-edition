@@ -49,6 +49,17 @@
     .dband{margin-top:7px;font-size:10px;letter-spacing:.04em;color:#cfe;border:1px solid rgba(120,200,255,.25);
       border-radius:5px;padding:5px 9px;background:rgba(10,20,32,.55);max-width:430px;}
     .dband b{color:#ffb000;font-weight:700;}
+    /* manual camera↔lidar calibration sliders (drives the dense-cloud sidecar live) */
+    .calibpanel{position:absolute;right:20px;bottom:62px;width:252px;pointer-events:auto;font-size:10px;
+      border:1px solid var(--line);border-radius:6px;padding:9px 11px;background:rgba(6,11,18,.85);backdrop-filter:blur(3px);}
+    .calibpanel h4{margin:0 0 6px;font-size:9px;letter-spacing:.12em;color:var(--cyan);font-weight:700;}
+    .calibpanel .ckrow{display:block;margin-bottom:6px;color:var(--muted);cursor:pointer;}
+    .calibpanel .crow{display:flex;align-items:center;gap:7px;margin:3px 0;}
+    .calibpanel .crow .cl{width:34px;color:var(--dim);}
+    .calibpanel .crow input[type=range]{flex:1;}
+    .calibpanel .cv{width:64px;text-align:right;color:var(--text);font-variant-numeric:tabular-nums;}
+    .calibpanel .cnote{margin-top:6px;padding-top:6px;border-top:1px solid var(--line);color:var(--dim);font-size:9px;}
+    .calibpanel .cnote b{color:#ffb000;}
     .ctl{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;}
     .ctl button{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--muted);
       background:rgba(8,15,23,.7);border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer;}
@@ -97,6 +108,16 @@
     <div class="ctl">
       <button id="b_view" onclick="toggleView()">⬡ 3D view</button>
       <button id="b_reset" onclick="resetView()">⟲ recentre</button>
+      <button id="b_calib" onclick="toggleCalib()">⚙ calibrate</button>
+    </div>
+
+    <div class="calibpanel" id="calibpanel" style="display:none">
+      <h4>CAMERA ↔ LIDAR CALIBRATION (dense cloud)</h4>
+      <label class="ckrow"><input type="checkbox" id="cb_manual"> manual — drag to align the cloud onto the walls</label>
+      <div class="crow"><span class="cl">FOV</span><input type="range" id="cb_focal" min="220" max="900" step="5"><span class="cv" id="cb_focal_v">—</span></div>
+      <div class="crow"><span class="cl">yaw</span><input type="range" id="cb_yaw" min="-30" max="30" step="1"><span class="cv" id="cb_yaw_v">—</span></div>
+      <div class="crow"><span class="cl">pitch</span><input type="range" id="cb_pitch" min="-80" max="80" step="2"><span class="cv" id="cb_pitch_v">—</span></div>
+      <div class="cnote">anchor fit <b id="cb_corr">—</b> · maximise it + watch the cloud snap to the cyan walls</div>
     </div>
 
     <div id="empty">— awaiting LIDAR stream —<br><span style="font-size:10px;color:var(--dim)">start the Pi reader; the brain builds the room from raw points</span></div>
@@ -141,20 +162,15 @@ function spread(key){ if(hist.length < 2) return 0;
   var lo=1e9, hi=-1e9; for(var i=0;i<hist.length;i++){ var v=hist[i][key]; if(v<lo)lo=v; if(v>hi)hi=v; } return hi-lo; }
 
 // S2 instrumentation strip — the validation gate. Every value is telemetry, never a belief.
-// merge duplicate detections of the same label that land within 0.5 m (keep the
-// higher-confidence one) so the radar + panel don't show "mouse" three times.
+// de-dupe by stable TRACK ID (from the scene tracker) — distinct monitors are distinct
+// tracks, so we keep one entry per track_id (not per spatial cluster). Keeps the freshest.
 function dedupeFused(arr){
-  var out=[];
+  var out=[], seen={};
   for(var i=0;i<arr.length;i++){
-    var o=arr[i]; if(!o) continue; var dup=false;
-    for(var j=0;j<out.length;j++){
-      var p=out[j];
-      if(p.label===o.label && p.position_lidar_m && o.position_lidar_m){
-        var dx=p.position_lidar_m[0]-o.position_lidar_m[0], dz=p.position_lidar_m[2]-o.position_lidar_m[2];
-        if(Math.hypot(dx,dz)<0.5){ dup=true; if((o.label_confidence||0)>(p.label_confidence||0)) out[j]=o; break; }
-      }
-    }
-    if(!dup) out.push(o);
+    var o=arr[i]; if(!o) continue;
+    var k=o.track_id||('_'+i);
+    if(seen[k]!=null){ if((o.label_confidence||0)>(out[seen[k]].label_confidence||0)) out[seen[k]]=o; continue; }
+    seen[k]=out.length; out.push(o);
   }
   return out;
 }
@@ -163,14 +179,18 @@ function renderObjPanel(){
   var el=document.getElementById('objpanel'); if(!el) return;
   var placed=fused.filter(function(o){ return o && o.position_lidar_m; });
   if(!placed.length){ el.innerHTML=''; return; }
-  el.innerHTML='<h4>OBJECTS · camera + lidar</h4>'+placed.map(function(o,i){
-    return '<div class="row"><span class="k">'+(i+1)+'. '+(o.label||'?')+'</span>'+
+  el.innerHTML='<h4>OBJECTS · camera + lidar (tracked)</h4>'+placed.map(function(o,i){
+    var tid=o.track_id?'<span style="color:var(--dim)">·'+o.track_id+'</span>':'';
+    var dur=(o.stable_for_s!=null&&o.stable_for_s>0)?' <span style="color:var(--dim)">'+o.stable_for_s.toFixed(0)+'s</span>':'';
+    return '<div class="row"><span class="k">'+(i+1)+'. '+(o.label||'?')+' '+tid+'</span>'+
       '<span class="v">'+(o.range_m!=null?o.range_m.toFixed(2)+'m':'—')+
-      ' <span style="color:var(--dim)">'+Math.round((o.label_confidence||0)*100)+'%</span></span></div>';
-  }).join('')+'<div class="note">labels are camera GUESSES · ranges are lidar-MEASURED · telemetry-only</div>';
+      ' <span style="color:var(--dim)">'+Math.round((o.label_confidence||0)*100)+'%</span>'+dur+'</span></div>';
+  }).join('')+'<div class="note">stable TRACKS (survived ≥2 frames) · labels are camera GUESSES · ranges lidar-MEASURED</div>';
 }
 
 function updateDenseBanner(){
+  var ce=document.getElementById('cb_corr');   // live anchor-fit feedback for the calib sliders
+  if(ce){ var cc=denseMeta&&denseMeta.corr; ce.textContent=(cc==null)?'—':(cc.toFixed(2)+(cc>=0.7?' good':cc>=0.5?' fair':' weak')); }
   var el=document.getElementById('densebanner'); if(!el) return;
   if(!denseMeta){ el.style.display='none'; return; }
   var n=(denseMeta.n||0).toLocaleString();
@@ -537,6 +557,35 @@ cv.addEventListener('touchend', function(){ dragging=false; },{passive:true});
 function toggleView(){ viewMode = (viewMode==='top') ? '3d' : 'top';
   document.getElementById('b_view').textContent = (viewMode==='top') ? '⬡ 3D view' : '⊞ top-down';
   updateDenseBanner(); }
+
+// ---- manual camera↔lidar calibration sliders → POST /api/spatial/camera-calib ----
+function calibLabels(){
+  var f=+document.getElementById('cb_focal').value, y=+document.getElementById('cb_yaw').value, p=+document.getElementById('cb_pitch').value;
+  document.getElementById('cb_focal_v').textContent = f+' ('+Math.round(2*Math.atan2(320,f)*180/Math.PI)+'°)';
+  document.getElementById('cb_yaw_v').textContent = (y>=0?'+':'')+y+'°';
+  document.getElementById('cb_pitch_v').textContent = (p>=0?'+':'')+p+'px';
+}
+function calibPost(){
+  calibLabels();
+  if(typeof fetch==='undefined') return;
+  fetch('/api/spatial/camera-calib',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    focal_px:+document.getElementById('cb_focal').value, yaw_deg:+document.getElementById('cb_yaw').value,
+    pitch_row_offset:+document.getElementById('cb_pitch').value, manual:document.getElementById('cb_manual').checked
+  })}).catch(function(){});
+}
+function toggleCalib(){ var p=document.getElementById('calibpanel'); if(p) p.style.display=(p.style.display==='none')?'block':'none'; }
+(function calibInit(){
+  if(typeof fetch==='undefined') return;     // sandbox-safe
+  fetch('/api/spatial/camera-calib').then(function(r){return r.json();}).then(function(c){
+    document.getElementById('cb_focal').value=c.focal_px||640;
+    document.getElementById('cb_yaw').value=c.yaw_deg||10;
+    document.getElementById('cb_pitch').value=c.pitch_row_offset||0;
+    document.getElementById('cb_manual').checked=!!c.manual;
+    calibLabels();
+  }).catch(function(){});
+  ['cb_focal','cb_yaw','cb_pitch'].forEach(function(id){var e=document.getElementById(id); if(e) e.addEventListener('input',calibPost);});
+  var m=document.getElementById('cb_manual'); if(m) m.addEventListener('change',calibPost);
+})();
 function resetView(){ theta=0.84; elev=1.0; }   // recentre the 3D camera
 window.toggleView=toggleView; window.resetView=resetView;
 
