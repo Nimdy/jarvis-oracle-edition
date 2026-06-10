@@ -112,7 +112,7 @@
     </div>
 
     <div class="calibpanel" id="calibpanel" style="display:none">
-      <h4>CAMERA ↔ LIDAR CALIBRATION (dense cloud)</h4>
+      <h4>CAMERA ↔ LIDAR CALIBRATION (dense cloud) <span id="cb_reset" onclick="resetCalib()" style="float:right;cursor:pointer;color:var(--cyan);font-weight:400">↺ reset</span></h4>
       <label class="ckrow"><input type="checkbox" id="cb_manual"> manual — drag to align the cloud onto the walls</label>
       <div class="crow"><span class="cl">FOV</span><input type="range" id="cb_focal" min="220" max="900" step="5"><span class="cv" id="cb_focal_v">—</span></div>
       <div class="crow"><span class="cl">yaw</span><input type="range" id="cb_yaw" min="-30" max="30" step="1"><span class="cv" id="cb_yaw_v">—</span></div>
@@ -574,6 +574,13 @@ function calibPost(){
   })}).catch(function(){});
 }
 function toggleCalib(){ var p=document.getElementById('calibpanel'); if(p) p.style.display=(p.style.display==='none')?'block':'none'; }
+function resetCalib(){   // snap back to the known-good defaults if the sliders get jacked up
+  document.getElementById('cb_focal').value=640;
+  document.getElementById('cb_yaw').value=10;
+  document.getElementById('cb_pitch').value=0;
+  document.getElementById('cb_manual').checked=false;
+  calibPost();
+}
 (function calibInit(){
   if(typeof fetch==='undefined') return;     // sandbox-safe
   fetch('/api/spatial/camera-calib').then(function(r){return r.json();}).then(function(c){

@@ -41,10 +41,10 @@ def load_calib(default_yaw_deg):
     try:
         with open(CALIB) as f:
             c = json.load(f)
-        return (float(c.get("focal_px", 470.0)), float(c.get("yaw_deg", default_yaw_deg)),
+        return (float(c.get("focal_px", 640.0)), float(c.get("yaw_deg", default_yaw_deg)),
                 bool(c.get("manual", False)), int(c.get("pitch_row_offset", 0)))
     except Exception:
-        return 470.0, default_yaw_deg, False, 0
+        return 640.0, default_yaw_deg, False, 0
 
 
 def log(*a):

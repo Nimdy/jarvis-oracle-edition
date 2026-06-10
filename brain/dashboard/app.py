@@ -710,7 +710,7 @@ def _create_app() -> FastAPI:
             with open(_os.path.expanduser("~/.jarvis/camera_calib.json")) as f:
                 return _json.load(f)
         except Exception:
-            return {"focal_px": 470.0, "yaw_deg": 10.0, "pitch_row_offset": 0, "manual": False}
+            return {"focal_px": 640.0, "yaw_deg": 10.0, "pitch_row_offset": 0, "manual": False}
 
     @app.post("/api/spatial/camera-calib")
     async def api_camera_calib_set(request: Request):
@@ -721,7 +721,7 @@ def _create_app() -> FastAPI:
         body = await request.json()
         path = _os.path.expanduser("~/.jarvis/camera_calib.json")
         _os.makedirs(_os.path.dirname(path), exist_ok=True)
-        cur = {"focal_px": 470.0, "yaw_deg": 10.0, "pitch_row_offset": 0, "manual": False}
+        cur = {"focal_px": 640.0, "yaw_deg": 10.0, "pitch_row_offset": 0, "manual": False}
         try:
             with open(path) as f:
                 cur.update(_json.load(f))
