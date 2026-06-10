@@ -92,8 +92,11 @@ def main():
             row = [float(v) for v in pred[y_row]]
             # a single configured yaw can't capture the camera↔lidar mismatch → search the
             # yaw window for the strongest PHYSICAL (scale>0) correlation; refuse if none.
+            # constrain the yaw search to a PHYSICALLY-plausible band around the configured
+            # mount yaw — a wide search finds spurious high-corr fits far from the mount
+            # (the +50° flip). Honest: the cloud may refuse here until a real FOV calibration.
             a, yaw_used = anchor_best_yaw(row, profile, base_yaw_rad=ex.yaw_rad, focal_px=FOCAL,
-                                          principal_x=PX, search_deg=55.0, step_deg=2.0,
+                                          principal_x=PX, search_deg=15.0, step_deg=2.0,
                                           min_inliers=15, min_corr=0.4)
             if not a.valid:
                 # KEEP the last good cloud (don't overwrite) — it goes stale at 20s on its own.
