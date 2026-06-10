@@ -27,6 +27,16 @@
     .hud.bl .st .k{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-top:1px;}
     .hud.br{bottom:16px;right:20px;text-align:right;color:var(--dim);font-size:9.5px;line-height:1.6;}
     .hud.br b{color:var(--muted);}
+    /* S2 instrumentation strip — the validation gate (aircraft-instrument honesty) */
+    .instr{position:absolute;top:120px;right:20px;width:248px;pointer-events:none;
+      font-size:10px;line-height:1.55;border:1px solid var(--line);border-radius:6px;
+      padding:8px 10px;background:rgba(6,11,18,.66);backdrop-filter:blur(2px);}
+    .instr h4{margin:0 0 5px;font-size:9px;letter-spacing:.13em;color:var(--cyan);font-weight:700;}
+    .instr .row{display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums;}
+    .instr .row .k{color:var(--dim);} .instr .row .v{color:var(--text);}
+    .instr .hero{margin-top:5px;padding-top:5px;border-top:1px solid var(--line);}
+    .instr .hero .k{color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+    .instr .hero .v{font-weight:700;font-size:12px;}
     .ctl{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;}
     .ctl button{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--muted);
       background:rgba(8,15,23,.7);border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer;}
@@ -65,6 +75,7 @@
       <div class="leg"><i style="border-color:var(--amber)"></i>wall (lower&nbsp;conf)</div>
       <div class="leg"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#eaf6ff;vertical-align:middle;margin-right:7px;"></span>lidar (JARVIS)</div>
     </div>
+    <div class="hud instr" id="instr"></div>
     <div class="hud bl" id="stats"></div>
     <div class="hud br" id="meta"></div>
 
@@ -97,6 +108,48 @@ var bloomCtx = bloomCv.getContext('2d');
 
 // derived per data update
 var midx = 0, midz = 0, extent = 3;
+var hist = [];                                            // rolling 30s {t,w,d,wc} for stability_30s
+
+function pushHist(w, d, wc){
+  var t = Date.now(); hist.push({t:t, w:w, d:d, wc:wc});
+  while(hist.length && t - hist[0].t > 30000) hist.shift();
+}
+function spread(key){ if(hist.length < 2) return 0;
+  var lo=1e9, hi=-1e9; for(var i=0;i<hist.length;i++){ var v=hist[i][key]; if(v<lo)lo=v; if(v>hi)hi=v; } return hi-lo; }
+
+// S2 instrumentation strip — the validation gate. Every value is telemetry, never a belief.
+function renderInstr(r){
+  var fs = r.filter_stats || {};
+  var dm = r.dimensions_m || [0,0];
+  var w = (fs.room_width_m!=null)?fs.room_width_m:dm[0];
+  var d = (fs.room_depth_m!=null)?fs.room_depth_m:dm[1];
+  var wc = (fs.wall_count!=null)?fs.wall_count:((r.walls||[]).length);
+  pushHist(w, d, wc);
+  var stab = Math.max(spread('w'), spread('d')) * 100;          // cm of drift over the window
+  var stabCol = stab<5?'var(--green)':(stab<15?'var(--amber)':'var(--red)');
+  var dmaxCol = (fs.dropped_max_range>0)?'var(--cyan)':'var(--muted)';   // cap engaging = good, not error
+  var wcs = hist.map(function(h){return h.wc;});
+  var wcMin = Math.min.apply(null, wcs), wcMax = Math.max.apply(null, wcs);
+  function m(x){ return (x==null)?'—':(+x).toFixed(2)+' m'; }
+  function n(x){ return (x==null)?'—':String(x); }
+  function row(k,v,col){ return '<div class="row"><span class="k">'+k+'</span><span class="v"'+(col?' style="color:'+col+'"':'')+'>'+v+'</span></div>'; }
+  document.getElementById('instr').innerHTML =
+    '<h4>S2 INSTRUMENTATION</h4>'+
+    row('observed_max_m', m(fs.observed_max_m))+
+    row('effective_max_m', m(fs.effective_max_m), (fs.dropped_max_range>0?'var(--cyan)':''))+
+    row('max_range_m · cap', m(fs.max_range_m))+
+    row('min_range_m', m(fs.min_range_m))+
+    row('raw_points', n(fs.raw_points))+
+    row('points_after_filter', n(fs.points_after_filter))+
+    row('dropped_min_range', n(fs.dropped_min_range))+
+    row('dropped_max_range', n(fs.dropped_max_range), dmaxCol)+
+    row('wall_count', wc+' <span style="color:var(--dim)">('+wcMin+'–'+wcMax+')</span>')+
+    row('room_width_m', m(w))+
+    row('room_depth_m', m(d))+
+    row('coverage_pct', ((fs.coverage_pct!=null)?fs.coverage_pct:Math.round((r.coverage_fraction||0)*100))+' %')+
+    '<div class="hero">'+row('stability_30s', '±'+stab.toFixed(1)+' cm '+
+      '<span style="color:var(--dim);font-weight:400">('+hist.length+'×)</span>', stabCol)+'</div>';
+}
 
 function vsub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
 function vdot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
@@ -123,6 +176,7 @@ function setData(d){
   em.style.display = ok ? 'none' : 'flex';
   if (!ok){
     haveData = false;
+    document.getElementById('instr').innerHTML = ''; hist = [];   // no stale instrumentation
     if (r && r.reason){
       em.innerHTML = '— room model warming up —<br><span style="font-size:10px;color:var(--dim)">'+
         String(r.reason).replace(/_/g,' ')+' · coverage '+Math.round((r.coverage_fraction||0)*100)+'%</span>';
@@ -155,6 +209,7 @@ function setData(d){
   document.getElementById('meta').innerHTML =
     'frame <b>'+(r.frame||'lidar_sensor')+'</b> · bins <b>'+(r.n_bins||0)+'</b><br>'+
     'inscribed r <b>'+(r.inscribed_radius_m||0).toFixed(2)+' m</b> · authority <b>'+(r.authority||'spatial_telemetry_only')+'</b>';
+  renderInstr(r);
 }
 
 function draw(){
