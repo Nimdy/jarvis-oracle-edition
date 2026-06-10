@@ -18,10 +18,20 @@ separate, additive seam that never disrupts live cognition.
 from __future__ import annotations
 
 import math
+import os
 from collections import deque
 from dataclasses import dataclass, field
 from statistics import median
 from typing import Any, Optional, Sequence
+
+
+def _env_float(name: str, default: float) -> float:
+    """Config that PERSISTS via env (not a hardcoded magic number) — override at the
+    launch env without a code change; the literal here is the documented default."""
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return float(default)
 
 TWO_PI = 2.0 * math.pi
 
@@ -39,7 +49,10 @@ class LidarRoomConfig:
     min_wall_inliers: int = 8               # a segment shorter than this is dropped
     door_width_band_m: tuple[float, float] = (0.6, 1.2)
     nearest_sectors: int = 12
-    range_max_m: float = 12.0               # S2 max; beyond = "no return / open"
+    range_max_m: float = 12.0               # S2 sensor ceiling / fallback + shadow ratio
+    # --- indoor range gating (the S2 truth-layer noise fix; env-overridable) ---
+    min_range_m: float = field(default_factory=lambda: _env_float("JARVIS_LIDAR_MIN_RANGE_M", 0.12))
+    max_range_m: float = field(default_factory=lambda: _env_float("JARVIS_LIDAR_MAX_RANGE_M", 8.0))
     min_coverage_fraction: float = 0.25     # below → empty-by-design RoomModel
     discontinuity_m: float = 0.30           # range jump that breaks a wall run
     occlusion_shadow_ratio: float = 0.5     # gap behind a bin < ratio*neighbour → shadow
@@ -402,16 +415,47 @@ class LidarRoomModel:
         self._config = config
         self._rings: list[deque] = [deque(maxlen=config.ring_len_K) for _ in range(config.n_bins)]
         self._scan_count = 0
+        self._fstats: dict[str, Any] = self._zero_fstats()
+
+    def _zero_fstats(self) -> dict[str, Any]:
+        return {
+            "raw_points": 0, "dropped_zero": 0, "dropped_min_range": 0,
+            "dropped_max_range": 0, "points_after_filter": 0,
+            "observed_min_m": None, "observed_max_m": None,
+            "effective_max_m": self._config.max_range_m,
+            "cum_raw_points": 0, "cum_dropped_zero": 0, "cum_dropped_min_range": 0,
+            "cum_dropped_max_range": 0, "cum_points_after_filter": 0,
+        }
 
     def ingest(self, scan: LidarScan) -> None:
         try:
-            n = self._config.n_bins
+            cfg = self._config
+            n = cfg.n_bins
             bin_w = TWO_PI / n
             nearest: list[Optional[float]] = [None] * n
-            rmax = scan.range_max_m or self._config.range_max_m
+            # hard indoor ceiling: a far return (open door/window/specular reflection) is
+            # ghost geometry that inflates the room — cap it. Also drop too-close housing noise.
+            eff_max = min(scan.range_max_m or cfg.range_max_m, cfg.max_range_m)
+            rmin = cfg.min_range_m
+            raw = d_zero = d_min = d_max = kept = 0
+            o_min: Optional[float] = None
+            o_max: Optional[float] = None
             for bearing, rng in scan.points:
-                if rng is None or rng <= 0.0 or rng >= rmax:
+                raw += 1
+                if rng is None or rng <= 0.0:
+                    d_zero += 1
                     continue
+                if o_min is None or rng < o_min:
+                    o_min = rng
+                if o_max is None or rng > o_max:
+                    o_max = rng
+                if rng < rmin:                       # too-close housing reflection
+                    d_min += 1
+                    continue
+                if rng >= eff_max:                   # ghost beyond the indoor cap
+                    d_max += 1
+                    continue
+                kept += 1
                 b = int((bearing % TWO_PI) / bin_w) % n
                 if nearest[b] is None or rng < nearest[b]:
                     nearest[b] = rng
@@ -419,13 +463,32 @@ class LidarRoomModel:
                 # carry the per-rev nearest (or a dropout None) — NEVER back-fill 0/range_max
                 self._rings[i].append(nearest[i])
             self._scan_count += 1
+            fs = self._fstats
+            fs.update(raw_points=raw, dropped_zero=d_zero, dropped_min_range=d_min,
+                      dropped_max_range=d_max, points_after_filter=kept,
+                      observed_min_m=o_min, observed_max_m=o_max, effective_max_m=eff_max)
+            fs["cum_raw_points"] += raw
+            fs["cum_dropped_zero"] += d_zero
+            fs["cum_dropped_min_range"] += d_min
+            fs["cum_dropped_max_range"] += d_max
+            fs["cum_points_after_filter"] += kept
         except Exception:
             pass  # a bad scan must never corrupt accumulated state
+
+    def filter_stats(self) -> dict[str, Any]:
+        """Drop-telemetry to PROVE the gating works (raw→after-filter, ghost rejection,
+        observed-vs-effective range). Honest counters, never a belief."""
+        fs = dict(self._fstats)
+        fs["min_range_m"] = self._config.min_range_m
+        fs["max_range_m"] = self._config.max_range_m
+        fs["scan_count"] = self._scan_count
+        return fs
 
     def reset(self) -> None:
         for r in self._rings:
             r.clear()
         self._scan_count = 0
+        self._fstats = self._zero_fstats()
 
     @property
     def coverage_fraction(self) -> float:
