@@ -314,6 +314,7 @@ class PerceptionOrchestrator:
         self._scene_tracker = SceneTracker()
         self._display_classifier = DisplayClassifier()
         self._last_scene_snapshot: Any = None
+        self._last_person_bboxes: list = []     # transient person bbox(es) this frame (for spatial fusion yaw cal)
 
         self._calibration_manager = CalibrationManager()
         self._calibration_manager.setup_pi_camera_defaults(
@@ -1303,6 +1304,7 @@ class PerceptionOrchestrator:
         # estimate_region_visibility (occluded-vs-removed). NEVER tracked as an entity,
         # persisted, or tied to identity — persons are already filtered out of scene_dets.
         person_boxes = [tuple(b) for b in (person_bboxes or []) if b and len(b) == 4]
+        self._last_person_bboxes = person_boxes      # transient, read-only, for fusion yaw cal
 
         snapshot = self._scene_tracker.update(scene_dets, fw, fh, person_boxes)
         self._last_scene_snapshot = snapshot
@@ -2650,6 +2652,11 @@ class PerceptionOrchestrator:
             self.send_camera_control("zoom_to", region=bbox, padding=1.8)
         else:
             self.send_camera_control("reset")
+
+    def get_person_bboxes(self) -> list:
+        """Latest transient person bbox(es) this frame — read-only, for the spatial-fusion
+        yaw calibrator (camera person bearing). NOT a tracked entity / identity / belief."""
+        return list(self._last_person_bboxes)
 
     def get_scene_snapshot(self) -> Any:
         """Public read-only accessor for the latest :class:`SceneSnapshot`.

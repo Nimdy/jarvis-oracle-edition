@@ -537,7 +537,13 @@ def _build_fused_objects(ctx: "SnapshotContext") -> dict[str, Any]:
         intr = getattr(getattr(ctx.perc_orch, "_calibration_manager", None), "intrinsics", None)
         focal = float(getattr(intr, "focal_length_px", 800.0))
         px = float(getattr(intr, "principal_x", 960.0))
-        from cognition.lidar_fusion import feed_calibration
+        from cognition.lidar_fusion import feed_calibration, camera_bearing
+        # a PERSON is transient bbox geometry (NOT a scene entity), so the yaw calibrator
+        # is fed from the person bbox path, not the object labels.
+        try:
+            person_bboxes = ctx.perc_orch.get_person_bboxes() or []
+        except Exception:
+            person_bboxes = []
         out: dict[str, Any] = {}
         for sid, room in rooms.items():
             prof = room.get("profile") or []
@@ -545,12 +551,11 @@ def _build_fused_objects(ctx: "SnapshotContext") -> dict[str, Any]:
                 continue
             fused = fuse(cam, prof, yaw_rad=ex.yaw_rad, focal_px=focal,
                          principal_x=px, mount_height_m=ex.ty_m)
-            # yaw self-calibration: a detected person + a moving lidar return refine the
-            # yaw (advisory — it suggests, never auto-applies). Accumulates across snapshots.
-            for f in fused:
-                if f.label == "person":
-                    feed_calibration(sid, f.bearing_rad, prof)
-                    break
+            # yaw self-calibration: a moving person (lidar got-closer bin) paired with the
+            # camera person bearing refines yaw (advisory — suggests, never auto-applies).
+            for pb in person_bboxes:
+                if pb and len(pb) >= 4:
+                    feed_calibration(sid, camera_bearing(pb, px, focal), prof)
             out[sid] = [f.to_dict() for f in fused]
         return out
     except Exception:
