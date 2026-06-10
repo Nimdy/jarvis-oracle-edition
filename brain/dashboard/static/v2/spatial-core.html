@@ -74,6 +74,7 @@
       <div class="leg"><i style="border-color:var(--green)"></i>wall (high&nbsp;conf)</div>
       <div class="leg"><i style="border-color:var(--amber)"></i>wall (lower&nbsp;conf)</div>
       <div class="leg"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#eaf6ff;vertical-align:middle;margin-right:7px;"></span>lidar (JARVIS)</div>
+      <div class="leg"><span style="display:inline-block;width:8px;height:8px;transform:rotate(45deg);background:#ffb000;vertical-align:middle;margin-right:7px;"></span>object (camera label · lidar range)</div>
     </div>
     <div class="hud instr" id="instr"></div>
     <div class="hud bl" id="stats"></div>
@@ -101,6 +102,7 @@ var COL = { hi:[0,255,153], lo:[255,176,0], cyan:[0,204,255], grid:[40,110,150],
 var cv = document.getElementById('stage');
 var ctx = cv.getContext('2d');
 var room = null, haveData = false;
+var fused = [];                                           // Tier-2 fused objects (camera label + lidar range)
 var theta = 0.84, elev = 1.0, autoRot = false, dragging = false, lastX = 0, lastY = 0;
 var viewMode = 'top';   // 'top' = readable floor-plan (lidar-north up, fixed) | '3d' = hologram
 var DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -175,6 +177,9 @@ function setData(d){
   var lr = (d && d.lidar_room) || {};
   var keys = Object.keys(lr);
   var r = keys.length ? lr[keys[0]] : null;
+  // Tier-2 fused objects (camera label + lidar range), keyed by sensor
+  var fo = (d && d.fused_objects) || {}; var fk = Object.keys(fo);
+  fused = fk.length ? (fo[fk[0]] || []) : [];
   document.getElementById('sensor').textContent =
     keys.length ? (keys.length > 1 ? keys[0]+' (+'+(keys.length-1)+')' : keys[0]) : 'no lidar';
   // honest empty / degraded states
@@ -182,7 +187,7 @@ function setData(d){
   var em = document.getElementById('empty');
   em.style.display = ok ? 'none' : 'flex';
   if (!ok){
-    haveData = false;
+    haveData = false; fused = [];
     document.getElementById('instr').innerHTML = ''; hist = [];   // no stale instrumentation
     if (r && r.reason){
       em.innerHTML = '— room model warming up —<br><span style="font-size:10px;color:var(--dim)">'+
@@ -281,6 +286,24 @@ function renderTopDown(){
   ctx.fillText('E', cx+reach*1.05+5*DPR, cy+5*DPR);
   ctx.fillText('W', cx-reach*1.05-17*DPR, cy+5*DPR);
   ctx.fillText('S', cx-5*DPR, cy+reach*1.05+17*DPR);
+
+  // ---- Tier-2 fused objects: camera LABEL on the lidar geometry (amber = "named by
+  //      the camera, ranged by the lidar"; a hypothesis, not a belief) ----
+  var AMB=[255,176,0];
+  for(var oi=0; oi<fused.length; oi++){
+    var f=fused[oi], pl=f && f.position_lidar_m;
+    if(!pl) continue;                                  // camera-only (no lidar range) → not placeable
+    var sp=P(pl[0], pl[2]);
+    ctx.shadowColor=rgba(AMB,0.9); ctx.shadowBlur=8*DPR; ctx.fillStyle=rgba(AMB,0.96);
+    ctx.beginPath();                                   // diamond marker
+    ctx.moveTo(sp[0],sp[1]-5*DPR); ctx.lineTo(sp[0]+5*DPR,sp[1]);
+    ctx.lineTo(sp[0],sp[1]+5*DPR); ctx.lineTo(sp[0]-5*DPR,sp[1]); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle=rgba(AMB,0.96); ctx.font='bold '+(12*DPR)+'px monospace';
+    ctx.fillText((f.label||'?')+(f.range_m!=null?'  '+f.range_m.toFixed(2)+'m':''), sp[0]+9*DPR, sp[1]-5*DPR);
+    ctx.fillStyle=rgba([120,150,165],1); ctx.font=(9*DPR)+'px monospace';
+    ctx.fillText(Math.round((f.label_confidence||0)*100)+'% · camera', sp[0]+9*DPR, sp[1]+7*DPR);
+  }
 }
 
 function renderFrame(){
