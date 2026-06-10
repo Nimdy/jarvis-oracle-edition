@@ -11,7 +11,8 @@ import math
 import pytest
 
 from cognition.lidar_depth import (
-    AnchorResult, anchor_depth_affine, depth_to_points, lidar_plane_row, TWO_PI,
+    AnchorResult, anchor_depth_affine, anchor_best_yaw, depth_to_points,
+    lidar_plane_row, TWO_PI,
 )
 
 F = 470.0      # focal (640x480 IMX, per the live calibration)
@@ -113,3 +114,63 @@ def test_no_forbidden_imports():
     is_clean = result[0] if isinstance(result, tuple) else (
         result.get("is_clean", result.get("clean", True)) if isinstance(result, dict) else bool(result))
     assert is_clean
+
+
+def _row_profile(disp_fn, s_true, t_true, yaw_true=0.0, n_bins=360):
+    """Encode inv_metric = s_true*disp + t_true, with the lidar ranges stored as if the
+    true camera→lidar yaw is yaw_true (so the clean fit is only found at that yaw)."""
+    row = [None] * 640
+    prof = [None] * n_bins
+    bw = TWO_PI / n_bins
+    for x in range(20, 620, 13):
+        disp = disp_fn(x)
+        th = math.atan2(x - PX, F)
+        if math.cos(th) <= 0.1:
+            continue
+        inv = s_true * disp + t_true
+        if inv <= 0:
+            continue
+        row[x] = disp
+        prof[int(((th - yaw_true) % TWO_PI) / bw) % n_bins] = (1.0 / inv) / math.cos(th)
+    return row, prof
+
+
+def test_anchor_rejects_non_physical_negative_scale():
+    # disparity INVERSELY related to inverse-depth (s_true<0) → non-physical → refuse
+    row, prof = _row_profile(lambda x: 0.4 + 0.002 * x, s_true=-1.0, t_true=3.0)
+    a = anchor_depth_affine(row, prof, yaw_rad=0.0, focal_px=F, principal_x=PX, min_inliers=10)
+    assert not a.valid and a.reason == "non_physical_scale" and a.scale < 0
+
+
+def test_anchor_rejects_weak_correlation():
+    # a real positive trend buried in big oscillation decorrelated from disp → |corr| < 0.4
+    row = [None] * 640
+    prof = [None] * 360
+    bw = TWO_PI / 360
+    for x in range(20, 620, 13):
+        disp = 0.4 + 0.002 * x
+        th = math.atan2(x - PX, F)
+        if math.cos(th) <= 0.1:
+            continue
+        inv = 0.3 * disp + 1.5 + 0.8 * math.sin(x * 1.7)   # trend + decorrelated noise
+        row[x] = disp
+        prof[int((th % TWO_PI) / bw) % 360] = (1.0 / inv) / math.cos(th)
+    a = anchor_depth_affine(row, prof, yaw_rad=0.0, focal_px=F, principal_x=PX,
+                            min_inliers=10, min_corr=0.4)
+    assert not a.valid and a.reason == "weak_correlation" and abs(a.corr) < 0.4
+
+
+def test_anchor_best_yaw_finds_physical_fit_off_base():
+    row, prof = _row_profile(lambda x: 0.4 + 0.002 * x, s_true=2.0, t_true=0.3,
+                             yaw_true=math.radians(12))
+    base = anchor_depth_affine(row, prof, yaw_rad=0.0, focal_px=F, principal_x=PX, min_inliers=10)
+    best, yaw = anchor_best_yaw(row, prof, base_yaw_rad=0.0, focal_px=F, principal_x=PX,
+                                search_deg=30, step_deg=2, min_inliers=10)
+    assert best.valid and best.scale > 0 and best.corr > 0.9
+    assert abs(math.degrees(yaw) - 12) <= 2          # search recovered the true yaw
+
+
+def test_anchor_corr_in_dict():
+    row, prof = _synthetic_row_and_profile(s_true=2.0, t_true=0.3)
+    a = anchor_depth_affine(row, prof, yaw_rad=0.0, focal_px=F, principal_x=PX, min_inliers=10)
+    assert a.to_dict()["corr"] >= 0.9                # clean synthetic ⇒ near-perfect correlation
