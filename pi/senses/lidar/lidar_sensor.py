@@ -127,6 +127,7 @@ class LidarSensor:
         points = 0
         revolutions = 0
         range_max_mm = 0.0
+        raw_n = 0; dropped_quality = 0; dropped_zero = 0   # truth-layer drop telemetry
         window_start = time.time()
         last_emit = window_start
 
@@ -138,7 +139,12 @@ class LidarSensor:
             dist = float(getattr(m, "distance", 0) or 0)
             qual = float(getattr(m, "quality", 0) or 0)
             ang = float(getattr(m, "angle", 0) or 0) % 360.0
-            if dist > 0 and qual > 0:
+            raw_n += 1
+            if qual <= 0:                         # reject qual <= 0
+                dropped_quality += 1
+            elif dist <= 0:                       # reject dist <= 0
+                dropped_zero += 1
+            else:
                 s = int(ang // _SECTOR_DEG) % SECTORS
                 if sector_min[s] is None or dist < sector_min[s]:
                     sector_min[s] = dist
@@ -152,16 +158,18 @@ class LidarSensor:
             now = time.time()
             if now - last_emit >= self._emit_interval:
                 self._emit_summary(sector_min, raw_min, points, revolutions, range_max_mm,
-                                   now - window_start)
+                                   now - window_start, raw_n, dropped_quality, dropped_zero)
                 sector_min = [None] * SECTORS
                 raw_min = [None] * RAW_BINS
                 points = 0
                 revolutions = 0
                 range_max_mm = 0.0
+                raw_n = 0; dropped_quality = 0; dropped_zero = 0
                 window_start = now
                 last_emit = now
 
-    def _emit_summary(self, sector_min, raw_min, points, revolutions, range_max_mm, dt) -> None:
+    def _emit_summary(self, sector_min, raw_min, points, revolutions, range_max_mm, dt,
+                      raw_n=0, dropped_quality=0, dropped_zero=0) -> None:
         sectors = {}
         open_sectors = []
         for i, d in enumerate(sector_min):
@@ -189,6 +197,10 @@ class LidarSensor:
             "open_sectors": sorted(open_sectors),
             "scan_quality": quality,
             "points_polar": points_polar,         # [[bearing_rad, range_m], ...]
+            # Pi truth-layer drop telemetry (the brain reports its own range-gating drops)
+            "raw_points": raw_n,
+            "dropped_quality": dropped_quality,
+            "dropped_zero": dropped_zero,
         }
         try:
             self._emit(summary)

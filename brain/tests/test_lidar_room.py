@@ -196,3 +196,39 @@ def test_no_forbidden_imports():
     is_clean = result[0] if isinstance(result, tuple) else (
         result.get("is_clean", result.get("clean", True)) if isinstance(result, dict) else bool(result))
     assert is_clean
+
+
+# ---- indoor range gating + drop telemetry (Harden S2 filtering PR) -----------
+def test_range_gating_drops_close_and_far_with_telemetry():
+    """min_range_m / max_range_m reject housing noise + far ghosts, with honest counts."""
+    m = LidarRoomModel(LidarRoomConfig())              # defaults: 0.12 / 8.0
+    pts = (
+        (math.radians(10), 2.5),    # keep
+        (math.radians(20), 0.05),   # drop: < min_range_m (housing reflection)
+        (math.radians(30), 9.0),    # drop: >= max_range_m (ghost through a doorway)
+        (math.radians(40), 0.0),    # drop: zero / dropout
+    )
+    m.ingest(LidarScan(timestamp=0.0, points=pts, range_max_m=12.0))
+    fs = m.filter_stats()
+    assert fs["raw_points"] == 4
+    assert fs["dropped_zero"] == 1
+    assert fs["dropped_min_range"] == 1
+    assert fs["dropped_max_range"] == 1
+    assert fs["points_after_filter"] == 1
+    assert fs["effective_max_m"] == 8.0                # capped below the 12 m observed ceiling
+    assert fs["observed_max_m"] == 9.0                 # honest: what the sensor actually returned
+    assert fs["min_range_m"] == 0.12 and fs["max_range_m"] == 8.0
+
+
+def test_far_ghost_does_not_inflate_room():
+    """A recurring 9 m return (open door / reflection) must NOT inflate a ~2 m-radius room."""
+    m = LidarRoomModel(LidarRoomConfig())
+    for _ in range(14):
+        pts = [(math.radians(d), 2.0) for d in range(360)]   # full ring at 2 m
+        pts.append((math.radians(90), 9.0))                  # far ghost every revolution
+        m.ingest(LidarScan(timestamp=0.0, points=tuple(pts), range_max_m=12.0))
+    rm = m.room_model()
+    assert rm.reason is None
+    w, d = rm.dimensions_m
+    assert w < 6.0 and d < 6.0                          # ~4 m box, never ~18 m from the ghost
+    assert m.filter_stats()["cum_dropped_max_range"] == 14

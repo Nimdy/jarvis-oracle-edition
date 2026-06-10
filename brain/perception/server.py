@@ -176,6 +176,18 @@ class PerceptionServer:
                 d = room.room_model().to_dict()
             except Exception:
                 d = {"reason": "error"}
+            # drop-telemetry + derived geometry to PROVE the indoor range gating
+            # stabilises the truth layer (raw→after-filter, ghost rejection, dims).
+            try:
+                fs = room.filter_stats()
+                dims = d.get("dimensions_m", [0.0, 0.0])
+                fs["room_width_m"] = dims[0] if dims else 0.0
+                fs["room_depth_m"] = dims[1] if len(dims) > 1 else 0.0
+                fs["wall_count"] = len(d.get("walls", []))
+                fs["coverage_pct"] = round(d.get("coverage_fraction", 0.0) * 100.0, 1)
+                d["filter_stats"] = fs
+            except Exception:
+                pass
             d["authority"] = "spatial_telemetry_only"
             d["writes_beliefs"] = False
             out[sid] = d
@@ -499,6 +511,10 @@ class PerceptionServer:
                     "sectors": event.data.get("sectors", {}),
                     "open_sectors": event.data.get("open_sectors", []),
                     "scan_quality": event.data.get("scan_quality", "unknown"),
+                    # Pi truth-layer drop telemetry (per emit window)
+                    "raw_points": event.data.get("raw_points", 0),
+                    "dropped_quality": event.data.get("dropped_quality", 0),
+                    "dropped_zero": event.data.get("dropped_zero", 0),
                     "authority": "spatial_telemetry_only",
                     "writes_beliefs": False,
                     "last_update": time.time(),
