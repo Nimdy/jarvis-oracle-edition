@@ -109,6 +109,7 @@
       <button id="b_view" onclick="toggleView()">⬡ 3D view</button>
       <button id="b_reset" onclick="resetView()">⟲ recentre</button>
       <button id="b_calib" onclick="toggleCalib()">⚙ calibrate</button>
+      <button id="b_matrix" onclick="toggleMatrix()">◉ matrix</button>
     </div>
 
     <div class="calibpanel" id="calibpanel" style="display:none">
@@ -162,6 +163,30 @@ function spread(key){ if(hist.length < 2) return 0;
   var lo=1e9, hi=-1e9; for(var i=0;i<hist.length;i++){ var v=hist[i][key]; if(v<lo)lo=v; if(v>hi)hi=v; } return hi-lo; }
 
 // S2 instrumentation strip — the validation gate. Every value is telemetry, never a belief.
+// ---- S2 reflectivity (Tier-0): colour each lidar bin by reflected-pulse strength.
+//      Matte wall vs glossy screen vs glass read differently — a live MATERIAL map.
+//      'matrix' mode greens it into a code-rain glow (brightness = reflectivity). ----
+var matrixMode = false;
+function reflColor(q){      // S2 indoor reflectivity ~1-63 (median ~12)
+  if(matrixMode){ var g=(q==null)?0.16:Math.max(0.14,Math.min(1,q/45));
+    return [Math.round(12+g*30), Math.round(110+g*145), Math.round(22+g*48)]; }   // Matrix green
+  if(q==null) return [70,92,112];                                                 // no reflectivity → slate
+  var t=Math.max(0,Math.min(1,q/45));                                             // dim teal → bright cyan-white
+  return [Math.round(30+t*205), Math.round(95+t*160), Math.round(122+t*133)];
+}
+function drawReflPoints(proj){
+  if(!room) return;
+  var prof=room.profile||[], intn=room.intensity||[], nb=prof.length||360, bw=2*Math.PI/nb, i;
+  for(i=0;i<prof.length;i++){ var rr=prof[i]; if(rr==null) continue;
+    var th=(i+0.5)*bw, sp=proj(rr*Math.sin(th), rr*Math.cos(th)); if(!sp) continue;
+    var c=reflColor(i<intn.length?intn[i]:null);
+    ctx.fillStyle='rgb('+c[0]+','+c[1]+','+c[2]+')';
+    ctx.fillRect(sp[0]-1.6*DPR, sp[1]-1.6*DPR, 3.2*DPR, 3.2*DPR);
+  }
+}
+function toggleMatrix(){ matrixMode=!matrixMode;
+  var b=document.getElementById('b_matrix'); if(b) b.className=matrixMode?'on':''; }
+
 // de-dupe by stable TRACK ID (from the scene tracker) — distinct monitors are distinct
 // tracks, so we keep one entry per track_id (not per spatial cluster). Keeps the freshest.
 function dedupeFused(arr){
@@ -364,6 +389,7 @@ function renderTopDown(){
     ctx.fillStyle=rgba(COL.cyan,0.10); ctx.fill();
     ctx.strokeStyle=rgba(COL.cyan,0.45); ctx.lineWidth=1.5*DPR; ctx.stroke();
   }
+  drawReflPoints(P);                 // S2 reflectivity: each bin coloured by material/return strength
   // walls as crisp outlines, coloured by confidence
   for(i=0;i<room.walls.length;i++){ var w=room.walls[i]; if(!w||!Array.isArray(w.start_m)||!Array.isArray(w.end_m)) continue;
     var col=(w.confidence||0.5)>=0.85?COL.hi:COL.lo, a=P(w.start_m[0],w.start_m[1]), b=P(w.end_m[0],w.end_m[1]);
@@ -464,6 +490,9 @@ function renderFrame(){
     ctx.beginPath(); ctx.moveTo(fp[0][0],fp[0][1]); for(i=1;i<fp.length;i++) ctx.lineTo(fp[i][0],fp[i][1]); ctx.closePath();
     ctx.fillStyle=rgba(COL.cyan,0.07); ctx.fill();
     ctx.strokeStyle=rgba(COL.cyan,0.5); ctx.lineWidth=2*DPR; ctx.stroke(); }
+
+  ctx.globalCompositeOperation='source-over';   // S2 reflectivity ring on the floor plane
+  drawReflPoints(function(x,z){ return proj([x,0,z]); });
 
   // ---- walls (depth sorted far->near): reflection + vertical gradient + glowing edges ----
   var quads=[];
