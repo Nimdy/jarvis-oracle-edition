@@ -1096,6 +1096,7 @@ def _create_app() -> FastAPI:
             "sensor_health": _cache.get("sensor_health", {}),
             "lidar": _cache.get("lidar", {}),
             "lidar_room": _cache.get("lidar_room", {}),
+            "fused_objects": _cache.get("fused_objects", {}),
             "link": _cache.get("link", {}),
             "devices": derive_pi5_devices(_cache),
         }

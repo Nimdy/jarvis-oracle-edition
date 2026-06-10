@@ -510,6 +510,46 @@ def _build_reconstructability_metadata() -> dict[str, dict[str, Any]]:
     }
 
 
+def _build_fused_objects(ctx: "SnapshotContext") -> dict[str, Any]:
+    """Tier-2 SHADOW fusion: camera labels + lidar metric ranges (telemetry-only).
+
+    The camera supplies WHAT (a label hypothesis), the lidar supplies WHERE (exact
+    range). Empty unless BOTH a camera scene snapshot and a lidar room model exist —
+    a bonus view, never required (camera-only and no-lidar paths are untouched).
+    Never raises.
+    """
+    try:
+        if not (ctx.perception and ctx.perc_orch):
+            return {}
+        rooms = ctx.perception.get_lidar_room_model()
+        if not rooms:
+            return {}
+        snap = ctx.perc_orch.get_scene_snapshot()
+        ents = getattr(snap, "entities", None) or []
+        cam = [{"entity_id": getattr(e, "entity_id", ""), "label": getattr(e, "label", "?"),
+                "confidence": getattr(e, "confidence", 0.0), "bbox": getattr(e, "bbox", None)}
+               for e in ents if getattr(e, "bbox", None)]
+        if not cam:
+            return {}
+        from cognition.lidar_fusion import fuse
+        from cognition.lidar_calibration import load_extrinsic
+        ex = load_extrinsic()
+        intr = getattr(getattr(ctx.perc_orch, "_calibration_manager", None), "intrinsics", None)
+        focal = float(getattr(intr, "focal_length_px", 800.0))
+        px = float(getattr(intr, "principal_x", 960.0))
+        out: dict[str, Any] = {}
+        for sid, room in rooms.items():
+            prof = room.get("profile") or []
+            if not prof:
+                continue
+            fused = fuse(cam, prof, yaw_rad=ex.yaw_rad, focal_px=focal,
+                         principal_x=px, mount_height_m=ex.ty_m)
+            out[sid] = [f.to_dict() for f in fused]
+        return out
+    except Exception:
+        return {}
+
+
 def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
     """Build the full dashboard snapshot from engine state.
 
@@ -651,6 +691,7 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
 
         "lidar": ctx.perception.get_lidar_telemetry() if ctx.perception else {},
         "lidar_room": ctx.perception.get_lidar_room_model() if ctx.perception else {},
+        "fused_objects": _build_fused_objects(ctx),     # Tier-2 shadow: camera label + lidar range
 
         "link": ctx.perception.get_link_health() if ctx.perception else {},
 
