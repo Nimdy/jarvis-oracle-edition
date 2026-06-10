@@ -177,7 +177,7 @@ function renderFrame(){
   var rt = vnorm(vcross(f,[0,1,0]));
   var up = vcross(rt,f);
   function rawp(p){ var rel=vsub(p,cam), xc=vdot(rel,rt), yc=vdot(rel,up), zc=vdot(rel,f);
-    if(zc<=0.05) return null; return [xc/zc*focal, yc/zc*focal, zc]; }
+    if(zc<=0.05) return null; return [xc/zc*focal, -(yc/zc)*focal, zc]; }  // screen +y is DOWN → negate world-up
 
   // ---- auto-fit: project the geometry, then scale+centre so it fills the frame
   //      on ANY aspect/screen (kills the dead-space) ----
