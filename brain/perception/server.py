@@ -129,6 +129,10 @@ class PerceptionServer:
         # 2D spatial telemetry (e.g. RPLIDAR sector summaries). Telemetry-only —
         # never written into beliefs/memory; surfaced for the world model + dashboard.
         self._lidar_telemetry: dict[str, dict] = {}
+        # Stage 2b: per-sensor 2D room reconstruction (standalone, telemetry-only).
+        # Lazily created on the first scan_2d carrying raw points_polar; runs OFF the
+        # tick; never writes beliefs/memory. Inert until the Pi streams raw points.
+        self._lidar_rooms: dict[str, Any] = {}
         # Link / nervous-system telemetry. Brain-stamped receipt times so event
         # rate + last-seen are reliable even when a sensor sends timestamp=0.
         self._event_recv_log: deque[tuple[float, str]] = deque(maxlen=2000)
@@ -154,6 +158,28 @@ class PerceptionServer:
         (writes_beliefs=False is enforced at the source; we just surface it).
         """
         return dict(self._lidar_telemetry)
+
+    def get_lidar_room_model(self, sensor_id: str | None = None) -> dict[str, dict]:
+        """Frozen 2D room reconstruction per lidar sensor (TELEMETRY-ONLY).
+
+        Built OFF-tick by a standalone cognition.lidar_room accumulator from raw
+        (bearing,range) points. Never writes beliefs/memory/identity. Empty until the
+        Pi streams raw points_polar (Stage 2a) — sector-only payloads don't feed it.
+        """
+        out: dict[str, dict] = {}
+        items = ([(sensor_id, self._lidar_rooms.get(sensor_id))] if sensor_id
+                 else list(self._lidar_rooms.items()))
+        for sid, room in items:
+            if room is None:
+                continue
+            try:
+                d = room.room_model().to_dict()
+            except Exception:
+                d = {"reason": "error"}
+            d["authority"] = "spatial_telemetry_only"
+            d["writes_beliefs"] = False
+            out[sid] = d
+        return out
 
     def get_link_health(self, window_s: float = 60.0) -> dict[str, Any]:
         """Brain<->Pi link / nervous-system telemetry (read-only snapshot).
@@ -477,6 +503,25 @@ class PerceptionServer:
                     "writes_beliefs": False,
                     "last_update": time.time(),
                 }
+                # Stage 2b (additive, guarded, OFF-tick): feed RAW (bearing,range)
+                # points into the standalone room model when present. Sector-only
+                # payloads (today) carry no points_polar → skipped; the telemetry
+                # above is untouched. A bad scan can never reach the tick or beliefs.
+                raw = event.data.get("points_polar")
+                if raw:
+                    try:
+                        from cognition.lidar_room import LidarScan, LidarRoomModel
+                        room = self._lidar_rooms.get(sensor_id)
+                        if room is None:
+                            room = self._lidar_rooms[sensor_id] = LidarRoomModel()
+                        room.ingest(LidarScan.from_dict({
+                            "timestamp": getattr(event, "timestamp", 0.0),
+                            "points": raw,
+                            "range_max_m": event.data.get("range_max_m", 12.0),
+                            "quality": event.data.get("scan_quality", "good"),
+                        }))
+                    except Exception:
+                        logger.debug("lidar room ingest skipped for %s", sensor_id, exc_info=True)
             case "synthetic_exercise_start":
                 logger.info("Synthetic exercise started from sensor %s", sensor_id)
                 self._synthetic_sensors.add(sensor_id)

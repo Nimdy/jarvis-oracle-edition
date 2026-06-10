@@ -650,6 +650,7 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         "sensor_health": ctx.perception.get_sensor_health() if ctx.perception else {},
 
         "lidar": ctx.perception.get_lidar_telemetry() if ctx.perception else {},
+        "lidar_room": ctx.perception.get_lidar_room_model() if ctx.perception else {},
 
         "link": ctx.perception.get_link_health() if ctx.perception else {},
 
