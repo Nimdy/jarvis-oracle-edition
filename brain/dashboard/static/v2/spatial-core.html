@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Spatial Core (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific — full-bleed holographic stage + crisp DOM HUD over it */
+    html,body{height:100%;}
+    #stagewrap{position:relative;width:100%;height:calc(100vh - 92px);min-height:420px;overflow:hidden;
+      background:radial-gradient(ellipse at 50% 62%, #071018 0%, #03040a 70%);}
+    #stage{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;}
+    #stage.drag{cursor:grabbing;}
+    .hud{position:absolute;pointer-events:none;font-variant-numeric:tabular-nums;}
+    .hud.tl{top:16px;left:20px;}
+    .hud.tl .t{font-size:22px;font-weight:700;letter-spacing:.14em;color:var(--text);}
+    .hud.tl .s{font-size:10px;letter-spacing:.06em;color:var(--cyan);margin-top:3px;}
+    .hud.tl .fw{font-size:9px;letter-spacing:.04em;color:var(--dim);margin-top:3px;}
+    .hud.tr{top:16px;right:20px;text-align:right;}
+    .hud.tr .leg{font-size:9.5px;color:var(--muted);line-height:1.7;}
+    .hud.tr .leg i{display:inline-block;width:18px;height:0;border-top:3px solid;vertical-align:middle;margin-right:6px;}
+    .hud.bl{bottom:16px;left:20px;display:flex;gap:26px;}
+    .hud.bl .st .v{font-size:19px;font-weight:700;color:var(--cyan);}
+    .hud.bl .st .k{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-top:1px;}
+    .hud.br{bottom:16px;right:20px;text-align:right;color:var(--dim);font-size:9.5px;line-height:1.6;}
+    .hud.br b{color:var(--muted);}
+    .ctl{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;}
+    .ctl button{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--muted);
+      background:rgba(8,15,23,.7);border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer;}
+    .ctl button:hover{color:var(--cyan);border-color:var(--cyan);}
+    .ctl button.on{color:var(--cyan);border-color:var(--cyan);}
+    #empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+      color:var(--muted);font-size:13px;letter-spacing:.04em;text-align:center;line-height:1.8;}
+    .corner{position:absolute;width:34px;height:34px;border:0 solid var(--cyan);opacity:.55;pointer-events:none;}
+    .corner.a{top:10px;left:10px;border-top-width:2px;border-left-width:2px;}
+    .corner.b{top:10px;right:10px;border-top-width:2px;border-right-width:2px;}
+    .corner.c{bottom:10px;left:10px;border-bottom-width:2px;border-left-width:2px;}
+    .corner.d{bottom:10px;right:10px;border-bottom-width:2px;border-right-width:2px;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · SPATIAL CORE</h1><span class="v2">dashboardV2</span>
+    <span class="sub">JARVIS's live spatial perception — the 2D LIDAR room model, reconstructed as an
+      interactive 3D hologram. Drag to orbit. Telemetry-only: this is what JARVIS senses, not what it believes.</span>
+    <span class="right"><span id="sensor">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <div id="stagewrap">
+    <canvas id="stage"></canvas>
+    <div class="corner a"></div><div class="corner b"></div><div class="corner c"></div><div class="corner d"></div>
+
+    <div class="hud tl">
+      <div class="t">SPATIAL CORE</div>
+      <div class="s">LIVE 2D LIDAR → HOLOGRAPHIC ROOM RECONSTRUCTION</div>
+      <div class="fw" id="fw">telemetry-only · writes_beliefs = false · single horizontal LIDAR plane · walls extruded to 2.5 m for viz (height synthetic)</div>
+    </div>
+    <div class="hud tr">
+      <div class="leg"><i style="border-color:var(--green)"></i>wall (high&nbsp;conf)</div>
+      <div class="leg"><i style="border-color:var(--amber)"></i>wall (lower&nbsp;conf)</div>
+      <div class="leg"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#eaf6ff;vertical-align:middle;margin-right:7px;"></span>lidar (JARVIS)</div>
+    </div>
+    <div class="hud bl" id="stats"></div>
+    <div class="hud br" id="meta"></div>
+
+    <div class="ctl">
+      <button id="b_rot" class="on" onclick="toggleRot()">◷ auto-orbit</button>
+      <button id="b_reset" onclick="resetView()">⟲ reset view</button>
+    </div>
+
+    <div id="empty">— awaiting LIDAR stream —<br><span style="font-size:10px;color:var(--dim)">start the Pi reader; the brain builds the room from raw points</span></div>
+  </div>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+"use strict";
+/* ===== Spatial Core — zero-dependency software 3D (canvas 2D). =====
+ * Ported 1:1 from the proven offline renderer. Room frame: X=right (sin),
+ * Z=forward (cos); world Y is up, floor at y=0. No external assets (offline-safe). */
+if (window.V2 && V2.renderNav) V2.renderNav('spatial core');
+
+var WALL_H = 2.5;
+var COL = { hi:[0,255,153], lo:[255,176,0], cyan:[0,204,255], grid:[40,110,150], white:[234,246,255] };
+
+var cv = document.getElementById('stage');
+var ctx = cv.getContext('2d');
+var room = null, haveData = false;
+var theta = 0.84, elev = 1.0, autoRot = true, dragging = false, lastX = 0, lastY = 0;
+var DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+// derived per data update
+var midx = 0, midz = 0, extent = 3;
+
+function vsub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
+function vdot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function vcross(a,b){return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];}
+function vnorm(v){var L=Math.hypot(v[0],v[1],v[2])||1;return [v[0]/L,v[1]/L,v[2]/L];}
+function rgba(c,a){return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';}
+
+function resize(){
+  var w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = Math.round(w*DPR); cv.height = Math.round(h*DPR);
+}
+window.addEventListener('resize', resize);
+
+function setData(d){
+  var lr = (d && d.lidar_room) || {};
+  var keys = Object.keys(lr);
+  var r = keys.length ? lr[keys[0]] : null;
+  document.getElementById('sensor').textContent =
+    keys.length ? (keys.length > 1 ? keys[0]+' (+'+(keys.length-1)+')' : keys[0]) : 'no lidar';
+  // honest empty / degraded states
+  var ok = r && r.reason == null && (r.walls||[]).length > 0;
+  var em = document.getElementById('empty');
+  em.style.display = ok ? 'none' : 'flex';
+  if (!ok){
+    haveData = false;
+    if (r && r.reason){
+      em.innerHTML = '— room model warming up —<br><span style="font-size:10px;color:var(--dim)">'+
+        String(r.reason).replace(/_/g,' ')+' · coverage '+Math.round((r.coverage_fraction||0)*100)+'%</span>';
+    } else {
+      em.innerHTML = '— awaiting LIDAR stream —<br><span style="font-size:10px;color:var(--dim)">start the Pi reader; the brain builds the room from raw points</span>';
+    }
+    return;
+  }
+  room = r; haveData = true;
+  // provenance-honest firewall line — driven by the payload, never a fixed literal
+  document.getElementById('fw').innerHTML =
+    'authority <b style="color:var(--cyan)">'+(r.authority||'spatial_telemetry_only')+'</b> · writes_beliefs = <b>'+
+    (r.writes_beliefs===false?'false':String(r.writes_beliefs))+'</b> · single horizontal LIDAR plane · walls extruded to 2.5 m (synthetic height)';
+  var xs=[0], zs=[0], i;
+  for(i=0;i<r.walls.length;i++){ var wl=r.walls[i]; if(!wl||!Array.isArray(wl.start_m)||!Array.isArray(wl.end_m)) continue;
+    xs.push(wl.start_m[0],wl.end_m[0]); zs.push(wl.start_m[1],wl.end_m[1]); }
+  var pm = r.points_m||[];
+  for(i=0;i<pm.length;i++){ xs.push(pm[i][0]); zs.push(pm[i][1]); }
+  var minx=Math.min.apply(null,xs), maxx=Math.max.apply(null,xs);
+  var minz=Math.min.apply(null,zs), maxz=Math.max.apply(null,zs);
+  midx=(minx+maxx)/2; midz=(minz+maxz)/2;
+  extent=Math.max(maxx-minx, maxz-minz, 1.0);
+  // stats HUD
+  var dm=r.dimensions_m||[0,0];
+  var st=[['v','room',dm[0].toFixed(2)+' × '+dm[1].toFixed(2)+' m'],['','walls',String(r.walls.length)],
+          ['','free',(r.free_space_area_m2||0).toFixed(1)+' m²'],['','coverage',Math.round((r.coverage_fraction||0)*100)+'%'],
+          ['','scans',(r.scan_count||0).toLocaleString()]];
+  document.getElementById('stats').innerHTML = st.map(function(s){
+    return '<div class="st"><div class="v">'+s[2]+'</div><div class="k">'+s[1]+'</div></div>';}).join('');
+  document.getElementById('meta').innerHTML =
+    'frame <b>'+(r.frame||'lidar_sensor')+'</b> · bins <b>'+(r.n_bins||0)+'</b><br>'+
+    'inscribed r <b>'+(r.inscribed_radius_m||0).toFixed(2)+' m</b> · authority <b>'+(r.authority||'spatial_telemetry_only')+'</b>';
+}
+
+function draw(){
+  // belt-and-braces: one bad frame (malformed payload, transient state) must NEVER
+  // kill the loop — always re-arm in finally so the hologram self-heals next poll.
+  try { renderFrame(); } catch(e){ /* swallow; next frame retries */ }
+  requestAnimationFrame(draw);
+}
+
+function renderFrame(){
+  var Wc=cv.width, Hc=cv.height, cx=Wc/2, cy=Hc/2;
+  ctx.clearRect(0,0,Wc,Hc);
+  if(!haveData || !room){ return; }
+
+  var fov = 46*Math.PI/180, focal = (Hc/2)/Math.tan(fov/2);
+  var R = extent*1.85 + 2.2;
+  var cam = [midx + R*Math.sin(theta), WALL_H*1.55*elev, midz + R*Math.cos(theta)];
+  var target = [midx, WALL_H*0.32, midz];
+  var f = vnorm(vsub(target,cam));
+  var rt = vnorm(vcross(f,[0,1,0]));
+  var up = vcross(rt,f);
+  function proj(p){
+    var rel=vsub(p,cam), xc=vdot(rel,rt), yc=vdot(rel,up), zc=vdot(rel,f);
+    if(zc<=0.05) return null;
+    return [cx + (xc/zc)*focal, cy - (yc/zc)*focal, zc];
+  }
+
+  // offscreen-free bloom: draw bright scene with additive 'lighter' + shadowBlur
+  ctx.lineCap='round'; ctx.lineJoin='round';
+
+  // floor grid
+  ctx.globalCompositeOperation='source-over';
+  var g0x=midx-extent*0.6-0.4, g1x=midx+extent*0.6+0.4, g0z=midz-extent*0.6-0.4, g1z=midz+extent*0.6+0.4;
+  var step=0.5, k;
+  ctx.lineWidth=1*DPR; ctx.strokeStyle=rgba(COL.grid,0.22);
+  for(k=g0x;k<=g1x+1e-6;k+=step){ line3(proj([k,0,g0z]),proj([k,0,g1z])); }
+  for(k=g0z;k<=g1z+1e-6;k+=step){ line3(proj([g0x,0,k]),proj([g1x,0,k])); }
+  // range rings (on lidar origin)
+  ctx.strokeStyle=rgba(COL.cyan,0.24);
+  for(var rad=1; rad<=Math.ceil(extent); rad++){
+    ctx.beginPath(); var started=false;
+    for(var a=0;a<=360;a+=6){ var pp=proj([rad*Math.sin(a*Math.PI/180),0,rad*Math.cos(a*Math.PI/180)]);
+      if(!pp){started=false;continue;} if(!started){ctx.moveTo(pp[0],pp[1]);started=true;} else ctx.lineTo(pp[0],pp[1]); }
+    ctx.stroke();
+  }
+
+  // walls — depth sorted far->near, bloom via shadowBlur + additive edges
+  var quads=[];
+  for(var i=0;i<room.walls.length;i++){
+    var w=room.walls[i]; if(!w||!Array.isArray(w.start_m)||!Array.isArray(w.end_m)) continue;
+    var s=w.start_m, e=w.end_m, conf=w.confidence||0.5;
+    var col = conf>=0.85?COL.hi:COL.lo;
+    var v=[[s[0],0,s[1]],[e[0],0,e[1]],[e[0],WALL_H,e[1]],[s[0],WALL_H,s[1]]];
+    var cen=[(s[0]+e[0])/2,WALL_H/2,(s[1]+e[1])/2];
+    quads.push([Math.hypot(cen[0]-cam[0],cen[1]-cam[1],cen[2]-cam[2]), v, col, conf]);
+  }
+  quads.sort(function(a,b){return b[0]-a[0];});
+  for(var q=0;q<quads.length;q++){
+    var V=quads[q][1], col=quads[q][2], conf=quads[q][3];
+    var P=[proj(V[0]),proj(V[1]),proj(V[2]),proj(V[3])];
+    if(P[0]==null||P[1]==null||P[2]==null||P[3]==null) continue;
+    // translucent face
+    ctx.globalCompositeOperation='lighter';
+    ctx.beginPath(); ctx.moveTo(P[0][0],P[0][1]); ctx.lineTo(P[1][0],P[1][1]); ctx.lineTo(P[2][0],P[2][1]); ctx.lineTo(P[3][0],P[3][1]); ctx.closePath();
+    ctx.fillStyle=rgba(col, 0.10+0.16*conf); ctx.fill();
+    // glowing edges
+    ctx.shadowColor=rgba(col,0.9); ctx.shadowBlur=14*DPR;
+    ctx.strokeStyle=rgba(col,0.95); ctx.lineWidth=3*DPR; line3(P[3],P[2]);            // top rail
+    ctx.lineWidth=2*DPR; ctx.strokeStyle=rgba(col,0.7);
+    line3(P[0],P[3]); line3(P[1],P[2]); line3(P[0],P[1]);
+    ctx.shadowBlur=0;
+  }
+
+  // lidar core + sweep beam + column
+  ctx.globalCompositeOperation='lighter';
+  var sweep = theta*2.3 + performance.now()/700;
+  var o0=proj([0,0.02,0]);
+  var s1=proj([extent*0.92*Math.sin(sweep),0.02,extent*0.92*Math.cos(sweep)]);
+  var s2=proj([extent*0.92*Math.sin(sweep+0.22),0.02,extent*0.92*Math.cos(sweep+0.22)]);
+  if(o0&&s1&&s2){ ctx.beginPath(); ctx.moveTo(o0[0],o0[1]); ctx.lineTo(s1[0],s1[1]); ctx.lineTo(s2[0],s2[1]); ctx.closePath();
+    ctx.fillStyle=rgba(COL.cyan,0.16); ctx.fill(); }
+  var otop=proj([0,WALL_H*0.95,0]);
+  if(o0&&otop){ ctx.strokeStyle=rgba(COL.white,0.5); ctx.lineWidth=2*DPR; line3(o0,otop); }
+  if(o0){ ctx.shadowColor=rgba(COL.cyan,0.95); ctx.shadowBlur=22*DPR;
+    ctx.fillStyle=rgba(COL.white,0.95); ctx.beginPath(); ctx.arc(o0[0],o0[1],5*DPR,0,7); ctx.fill(); ctx.shadowBlur=0; }
+
+  ctx.globalCompositeOperation='source-over';
+  if(autoRot && !dragging) theta += 0.0045;
+
+  function line3(a,b){ if(!a||!b) return; ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); }
+}
+
+// ---- interaction ----
+cv.addEventListener('mousedown', function(e){ dragging=true; cv.classList.add('drag'); lastX=e.clientX; lastY=e.clientY; });
+window.addEventListener('mouseup', function(){ dragging=false; cv.classList.remove('drag'); });
+window.addEventListener('mousemove', function(e){ if(!dragging) return;
+  theta -= (e.clientX-lastX)*0.008; elev = Math.max(0.25, Math.min(2.4, elev - (e.clientY-lastY)*0.004));
+  lastX=e.clientX; lastY=e.clientY; });
+cv.addEventListener('touchstart', function(e){ if(e.touches.length){dragging=true; lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;} },{passive:true});
+cv.addEventListener('touchmove', function(e){ if(!dragging||!e.touches.length) return;
+  theta -= (e.touches[0].clientX-lastX)*0.008; elev=Math.max(0.25,Math.min(2.4, elev-(e.touches[0].clientY-lastY)*0.004));
+  lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; },{passive:true});
+cv.addEventListener('touchend', function(){ dragging=false; },{passive:true});
+function toggleRot(){ autoRot=!autoRot; document.getElementById('b_rot').classList.toggle('on',autoRot); }
+function resetView(){ theta=0.84; elev=1.0; }
+window.toggleRot=toggleRot; window.resetView=resetView;
+
+function clk(){ var n=new Date(); document.getElementById('clock').textContent=n.toLocaleTimeString(); }
+function tick(){
+  V2.fetchJSON('/api/pi5').then(setData).catch(function(){
+    // link to brain lost — DROP the stale room (never keep orbiting a dead frame as if live)
+    document.getElementById('sensor').textContent='offline';
+    haveData=false;
+    var em=document.getElementById('empty'); em.style.display='flex';
+    em.innerHTML='— link to brain lost —<br><span style="font-size:10px;color:var(--dim)">reconnecting…</span>';
+  });
+}
+
+resize(); clk(); setInterval(clk,1000);
+if(window.ResizeObserver){ try{ new ResizeObserver(resize).observe(document.getElementById('stagewrap')); }catch(e){} }
+tick(); setInterval(tick, 5000);
+if(ctx){ requestAnimationFrame(draw); }
+</script>
+</body>
+</html>

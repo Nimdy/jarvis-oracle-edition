@@ -38,6 +38,7 @@ window.V2 = (function(){
     ['/static/v2/camera.html','camera'],
     ['/static/v2/pi5.html','pi5 body'],
     ['/static/v2/spatial.html','spatial'],
+    ['/static/v2/spatial-core.html','spatial core'],
     ['#sep','ops'],
     ['/static/v2/capability.html','capability'],
     ['/static/v2/autonomy.html','autonomy'],
