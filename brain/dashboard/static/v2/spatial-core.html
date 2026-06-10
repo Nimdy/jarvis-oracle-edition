@@ -46,6 +46,9 @@
     .objpanel .row{display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums;}
     .objpanel .row .k{color:var(--text);} .objpanel .row .v{color:#ffb000;}
     .objpanel .note{margin-top:5px;padding-top:5px;border-top:1px solid var(--line);color:var(--dim);font-size:8.5px;}
+    .dband{margin-top:7px;font-size:10px;letter-spacing:.04em;color:#cfe;border:1px solid rgba(120,200,255,.25);
+      border-radius:5px;padding:5px 9px;background:rgba(10,20,32,.55);max-width:430px;}
+    .dband b{color:#ffb000;font-weight:700;}
     .ctl{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;}
     .ctl button{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--muted);
       background:rgba(8,15,23,.7);border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer;}
@@ -78,6 +81,7 @@
       <div class="t">SPATIAL CORE</div>
       <div class="s">LIVE 2D LIDAR → TOP-DOWN ROOM MAP · NORTH-UP · NO ROTATION</div>
       <div class="fw" id="fw">telemetry-only · writes_beliefs = false · single horizontal LIDAR plane · walls extruded to 2.5 m for viz (height synthetic)</div>
+      <div class="dband" id="densebanner" style="display:none"></div>
     </div>
     <div class="hud tr">
       <div class="leg"><i style="border-color:var(--green)"></i>wall (high&nbsp;conf)</div>
@@ -113,6 +117,7 @@ var cv = document.getElementById('stage');
 var ctx = cv.getContext('2d');
 var room = null, haveData = false;
 var fused = [];                                           // Tier-2 fused objects (camera label + lidar range)
+var dense = [], denseMeta = null;                         // Tier-3 dense cloud (lidar-anchored camera depth)
 var theta = 0.84, elev = 1.0, autoRot = false, dragging = false, lastX = 0, lastY = 0;
 var viewMode = 'top';   // 'top' = readable floor-plan (lidar-north up, fixed) | '3d' = hologram
 var DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -158,6 +163,20 @@ function renderObjPanel(){
       '<span class="v">'+(o.range_m!=null?o.range_m.toFixed(2)+'m':'—')+
       ' <span style="color:var(--dim)">'+Math.round((o.label_confidence||0)*100)+'%</span></span></div>';
   }).join('')+'<div class="note">labels are camera GUESSES · ranges are lidar-MEASURED · telemetry-only</div>';
+}
+
+function updateDenseBanner(){
+  var el=document.getElementById('densebanner'); if(!el) return;
+  if(!denseMeta){ el.style.display='none'; return; }
+  var n=(denseMeta.n||0).toLocaleString();
+  el.style.display='block';
+  if(viewMode==='3d'){
+    el.innerHTML='◆ DENSE 3D RECONSTRUCTION · '+n+' colored points · anchored to '+
+      (denseMeta.inliers||0)+' lidar measurements · <b>depth = camera GUESS, scale = lidar MEASURED</b> · '+
+      (denseMeta.age||0).toFixed(0)+'s ago';
+  } else {
+    el.innerHTML='◆ dense 3D cloud is LIVE ('+n+' pts) — hit <b>⬡ 3D view</b> to see the reconstructed room';
+  }
 }
 
 function renderInstr(r){
@@ -219,6 +238,11 @@ function setData(d){
   // Tier-2 fused objects (camera label + lidar range), keyed by sensor
   var fo = (d && d.fused_objects) || {}; var fk = Object.keys(fo);
   fused = dedupeFused(fk.length ? (fo[fk[0]] || []) : []);
+  // Tier-3 dense cloud (camera depth, lidar-anchored to metric) — 3D view only
+  var dpd = (d && d.dense_points) || {};
+  dense = (dpd.available && Array.isArray(dpd.points)) ? dpd.points : [];
+  denseMeta = dpd.available ? {n: dpd.n, rms: dpd.rms, age: dpd.age_s, scale: dpd.scale, inliers: dpd.inliers} : null;
+  updateDenseBanner();
   document.getElementById('sensor').textContent =
     keys.length ? (keys.length > 1 ? keys[0]+' (+'+(keys.length-1)+')' : keys[0]) : 'no lidar';
   // honest empty / degraded states
@@ -444,6 +468,20 @@ function renderFrame(){
     ctx.shadowBlur=0;
   }
 
+  // ---- Tier-3 DENSE cloud: camera depth, lidar-anchored to METRIC. Real camera colour,
+  //      depth-sorted far→near. The room as JARVIS reconstructs it (depth=GUESS, scale=MEASURED).
+  if(dense && dense.length){
+    ctx.globalCompositeOperation='source-over';
+    var dprj=[];
+    for(i=0;i<dense.length;i++){ var P=dense[i]; var dq=proj([P[0],P[1],P[2]]);
+      if(dq) dprj.push([dq[2],dq[0],dq[1],P[3],P[4],P[5]]); }
+    dprj.sort(function(a,b){return b[0]-a[0];});           // far first (painter's order)
+    var psz=2.2*DPR;
+    for(i=0;i<dprj.length;i++){ var D=dprj[i];
+      ctx.fillStyle='rgb('+D[3]+','+D[4]+','+D[5]+')';
+      ctx.fillRect(D[1]-psz*0.5, D[2]-psz*0.5, psz, psz); }
+  }
+
   // ---- lidar core + sweep beam + column ----
   ctx.globalCompositeOperation='lighter';
   var sweep = theta*2.3 + performance.now()/700;
@@ -486,7 +524,8 @@ cv.addEventListener('touchmove', function(e){ if(!dragging||!e.touches.length) r
   lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; },{passive:true});
 cv.addEventListener('touchend', function(){ dragging=false; },{passive:true});
 function toggleView(){ viewMode = (viewMode==='top') ? '3d' : 'top';
-  document.getElementById('b_view').textContent = (viewMode==='top') ? '⬡ 3D view' : '⊞ top-down'; }
+  document.getElementById('b_view').textContent = (viewMode==='top') ? '⬡ 3D view' : '⊞ top-down';
+  updateDenseBanner(); }
 function resetView(){ theta=0.84; elev=1.0; }   // recentre the 3D camera
 window.toggleView=toggleView; window.resetView=resetView;
 
