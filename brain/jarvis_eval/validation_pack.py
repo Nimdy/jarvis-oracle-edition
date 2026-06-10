@@ -218,6 +218,7 @@ _HRR_MODULE_ROOTS: tuple[str, ...] = (
     "cognition/lidar_room.py",
     "cognition/lidar_calibration.py",
     "cognition/lidar_fusion.py",
+    "cognition/lidar_depth.py",
     "memory/hrr_recall_advisor.py",
     "hemisphere/hrr_specialist.py",
     "synthetic/hrr_exercise.py",
