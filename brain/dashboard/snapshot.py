@@ -604,6 +604,8 @@ def _build_dense_points(ctx: "SnapshotContext") -> dict[str, Any]:
             "scale": d.get("scale"), "inliers": d.get("inliers"), "rms": d.get("rms"),
             "corr": d.get("corr"), "yaw_used_deg": d.get("yaw_used_deg"),
             "age_s": round(age, 1), "provenance": d.get("provenance"),
+            # camera coasts on the cached lidar scale when the lidar is unplugged — say so honestly
+            "lidar_live": d.get("lidar_live", True), "scale_source": d.get("scale_source", "live"),
             "authority": "spatial_telemetry_only", "writes_beliefs": False,
         }
     except Exception:

@@ -140,6 +140,9 @@ var ctx = cv.getContext('2d');
 var room = null, haveData = false;
 var fused = [];                                           // Tier-2 fused objects (camera label + lidar range)
 var dense = [], denseMeta = null;                         // Tier-3 dense cloud (lidar-anchored camera depth)
+// lidar liveness: scan_count stops advancing when the sensor is unplugged → ghost the frozen
+// radar (it's a last-known still frame, NOT a live scan) while the camera cloud stays the hero.
+var lidarStale = false, lastScanCount = -1, lastScanChangeMs = 0, scanAgeS = 0;
 // colour LUT — a GENTLE shadow lift so the dim room is legible, but NO gain: the dense
 // cloud is camera-GUESS (lower authority), so it stays visually SUBORDINATE to the bright
 // measured lidar walls (rendered dimmer + semi-transparent, never out-glowing the geometry).
@@ -227,8 +230,15 @@ function updateDenseBanner(){
   if(viewMode==='3d'){
     var c=denseMeta.corr; var q=(c==null)?'':(c>=0.7?'strong':c>=0.5?'fair':'weak');
     var qc=(c>=0.7?'#4ad':c>=0.5?'#fb0':'#f86');
+    // camera coasting on the last lidar-measured scale — authoritative flag from the sidecar,
+    // OR the client-side stale signal (honest even before any brain restart picks up the field)
+    var cached=denseMeta.lidarLive===false || lidarStale;
+    var scaleTxt=cached
+      ? 'depth = camera GUESS, scale = lidar <span style="color:#fb0">CACHED · lidar offline</span>'
+      : 'depth = camera GUESS, scale = lidar MEASURED';
     el.innerHTML='◆ DENSE 3D RECONSTRUCTION (camera-projected · LOWER authority than lidar) · '+n+
-      ' pts · anchored to '+(denseMeta.inliers||0)+' lidar pts · <b>depth = camera GUESS, scale = lidar MEASURED</b>'+
+      ' pts · '+(cached?'scale held from last lidar fix':'anchored to '+(denseMeta.inliers||0)+' lidar pts')+
+      ' · <b>'+scaleTxt+'</b>'+
       (c==null?'':' · anchor fit <b style="color:'+qc+'">'+q+' r='+c.toFixed(2)+'</b>')+
       (denseMeta.yaw==null?'':' @ yaw '+denseMeta.yaw.toFixed(0)+'°')+' · '+(denseMeta.age||0).toFixed(0)+'s ago';
   } else {
@@ -299,15 +309,41 @@ function setData(d){
   var dpd = (d && d.dense_points) || {};
   dense = (dpd.available && Array.isArray(dpd.points)) ? dpd.points : [];
   denseMeta = dpd.available ? {n: dpd.n, rms: dpd.rms, age: dpd.age_s, scale: dpd.scale,
-    inliers: dpd.inliers, corr: dpd.corr, yaw: dpd.yaw_used_deg} : null;
-  updateDenseBanner();
-  document.getElementById('sensor').textContent =
-    keys.length ? (keys.length > 1 ? keys[0]+' (+'+(keys.length-1)+')' : keys[0]) : 'no lidar';
+    inliers: dpd.inliers, corr: dpd.corr, yaw: dpd.yaw_used_deg, lidarLive: dpd.lidar_live,
+    scaleSource: dpd.scale_source} : null;
   // honest empty / degraded states
   var ok = r && r.reason == null && (r.walls||[]).length > 0;
+  // lidar liveness — scan_count freezing == the sensor stopped feeding (unplugged / Pi node down).
+  // The lidar comes & goes: this flips by itself each poll, no restart needed either direction.
+  var sc = r ? (r.scan_count||0) : 0;
+  if (sc !== lastScanCount){ lastScanCount = sc; lastScanChangeMs = Date.now(); }
+  scanAgeS = lastScanChangeMs ? (Date.now()-lastScanChangeMs)/1000 : 0;
+  lidarStale = ok && scanAgeS >= 8;        // ~2 polls with no new scan → frozen
+  updateDenseBanner();                     // after lidarStale so the cached-scale note is correct
+  document.getElementById('sensor').textContent =
+    (keys.length ? (keys.length > 1 ? keys[0]+' (+'+(keys.length-1)+')' : keys[0]) : 'no lidar') +
+    (lidarStale ? ' · ⚠ OFFLINE '+Math.round(scanAgeS)+'s' : '');
   var em = document.getElementById('empty');
   em.style.display = ok ? 'none' : 'flex';
   if (!ok){
+    // No live room — but if the camera cloud is alive (coasting on the cached scale), the 3D
+    // reconstruction is still the hero. Render it SOLO rather than show a dead screen.
+    if (dense && dense.length && viewMode === '3d'){
+      room = (r && Array.isArray(r.walls)) ? r
+        : {walls:[], points_m:[], authority:'spatial_telemetry_only', writes_beliefs:false};
+      haveData = true; fused = []; lidarStale = true;
+      em.style.display = 'none';
+      var xs2=[0], zs2=[0], di;
+      for(di=0; di<dense.length; di+=4){ xs2.push(dense[di][0]); zs2.push(dense[di][2]); }
+      var mnx=Math.min.apply(null,xs2), mxx=Math.max.apply(null,xs2),
+          mnz=Math.min.apply(null,zs2), mxz=Math.max.apply(null,zs2);
+      midx=(mnx+mxx)/2; midz=(mnz+mxz)/2; extent=Math.max(mxx-mnx, mxz-mnz, 1.0);
+      document.getElementById('instr').innerHTML=''; hist=[];
+      var opS=document.getElementById('objpanel'); if(opS) opS.innerHTML='';
+      document.getElementById('sensor').textContent='camera-only · no lidar';
+      updateDenseBanner();    // reflect the now-stale state (cached scale)
+      return;
+    }
     haveData = false; fused = [];
     document.getElementById('instr').innerHTML = ''; hist = [];   // no stale instrumentation
     var op0=document.getElementById('objpanel'); if(op0) op0.innerHTML='';
@@ -456,6 +492,9 @@ function renderFrame(){
     var vv=[[s[0],0,s[1]],[e[0],0,e[1]],[s[0],WALL_H,s[1]],[e[0],WALL_H,e[1]]];
     for(var j=0;j<4;j++){ r=rawp(vv[j]); if(r) probe.push(r); } }
   for(i=0;i<pm.length;i++){ r=rawp([pm[i][0],0,pm[i][1]]); if(r) probe.push(r); }
+  // no lidar geometry (camera-only mode) → fit the frame to the dense cloud itself
+  if(!probe.length && dense && dense.length){
+    for(i=0;i<dense.length;i+=6){ r=rawp([dense[i][0],dense[i][1],dense[i][2]]); if(r) probe.push(r); } }
   if(!probe.length) return;
   var rxn=1e9,rxx=-1e9,ryn=1e9,ryx=-1e9;
   for(i=0;i<probe.length;i++){ var pr=probe[i];
@@ -480,6 +519,10 @@ function renderFrame(){
       if(!pp){st=false;continue;} if(!st){ctx.moveTo(pp[0],pp[1]);st=true;} else ctx.lineTo(pp[0],pp[1]); }
     ctx.stroke();
   }
+
+  // lidar offline → ghost the frozen lidar geometry (glow/footprint/reflectivity/walls) so it
+  // reads as a last-known still frame, not a live scan. The camera cloud below stays full-strength.
+  ctx.globalAlpha = lidarStale ? 0.2 : 1;
 
   // ---- ground glow under the lidar core ----
   var o0=proj([0,0.02,0]);
@@ -548,11 +591,15 @@ function renderFrame(){
   }
 
   // ---- lidar core + sweep beam + column ----
+  ctx.globalAlpha=1;
   ctx.globalCompositeOperation='lighter';
-  var sweep = theta*2.3 + performance.now()/700;
-  var s1=proj([extent*0.9*Math.sin(sweep),0.02,extent*0.9*Math.cos(sweep)]);
-  var s2=proj([extent*0.9*Math.sin(sweep+0.2),0.02,extent*0.9*Math.cos(sweep+0.2)]);
-  if(o0&&s1&&s2){ ctx.fillStyle=rgba(COL.cyan,0.18); ctx.beginPath(); ctx.moveTo(o0[0],o0[1]); ctx.lineTo(s1[0],s1[1]); ctx.lineTo(s2[0],s2[1]); ctx.closePath(); ctx.fill(); }
+  // the spinning sweep is a LIVE-scan cue — only draw it when the lidar is actually feeding
+  if(!lidarStale){
+    var sweep = theta*2.3 + performance.now()/700;
+    var s1=proj([extent*0.9*Math.sin(sweep),0.02,extent*0.9*Math.cos(sweep)]);
+    var s2=proj([extent*0.9*Math.sin(sweep+0.2),0.02,extent*0.9*Math.cos(sweep+0.2)]);
+    if(o0&&s1&&s2){ ctx.fillStyle=rgba(COL.cyan,0.18); ctx.beginPath(); ctx.moveTo(o0[0],o0[1]); ctx.lineTo(s1[0],s1[1]); ctx.lineTo(s2[0],s2[1]); ctx.closePath(); ctx.fill(); }
+  }
   var otop=proj([0,WALL_H*0.95,0]);
   if(o0&&otop){ ctx.strokeStyle=rgba(COL.white,0.5); ctx.lineWidth=2*DPR; seg(o0,otop); }
   if(o0){ ctx.shadowColor=rgba(COL.cyan,0.95); ctx.shadowBlur=22*DPR;
