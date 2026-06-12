@@ -25,10 +25,14 @@ quarantine is recorded here as a *pending recommendation*, executed only when th
 quarantine immune system / active gate is wired (P5); advisory only flags it.
 
 HONESTY GUARDRAILS (SPARK §7) enforced here:
-  * VIEW-ONLY EPISTEMICS: this module reads belief provenance/confidence but
-    NEVER mutates the frozen ``BeliefRecord`` or writes ``beliefs.jsonl``. The
-    operator's answer is recorded as an *external-validation outcome* (a separate
-    durable log); the actual belief mutation is the active-tier closure (P5).
+  * OPERATOR-GATED EPISTEMICS: scoring/enqueue are view-only. The single mutating
+    path is ``answer()`` -> ``_ground_belief()``, the active-tier closure (SAFE
+    subset): an operator's external validation re-stamps the belief's provenance to
+    ``user_claim`` (it becomes grounded; its inference tension drops; it stops
+    re-surfacing) and nudges confidence by polarity. The riskier P5 parts —
+    reward-coupling and aggressive immune-system quarantine — are deliberately NOT
+    done here. The external-validation OUTCOME is still recorded to its own durable
+    log independently of the belief mutation.
   * Answering is OPERATOR-GATED: nothing here is auto-fired. ``answer()`` runs
     only on an explicit operator POST.
   * Being corrected counts as success: a "refuted" answer still records
@@ -451,10 +455,42 @@ class GroundingQueue:
         except Exception:
             logger.debug("answer: SparkPromotion record failed", exc_info=True)
 
+        # Active-tier closure (SAFE subset): externally anchor the belief the operator
+        # just validated, so the grounding LOOP closes (the belief stops re-surfacing).
+        if grounded and rec.belief_id:
+            try:
+                self._ground_belief(rec.belief_id, validation)
+            except Exception:
+                logger.debug("answer: belief grounding closure failed", exc_info=True)
+
         # Durable, append-only external-validation log (audit chain, §2 station 5).
         self._append_outcome_log(rec)
         self.save()
         return {"ok": True, "record": rec.to_dict()}
+
+    @staticmethod
+    def _ground_belief(belief_id: str, validation: str) -> None:
+        """SPARK active-tier closure (SAFE subset). When the operator externally
+        validates a belief, re-stamp its provenance to ``user_claim`` — the design's
+        operator-grounding path: it now counts as grounded, its inference-gap tension
+        drops, and it stops re-surfacing in the queue. Confirm nudges confidence up;
+        refute tanks it (the belief is anchored either way, per "correction counts as
+        grounded"). We deliberately do NOT do the riskier P5 parts — no reward-coupling
+        and no aggressive immune-system quarantine; refute just low-confidences it."""
+        from epistemic.belief_graph import BeliefGraph
+        bg = BeliefGraph.get_instance()
+        store = getattr(bg, "_belief_store", None) if bg is not None else None
+        if store is None:
+            return
+        bel = store.get(belief_id)
+        if bel is None:
+            return
+        store.update_provenance(belief_id, "user_claim")  # operator = grounded
+        cur = float(getattr(bel, "belief_confidence", 0.0) or 0.0)
+        new_conf = min(0.95, cur + 0.15) if validation == "confirmed" else 0.1
+        store.update_belief_confidence(belief_id, new_conf)
+        logger.info("Grounding closure: belief %s -> user_claim (%s, conf %.2f->%.2f)",
+                    belief_id, validation or "?", cur, new_conf)
 
     def _append_outcome_log(self, rec: PendingGroundingQuestion) -> None:
         try:

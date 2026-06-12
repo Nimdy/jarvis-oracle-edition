@@ -407,6 +407,44 @@ class BeliefStore:
             self._append_belief_jsonl(updated)
             return True
 
+    def update_provenance(self, belief_id: str, new_provenance: str) -> bool:
+        """Re-stamp a belief's provenance (e.g. model_inference -> user_claim when an
+        operator externally validates it — the SPARK active-tier grounding closure).
+        Creates a new frozen record + appends to the durable log, like the siblings."""
+        with self._lock:
+            old = self._beliefs.get(belief_id)
+            if old is None:
+                return False
+            updated = BeliefRecord(
+                belief_id=old.belief_id,
+                canonical_subject=old.canonical_subject,
+                canonical_predicate=old.canonical_predicate,
+                canonical_object=old.canonical_object,
+                modality=old.modality,
+                stance=old.stance,
+                polarity=old.polarity,
+                claim_type=old.claim_type,
+                epistemic_status=old.epistemic_status,
+                extraction_confidence=old.extraction_confidence,
+                belief_confidence=old.belief_confidence,
+                provenance=new_provenance,
+                scope=old.scope,
+                source_memory_id=old.source_memory_id,
+                timestamp=old.timestamp,
+                time_range=old.time_range,
+                is_state_belief=old.is_state_belief,
+                conflict_key=old.conflict_key,
+                evidence_refs=old.evidence_refs,
+                contradicts=old.contradicts,
+                resolution_state=old.resolution_state,
+                rendered_claim=old.rendered_claim,
+                identity_subject_id=old.identity_subject_id,
+                identity_subject_type=old.identity_subject_type,
+            )
+            self._beliefs[belief_id] = updated
+            self._append_belief_jsonl(updated)
+            return True
+
     def add_contradiction_link(self, belief_id: str, other_id: str) -> bool:
         with self._lock:
             old = self._beliefs.get(belief_id)
