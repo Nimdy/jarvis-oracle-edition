@@ -90,6 +90,40 @@ def test_skips_single_shared_content_token():
         assert n == 0
 
 
+def test_second_pass_is_noop_no_budget_waste():
+    # Regression: EdgeStore.add() returns True on a dedup-merge, so a naive linker
+    # re-spends its budget re-merging already-linked beliefs every cycle and never
+    # drains the backlog (orphan_rate plateaus). The skip-if-already-anchored guard
+    # must make a second pass a true no-op.
+    a = _belief("a", "finding_fivetier_routing_strategy")
+    b = _belief("b", "method_fivetier_routing_disambiguation")
+    with tempfile.TemporaryDirectory() as td:
+        bridge, es = _bridge(td, [a, b])
+        n1 = bridge.fill_topic_cluster_edges(max_per_cycle=50)
+        before = len(es._edges)
+        assert n1 >= 2 and before >= 2
+        n2 = bridge.fill_topic_cluster_edges(max_per_cycle=50)
+        assert n2 == 0                 # nothing re-created -> budget preserved
+        assert len(es._edges) == before  # no edge growth on re-run
+
+
+def test_tiny_budget_advances_across_passes():
+    # Two separate topic clusters; a budget that only covers one per pass must
+    # ADVANCE to the second cluster on the next pass (not get stuck on the first).
+    beliefs = [
+        _belief("a1", "finding_alpha_routing_strategy"),
+        _belief("a2", "method_alpha_routing_strategy"),
+        _belief("b1", "finding_beta_audio_pipeline"),
+        _belief("b2", "method_beta_audio_pipeline"),
+    ]
+    with tempfile.TemporaryDirectory() as td:
+        bridge, es = _bridge(td, beliefs)
+        for _ in range(4):             # a few small passes
+            bridge.fill_topic_cluster_edges(max_per_cycle=2)
+        # every belief in both clusters ends up anchored
+        assert all(es.get_incoming(b) for b in ("a1", "a2", "b1", "b2"))
+
+
 def test_forms_hub_around_most_confident():
     # Three beliefs all share fivetier+routing; the highest-confidence one is the hub.
     hub = _belief("hub", "concept_fivetier_routing_strategy", belief_confidence=0.95)

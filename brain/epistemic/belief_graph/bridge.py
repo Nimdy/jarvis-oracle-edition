@@ -57,6 +57,12 @@ TOPIC_MIN_TOKEN_LEN: int = 4
 TOPIC_MIN_SHARED_TOKENS: int = 2
 TOPIC_MAX_POSTING: int = 40            # skip tokens in > this many beliefs (too common)
 TOPIC_EDGE_STRENGTH: float = 0.35
+# Incoming edge types that count as "this belief is anchored" (matches
+# provenance_scorer's orphan definition; refines excluded). A belief with an
+# incoming edge of one of these is already de-orphaned and is skipped on
+# subsequent fill passes — otherwise EdgeStore.add()'s True-on-dedup-merge would
+# let re-processing spend the whole per-cycle budget without advancing.
+_EVIDENTIAL_TYPES: frozenset = frozenset({"supports", "contradicts", "depends_on", "derived_from"})
 # Claim-type prefixes + generic stopwords that are NOT topical content. A token
 # here can never count toward the >=2 shared-token gate (so "both are Method:
 # claims" is not topical relatedness).
@@ -690,6 +696,13 @@ class GraphBridge:
             for bid, tk in tokens.items():
                 if created >= max_per_cycle:
                     break
+                # Only de-orphan TRUE orphans: skip beliefs that already have an
+                # incoming evidential edge. EdgeStore.add() returns True on a dedup
+                # merge, so without this the budget gets spent re-merging already-
+                # linked beliefs every cycle and the backlog never drains.
+                if any(e.edge_type in _EVIDENTIAL_TYPES
+                       for e in self._edge_store.get_incoming(bid)):
+                    continue
                 shared: dict[str, int] = defaultdict(int)
                 for t in tk:
                     for other in postings.get(t, ()):  # co-occurring beliefs
