@@ -44,6 +44,34 @@ CAUSAL_TOKEN_MIN_LEN: int = 3
 CAUSAL_MAX_CANDIDATES: int = 20
 CAUSAL_EDGE_STRENGTH: float = 0.55
 
+# Topical-cluster writer (basis="shared_topic"): research-extracted beliefs have
+# all-unique canonical_subjects AND all-unique source_memory_ids, so neither the
+# shared_subject nor a shared_source heuristic can connect them — yet many are
+# plainly the same topic ("five-tier routing", "Silero VAD"). We link a belief to
+# the most-confident OTHER belief that shares >=TOPIC_MIN_SHARED_TOKENS meaningful
+# CONTENT tokens (claim-type prefixes + stopwords stripped, len>=TOPIC_MIN_TOKEN_LEN).
+# Conservative by design: >=2 shared content tokens (not one common word), and
+# ubiquitous tokens (posting > TOPIC_MAX_POSTING) are skipped as non-discriminative.
+# Honest provenance — a modest bidirectional supports edge, never metric-gaming.
+TOPIC_MIN_TOKEN_LEN: int = 4
+TOPIC_MIN_SHARED_TOKENS: int = 2
+TOPIC_MAX_POSTING: int = 40            # skip tokens in > this many beliefs (too common)
+TOPIC_EDGE_STRENGTH: float = 0.35
+# Claim-type prefixes + generic stopwords that are NOT topical content. A token
+# here can never count toward the >=2 shared-token gate (so "both are Method:
+# claims" is not topical relatedness).
+TOPIC_STOP_TOKENS: frozenset = frozenset({
+    "metric", "concept", "method", "problem", "finding", "conclusion", "brief",
+    "interaction", "completed", "about", "summary", "result", "results", "note",
+    "observation", "insight", "fact", "claim", "belief", "statement", "detail",
+    "the", "this", "that", "these", "those", "paper", "system", "uses", "used",
+    "with", "from", "into", "onto", "over", "under", "between", "during", "based",
+    "ensures", "ensure", "addresses", "address", "provides", "provide", "allows",
+    "allow", "leads", "lead", "leading", "challenge", "approach", "general",
+    "value", "values", "type", "types", "data", "process", "processing", "user",
+    "thing", "things", "various", "several", "common", "different", "important",
+})
+
 
 class GraphBridge:
     """Subscribes to Layer 5 and memory events, creates edges in the EdgeStore."""
@@ -601,6 +629,94 @@ class GraphBridge:
                         break
         if created:
             logger.info("Orphan edge fill: created %d edges for %d orphan beliefs", created, len(orphans))
+        return created
+
+    # -- Topical-cluster edges (basis="shared_topic") -----------------------
+
+    @staticmethod
+    def _topic_tokens(subject: str) -> frozenset:
+        """Meaningful CONTENT tokens of a canonical subject: lowercased, split on
+        non-alphanumerics, with claim-type prefixes + stopwords + short/numeric
+        tokens removed. These are what genuinely signal 'same topic'."""
+        import re
+        toks = set()
+        for t in re.split(r"[^a-z0-9]+", (subject or "").lower()):
+            if (len(t) >= TOPIC_MIN_TOKEN_LEN and t not in TOPIC_STOP_TOKENS
+                    and not t.isdigit()):
+                toks.add(t)
+        return frozenset(toks)
+
+    def fill_topic_cluster_edges(self, max_per_cycle: int = 30) -> int:
+        """Link each belief to the most-confident OTHER active belief that shares
+        >= TOPIC_MIN_SHARED_TOKENS meaningful content tokens. Bidirectional
+        ``supports`` edges (basis ``shared_topic``, strength 0.35) so both ends
+        gain an INCOMING edge (de-orphaned) and confident beliefs accrete topical
+        hubs. Honest + conservative; complements ``fill_orphan_edges`` for the
+        research-claim regime where subjects AND sources are all unique.
+
+        Returns the number of new edges created.
+        """
+        from collections import defaultdict
+        from epistemic.belief_graph.edges import make_edge
+
+        active = [b for b in self._belief_store.get_active_beliefs()
+                  if getattr(b, "resolution_state", None) == "active"]
+        tokens: dict[str, frozenset] = {}
+        conf: dict[str, float] = {}
+        rec: dict[str, Any] = {}
+        for b in active:
+            bid = getattr(b, "belief_id", None)
+            if not bid:
+                continue
+            tk = self._topic_tokens(getattr(b, "canonical_subject", "") or "")
+            if len(tk) < TOPIC_MIN_SHARED_TOKENS:
+                continue                       # too few content tokens to ever match
+            tokens[bid] = tk
+            conf[bid] = float(getattr(b, "belief_confidence", 0.0) or
+                              getattr(b, "extraction_confidence", 0.0) or 0.0)
+            rec[bid] = b
+
+        # Inverted index token -> belief_ids; drop non-discriminative tokens
+        # (appearing in only 1 belief, or in more than TOPIC_MAX_POSTING).
+        index: dict[str, list] = defaultdict(list)
+        for bid, tk in tokens.items():
+            for t in tk:
+                index[t].append(bid)
+        postings = {t: bids for t, bids in index.items()
+                    if 2 <= len(bids) <= TOPIC_MAX_POSTING}
+
+        created = 0
+        with self._lock:
+            for bid, tk in tokens.items():
+                if created >= max_per_cycle:
+                    break
+                shared: dict[str, int] = defaultdict(int)
+                for t in tk:
+                    for other in postings.get(t, ()):  # co-occurring beliefs
+                        if other != bid:
+                            shared[other] += 1
+                cands = [c for c, n in shared.items() if n >= TOPIC_MIN_SHARED_TOKENS]
+                if not cands:
+                    continue
+                anchor = max(cands, key=lambda c: (conf.get(c, 0.0), c))
+                if anchor == bid:
+                    continue
+                prov = getattr(rec[bid], "provenance", "") or ""
+                for s_id, t_id in ((bid, anchor), (anchor, bid)):
+                    edge = make_edge(
+                        source_belief_id=s_id, target_belief_id=t_id,
+                        edge_type="supports", strength=TOPIC_EDGE_STRENGTH,
+                        provenance=prov, evidence_basis="shared_topic",
+                    )
+                    if self._edge_store.add(edge):
+                        self._edges_created += 1
+                        try:
+                            self._emit_edge_created("supports", "shared_topic")
+                        except Exception:
+                            pass
+                        created += 1
+        if created:
+            logger.info("Topic-cluster fill: created %d shared_topic edges", created)
         return created
 
     # -- Temporal-sequence edges (basis="temporal_sequence") ----------------

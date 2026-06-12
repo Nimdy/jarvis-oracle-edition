@@ -37,6 +37,11 @@ VALID_EVIDENCE_BASES = frozenset({
     "shared_subject", "causal", "temporal_sequence", "belief_version",
     "extractor_link", "user_correction", "resolution_outcome",
     "memory_association", "orphan_fill",
+    # Topical cluster: two beliefs share >=2 meaningful CONTENT tokens in their
+    # canonical subject (claim-type prefixes + stopwords excluded). Honest
+    # same-topic relatedness for research-extracted claims whose subjects +
+    # sources are otherwise all-unique (so shared_subject/source can't link them).
+    "shared_topic",
 })
 
 _JARVIS_DIR = os.path.expanduser("~/.jarvis")

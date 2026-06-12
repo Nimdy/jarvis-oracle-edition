@@ -44,6 +44,13 @@ class BeliefGraph:
     # to game orphan_rate. See docs/CAPABILITY_AUTHORITY_DESIGN.md honesty rule / FIDELITY #10.
     ORPHAN_FILL_CADENCE_S: float = 600.0
     ORPHAN_FILL_BUDGET: int = 15
+    # Topical-cluster fill (basis="shared_topic"): the primary de-orphaner for
+    # research-extracted claims (all-unique subjects + sources defeat the
+    # shared-subject filler). Same throttled, honest path — only links beliefs
+    # sharing >=2 meaningful CONTENT tokens. Higher budget: edges are cheap and
+    # the existing backlog is large; still bounded per cycle to cap tick latency.
+    TOPIC_FILL_BUDGET: int = 100
+    TOPIC_FILL_BUDGET_DREAM: int = 200
 
     def __init__(self) -> None:
         from epistemic.belief_graph.edges import EdgeStore
@@ -145,6 +152,9 @@ class BeliefGraph:
                 filled = self._bridge.fill_orphan_edges(max_per_cycle=self.ORPHAN_FILL_BUDGET)
                 if filled:
                     logger.info("BeliefGraph maintenance: filled %d orphan edges (non-dream)", filled)
+                topic_filled = self._bridge.fill_topic_cluster_edges(max_per_cycle=self.TOPIC_FILL_BUDGET)
+                if topic_filled:
+                    logger.info("BeliefGraph maintenance: filled %d shared_topic edges (non-dream)", topic_filled)
             except Exception:
                 logger.exception("BeliefGraph maintenance orphan-fill error")
 
@@ -267,6 +277,9 @@ class BeliefGraph:
                 filled = self._bridge.fill_orphan_edges(max_per_cycle=30)
                 if filled:
                     logger.info("BeliefGraph dream: filled %d orphan edges", filled)
+                topic_filled = self._bridge.fill_topic_cluster_edges(max_per_cycle=self.TOPIC_FILL_BUDGET_DREAM)
+                if topic_filled:
+                    logger.info("BeliefGraph dream: filled %d shared_topic edges", topic_filled)
 
             self._run_full_propagation()
         except Exception:
