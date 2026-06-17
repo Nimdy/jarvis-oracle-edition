@@ -253,6 +253,42 @@ def get_backoff_delay(crash_count: int) -> float:
     return BACKOFF_SCHEDULE[max(0, idx)]
 
 
+def _ensure_depth_sidecar(script_dir: str) -> None:
+    """Best-effort auto-start of the Tier-3 dense-depth sidecar (telemetry-only).
+
+    The sidecar (``tools/tier3_depth_service.py``) generates the dense colored 3D cloud
+    (``~/.jarvis/dense_points.json``) the spatial dashboard reads. It is a SEPARATE,
+    fully-decoupled process: a failure here must NEVER affect the brain.
+
+    - Idempotent: if it is already running, do nothing (no double-launch on restart).
+    - Detached into its own session so a brain restart / signal-forward never kills it.
+    - Never raises into the supervisor loop.
+
+    Closes the silent-loss gap: before this, the sidecar died on any outage and stayed
+    gone (no auto-start) until someone noticed the 3D clouds had vanished.
+    """
+    try:
+        for entry in Path("/proc").iterdir():
+            if entry.name.isdigit() and "tier3_depth_service.py" in _proc_cmdline(int(entry.name)):
+                return  # already running — do not double-launch
+        venv_python = os.path.join(script_dir, ".venv", "bin", "python")
+        sidecar = os.path.join(script_dir, "tools", "tier3_depth_service.py")
+        if not (os.path.isfile(venv_python) and os.path.isfile(sidecar)):
+            return  # not deployed here (tests / partial checkout) — skip silently
+        with open("/tmp/tier3_depth.log", "ab") as logf:
+            subprocess.Popen(
+                [venv_python, "-u", sidecar],
+                cwd=script_dir,
+                stdout=logf,
+                stderr=logf,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,  # decouple: survives brain restarts / signal forwarding
+            )
+        log("Auto-started Tier-3 depth sidecar (dense 3D cloud)")
+    except Exception as exc:  # noqa: BLE001 — a sidecar hiccup must never touch the brain
+        log(f"Depth sidecar auto-start skipped: {exc}")
+
+
 def main() -> int:
     script_dir = os.environ.get("JARVIS_BRAIN_DIR") or os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
@@ -300,6 +336,12 @@ def main() -> int:
             [venv_python, "-u", "main.py"] + extra_args,
             cwd=script_dir,
         )
+
+        # Telemetry-only Tier-3 dense-depth sidecar: auto-start + self-heal alongside the
+        # brain. Decoupled (own session) and never-throws — closes the silent-loss gap where
+        # the 3D cloud vanished on any outage and stayed gone until noticed. Runs after the
+        # brain is already launched so it can never delay or block the brain coming up.
+        _ensure_depth_sidecar(script_dir)
 
         exit_code = brain_proc.wait()
         elapsed = time.monotonic() - launch_time

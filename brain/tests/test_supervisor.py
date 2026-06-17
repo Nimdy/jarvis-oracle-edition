@@ -157,6 +157,51 @@ class TestBackoff:
             assert sup.get_backoff_delay(5) == 0.0
 
 
+class TestDepthSidecarAutostart:
+    """The Tier-3 depth sidecar auto-start must be SAFE: no-op when not deployed,
+    detached when it does launch, and it must NEVER raise into the supervisor loop."""
+
+    def _stub_brain_dir(self, tmp_path: Path, with_sidecar: bool) -> Path:
+        (tmp_path / ".venv" / "bin").mkdir(parents=True)
+        (tmp_path / ".venv" / "bin" / "python").symlink_to(sys.executable)
+        if with_sidecar:
+            (tmp_path / "tools").mkdir()
+            (tmp_path / "tools" / "tier3_depth_service.py").write_text("# stub\n")
+        return tmp_path
+
+    def test_noop_when_sidecar_not_deployed(self, tmp_path):
+        # venv present but no tools/tier3_depth_service.py (the test/mock layout) -> no launch
+        sup = _load_supervisor()
+        self._stub_brain_dir(tmp_path, with_sidecar=False)
+        with patch.object(sup, "_proc_cmdline", return_value=""), \
+                patch.object(sup.subprocess, "Popen") as mock_popen:
+            sup._ensure_depth_sidecar(str(tmp_path))
+            mock_popen.assert_not_called()
+
+    def test_launches_detached_when_deployed(self, tmp_path):
+        sup = _load_supervisor()
+        self._stub_brain_dir(tmp_path, with_sidecar=True)
+        with patch.object(sup, "_proc_cmdline", return_value=""), \
+                patch.object(sup.subprocess, "Popen") as mock_popen:
+            sup._ensure_depth_sidecar(str(tmp_path))
+            assert mock_popen.call_count == 1
+            # detached so a brain restart / signal-forward can never kill it
+            assert mock_popen.call_args.kwargs.get("start_new_session") is True
+
+    def test_idempotent_when_already_running(self, tmp_path):
+        sup = _load_supervisor()
+        self._stub_brain_dir(tmp_path, with_sidecar=True)
+        with patch.object(sup, "_proc_cmdline", return_value="python -u tools/tier3_depth_service.py"), \
+                patch.object(sup.subprocess, "Popen") as mock_popen:
+            sup._ensure_depth_sidecar(str(tmp_path))
+            mock_popen.assert_not_called()  # already up -> do not double-launch
+
+    def test_never_raises_on_bad_input(self):
+        # bogus dir / unexpected error must be swallowed (returns None, no exception)
+        sup = _load_supervisor()
+        assert sup._ensure_depth_sidecar("/no/such/dir/xyz") is None
+
+
 # ---------------------------------------------------------------------------
 # Integration tests (spawn actual supervisor with mock brain scripts)
 # ---------------------------------------------------------------------------
