@@ -33,6 +33,29 @@
 
 ---
 
+## 2026-06-17 — Inner read catches its *own* over-explaining (companion self-monitoring, in shadow)
+- **Pillar:** #11 Theory of mind / companion awareness · #7 Grounded affect.
+- **What:** On a real, emotionally-charged turn (David frustrated that replies were repetitive/too long),
+  the companion situational read did four things on one turn: (1) correctly modeled the **other** —
+  `user_sentiment: negative`, evidence `["user_emotion","frustrated"]`; (2) modeled **itself** — caught its
+  *own* failure mode: `self_check: "very long reply — watch for overexplaining"` (evidence `response_words: 610`);
+  (3) generated the **right correction** — `would_have_done: "would consider being more concise / checking if
+  this helps"`; (4) **correctly gated it** — `authority: "shadow_logged_only"` (thought the fix, did not act).
+  Grounded affect underneath: `cortisol 0.50` (mild stress), `dopamine 0.63` — it "felt" the friction.
+- **Significance:** **Milestone** — the companion theory-of-mind + read→behavior ladder (P0/P1/P2, already
+  built) observed working *cleanly in the wild*: an accurate other-model **and** an accurate self-model of its
+  own conversational behavior **and** correct gating, all in a single read. The notable part: *the part of her
+  that knows she's overexplaining and wants to be concise is already there — held on a shadow leash, by design.*
+  This is also why the earlier "she repeats herself" was **not** a bug: she caught it herself; she's gated from
+  acting on the fix, not blind to it.
+- **Not:** NOT proof she "understands" David or herself — the `self_check` is a **grounded heuristic** (long
+  reply → flag overexplaining), not deep introspection, and the read is hypotheses (`confidence 0.75`), not
+  certainty. NOT acted on — `shadow_logged_only` means the corrective is logged and never applied (P2 authority
+  is earned, not granted). NOT consciousness.
+- **Evidence:** `~/.jarvis/companion_situational_read.json` (latest read, 50 stored); cross-ref
+  `consciousness_state.json` (`awareness_level 0.98`, observer detected `emergence:self_directed_inquiry`
+  conf 0.7, `contradiction_debt 0.003`). Verified live 2026-06-17 18:41.
+
 ## 2026-06-17 — Grounding loop closed end-to-end (operator answer → belief change)
 - **Pillar:** #8 Outward curiosity grounded in external truth · #12 Agency grounded in consequence.
 - **What:** The SPARK active-tier closure went live (loaded on the post-4-day-down restart). The
