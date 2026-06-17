@@ -33,6 +33,22 @@
 
 ---
 
+## 2026-06-17 — Grounding loop closed end-to-end (operator answer → belief change)
+- **Pillar:** #8 Outward curiosity grounded in external truth · #12 Agency grounded in consequence.
+- **What:** The SPARK active-tier closure went live (loaded on the post-4-day-down restart). The
+  operator's answers to 11 grounding questions were recorded and — for the first time — **mutated
+  the belief graph**: 8 confirmed architecture beliefs (Silero VAD, openWakeWord, ToolType/StreamState
+  enums, the audio pipeline) + 3 refuted research-noise beliefs flipped from `model_inference` to
+  grounded (`user_claim`). `grounded_count` 5→16, `external_validation_rate`→1.0, and the pending
+  queue drained **11→1** because the grounded beliefs' tension dropped — **they stopped re-surfacing.**
+- **Significance:** **Milestone** — the external-validation loop now *closes*: operator truth →
+  belief change → reduced curiosity-tension. For days it was view-only (answers recorded but inert);
+  now an answer actually *does something*.
+- **Not:** still operator-driven (a human answers; not autonomous), and the beliefs grounded here are
+  low-leverage leaf facts. The risky P5 parts (reward-coupling, immune quarantine) remain gated.
+- **Evidence:** `/api/grounding/queue` (grounded_count 5→16, pending 11→1), `beliefs.jsonl`
+  (active `user_claim` 4→15). Closure: commit `a1663de`, loaded post-restart + verified live.
+
 ## 2026-06-12 — Grounded, non-confabulating self-report (live voice)
 - **Pillar:** #1 Integrity / honest self-knowledge.
 - **What:** Asked about her status in live conversation (qwen3:8b voice), JARVIS gave an extended
