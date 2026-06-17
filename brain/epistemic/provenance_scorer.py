@@ -347,6 +347,17 @@ class ProvenanceScorer:
           * pressure term — global quarantine composite (system-wide doubt).
         """
         provenance = getattr(belief, "provenance", "") or ""
+        # Already externally validated (operator / sensor / cited source) → it does
+        # NOT need re-grounding. Return ~0 tension so a grounded belief drops out of
+        # the queue regardless of leverage — fixes a high-leverage HUB belief being
+        # re-asked AFTER the operator already confirmed it (the grounding closure
+        # grounds it but the global pressure term × hub leverage kept it ranked).
+        if provenance in _GROUNDED_PROVENANCE:
+            return 0.0, {
+                "inference_term": 0.0, "orphan_term": 0.0, "pressure_term": 0.0,
+                "base_confidence": round(base_conf, 4),
+                "effective_confidence": round(effective_conf, 4), "grounded": 1.0,
+            }
         # Both model-inferred AND untrusted-scraped beliefs are "ungrounded until
         # validated": they carry the inference term so the grounding ring is drawn
         # to confirm them. (web_scrap is external in origin but unverified — a random

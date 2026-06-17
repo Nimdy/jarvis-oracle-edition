@@ -317,10 +317,12 @@ def test_provenance_scorer_is_view_only():
     for b in beliefs:
         assert b._mutations == [], f"belief {b.belief_id} was mutated: {b._mutations}"
     assert store.saved == 0
-    # An inferred, orphaned belief reads hotter than a grounded one.
+    # An inferred, orphaned belief reads hot; a GROUNDED belief (b2=observed) reads
+    # 0 tension and drops out of the report entirely — it's been externally validated,
+    # so it is never re-queued for grounding (regardless of hub leverage).
     by_id = {t.belief_id: t for t in report.top_tensions}
-    assert by_id["b1"].grounding_tension > 0.0
-    assert by_id["b1"].is_inferred and not by_id["b2"].is_inferred
+    assert by_id["b1"].grounding_tension > 0.0 and by_id["b1"].is_inferred
+    assert "b2" not in by_id
 
 
 def test_provenance_scorer_default_safe_without_store():
