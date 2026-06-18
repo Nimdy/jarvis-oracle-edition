@@ -1447,6 +1447,27 @@ def _create_app() -> FastAPI:
     async def api_scene():
         return _cache.get("scene", {})
 
+    @app.post("/api/camera/control", dependencies=[Depends(_require_api_key)])
+    async def api_camera_control(request: Request):
+        """Live camera control — zoom / region-zoom / focus. Forwards to the Pi
+        detector via the perception server (governed write, API key). The Pi handles:
+        zoom(level) · zoom_to(region,[padding]) · reset · autofocus · continuous_af ·
+        manual_focus(position). Telemetry-irrelevant: drives the lens/ISP, no cognition."""
+        try:
+            body = await request.json()
+            control = str(body.get("control") or "").strip()
+            allowed = {"zoom", "zoom_to", "reset", "autofocus", "continuous_af", "manual_focus"}
+            if control not in allowed:
+                return JSONResponse({"error": f"unknown control: {control!r}"}, status_code=400)
+            po = _perc_orch
+            if po is None or getattr(po, "perception", None) is None:
+                return JSONResponse({"error": "perception unavailable"}, status_code=503)
+            kwargs = {k: v for k, v in body.items() if k != "control"}
+            po.perception.send_camera_control(control, **kwargs)
+            return {"ok": True, "control": control, "args": kwargs}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
     @app.get("/api/health")
     async def api_health():
         return _cache.get("health", {})
