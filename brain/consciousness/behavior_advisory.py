@@ -221,14 +221,25 @@ class BehaviorAdvisoryEngine:
                     "person_aware": False,
                 })
 
-        # be_concise — the self-check tell (independent of the above)
+        # be_concise — the self-check tell. Now person-aware once the LEARNED brevity
+        # axis is earned (this is what uncages corroboration for a steady/engaged
+        # companion — engagement disposition alone could never back this one).
         if overexplain:
+            verbosity_pref = str(getattr(pm, "verbosity_pref", "") or "")
+            verbosity_conf = float(getattr(pm, "verbosity_confidence", 0.0) or 0.0)
+            prefers_concise = (
+                verbosity_pref == "prefers concise replies"
+                and verbosity_conf >= _PERSON_AWARE_DISPOSITION_FLOOR
+            )
+            # boost scales with the brevity-axis confidence (NOT the engagement disp_conf).
+            verbosity_boost = min(_PERSON_AWARE_MAX_BOOST, round(verbosity_conf * 0.3, 3))
+            be_concise_conf = base_conf + (verbosity_boost if prefers_concise else 0.0)
             suggestions.append({
                 "adjustment": "be_concise",
                 "narration": "would consider being more concise / checking if this helps",
-                "reason": self_check,
-                "confidence": _conf(base_conf, False),
-                "person_aware": False,
+                "reason": self._reason(self_check, prefers_concise, verbosity_pref),
+                "confidence": round(max(0.0, min(1.0, be_concise_conf)), 3),
+                "person_aware": prefers_concise,
             })
 
         # acknowledge_delay — the user waited

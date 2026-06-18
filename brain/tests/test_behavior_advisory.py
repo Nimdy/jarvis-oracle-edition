@@ -19,10 +19,12 @@ def _read(*, tripped=True, sentiment="negative", engagement="disengaging",
     )
 
 
-def _pm(*, disposition="", disp_conf=0.0, responsiveness=""):
+def _pm(*, disposition="", disp_conf=0.0, responsiveness="",
+        verbosity_pref="forming — not enough reads yet", verbosity_confidence=0.0):
     return SimpleNamespace(
         disposition=disposition, disposition_confidence=disp_conf,
         responsiveness=responsiveness,
+        verbosity_pref=verbosity_pref, verbosity_confidence=verbosity_confidence,
     )
 
 
@@ -91,3 +93,40 @@ class TestBehaviorAdvisory:
         assert pr["gate"] == "P3->P4"
         assert pr["structural_ready"] is False          # fresh -> not enough advisories
         assert "EARNED" in pr["note"]
+
+    # ── brevity axis (uncages corroboration for a steady/engaged companion) ──
+    def _oe_read(self):
+        # over-explain on a steady/engaged turn — the case that was previously un-corroborable
+        return _read(sentiment="neutral", engagement="engaged",
+                     self_check="very long reply — watch for overexplaining")
+
+    def test_be_concise_person_aware_when_brevity_axis_earned(self, engine):
+        bare = engine.propose(self._oe_read(), _pm())
+        bare_bc = next(s for s in bare.suggestions if s["adjustment"] == "be_concise")
+        assert bare_bc["person_aware"] is False          # no learned brevity pref yet
+
+        aware = engine.propose(
+            self._oe_read(),
+            _pm(verbosity_pref="prefers concise replies", verbosity_confidence=0.6),
+        )
+        aware_bc = next(s for s in aware.suggestions if s["adjustment"] == "be_concise")
+        assert aware_bc["person_aware"] is True
+        assert aware_bc["confidence"] > bare_bc["confidence"]
+        assert "learned pattern" in aware_bc["reason"]
+
+    def test_be_concise_weak_brevity_axis_does_not_corroborate(self, engine):
+        adv = engine.propose(
+            self._oe_read(),
+            _pm(verbosity_pref="prefers concise replies", verbosity_confidence=0.1),
+        )
+        bc = next(s for s in adv.suggestions if s["adjustment"] == "be_concise")
+        assert bc["person_aware"] is False               # below the 0.30 floor -> no fake boost
+
+    def test_be_concise_ignores_unrelated_brevity_label(self, engine):
+        # "no clear length preference" must NOT corroborate even at high confidence
+        adv = engine.propose(
+            self._oe_read(),
+            _pm(verbosity_pref="no clear length preference", verbosity_confidence=0.9),
+        )
+        bc = next(s for s in adv.suggestions if s["adjustment"] == "be_concise")
+        assert bc["person_aware"] is False

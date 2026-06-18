@@ -64,6 +64,24 @@ _ENGAGEMENT_PHRASE = {
     "unknown": "unclear",
 }
 
+# ── verbosity/brevity axis (a 2nd LEARNED disposition) ───────────────────────
+# Learns whether a person reacts worse when JARVIS OVER-EXPLAINS, as a within-person
+# CONTRAST (their reaction on over-explained turns vs their own baseline) — a
+# confidence-scored HYPOTHESIS, never a hand-coded "dislikes long replies". It is
+# sample-gated on over-explained turns, so it is EARNED from lived reads exactly like
+# the engagement axis. This is what lets the be_concise advisory become person-aware
+# for a steady/engaged companion (the prior cage: only disengagement could corroborate).
+_VERBOSITY_MIN_OE_SAMPLES = 4        # min over-explained turns before any hypothesis
+_VERBOSITY_FULL_CONF_SAMPLES = 12    # over-explained turns for the confidence ramp to max
+_VERBOSITY_CONTRAST_FLOOR = 0.5      # baseline-minus-overexplain reaction gap to call it
+_REACTION_ENG = {"engaged": 1.0, "neutral": 0.0, "disengaging": -1.0, "unknown": 0.0}
+_REACTION_SENT = {"positive": 1.0, "neutral": 0.0, "negative": -1.0}
+
+
+def _reaction_score(engagement: str, sentiment: str) -> float:
+    """Coarse [-2..+2] read of how the person received an exchange (engagement+sentiment)."""
+    return _REACTION_ENG.get(engagement, 0.0) + _REACTION_SENT.get(sentiment, 0.0)
+
 
 @dataclass
 class PersonModel:
@@ -78,6 +96,13 @@ class PersonModel:
     feeling_confidence: float = 0.0
     responsiveness: str = "unknown"          # "responsive" | "mixed" | "withdrawn"
     consistency: float = 0.0                  # how consistent recent reads are (0..1)
+    # verbosity/brevity axis (2nd learned disposition — earned from over-explained turns)
+    verbosity_pref: str = "forming — not enough reads yet"
+    verbosity_confidence: float = 0.0
+    _oe_count: int = 0                        # over-explained turns seen
+    _oe_reaction_sum: float = 0.0             # summed reaction on those turns
+    _all_count: int = 0                       # all turns (the baseline)
+    _all_reaction_sum: float = 0.0            # summed reaction over all turns
     last_updated: float = 0.0
     _eng_counts: dict = field(default_factory=dict)
     _sent_counts: dict = field(default_factory=dict)
@@ -93,6 +118,8 @@ class PersonModel:
             "feeling_confidence": round(self.feeling_confidence, 3),
             "responsiveness": self.responsiveness,
             "consistency": round(self.consistency, 3),
+            "verbosity_pref": self.verbosity_pref,
+            "verbosity_confidence": round(self.verbosity_confidence, 3),
             "last_updated": self.last_updated,
             "hypothesis": True,
             "authority": "shadow_logged_only",
@@ -138,6 +165,12 @@ class TheoryOfMindEngine:
                     "feeling_confidence": pm.feeling_confidence,
                     "responsiveness": pm.responsiveness,
                     "consistency": pm.consistency,
+                    "verbosity_pref": pm.verbosity_pref,
+                    "verbosity_confidence": pm.verbosity_confidence,
+                    "_oe_count": pm._oe_count,
+                    "_oe_reaction_sum": pm._oe_reaction_sum,
+                    "_all_count": pm._all_count,
+                    "_all_reaction_sum": pm._all_reaction_sum,
                     "last_updated": pm.last_updated,
                     "recent": [list(t) for t in pm._recent],
                 }
@@ -162,6 +195,12 @@ class TheoryOfMindEngine:
                 pm.feeling_confidence = float(s.get("feeling_confidence", 0.0) or 0.0)
                 pm.responsiveness = s.get("responsiveness", "unknown")
                 pm.consistency = float(s.get("consistency", 0.0) or 0.0)
+                pm.verbosity_pref = s.get("verbosity_pref", pm.verbosity_pref)
+                pm.verbosity_confidence = float(s.get("verbosity_confidence", 0.0) or 0.0)
+                pm._oe_count = int(s.get("_oe_count", 0) or 0)
+                pm._oe_reaction_sum = float(s.get("_oe_reaction_sum", 0.0) or 0.0)
+                pm._all_count = int(s.get("_all_count", 0) or 0)
+                pm._all_reaction_sum = float(s.get("_all_reaction_sum", 0.0) or 0.0)
                 pm.last_updated = float(s.get("last_updated", 0.0) or 0.0)
                 for item in (s.get("recent") or []):
                     try:
@@ -184,12 +223,14 @@ class TheoryOfMindEngine:
             eng = getattr(read, "engagement", None) or "unknown"
             sent = getattr(read, "user_sentiment", None) or "neutral"
             conf = float(getattr(read, "confidence", 0.0) or 0.0)
-            return self._update(name, eng, sent, conf)
+            self_check = str(getattr(read, "self_check", "") or "")
+            overexplain = bool(self_check) and self_check != "reply length proportionate"
+            return self._update(name, eng, sent, conf, overexplain)
         except Exception:
             return None
 
     def _update(self, name: str, engagement: str, sentiment: str,
-                read_confidence: float) -> PersonModel:
+                read_confidence: float, overexplain: bool = False) -> PersonModel:
         pm = self._people.get(name)
         if pm is None:
             pm = PersonModel(name=name)
@@ -234,6 +275,32 @@ class TheoryOfMindEngine:
             pm.responsiveness = "withdrawn"
         else:
             pm.responsiveness = "mixed"
+
+        # ── verbosity/brevity axis (does this person react worse when over-explained?) ──
+        # Within-person contrast: their reaction on over-explained turns vs their baseline.
+        # EARNED — sample-gated on over-explained turns, confidence-scored, HYPOTHESIS-only.
+        r = _reaction_score(engagement, sentiment)
+        pm._all_count += 1
+        pm._all_reaction_sum += r
+        if overexplain:
+            pm._oe_count += 1
+            pm._oe_reaction_sum += r
+        if pm._oe_count >= _VERBOSITY_MIN_OE_SAMPLES:
+            oe_mean = pm._oe_reaction_sum / pm._oe_count
+            ne_count = pm._all_count - pm._oe_count
+            ne_mean = ((pm._all_reaction_sum - pm._oe_reaction_sum) / ne_count) if ne_count else 0.0
+            contrast = ne_mean - oe_mean  # > 0 => reacts worse when over-explained
+            if contrast >= _VERBOSITY_CONTRAST_FLOOR:
+                ramp = min(1.0, pm._oe_count / _VERBOSITY_FULL_CONF_SAMPLES)
+                pm.verbosity_pref = "prefers concise replies"
+                pm.verbosity_confidence = round(min(1.0, contrast / 2.0) * ramp, 3)
+            else:
+                pm.verbosity_pref = "no clear length preference"
+                pm.verbosity_confidence = 0.0
+        else:
+            pm.verbosity_pref = "forming — not enough over-explained reads yet"
+            pm.verbosity_confidence = 0.0
+
         self._save()
         return pm
 
