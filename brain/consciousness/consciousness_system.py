@@ -827,6 +827,14 @@ class ConsciousnessSystem:
                     diminished=propagation.get("diminished", 0),
                     propagated=propagation.get("belief_count", 0),
                 )
+
+            # Native Cognition #3 P0 (SHADOW): observe one grounded reasoning stance
+            # from a real high-tension belief on the belief-graph cycle. Self-gated by
+            # a module-level cooldown (~180s), reusing the cached grounding context (no
+            # extra ProvenanceScorer compute). Pure shadow: logs + counter only — never
+            # emits a thought, seeds an episode, or writes anything.
+            from hemisphere.reasoning_encoder import maybe_observe_grounded_stance
+            maybe_observe_grounded_stance()
         except Exception:
             logger.debug("Belief graph tick error", exc_info=True)
 

@@ -17,6 +17,17 @@ import hemisphere.reasoning_encoder as re_enc
 from hemisphere.reasoning_encoder import ReasoningEncoder
 
 
+@pytest.fixture(autouse=True)
+def _reset_encoder_module_state(monkeypatch):
+    """Reset the module-level context cache + stance cooldown so the cache/cooldown
+    tests are deterministic and never leak state across the suite (these globals only
+    affect _cached_context / get_status / maybe_observe_grounded_stance)."""
+    monkeypatch.setattr(re_enc, "_ctx_cache", None, raising=False)
+    monkeypatch.setattr(re_enc, "_ctx_cache_ts", 0.0, raising=False)
+    monkeypatch.setattr(re_enc, "_last_stance_ts", 0.0, raising=False)
+    yield
+
+
 # --------------------------------------------------------------------------
 # Context builders
 # --------------------------------------------------------------------------
@@ -213,3 +224,75 @@ class TestLiveGather:
         assert st["authority"] == "shadow_observe_only"
         assert 0.0 <= st["reasoning_signal"] <= 1.0
         assert len(st["feature_vector"]) == 8
+
+
+# --------------------------------------------------------------------------
+# Shared context cache (keeps ProvenanceScorer.compute off the 2s snapshot hot path)
+# --------------------------------------------------------------------------
+
+class TestContextCache:
+    def test_memoizes_within_ttl(self, monkeypatch):
+        clock = {"t": 100.0}
+        monkeypatch.setattr(re_enc.time, "monotonic", lambda: clock["t"])
+        gathers = {"n": 0}
+        monkeypatch.setattr(re_enc, "gather_reasoning_context",
+                            lambda engine=None: {"g": (gathers.__setitem__("n", gathers["n"] + 1) or gathers["n"])})
+        a = re_enc._cached_context()
+        b = re_enc._cached_context()                 # within TTL -> no second gather
+        assert a is b and gathers["n"] == 1
+        clock["t"] += re_enc._CTX_CACHE_TTL_S + 1.0
+        re_enc._cached_context()                     # past TTL -> re-gather
+        assert gathers["n"] == 2
+
+    def test_get_status_uses_cache(self, monkeypatch):
+        clock = {"t": 500.0}
+        monkeypatch.setattr(re_enc.time, "monotonic", lambda: clock["t"])
+        gathers = {"n": 0}
+        monkeypatch.setattr(re_enc, "gather_reasoning_context",
+                            lambda engine=None: (gathers.__setitem__("n", gathers["n"] + 1) or dict(_grounded_ctx())))
+        re_enc.get_status(); re_enc.get_status()      # two polls within TTL -> one gather
+        assert gathers["n"] == 1
+
+
+# --------------------------------------------------------------------------
+# Cooldown-gated cadence wrapper (fires the shadow stance ~once / _STANCE_COOLDOWN_S)
+# --------------------------------------------------------------------------
+
+class TestMaybeObserveCooldown:
+    def test_fires_then_gated_then_fires(self, monkeypatch):
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(re_enc.time, "monotonic", lambda: clock["t"])
+        calls = {"n": 0}
+        monkeypatch.setattr(re_enc, "observe_grounded_stance",
+                            lambda ctx=None: (calls.__setitem__("n", calls["n"] + 1) or {"ok": True}))
+        assert re_enc.maybe_observe_grounded_stance({"x": 1}) is not None   # last=0 -> fires
+        assert calls["n"] == 1
+        assert re_enc.maybe_observe_grounded_stance({"x": 1}) is None        # within cooldown -> gated
+        assert calls["n"] == 1
+        clock["t"] += re_enc._STANCE_COOLDOWN_S + 0.01
+        assert re_enc.maybe_observe_grounded_stance({"x": 1}) is not None    # cooldown elapsed -> fires
+        assert calls["n"] == 2
+
+    def test_attempt_advances_timestamp_even_when_observe_none(self, monkeypatch):
+        # Empty/ungrounded field (observe returns None) must STILL advance the cooldown
+        # so we never re-gather/compute every tick on a cold brain.
+        clock = {"t": 5000.0}
+        monkeypatch.setattr(re_enc.time, "monotonic", lambda: clock["t"])
+        calls = {"n": 0}
+        monkeypatch.setattr(re_enc, "observe_grounded_stance",
+                            lambda ctx=None: (calls.__setitem__("n", calls["n"] + 1) or None))
+        assert re_enc.maybe_observe_grounded_stance({"x": 1}) is None        # fired (delegated) -> None
+        assert calls["n"] == 1
+        assert re_enc.maybe_observe_grounded_stance({"x": 1}) is None        # gated, no delegate
+        assert calls["n"] == 1
+
+    def test_uses_cached_context_when_ctx_none(self, monkeypatch):
+        clock = {"t": 9000.0}
+        monkeypatch.setattr(re_enc.time, "monotonic", lambda: clock["t"])
+        sentinel = {"_top_tensions": [], "sentinel": True}
+        monkeypatch.setattr(re_enc, "_cached_context", lambda engine=None: sentinel)
+        seen = {}
+        monkeypatch.setattr(re_enc, "observe_grounded_stance",
+                            lambda ctx=None: (seen.__setitem__("ctx", ctx) or {"ok": True}))
+        re_enc.maybe_observe_grounded_stance(None)
+        assert seen["ctx"] is sentinel                                       # reused cache, no fresh gather

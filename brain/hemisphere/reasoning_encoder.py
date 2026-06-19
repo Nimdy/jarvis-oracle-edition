@@ -45,6 +45,7 @@ the earned-trust term, Block C is the readiness gate.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Mapping
 
 logger = logging.getLogger(__name__)
@@ -279,6 +280,18 @@ class ReasoningEncoder:
 # without those stances ever being emitted (mirrors thoughts_shadowed).
 _grounded_stances_shadowed: int = 0
 
+# Shared context cache + stance cadence (Phase 0 #3, SHADOW). ProvenanceScorer.compute()
+# (inside gather_reasoning_context) is a ~belief-field graph traversal; the dashboard
+# snapshot loop calls get_status() every ~2s and the grounding-coherence readout drifts
+# over MINUTES — so memoise the gathered context for _CTX_CACHE_TTL_S and let the readout
+# AND the periodic stance observer share ONE compute per window instead of paying it on
+# every poll. time.monotonic() (immune to wall-clock jumps; trivially monkeypatched).
+_CTX_CACHE_TTL_S: float = 30.0
+_STANCE_COOLDOWN_S: float = 180.0
+_ctx_cache: dict[str, Any] | None = None
+_ctx_cache_ts: float = 0.0
+_last_stance_ts: float = 0.0
+
 
 def gather_reasoning_context(engine: Any | None = None) -> dict[str, Any]:
     """Build the encoder's flat context dict from live, VIEW-ONLY sources.
@@ -325,6 +338,24 @@ def gather_reasoning_context(engine: Any | None = None) -> dict[str, Any]:
     except Exception:
         logger.debug("reasoning_encoder: validation gather failed", exc_info=True)
     return ctx
+
+
+def _cached_context(engine: Any | None = None) -> dict[str, Any]:
+    """Return a recent gather_reasoning_context(), recomputing at most once per
+    _CTX_CACHE_TTL_S. The dashboard snapshot loop calls this every ~2s; memoising
+    keeps the heavy ProvenanceScorer.compute() off that hot path (one compute per
+    window, shared with the stance observer). Never raises."""
+    global _ctx_cache, _ctx_cache_ts
+    try:
+        now = time.monotonic()
+        if _ctx_cache is not None and (now - _ctx_cache_ts) < _CTX_CACHE_TTL_S:
+            return _ctx_cache
+        _ctx_cache = gather_reasoning_context(engine)
+        _ctx_cache_ts = now
+        return _ctx_cache
+    except Exception:
+        logger.debug("reasoning_encoder: _cached_context failed", exc_info=True)
+        return _ctx_cache if _ctx_cache is not None else {}
 
 
 def compute_live_signal(engine: Any | None = None) -> float:
@@ -394,11 +425,35 @@ def observe_grounded_stance(ctx: Mapping[str, Any] | None = None) -> dict[str, A
         return None
 
 
+def maybe_observe_grounded_stance(ctx: Mapping[str, Any] | None = None,
+                                  engine: Any | None = None) -> dict[str, Any] | None:
+    """Cooldown-gated SHADOW wrapper around :func:`observe_grounded_stance`.
+
+    Safe to call on every kernel tick / belief-graph cycle: returns None immediately
+    unless ``_STANCE_COOLDOWN_S`` has elapsed since the last ATTEMPT. The timestamp
+    advances on every attempt (not only on a fire), so an empty / ungrounded field
+    does NOT re-gather every tick — it still respects the cooldown. On a fire it
+    reuses the shared cached context (no extra ProvenanceScorer compute beyond the
+    readout's). Never raises — strictly shadow (log + counter only)."""
+    global _last_stance_ts
+    try:
+        now = time.monotonic()
+        if (now - _last_stance_ts) < _STANCE_COOLDOWN_S:
+            return None
+        _last_stance_ts = now
+        if ctx is None:
+            ctx = _cached_context(engine)
+        return observe_grounded_stance(ctx)
+    except Exception:
+        logger.debug("reasoning_encoder: maybe_observe_grounded_stance failed", exc_info=True)
+        return None
+
+
 def get_status(engine: Any | None = None) -> dict[str, Any]:
     """Observability snapshot — the live grounding-coherence signal + shadow
     telemetry. Read-only, never raises. Safe to surface on a dashboard."""
     try:
-        ctx = gather_reasoning_context(engine)
+        ctx = _cached_context(engine)
         vec = ReasoningEncoder.encode(ctx)
         return {
             "focus": FOCUS_NAME,
