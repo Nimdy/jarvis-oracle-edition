@@ -449,6 +449,77 @@ def maybe_observe_grounded_stance(ctx: Mapping[str, Any] | None = None,
         return None
 
 
+# SPARK §8 P3 floor: the rep count at which it becomes worth ATTEMPTING an offline
+# prototype native reasoner distilled from the reasoning_validation stream. An
+# INFORMATIONAL target only — it flips no authority and gates no behavior (no native
+# reasoner is built; qwen is not replaced). Earn-don't-declare: build the witness
+# before the muscle.
+REASONING_STREAM_PHASE1_THRESHOLD = 30
+
+
+def reasoning_stream_status() -> dict[str, Any]:
+    """Read-only WITNESS over the live ``reasoning_validation`` earning stream.
+
+    Makes the (currently 0-rep) reasoning-state->outcome accrual LEGIBLE instead of
+    silently invisible: total reps, the EXTERNAL-only grounded/ungrounded split
+    routed through the shared :func:`live_shadow_accuracy` honesty floor (the rate
+    stays ``None`` below ``LIVE_SHADOW_MIN_N`` — never a fake 0), the mean
+    reasoning_signal carried on those reps, and the distance to the informational
+    Phase-1 prototype threshold.
+
+    Observability ONLY: it reads the in-memory distillation ring buffer (a pure
+    reader), writes nothing, and does NOT itself score anything — it COUNTS the
+    external validator's grounded decisions (research_intent.is_external_grounding).
+    It deliberately computes NO signal-vs-outcome correlation: the encoder signal
+    embeds past validation outcomes (Block B), so such a correlation would be
+    circular; that calibration belongs to a later phase with a timestamp train/test
+    split. Flips no lever, never touches qwen, never raises."""
+    try:
+        from hemisphere.distillation import (
+            distillation_collector, live_shadow_accuracy,
+            LIVE_SHADOW_MIN_N, BUFFER_MAXLEN,
+        )
+        batch = distillation_collector.get_training_batch(
+            "reasoning_validation", limit=BUFFER_MAXLEN, lived_only=True)
+        total = len(batch)
+        grounded = 0
+        sig_sum = 0.0
+        sig_n = 0
+        for s in batch:
+            d = s.data if isinstance(getattr(s, "data", None), dict) else {}
+            if d.get("grounded") is True:
+                grounded += 1
+            rs = d.get("reasoning_signal")
+            if isinstance(rs, (int, float)) and not isinstance(rs, bool):
+                sig_sum += float(rs)
+                sig_n += 1
+        floor = live_shadow_accuracy(grounded, total)
+        return {
+            "focus": FOCUS_NAME,
+            "phase": "P0_shadow",
+            "authority": "shadow_observe_only",
+            "total_reps": total,
+            "lived_only": True,
+            "grounded_count": grounded,
+            "ungrounded_count": total - grounded,
+            "grounded_rate": floor["live_shadow_accuracy"],   # None until N>=LIVE_SHADOW_MIN_N
+            "grounded_rate_min_n": LIVE_SHADOW_MIN_N,
+            "sufficient_data": floor["sufficient_data"],
+            "mean_reasoning_signal": round(sig_sum / sig_n, 4) if sig_n else None,
+            "reps_to_phase1_threshold": max(0, REASONING_STREAM_PHASE1_THRESHOLD - total),
+            "phase1_prototype_ready": total >= REASONING_STREAM_PHASE1_THRESHOLD,
+            "note": ("observability only — flips no lever; a native reasoner is NOT "
+                     "built and qwen is NOT replaced. grounded_rate is a COUNT of "
+                     "external validations through the honesty floor, not an accuracy."),
+        }
+    except Exception:
+        logger.debug("reasoning_encoder: reasoning_stream_status failed", exc_info=True)
+        return {
+            "focus": FOCUS_NAME, "phase": "P0_shadow",
+            "authority": "shadow_observe_only", "error": "unavailable",
+        }
+
+
 def get_status(engine: Any | None = None) -> dict[str, Any]:
     """Observability snapshot — the live grounding-coherence signal + shadow
     telemetry. Read-only, never raises. Safe to surface on a dashboard."""
@@ -467,6 +538,7 @@ def get_status(engine: Any | None = None) -> dict[str, Any]:
             "validation_grounded_rate": round(float(ctx.get("validation_grounded_rate", 0.0)), 4),
             "sources_available": bool(ctx.get("sources_available", False)),
             "grounded_stances_shadowed": _grounded_stances_shadowed,
+            "reasoning_validation_stream": reasoning_stream_status(),
         }
     except Exception:
         logger.debug("reasoning_encoder: get_status failed", exc_info=True)

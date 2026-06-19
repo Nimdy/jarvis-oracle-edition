@@ -296,3 +296,104 @@ class TestMaybeObserveCooldown:
                             lambda ctx=None: (seen.__setitem__("ctx", ctx) or {"ok": True}))
         re_enc.maybe_observe_grounded_stance(None)
         assert seen["ctx"] is sentinel                                       # reused cache, no fresh gather
+
+
+# --------------------------------------------------------------------------
+# Phase 1 WITNESS — read-only legibility of the reasoning_validation earning stream.
+# Asserts the firewall + earn-don't-declare invariants (the whole point of the slice).
+# --------------------------------------------------------------------------
+
+class TestReasoningStreamWitness:
+    def _sig(self, grounded=None, signal=None, origin="live"):
+        return SimpleNamespace(
+            data={"grounded": grounded, "reasoning_signal": signal},
+            origin=origin, fidelity=1.0, timestamp=0.0)
+
+    def _patch_batch(self, monkeypatch, batch):
+        """Replace the live ring-buffer reader with a spy returning a fake batch.
+        Returns a dict capturing the args the witness asked for."""
+        seen = {}
+        def _fake(teacher, limit=200, min_fidelity=0.0, lived_only=False):
+            seen["teacher"] = teacher
+            seen["lived_only"] = lived_only
+            return list(batch)
+        import hemisphere.distillation as dist
+        monkeypatch.setattr(dist.distillation_collector, "get_training_batch", _fake)
+        # the witness must NEVER write — make record() blow up if it's ever called
+        monkeypatch.setattr(dist.distillation_collector, "record",
+                            lambda *a, **k: pytest.fail("witness must not write (record called)"))
+        return seen
+
+    def test_zero_reps_honestly_unmeasured(self, monkeypatch):
+        self._patch_batch(monkeypatch, [])
+        st = re_enc.reasoning_stream_status()
+        assert st["total_reps"] == 0
+        assert st["grounded_rate"] is None                      # never a fake 0.0
+        assert re_enc.REASONING_STREAM_PHASE1_THRESHOLD == 30
+        assert st["reps_to_phase1_threshold"] == 30
+        assert st["phase1_prototype_ready"] is False
+        assert st["authority"] == "shadow_observe_only"
+
+    def test_below_min_n_rate_stays_none(self, monkeypatch):
+        # N=9 < LIVE_SHADOW_MIN_N (10) — the core anti-fabrication assertion.
+        batch = [self._sig(grounded=True)] * 5 + [self._sig(grounded=False)] * 4
+        self._patch_batch(monkeypatch, batch)
+        st = re_enc.reasoning_stream_status()
+        assert st["total_reps"] == 9
+        assert st["grounded_count"] == 5 and st["ungrounded_count"] == 4
+        assert st["grounded_rate"] is None
+
+    def test_at_min_n_rate_matches_honesty_floor(self, monkeypatch):
+        from hemisphere.distillation import live_shadow_accuracy
+        batch = [self._sig(grounded=True)] * 7 + [self._sig(grounded=False)] * 5  # N=12
+        self._patch_batch(monkeypatch, batch)
+        st = re_enc.reasoning_stream_status()
+        assert st["total_reps"] == 12 and st["grounded_count"] == 7
+        # reuses the shared floor verbatim (not a hand-rolled rate)
+        assert st["grounded_rate"] == live_shadow_accuracy(7, 12)["live_shadow_accuracy"] == round(7 / 12, 4)
+
+    def test_external_only_lived_filter_requested(self, monkeypatch):
+        seen = self._patch_batch(monkeypatch, [self._sig(grounded=True)])
+        re_enc.reasoning_stream_status()
+        assert seen["teacher"] == "reasoning_validation"
+        assert seen["lived_only"] is True                       # synthetic excluded at source
+
+    def test_grounded_counts_only_true(self, monkeypatch):
+        # grounded must be exactly True; None / False are NOT grounded.
+        batch = [self._sig(grounded=True), self._sig(grounded=False), self._sig(grounded=None)]
+        self._patch_batch(monkeypatch, batch)
+        st = re_enc.reasoning_stream_status()
+        assert st["grounded_count"] == 1 and st["total_reps"] == 3
+
+    def test_phase1_ready_flips_no_authority(self, monkeypatch):
+        batch = [self._sig(grounded=True)] * re_enc.REASONING_STREAM_PHASE1_THRESHOLD
+        self._patch_batch(monkeypatch, batch)
+        st = re_enc.reasoning_stream_status()
+        assert st["phase1_prototype_ready"] is True
+        assert st["authority"] == "shadow_observe_only"         # ready is purely informational
+        assert not hasattr(re_enc, "NativeReasoningPromotion")  # no gate exists
+
+    def test_never_raises_returns_unavailable(self, monkeypatch):
+        import hemisphere.distillation as dist
+        def _boom(*a, **k):
+            raise RuntimeError("buffer down")
+        monkeypatch.setattr(dist.distillation_collector, "get_training_batch", _boom)
+        st = re_enc.reasoning_stream_status()
+        assert st["error"] == "unavailable"
+        assert st["authority"] == "shadow_observe_only"
+
+    def test_mean_signal_skips_none(self, monkeypatch):
+        self._patch_batch(monkeypatch, [self._sig(signal=None), self._sig(signal=None)])
+        assert re_enc.reasoning_stream_status()["mean_reasoning_signal"] is None
+        self._patch_batch(monkeypatch, [self._sig(signal=0.6), self._sig(signal=None), self._sig(signal=0.8)])
+        assert re_enc.reasoning_stream_status()["mean_reasoning_signal"] == round((0.6 + 0.8) / 2, 4)
+
+    def test_get_status_carries_stream_and_no_qwen_import(self, monkeypatch, _isolate_tension_promotion):
+        self._patch_batch(monkeypatch, [self._sig(grounded=True)])
+        st = re_enc.get_status()
+        assert "reasoning_validation_stream" in st
+        assert st["reasoning_validation_stream"]["authority"] == "shadow_observe_only"
+        # NO QWEN TOUCH: the witness module must not reference the replacement targets.
+        src = open(re_enc.__file__).read()
+        for forbidden in ("existential_reasoning", "philosophical_dialogue", "_try_llm_enrich"):
+            assert forbidden not in src

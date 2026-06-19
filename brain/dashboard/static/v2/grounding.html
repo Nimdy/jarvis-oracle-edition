@@ -77,6 +77,7 @@
       <div class="note"><b>Native Cognition #3 P0 — SHADOW, view-only.</b> How grounded is the substrate JARVIS would <b>reason FROM</b> right now — read off the live belief field (grounded-provenance share, field calmness, structural anchoring) and its external-validation track record. <b>Replaces nothing</b>; it observes and accumulates the reasoning-state→outcome reps a future native reasoner will earn on (toward replacing qwen for existential/meta reasoning). A <b>low signal means an under-grounded substrate — that is the truth, not a fault</b>; it rises only as real grounding accrues (not a target to tune). The <b>validation block stays 0</b> until external belief-validations land.</div>
       <div class="topgrid" id="nativereason"></div>
       <div class="note" id="nativereasonvec" style="margin-top:8px"></div>
+      <div class="note" id="nativereasonstream" style="margin-top:6px"></div>
     </section>
 
     <section class="card col12">
@@ -190,7 +191,7 @@
     var sig=num(nr.reasoning_signal);
     if(sig===null && !nr.focus){
       el('nativereason').innerHTML='<div class="hint">native-reasoning readout not present (older brain build, or encoder import unavailable)</div>';
-      el('nativereasonvec').innerHTML=''; return;
+      el('nativereasonvec').innerHTML=''; el('nativereasonstream').innerHTML=''; return;
     }
     var html='';
     // No good/bad colour: this is a truth readout, not a target (avoids inviting tuning).
@@ -204,6 +205,17 @@
     el('nativereasonvec').innerHTML=(v.length===8)
       ? '<b>encoder vector</b> (A grounding · B validation · C substrate): '+labels.map(function(L,i){return esc(L)+' '+f2(v[i]);}).join(' · ')
       : '';
+    // Phase 1 WITNESS — the reasoning_validation earning stream made legible.
+    var rs=nr.reasoning_validation_stream||{};
+    if(rs.total_reps!=null){
+      var rate=(rs.grounded_rate==null)?('unmeasured (&lt;'+(rs.grounded_rate_min_n||10)+' reps)'):f2(rs.grounded_rate);
+      el('nativereasonstream').innerHTML='<b>earning stream</b> (reasoning_validation · lived-only): '
+        +rs.total_reps+' reps · grounded '+(rs.grounded_count||0)+'/'+(rs.total_reps||0)
+        +' · external grounded-rate '+rate
+        +' · '+(rs.reps_to_phase1_threshold||0)+' to phase-1 prototype threshold'
+        +(rs.phase1_prototype_ready?' · <b>prototype-ready</b> (informational)':'')
+        +'. <span style="color:var(--dim)">'+esc(rs.note||'')+'</span>';
+    } else { el('nativereasonstream').innerHTML=''; }
   }
 
   // ---- input-starvation banner (first-class state, never hidden) ----
