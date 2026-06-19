@@ -73,6 +73,13 @@
     </section>
 
     <section class="card col12">
+      <h2>Native Reasoning · grounding-coherence <span class="asof" id="nrtick"></span></h2>
+      <div class="note"><b>Native Cognition #3 P0 — SHADOW, view-only.</b> How grounded is the substrate JARVIS would <b>reason FROM</b> right now — read off the live belief field (grounded-provenance share, field calmness, structural anchoring) and its external-validation track record. <b>Replaces nothing</b>; it observes and accumulates the reasoning-state→outcome reps a future native reasoner will earn on (toward replacing qwen for existential/meta reasoning). A <b>low signal means an under-grounded substrate — that is the truth, not a fault</b>; it rises only as real grounding accrues (not a target to tune). The <b>validation block stays 0</b> until external belief-validations land.</div>
+      <div class="topgrid" id="nativereason"></div>
+      <div class="note" id="nativereasonvec" style="margin-top:8px"></div>
+    </section>
+
+    <section class="card col12">
       <h2>Affect Readout <span class="asof" id="affecttick"></span></h2>
       <div class="note"><b>Operator diagnostic — readout, not feeling.</b> Three governed scalars computed deterministically from real signals every tick (dopamine = novelty / reward / world-model accuracy; serotonin = coherence / curiosity-satisfaction / calibration; cortisol = contradiction-debt / quarantine-pressure / friction). <b>cannot-lie clamp</b>: a scalar is forced to exactly <b>0.0</b> if all its source readings are 0. The levers below are <b>proposed and UNAPPLIED</b> (shadow). JARVIS's own expression of these states stays blocked by the capability gate regardless.</div>
       <div class="topgrid" id="affect"></div>
@@ -173,6 +180,30 @@
       lvlChip('tension-thought', gr.tension_thought_promotion)+
       lvlChip('affect readout', gr.affect_promotion)+
       lvlChip('spark gate', gr.promotion);
+  }
+
+  // ---- native reasoning (grounding-coherence) — #3 P0 shadow readout ----
+  function renderNativeReasoning(){
+    var gr=(DATA&&DATA.grounding_ring)||{};
+    var nr=gr.native_reasoning||{};
+    el('nrtick').textContent=nr.authority?('· '+nr.authority):'';
+    var sig=num(nr.reasoning_signal);
+    if(sig===null && !nr.focus){
+      el('nativereason').innerHTML='<div class="hint">native-reasoning readout not present (older brain build, or encoder import unavailable)</div>';
+      el('nativereasonvec').innerHTML=''; return;
+    }
+    var html='';
+    // No good/bad colour: this is a truth readout, not a target (avoids inviting tuning).
+    html+=metricStat('grounding-coherence', sig===null?'—':f2(sig), 'shadow signal · 0..1');
+    html+=metricStat('belief field', num(nr.sampled_beliefs)===null?'—':nr.sampled_beliefs, (nr.inferred_count||0)+' model-inferred');
+    html+=metricStat('external validations', num(nr.validation_total_outcomes)===null?'—':nr.validation_total_outcomes, 'grounded rate '+f2(nr.validation_grounded_rate)+' · 0 until reps land');
+    html+=metricStat('grounded stances', num(nr.grounded_stances_shadowed)===null?'—':nr.grounded_stances_shadowed, 'shadow · cites a real belief, never emitted');
+    el('nativereason').innerHTML=html;
+    var v=nr.feature_vector||[];
+    var labels=['grounded-frac','calm','anchored','low-pressure','val-rate','val-volume','richness','not-hot'];
+    el('nativereasonvec').innerHTML=(v.length===8)
+      ? '<b>encoder vector</b> (A grounding · B validation · C substrate): '+labels.map(function(L,i){return esc(L)+' '+f2(v[i]);}).join(' · ')
+      : '';
   }
 
   // ---- input-starvation banner (first-class state, never hidden) ----
@@ -441,7 +472,7 @@
     fetchJSON('/api/grounding/queue').then(function(d){
       DATA=d; lastOkTs=Date.now();
       // /api/grounding/queue returns {grounding_ring, queue}; the page reads both.
-      renderMetrics(); renderStarvation(); renderAffect(); renderSituational(); renderShadowQ(); renderPending(); renderAnswered(); renderConfab(); renderMode();
+      renderMetrics(); renderNativeReasoning(); renderStarvation(); renderAffect(); renderSituational(); renderShadowQ(); renderPending(); renderAnswered(); renderConfab(); renderMode();
     }).catch(function(){
       el('qlist').innerHTML='<div class="hint" style="color:var(--red)">grounding queue endpoint offline — showing nothing rather than a fabricated queue</div>';
       el('starv').className='banner starv-bad';
