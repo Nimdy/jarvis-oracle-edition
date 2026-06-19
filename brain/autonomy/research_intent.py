@@ -204,6 +204,18 @@ def emit_thought_validation_outcome(
     # data from which a native reasoning specialist could LATER be distilled
     # (jump-before-dunk: collect the reps before the muscle can exist). This is the
     # opposite of qwen-verb-hacking — it grows JARVIS's own cognition, not a guard.
+    #
+    # Phase 0 (#3) enrichment: snapshot the reasoning-substrate grounding-coherence
+    # signal (the view-only ReasoningEncoder reading the live belief field) AT
+    # outcome time, so the recorded pair becomes reasoning-STATE -> outcome, not just
+    # belief -> outcome. That is the feature the future native reasoner trains on:
+    # "when my substrate read like THIS, did grounding land?" Best-effort, view-only.
+    reasoning_signal: float | None = None
+    try:
+        from hemisphere.reasoning_encoder import compute_live_signal
+        reasoning_signal = round(compute_live_signal(), 4)
+    except Exception:
+        reasoning_signal = None
     try:
         from hemisphere.distillation import distillation_collector
         distillation_collector.record(
@@ -218,9 +230,11 @@ def emit_thought_validation_outcome(
                 "scope": payload["scope"],
                 "grounded": bool(grounded),
                 "refuted": payload["refuted"],
+                "reasoning_signal": reasoning_signal,
             },
             metadata={"native_pivot": "reasoning_seed",
-                      "outcome": "grounded" if grounded else "ungrounded"},
+                      "outcome": "grounded" if grounded else "ungrounded",
+                      "reasoning_signal": reasoning_signal},
             origin="live",
             fidelity=1.0,
         )

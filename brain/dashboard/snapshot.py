@@ -1626,6 +1626,16 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
             _gr["tension_thought_promotion"] = TensionThoughtPromotion.get_instance().get_status()
         except Exception:
             _gr["tension_thought_promotion"] = {}
+        # Native Cognition #3 P0 (SHADOW): the reasoning-substrate grounding-coherence
+        # readout — "how grounded is the substrate JARVIS would reason FROM right now",
+        # read view-only off the live belief field. Observe-only, drives NO lever; it
+        # is the foundation the native reasoning specialist will later earn on. An
+        # under-grounded brain reads LOW here by design (no optimistic prior).
+        try:
+            from hemisphere.reasoning_encoder import get_status as _reasoning_status
+            _gr["native_reasoning"] = _reasoning_status(getattr(ctx, "engine", None))
+        except Exception:
+            _gr["native_reasoning"] = {}
         # SPARK §8 P3 teacher-signal health: the external-only THOUGHT_VALIDATION_OUTCOME
         # flow that the tension_thought_promotion selector earns on. Surfaces whether the
         # loop is actually emitting outcomes (validation_outcomes_emitted) or is quietly
