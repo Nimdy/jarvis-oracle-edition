@@ -135,6 +135,33 @@
     .pausebtn.on{background:rgba(40,30,3,.7);border-color:var(--amber);color:var(--amber);font-weight:700;}
     body.paused .acqd .acqd-hd{cursor:pointer;}
     .acqd .acqd-act .btn-danger{background:rgba(45,15,15,.6);border-color:rgba(180,40,40,.5);color:var(--red);}
+    /* Phase 1: pending self-improvement patch approvals — inline review (diff + sandbox + approve/reject) */
+    .si-pending{margin-top:12px;}
+    .sip-empty{color:var(--muted);font-size:.82rem;padding:8px 0;}
+    .sip-lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;margin:10px 0 4px;color:var(--muted);}
+    .sip-card{border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:8px;margin-top:10px;background:rgba(255,170,0,.04);overflow:hidden;}
+    .sip-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 12px;}
+    .sip-title{font-weight:700;font-size:.92rem;color:var(--text);}
+    .sip-meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.7rem;color:var(--muted);margin-top:3px;}
+    .sip-acts{display:flex;gap:6px;flex-shrink:0;}
+    .sip-btn{border:1px solid;border-radius:6px;padding:5px 12px;font-size:.74rem;cursor:pointer;background:transparent;font-weight:600;font-family:inherit;}
+    .sip-approve{border-color:var(--green);color:var(--green);}
+    .sip-approve:hover{background:rgba(0,255,136,.12);}
+    .sip-reject{border-color:var(--red);color:var(--red);}
+    .sip-reject:hover{background:rgba(255,0,68,.12);}
+    .sip-body{padding:0 12px 12px;}
+    .sip-chip{display:inline-block;border:1px solid var(--amber);color:var(--amber);border-radius:4px;padding:1px 7px;font-size:.68rem;margin:0 4px 4px 0;}
+    .sip-sandbox{display:flex;gap:8px;flex-wrap:wrap;}
+    .sip-sb{flex:1;min-width:66px;text-align:center;border:1px solid var(--line);border-radius:6px;padding:6px;}
+    .sip-sb .k{font-size:.6rem;color:var(--muted);text-transform:uppercase;}
+    .sip-sb .v{font-weight:700;font-size:.9rem;margin-top:2px;}
+    .sip-evi{margin:4px 0 0;padding-left:18px;font-size:.76rem;color:var(--text);}
+    .sip-fpath{font-size:.7rem;color:var(--cyan);font-weight:600;margin:8px 0 3px;}
+    .sip-diff{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.7rem;line-height:1.45;white-space:pre;overflow:auto;max-height:340px;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:6px;padding:8px;}
+    .sip-diff .d-add{color:var(--green);}
+    .sip-diff .d-del{color:var(--red);}
+    .sip-diff .d-hdr{color:var(--cyan);}
+    .sip-diff .d-ctx{color:var(--muted);}
   </style>
 </head>
 <body>
@@ -154,6 +181,7 @@
       <div class="gaterow" id="si-gates"></div>
       <div class="statline" id="si-stats"></div>
       <div class="contrast" id="si-contrast"></div>
+      <div class="si-pending" id="si-pending"></div>
     </section>
 
     <section class="card col5">
@@ -327,6 +355,69 @@
       (tot===0?'<b style="color:var(--dim)">n/a (no completed cycle)</b>':'<b>'+((rar||0)*100).toFixed(0)+'%</b>')+
       ', sandbox-pass '+(tot===0?'<b style="color:var(--dim)">n/a</b>':'<b>'+((spr||0)*100).toFixed(0)+'%</b>')+'. '+
       'Soul integrity <b>'+(soul===null?'—':soul.toFixed(3))+'</b> is passing but below 1.0 — recovery debt from today’s reboots, not a broken gate.';
+  }
+
+  // ---- Pending self-improvement patch approvals (inline review — no pivot to /capability-pipeline) ----
+  // Data is already fetched: SI.pending_approval_details (the live /api/self-improve cache list).
+  // Mirrors the proven static renderPendingApprovals: 5Ws + sandbox grid + colorized diff + Approve/Reject.
+  function colorDiff(raw){
+    if(!raw) return '<span class="d-ctx">(no diff)</span>';
+    return String(raw).split('\n').map(function(l){
+      if(l.indexOf('+++')===0||l.indexOf('---')===0||l.indexOf('@@')===0) return '<span class="d-hdr">'+escH(l)+'</span>';
+      if(l.charAt(0)==='+') return '<span class="d-add">'+escH(l)+'</span>';
+      if(l.charAt(0)==='-') return '<span class="d-del">'+escH(l)+'</span>';
+      return '<span class="d-ctx">'+escH(l)+'</span>';
+    }).join('\n');
+  }
+  function sbCell(label, ok){
+    return '<div class="sip-sb"><div class="k">'+label+'</div><div class="v" style="color:'+(ok?'var(--green)':'var(--red)')+'">'+(ok?'PASS':'FAIL')+'</div></div>';
+  }
+  function renderPending(){
+    var box=el('si-pending'); if(!box) return;
+    _wireSiPending();
+    var pend=((SI||{}).pending_approval_details)||[];
+    if(!pend.length){
+      box.innerHTML='<div class="sip-empty">No patches awaiting approval — loop idle or caught up. A stage-2 patch appears here for inline review the moment it is proposed.</div>';
+      return;
+    }
+    box.innerHTML='<div class="sip-lbl" style="color:var(--amber);">Pending patch approvals ('+pend.length+')</div>'+pend.map(function(p){
+      var sb=p.sandbox_summary||{};
+      var why=(p.why_requires_approval||[]).map(function(r){return '<span class="sip-chip">'+escH(String(r).replace(/_/g,' '))+'</span>';}).join('');
+      var diffs=(p.diffs||[]).map(function(d){return '<div class="sip-fpath">'+escH(d.path)+'</div><div class="sip-diff">'+colorDiff(d.diff)+'</div>';}).join('')||'<div class="sip-empty">No diff data.</div>';
+      var evi=(p.evidence||[]).length?'<ul class="sip-evi">'+p.evidence.map(function(e){return '<li>'+escH(String(e))+'</li>';}).join('')+'</ul>':'';
+      var rid=escH(p.request_id||'');
+      return '<div class="sip-card">'+
+        '<div class="sip-head"><div><div class="sip-title">'+escH(p.description||'Unnamed patch')+'</div>'+
+          '<div class="sip-meta"><span>'+escH(p.type||'')+'</span><span>target: '+escH(p.target||'?')+'</span><span>provider: '+escH(p.provider||'?')+'</span><span>'+(num(p.iterations)||0)+' iter</span></div></div>'+
+          '<div class="sip-acts">'+
+            '<button class="sip-btn sip-approve" data-rid="'+rid+'" data-act="approve">Approve</button>'+
+            '<button class="sip-btn sip-reject" data-rid="'+rid+'" data-act="reject">Reject</button></div></div>'+
+        '<div class="sip-body">'+
+          (why?'<div class="sip-lbl" style="color:var(--amber);">why approval required</div>'+why:'')+
+          (evi?'<div class="sip-lbl" style="color:var(--cyan);">evidence</div>'+evi:'')+
+          '<div class="sip-lbl" style="color:var(--green);">sandbox</div><div class="sip-sandbox">'+
+            sbCell('Overall',sb.overall_passed)+sbCell('Lint',sb.lint_passed)+sbCell('Tests',sb.all_tests_passed)+sbCell('Sim',sb.sim_passed)+'</div>'+
+          '<div class="sip-lbl" style="color:var(--cyan);">diff</div>'+diffs+
+        '</div></div>';
+    }).join('');
+  }
+  // Delegated handler on the stable #si-pending container — survives innerHTML re-renders and
+  // avoids inline-onclick string-context escaping entirely. Attached once via the _wired guard.
+  function _wireSiPending(){
+    var box=el('si-pending'); if(!box||box._wired) return; box._wired=true;
+    box.addEventListener('click', function(e){
+      var b=(e.target&&e.target.closest)?e.target.closest('.sip-btn'):null;
+      if(!b) return;
+      siApprove(b.getAttribute('data-rid')||'', b.getAttribute('data-act')==='approve');
+    });
+  }
+  // Approve applies a self-modification to JARVIS's own source — gate it behind an explicit confirm.
+  function siApprove(rid, approved){
+    if(!rid){ V2.toast('missing patch id', false); return; }
+    if(approved && !window.confirm("Apply this self-modification to JARVIS's source code? It passed sandbox, but you are the final gate.")) return;
+    V2.act(V2.post('/api/self-improve/approve', {patch_id:rid, approved:approved}),
+           approved?'patch approved — applying':'patch rejected')
+      .then(function(){ refresh(true); }).catch(function(){});
   }
 
   function renderCodegen(){
@@ -801,7 +892,7 @@
     }, { yesLabel: hasFloor?'Roll back':'Take offline' });
   };
 
-  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderAcqDeliberation(); renderCapabilityAuthority(); renderEscalation(); renderSkillLearning(); }
+  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderPending(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderAcqDeliberation(); renderCapabilityAuthority(); renderEscalation(); renderSkillLearning(); }
 
   var _paused=false;
   window._togglePause=function(){
