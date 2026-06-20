@@ -49,6 +49,7 @@ window.V2 = (function(){
     ['/static/v2/domains.html','domains'],
     ['#sep','lab'],
     ['/static/v2/lab.html','lab'],
+    ['/static/v2/hrr.html','hrr-vsa'],
     ['#sep','insight'],
     ['/static/v2/timeline.html','timeline'],
     ['/static/v2/immune.html','immune'],

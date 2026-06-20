@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · HRR / VSA Shadow Substrate (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only */
+    .topgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;align-items:start;}
+    .stat .k{font-size:9px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;}
+    .stat .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;}
+    .stat .sub{font-size:9px;color:var(--dim);margin-top:2px;}
+    .markers{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+    .marker{font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;border:1px solid var(--line);letter-spacing:.04em;}
+    .marker.premature{border-color:var(--amber);color:var(--amber);}
+    .marker.enabled-yes{border-color:var(--green);color:var(--green);}
+    .marker.enabled-no{border-color:var(--muted);color:var(--muted);}
+    .flags{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+    .flag{font-size:10px;padding:3px 9px;border-radius:4px;border:1px solid var(--line);font-variant-numeric:tabular-nums;}
+    .flag-ok{border-color:var(--green);color:var(--green);}
+    .flag-bad{border-color:var(--red);color:var(--red);font-weight:700;}
+    .retain{font-size:10px;color:var(--dim);font-weight:400;}
+    .tblwrap{max-height:300px;overflow:auto;border-top:1px dashed var(--line);margin-top:8px;}
+    table.hrtbl{width:100%;border-collapse:collapse;font-size:10.5px;font-variant-numeric:tabular-nums;}
+    table.hrtbl th{position:sticky;top:0;background:var(--bg,#0a0e14);color:var(--muted);text-align:right;font-weight:600;
+      padding:4px 8px;border-bottom:1px solid var(--line);text-transform:uppercase;font-size:8.5px;letter-spacing:.04em;}
+    table.hrtbl td{text-align:right;padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text);}
+    table.hrtbl td:first-child,table.hrtbl th:first-child{text-align:left;color:var(--cyan);}
+    .samplesel{display:flex;gap:6px;align-items:center;margin-left:auto;}
+    .samplesel button{background:transparent;border:1px solid var(--line);color:var(--muted);font-size:10px;padding:2px 9px;border-radius:11px;cursor:pointer;font-family:inherit;}
+    .samplesel button.on{border-color:var(--cyan);color:var(--cyan);font-weight:700;}
+    .hint{color:var(--dim);font-size:11px;padding:18px 6px;text-align:center;}
+    .note b{color:var(--text);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · HRR / VSA SHADOW SUBSTRATE</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Holographic Reduced Representations / Vector-Symbolic Architecture — a <b>shadow substrate</b> for binding/cleanup over the world, simulation, and recall lanes. <b>PRE-MATURE</b>: zero authority (every influence flag must read false); it observes and self-tests, drives no live lever until earned. Read-only render.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <main>
+    <section class="card col7">
+      <h2>Runtime <span class="asof" id="asof"></span></h2>
+      <div class="markers" id="markers"></div>
+      <div class="topgrid" id="runtime" style="margin-top:10px"></div>
+    </section>
+
+    <section class="card col5">
+      <h2>Authority Flags</h2>
+      <div class="note">Structurally enforced by the validation pack. <b>All six must be false</b> — HRR influences nothing (no policy, no belief writes, no canonical memory, no autonomy, no raw-vector exposure to the LLM, no soul-integrity coupling). Any <b>true</b> here is a governance breach, shown red.</div>
+      <div class="flags" id="flags"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Stage 0 — Synthetic Exercise (latest)</h2>
+      <div class="note">The self-test: encode synthetic facts, bind/unbind, and measure cleanup fidelity + false positives. <b>all_pass</b> + <b>0 side-effects</b> is the healthy state; this is how the substrate proves it works before any real lane trusts it.</div>
+      <div class="topgrid" id="exercise" style="margin-top:8px"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>World Shadow <span class="retain" id="world-retain"></span>
+        <span class="samplesel" id="samplesel">
+          <span style="font-size:10px;color:var(--muted)">rows</span>
+          <button data-n="20" class="on">20</button><button data-n="50">50</button><button data-n="100">100</button><button data-n="200">200</button>
+        </span></h2>
+      <div class="note">Binds the live world-model facts into an HRR vector each cycle and measures binding cleanliness + cleanup accuracy. <b>Shadow</b>: it never writes the canonical world model.</div>
+      <div class="topgrid" id="world-stat" style="margin-top:8px"></div>
+      <div id="world-tbl"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Simulation Shadow <span class="retain" id="sim-retain"></span></h2>
+      <div class="note">Encodes counterfactual "what-if" deltas and measures how cleanly the substrate represents the change (Δ similarity + cleanliness before/after). Advisory-only.</div>
+      <div class="topgrid" id="sim-stat" style="margin-top:8px"></div>
+      <div id="sim-tbl"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Recall Advisory <span class="retain" id="recall-retain"></span></h2>
+      <div class="note">An HRR-cued recall lane proposed alongside the real recall — measured for whether it <b>would have helped</b> (help rate) without ever steering the live result. LRU cache + overlap@k diagnostics.</div>
+      <div class="topgrid" id="recall-stat" style="margin-top:8px"></div>
+      <div id="recall-tbl"></div>
+    </section>
+  </main>
+
+<script src="/static/v2/shared.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V2=window.V2;
+  var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, ago=V2.ago, el=V2.el;
+  var STATUS=null, SAMPLES=null, lastOkTs=0, sampleN=20;
+  V2.renderNav('/static/v2/hrr.html');
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function stat(k,v,sub,color){ return '<div class="stat"><div class="k">'+esc(k)+'</div><div class="v"'+(color?' style="color:'+color+'"':'')+'>'+v+'</div>'+(sub?'<div class="sub">'+esc(sub)+'</div>':'')+'</div>'; }
+  function fbool(v){ return v===true?'yes':(v===false?'no':'—'); }
+  function fnum(v){ v=num(v); return v===null?'—':(Math.abs(v)<1&&v!==0?f3(v):String(v)); }
+  function fdate(ts){ ts=num(ts); if(!ts) return '—'; try{ return new Date(ts*1000).toLocaleString(); }catch(e){ return String(ts); } }
+
+  function renderRuntime(){
+    var d=STATUS||{};
+    el('markers').innerHTML=
+      '<span class="marker premature">'+esc(d.status||'—')+'</span>'+
+      '<span class="marker '+(d.enabled?'enabled-yes':'enabled-no')+'">'+(d.enabled?'ENABLED':'DISABLED')+'</span>';
+    el('runtime').innerHTML=
+      stat('stage', esc(d.stage||'—'))+
+      stat('dim', num(d.dim)===null?'—':d.dim)+
+      stat('sample every', (num(d.sample_every_ticks)||'—')+' ticks')+
+      stat('sample interval', (num(d.sample_interval_s)===null?'—':d.sample_interval_s+'s'))+
+      stat('backend', esc(d.backend||'—'))+
+      stat('enabled src', esc(d.enabled_source||'—'));
+  }
+
+  var FLAGS=['policy_influence','belief_write_enabled','canonical_memory','autonomy_influence','llm_raw_vector_exposure','soul_integrity_influence'];
+  function renderFlags(){
+    var d=STATUS||{};
+    el('flags').innerHTML=FLAGS.map(function(f){
+      var v=d[f]; var ok=(v===false);
+      return '<span class="flag '+(ok?'flag-ok':'flag-bad')+'">'+esc(f)+' = '+(v===true?'true':(v===false?'false':'?'))+'</span>';
+    }).join('');
+  }
+
+  function renderExercise(){
+    var e=(STATUS||{}).latest_exercise||{};
+    if(!Object.keys(e).length){ el('exercise').innerHTML='<div class="hint">no synthetic exercise recorded yet</div>'; return; }
+    el('exercise').innerHTML=
+      stat('generated', fdate(e.generated_at), e.generated_at?ago(e.generated_at):'')+
+      stat('cleanup@8', fnum(e.cleanup_accuracy_at_8), 'target 1.0', num(e.cleanup_accuracy_at_8)>=1?'var(--green)':'var(--amber)')+
+      stat('cleanup@16', fnum(e.cleanup_accuracy_at_16), 'target 1.0', num(e.cleanup_accuracy_at_16)>=1?'var(--green)':'var(--amber)')+
+      stat('false positive', fnum(e.false_positive_rate), 'target 0.0', num(e.false_positive_rate)>0?'var(--red)':'var(--green)')+
+      stat('all gates pass', fbool(e.all_pass), '', e.all_pass===true?'var(--green)':'var(--red)')+
+      stat('hrr side-effects', num(e.hrr_side_effects)===null?'—':e.hrr_side_effects, 'must be 0', (num(e.hrr_side_effects)||0)>0?'var(--red)':'var(--green)');
+  }
+
+  function lane(statusKey){ return (STATUS||{})[statusKey]||{}; }
+  function retainTxt(s){ return (num(s.samples_retained)||0)+'/'+(num(s.ring_capacity)||0)+' retained · '+(num(s.samples_total)||0)+' total'; }
+
+  function tbl(rows, cols){
+    if(!rows||!rows.length) return '<div class="hint">no samples retained yet (shadow ring empty or just booted)</div>';
+    var head='<tr>'+cols.map(function(c){return '<th>'+esc(c.l)+'</th>';}).join('')+'</tr>';
+    var body=rows.slice().reverse().map(function(r){    // newest first
+      return '<tr>'+cols.map(function(c){ var v=r[c.k]; return '<td>'+(c.f?c.f(v):esc(String(v==null?'—':v)))+'</td>'; }).join('')+'</tr>';
+    }).join('');
+    return '<div class="tblwrap"><table class="hrtbl">'+head+body+'</table></div>';
+  }
+
+  function renderWorld(){
+    var s=lane('world_shadow'); el('world-retain').textContent=retainTxt(s);
+    el('world-stat').innerHTML=
+      stat('binding cleanliness', fnum(s.binding_cleanliness))+
+      stat('cleanup accuracy', fnum(s.cleanup_accuracy))+
+      stat('Δ vs previous', fnum(s.similarity_to_previous))+
+      stat('enabled', fbool(s.enabled), '', s.enabled?'var(--green)':'var(--muted)');
+    el('world-tbl').innerHTML=tbl((SAMPLES||{}).world_shadow, [
+      {k:'tick',l:'tick'},{k:'facts_encoded',l:'facts'},{k:'binding_cleanliness',l:'bind.clean',f:fnum},
+      {k:'cleanup_accuracy',l:'cleanup',f:fnum},{k:'similarity_to_previous',l:'Δ prev',f:fnum},{k:'side_effects',l:'side_fx'}]);
+  }
+
+  function renderSim(){
+    var s=lane('simulation_shadow'); el('sim-retain').textContent=retainTxt(s);
+    el('sim-stat').innerHTML=
+      stat('last Δ similarity', fnum(s.last_delta_similarity))+
+      stat('last cleanliness', fnum(s.last_cleanliness_after))+
+      stat('enabled', fbool(s.enabled), '', s.enabled?'var(--green)':'var(--muted)');
+    el('sim-tbl').innerHTML=tbl((SAMPLES||{}).simulation_shadow, [
+      {k:'delta_event',l:'event'},{k:'facts_before',l:'facts·b'},{k:'facts_after',l:'facts·a'},
+      {k:'delta_similarity',l:'Δ sim',f:fnum},{k:'cleanliness_before',l:'clean·b',f:fnum},
+      {k:'cleanliness_after',l:'clean·a',f:fnum},{k:'side_effects',l:'side_fx'}]);
+  }
+
+  function renderRecall(){
+    var s=lane('recall_advisory'); el('recall-retain').textContent=retainTxt(s);
+    el('recall-stat').innerHTML=
+      stat('help rate', fnum(s.help_rate))+
+      stat('lru', (num(s.cache_size)||0)+' / '+(num(s.lru_capacity)||0))+
+      stat('last top score', fnum(s.last_hrr_top_score))+
+      stat('enabled', fbool(s.enabled), '', s.enabled?'var(--green)':'var(--muted)');
+    el('recall-tbl').innerHTML=tbl((SAMPLES||{}).recall_advisory, [
+      {k:'cue_class',l:'cue'},{k:'chain_size',l:'chain'},{k:'hrr_top_score',l:'top score',f:fnum},
+      {k:'seed_overlap',l:'overlap',f:fbool},{k:'advisory_helpful',l:'helped',f:fbool},
+      {k:'governance_action',l:'gov'},{k:'side_effects',l:'side_fx'}]);
+  }
+
+  function renderAll(){ renderRuntime(); renderFlags(); renderExercise(); renderWorld(); renderSim(); renderRecall();
+    el('mode').textContent='stage '+((STATUS||{}).stage||'—'); el('asof').textContent=lastOkTs?('as of '+new Date(lastOkTs).toLocaleTimeString()):''; }
+
+  function refresh(){
+    Promise.allSettled([
+      fetchJSON('/api/hrr/status'),
+      fetchJSON('/api/hrr/samples?world='+sampleN+'&simulation='+sampleN+'&recall='+sampleN)
+    ]).then(function(r){
+      if(r[0].status==='fulfilled') STATUS=r[0].value;
+      if(r[1].status==='fulfilled') SAMPLES=r[1].value;
+      if(r.some(function(x){return x.status==='fulfilled';})) lastOkTs=Date.now();
+      renderAll();
+    });
+  }
+  function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
+
+  // sample-size selector
+  Array.prototype.forEach.call(document.querySelectorAll('#samplesel button'), function(b){
+    b.addEventListener('click', function(){
+      Array.prototype.forEach.call(document.querySelectorAll('#samplesel button'), function(x){x.className='';});
+      b.className='on'; sampleN=parseInt(b.getAttribute('data-n'),10)||20; refresh();
+    });
+  });
+
+  refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
