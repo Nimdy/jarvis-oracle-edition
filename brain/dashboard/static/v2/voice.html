@@ -70,6 +70,14 @@
       <div class="note">The shadow STT drill from <code>.synthetic_exercise</code> — replays utterances through the route engine with side-effects blocked. <b>Shadow / templated</b>, not live audio; counts re-arm from zero each boot.</div>
       <div id="stt"></div>
     </section>
+
+    <section class="card col12">
+      <h2>Voice Intent Shadow NN</h2>
+      <div class="note">The learned voice-intent classifier, shadow-first: it predicts the route alongside the hardcoded router and is measured for <b>agreement</b> before earning authority (shadow → advisory → primary). Drives nothing until its promotion gates pass; auto-rolls-back if agreement drops.</div>
+      <div id="intent-stat"></div>
+      <div id="intent-gates" style="margin-top:8px"></div>
+      <div id="intent-roll" style="margin-top:6px"></div>
+    </section>
   </main>
 
 <script src="/static/v2/shared.js"></script>
@@ -263,6 +271,34 @@
   }
   function tick(){ el('clock').textContent=new Date().toLocaleTimeString()+(lastOkTs?'':' · connecting…'); }
   refresh(); setInterval(refresh, 8000); tick(); setInterval(tick, 1000);
+
+  // --- Voice Intent Shadow NN (self-contained: own endpoint + interval, isolated from refresh) ---
+  var INTENT=null;
+  function _ie(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+  function _ist(k,v,color){ return '<div style="min-width:96px"><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">'+k+'</div><div style="font-size:18px;font-weight:700;font-variant-numeric:tabular-nums'+(color?';color:'+color:'')+'">'+v+'</div></div>'; }
+  function renderIntent(){
+    var d=INTENT||{}; var ra=num(d.rolling_agreement);
+    el('intent-stat').innerHTML='<div style="display:flex;flex-wrap:wrap;gap:18px">'+
+      _ist('level', _ie(d.level||'—'), d.level==='primary'?'var(--green)':(d.level==='advisory'?'var(--cyan)':'var(--muted)'))+
+      _ist('next', _ie(d.next_level||'—'))+
+      _ist('ready', d.ready_for_promotion===true?'yes':'no', d.ready_for_promotion?'var(--green)':'var(--muted)')+
+      _ist('observations', num(d.observations_total)===null?'—':d.observations_total)+
+      _ist('nn predictions', num(d.nn_predictions_total)===null?'—':d.nn_predictions_total)+
+      _ist('rolling agree', ra===null?'n/a':Math.round(ra*100)+'%')+
+      _ist('rescues', num(d.rescues_applied)||0)+
+      _ist('overrides', num(d.primary_overrides_applied)||0)+
+    '</div>';
+    var g=d.gates||{};
+    var chips=Object.keys(g).map(function(k){ var x=g[k]||{}; var ok=x.ok===true;
+      var act=(x.actual!=null?x.actual:'—'), req=(x.required!=null?x.required:(x.required_s!=null?x.required_s:'—'));
+      return '<span style="font-size:10px;padding:3px 9px;border-radius:4px;border:1px solid '+(ok?'var(--green)':'var(--amber)')+';color:'+(ok?'var(--green)':'var(--amber)')+';margin:0 6px 6px 0;display:inline-block">'+_ie(k.replace(/_/g,' '))+': '+_ie(act)+'/'+_ie(req)+' '+(ok?'✓':'…')+'</span>';
+    }).join('');
+    el('intent-gates').innerHTML='<div style="font-size:9px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">promotion gates</div>'+(chips||'<span style="color:var(--muted)">no gates reported</span>');
+    var rb=d.rollback_history||[];
+    el('intent-roll').innerHTML=rb.length?'<div style="font-size:10px;color:var(--amber)">'+rb.length+' rollback(s) recorded</div>':'<div style="font-size:10px;color:var(--muted)">no rollbacks — clean shadow run</div>';
+  }
+  function refreshIntent(){ fetchJSON('/api/intent-shadow').then(function(d){ INTENT=d; renderIntent(); }).catch(function(){ el('intent-stat').innerHTML='<div class="offline">intent-shadow offline</div>'; }); }
+  refreshIntent(); setInterval(refreshIntent, 8000);
 })();
 </script>
 </body>

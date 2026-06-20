@@ -131,6 +131,13 @@
       <div class="opnote2">Set the resolver stage on the 5-rung ladder, or roll it back one rung. <b>active</b> grants real delivery authority — gated.</div>
       <div class="actrow" id="op-resolver"></div>
     </section>
+
+    <section class="card col12">
+      <h2>Language Kernel · Phase E</h2>
+      <div class="note">JARVIS's own language substrate (Phase C/D/E), shadow-first — tracks the live kernel artifact identity (id/hash), on-disk integrity, artifact history, and rollbacks. <b>PRE-MATURE</b> on a fresh brain: it observes and versions; the bounded adapter does not drive generation until earned.</div>
+      <div id="lk-stat"></div>
+      <div id="lk-hist" style="margin-top:8px"></div>
+    </section>
   </main>
 
 <script src="/static/v2/shared.js"></script>
@@ -442,6 +449,26 @@
   // ===== ISOLATED parity fetch (full-snapshot) — independent of refresh() above =====
   function refreshParity(){ V2.fetchJSON('/api/full-snapshot').then(function(s){ FS=s; parityOkTs=Date.now(); renderParity(); }).catch(function(){ renderParity(); }); }
   refreshParity(); setInterval(refreshParity, 8000);
+
+  // --- Language Kernel (Phase E) — self-contained: own endpoint + interval ---
+  var LKERNEL=null;
+  function _lke(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+  function _lkst(k,v,color){ return '<div style="min-width:108px"><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">'+k+'</div><div style="font-size:16px;font-weight:700;'+(color?'color:'+color:'')+'">'+v+'</div></div>'; }
+  function renderKernel(){
+    var d=LKERNEL||{}; var live=d.live_artifact;
+    el('lk-stat').innerHTML='<div style="display:flex;flex-wrap:wrap;gap:18px">'+
+      _lkst('status', _lke(d.status||'—'), d.status==='mature'?'var(--green)':'var(--amber)')+
+      _lkst('live artifact', live?_lke(String(live).slice(0,12)):'none', live?'var(--green)':'var(--muted)')+
+      _lkst('total artifacts', num(d.total_artifacts)===null?'—':d.total_artifacts)+
+      _lkst('checkpoint', d.checkpoint_exists===true?'present':'missing', d.checkpoint_exists?'var(--green)':'var(--red)')+
+      _lkst('on-disk = live', d.matches_live_artifact===true?'yes':'no', d.matches_live_artifact?'var(--green)':'var(--muted)')+
+      _lkst('on-disk hash', d.on_disk_hash?_lke(String(d.on_disk_hash).slice(0,10)):'—')+
+    '</div>'+(d.note?'<div style="font-size:10px;color:var(--muted);margin-top:8px">'+_lke(d.note)+'</div>':'');
+    var arts=d.artifacts||[], rb=d.rollback_history||[];
+    el('lk-hist').innerHTML='<div style="font-size:10px;color:var(--muted)">artifact history: <b style="color:var(--text)">'+arts.length+'</b> · rollbacks: <b style="color:'+(rb.length?'var(--amber)':'var(--text)')+'">'+rb.length+'</b></div>';
+  }
+  function refreshKernel(){ V2.fetchJSON('/api/language-kernel').then(function(d){ LKERNEL=d; renderKernel(); }).catch(function(){ el('lk-stat').innerHTML='<div class="offline">language-kernel offline</div>'; }); }
+  refreshKernel(); setInterval(refreshKernel, 8000);
 
   // operator-actions: render resolver buttons + warm the current-stage highlight (read-only GET)
   renderOpResolver(); refreshResolver(); setInterval(refreshResolver, 12000);
