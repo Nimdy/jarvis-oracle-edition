@@ -23,7 +23,7 @@ import time
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Depends, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -375,26 +375,24 @@ def _create_app() -> FastAPI:
         with open(si_path) as f:
             return HTMLResponse(f.read())
 
-    @app.get("/capability-pipeline", response_class=HTMLResponse)
+    # dashboardV2 consolidation: these legacy static pages are RETIRED — every feature
+    # now lives in the v2 cockpit (capability page incl. pending-patch review + specialist
+    # cards + scanner/activity drill-downs; voice = intent-shadow; cognition = language
+    # kernel; /v2/hrr = HRR substrate; /v2/prove = proposal history; /v2/autonomy = L3).
+    # Routes 307-redirect to the v2 equivalents. The static html (self_improve.html,
+    # hrr.html) is intentionally kept on disk for one cycle as an instant fallback:
+    # reverting this commit restores the in-place pages with no data loss.
+    @app.get("/capability-pipeline")
     async def capability_pipeline_page():
-        return _capability_pipeline_response()
+        return RedirectResponse(url="/static/v2/capability.html", status_code=307)
 
-    @app.get("/self-improve", response_class=HTMLResponse)
+    @app.get("/self-improve")
     async def self_improve_page():
-        """Backward-compatible alias for the broader capability pipeline page."""
-        return _capability_pipeline_response()
+        return RedirectResponse(url="/static/v2/capability.html", status_code=307)
 
-    @app.get("/hrr", response_class=HTMLResponse)
+    @app.get("/hrr")
     async def hrr_page():
-        """Dedicated live dashboard for the P4 HRR / VSA shadow substrate.
-
-        Purely observational — the page polls ``/api/hrr/status`` and
-        ``/api/hrr/samples`` on a timer. All authority flags rendered here
-        come straight from the server payload (never computed client-side).
-        """
-        hrr_path = os.path.join(_STATIC_DIR, "hrr.html")
-        with open(hrr_path) as f:
-            return HTMLResponse(f.read())
+        return RedirectResponse(url="/static/v2/hrr.html", status_code=307)
 
     @app.get("/hrr-scene", response_class=HTMLResponse)
     async def hrr_scene_page():
