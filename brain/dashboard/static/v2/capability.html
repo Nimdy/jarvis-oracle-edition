@@ -175,6 +175,14 @@
     .sc-dist{margin-top:8px;border-top:1px solid var(--line);padding-top:6px;}
     .sc-distbar{display:flex;height:6px;border-radius:3px;overflow:hidden;margin:4px 0;}
     .sc-distleg{display:flex;flex-wrap:wrap;gap:3px 8px;font-size:.64rem;}
+    /* Phase A: scanner / activity / history drill-downs */
+    .si-extra{margin-top:12px;border-top:1px dashed var(--line);padding-top:8px;}
+    .sx-lbl{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:3px;}
+    .sx-row{font-size:.78rem;color:var(--text);margin:2px 0;}
+    .sx-chip{display:inline-block;border:1px solid var(--line);color:var(--muted);border-radius:3px;padding:0 6px;font-size:.66rem;margin:0 4px 3px 0;}
+    .sx-dim{color:var(--muted);}
+    .sx-log{max-height:160px;overflow:auto;font-size:.72rem;font-family:ui-monospace,Menlo,Consolas,monospace;margin-top:2px;}
+    .sx-logrow{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.03);}
   </style>
 </head>
 <body>
@@ -195,6 +203,7 @@
       <div class="statline" id="si-stats"></div>
       <div class="contrast" id="si-contrast"></div>
       <div class="si-pending" id="si-pending"></div>
+      <div class="si-extra" id="si-extra"></div>
     </section>
 
     <section class="card col5">
@@ -431,6 +440,34 @@
     V2.act(V2.post('/api/self-improve/approve', {patch_id:rid, approved:approved}),
            approved?'patch approved — applying':'patch rejected')
       .then(function(){ refresh(true); }).catch(function(){});
+  }
+
+  // Self-improvement drill-downs (scanner detectors + activity log + proposal history).
+  // All from already-fetched SCAN (/api/self-improve/scanner) + SI (/api/self-improve).
+  function renderSIExtra(){
+    var box=el('si-extra'); if(!box) return;
+    var sc=SCAN||{}, si=SI||{};
+    var det=sc.detector_snapshot||{}, detNames=Object.keys(det);
+    var sustained=sc.sustained_counts||{};
+    var susTxt=Object.keys(sustained).map(function(k){return escH(k.replace(/_/g,' '))+' ×'+sustained[k];}).join(', ')||'none';
+    var cd=sc.category_cooldowns||{}; var cdTxt=Object.keys(cd).length?escH(Object.keys(cd).join(', ')):'none';
+    var scanner='<div class="sx-lbl">scanner</div>'+
+      '<div class="sx-row">scans <b>'+(num(sc.scan_count)||0)+'</b> · today <b>'+(num(sc.attempts_today)||0)+'/'+(num(sc.max_attempts_per_day)||'—')+'</b> · fingerprints <b>'+(num(sc.fired_fingerprints)||0)+'</b> (past '+(num(sc.past_proposal_fingerprints)||0)+')</div>'+
+      '<div class="sx-row">watching: '+(detNames.length?detNames.map(function(n){return '<span class="sx-chip">'+escH(n)+'</span>';}).join(''):'<span class="sx-dim">—</span>')+'</div>'+
+      '<div class="sx-row">sustained deficits: <b>'+susTxt+'</b> · cooldowns: '+cdTxt+'</div>';
+    var act=si.activity_log||[];
+    var activity='<div class="sx-lbl" style="margin-top:8px">activity log</div>'+(act.length?
+      '<div class="sx-log">'+act.slice(-8).reverse().map(function(a){
+        var lc=a.level==='ERROR'?'var(--red)':(a.level==='WARN'?'var(--amber)':(a.level==='SUCCESS'?'var(--green)':'var(--muted)'));
+        return '<div class="sx-logrow"><span style="color:'+lc+'">'+escH(a.level||'')+'</span> <span class="sx-dim">'+escH(a.phase||'')+'</span> '+escH(String(a.message||'').slice(0,90))+'</div>';
+      }).join('')+'</div>':'<div class="sx-dim">no events logged this cycle</div>');
+    var hist=si.recent_history||[];
+    var history='<div class="sx-lbl" style="margin-top:8px">recent proposals (history) <a href="/static/v2/prove.html" style="font-size:9px;color:var(--cyan)">full history →</a></div>'+(hist.length?
+      '<div class="sx-log">'+hist.slice(-6).reverse().map(function(h){
+        var hc=h.status==='promoted'?'var(--green)':(h.status==='failed'?'var(--red)':(h.status==='dry_run'?'var(--amber)':'var(--muted)'));
+        return '<div class="sx-logrow"><span style="color:'+hc+'">'+escH(h.status||'?')+'</span> '+escH(String(h.description||h.type||'').slice(0,80))+'</div>';
+      }).join('')+'</div>':'<div class="sx-dim">no proposal history yet</div>');
+    box.innerHTML=scanner+activity+history;
   }
 
   function renderCodegen(){
@@ -928,7 +965,7 @@
     }, { yesLabel: hasFloor?'Roll back':'Take offline' });
   };
 
-  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderPending(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderAcqDeliberation(); renderCapabilityAuthority(); renderEscalation(); renderSkillLearning(); }
+  function renderAll(){ renderRecovery(); renderMode(); renderSelfImprove(); renderPending(); renderSIExtra(); renderCodegen(); renderSpecialists(); renderAcquisition(); renderAcqDeliberation(); renderCapabilityAuthority(); renderEscalation(); renderSkillLearning(); }
 
   var _paused=false;
   window._togglePause=function(){
