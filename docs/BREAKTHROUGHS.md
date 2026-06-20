@@ -33,6 +33,38 @@
 
 ---
 
+## 2026-06-20 — No-confabulation floor reaches the *eyes* (grounded perception)
+- **Pillar:** #10 Embodiment / perception · #1 Integrity / honest self-knowledge.
+- **What:** The conversational VISION route ("what do you see?") was **confabulating**. It fetched a
+  real qwen3-vl caption but handed it to the chat LLM (qwen3:8b) as *advisory* context, so on a cold
+  VRAM load it invented a plausible scene — *"I see you, David, sitting at your desk with a laptop and
+  a cup of coffee, soft lighting"* — when the live frame actually held **three monitors, blue lighting,
+  no person**. Proven by running qwen3-vl on the *same* live frame and comparing. Fixed (v1.3.0,
+  `63c3eca`): the caption is now **authoritative, not advisory** — a VISION GROUNDING firewall in the
+  system prompt ("you are the mouth, not the eyes; report ONLY what the live frame shows; never invent
+  people/objects/lighting; if you can't see, say so") + temp 0.3 + dropping the stale ambient
+  scene-context that had been contradicting the live frame. Post-fix, the *same* question returned the
+  *actual* scene — "three monitors displaying code, keyboard and mouse, blue ambient lighting, a desk
+  lamp, a black cabinet" — matching the ground-truth caption, with no invented laptop or coffee. While
+  the VLM cold-loads (it swaps VRAM with the chat model), she now honestly says *"focusing my vision"*
+  instead of guessing.
+- **Significance:** **Milestone** — the honesty firewall proven on **self-report** (2026-06-12) now
+  covers **perception**. The same failure mode — confidently asserting something untrue — was the
+  original audit's worst case; closing it on the eyes means a visual claim is now grounded in a real
+  frame or honestly withheld. It's the integrity *floor* extended to a new sense, by the established
+  pattern (ground it or say you can't).
+- **Not:** NOT a new vision capability — qwen3-vl already saw accurately when warm; the achievement is
+  that the chat model can **no longer author** a scene the camera didn't show. NOT a proof of perfect
+  fidelity — grounding + low temp strongly constrain it, but the real backstop is the firewall + the
+  honest "can't see" fallback, not the model's goodwill. NOT consciousness. (Aside: "what do you
+  *currently* see?" can still mis-route to a state self-report — a routing nuance that matures on reps,
+  not a confabulation.)
+- **Evidence:** flight recorder — pre-fix turn 16:08 ("laptop / coffee / soft lighting") vs post-fix
+  turn 16:52 ("three monitors / blue lighting / desk lamp / black cabinet"); cross-checked against
+  qwen3-vl run directly on the same Pi `/snapshot` frame ("two monitors, code, blue lighting, desk
+  lamp, black drawer unit, person in brown shirt"). Commit `63c3eca`, shipped in v1.3.0, adversarially
+  reviewed.
+
 ## 2026-06-17 — Inner read catches its *own* over-explaining (companion self-monitoring, in shadow)
 - **Pillar:** #11 Theory of mind / companion awareness · #7 Grounded affect.
 - **What:** On a real, emotionally-charged turn (David frustrated that replies were repetitive/too long),
