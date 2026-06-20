@@ -2364,7 +2364,20 @@ def _build_policy_cache(engine: Any) -> dict[str, Any]:
     """Read the pre-built telemetry snapshot. O(1) — no computation triggered."""
     try:
         from policy.telemetry import policy_telemetry
-        return policy_telemetry.snapshot()
+        snap = policy_telemetry.snapshot()
+        # Earning legibility: progress toward the next auto-enabled feature flag.
+        # Computed from the same gate the engine uses (single source of truth).
+        try:
+            from policy.policy_interface import PolicyInterface
+            snap["earning"] = PolicyInterface.earning_status(
+                snap.get("experience_count", 0),
+                snap.get("nn_decisive_win_rate", 0.0),
+                snap.get("shadow_ab_total", 0),
+                snap.get("feature_flags", {}),
+            )
+        except Exception:
+            snap["earning"] = {}
+        return snap
     except Exception:
         logger.warning("Snapshot: policy cache failed", exc_info=True)
         return {"active": False, "mode": "shadow", "status": "not_loaded"}

@@ -209,6 +209,44 @@ class PolicyInterface:
             "has_governor": self._governor is not None,
         }
 
+    @staticmethod
+    def earning_status(
+        experience_count: int, win_rate: float, shadow_ab_total: int,
+        feature_flags: dict[str, bool] | None = None,
+    ) -> dict[str, Any]:
+        """View-only progress toward the next auto-enabled feature flag.
+
+        Mirrors auto_enable_features' gate EXACTLY so the dashboard shows the
+        real bars (no separate thresholds to drift). Pure — no side effects.
+        """
+        ff = feature_flags or {}
+        ladder: list[dict[str, Any]] = []
+        next_feature: dict[str, Any] | None = None
+        for min_exp, min_wr, min_shadow, feature in PolicyInterface._FEATURE_THRESHOLDS:
+            enabled = bool(ff.get(feature))
+            bars = {
+                "experience": {"have": experience_count, "need": min_exp,
+                               "pct": round(min(1.0, experience_count / min_exp), 3) if min_exp else 1.0},
+                "win_rate": {"have": round(win_rate, 3), "need": min_wr,
+                             "pct": round(min(1.0, win_rate / min_wr), 3) if min_wr else 1.0},
+                "shadow_ab": {"have": shadow_ab_total, "need": min_shadow,
+                              "pct": round(min(1.0, shadow_ab_total / min_shadow), 3) if min_shadow else 1.0},
+            }
+            all_met = (experience_count >= min_exp and win_rate >= min_wr
+                       and shadow_ab_total >= min_shadow)
+            row = {"feature": feature, "enabled": enabled, "all_met": all_met, "bars": bars}
+            ladder.append(row)
+            if next_feature is None and not enabled:
+                next_feature = row
+        return {
+            "experience_count": experience_count,
+            "win_rate": round(win_rate, 3),
+            "shadow_ab_total": shadow_ab_total,
+            "next_feature": next_feature,
+            "ladder": ladder,
+            "all_enabled": all(r["enabled"] for r in ladder) if ladder else False,
+        }
+
     def _apply_feature_flags(self, decision: PolicyDecision) -> PolicyDecision:
         if not self._feature_flags.get("budget_allocation"):
             decision.budget_ms = None

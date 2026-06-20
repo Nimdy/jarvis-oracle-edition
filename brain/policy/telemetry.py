@@ -46,6 +46,7 @@ class PolicyTelemetry:
     device: str = "cpu"
     train_enabled: bool = False
     feature_flags: dict[str, bool] = field(default_factory=dict)
+    experience_count: int = 0  # real interaction-outcome experiences; drives feature auto-enable
 
     # ── Performance (EMA-updated on hot path) ───────────────────────────
     decisions_total: int = 0
@@ -230,6 +231,7 @@ class PolicyTelemetry:
                 "device": self.device,
                 "train_enabled": self.train_enabled,
                 "feature_flags": dict(self.feature_flags),
+                "experience_count": self.experience_count,
 
                 "decisions_total": self.decisions_total,
                 "decisions_per_s_ema": round(self.decisions_per_s_ema, 2),

@@ -20,6 +20,13 @@
     .pillrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;}
     .pill{border:1px solid var(--line);border-radius:4px;padding:4px 9px;font-size:10px;}
     .pill .pk{color:var(--muted);font-size:9px;} .pill .pv{font-variant-numeric:tabular-nums;}
+    .ebanner{font-size:12px;margin:4px 0 10px;color:var(--text);}
+    .ebar{margin:7px 0;}
+    .ebl{font-size:10px;color:var(--muted);margin-bottom:3px;}
+    .etrack{height:9px;border:1px solid var(--line);border-radius:5px;overflow:hidden;background:rgba(3,8,14,.5);}
+    .efill{height:100%;transition:width .4s;}
+    .lhead{font-size:9.5px;letter-spacing:.07em;color:var(--muted);text-transform:uppercase;margin:12px 0 5px;}
+    .lrow{display:flex;justify-content:space-between;font-size:10.5px;padding:4px 0;border-top:1px solid var(--line);}
   </style>
 </head>
 <body>
@@ -54,6 +61,14 @@
       <div class="note">An A/B that compares two arms is only meaningful if something executes on them. When scores are all 0.0 and agreement is forced to 1.0 because nothing ran, it is <em>live-but-vacuous</em>, not a passing test.</div>
       <div class="kv" id="ab-kv"></div>
       <div class="caveat" id="ab-caveat"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>Policy NN · earning out of shadow</h2>
+      <div class="note">The policy NN runs in <b>shadow</b> and improves on lived reps — each real conversation turn is one experience. Feature flags <b>auto-enable</b> when all three bars below are met (no human gate). Empty bars after a reboot = soaking, not stuck.</div>
+      <div id="earn-next"></div>
+      <div id="earn-ladder"></div>
+      <div class="caveat" id="earn-caveat"></div>
     </section>
   </main>
 
@@ -128,6 +143,38 @@
       : 'Real decisions are flowing — comparison is meaningful.';
   }
 
+  function ebar(label, haveDisp, needDisp, pct){
+    pct=pct||0;
+    var met=pct>=1.0;
+    var col=met?'var(--green)':(pct>=0.5?'var(--amber)':'var(--red)');
+    return '<div class="ebar"><div class="ebl">'+label+' <b style="color:'+col+'">'+haveDisp+'</b> / '+needDisp+'</div>'+
+      '<div class="etrack"><div class="efill" style="width:'+Math.round(pct*100)+'%;background:'+col+'"></div></div></div>';
+  }
+  function renderEarning(){
+    var e=(POL&&POL.earning)||{};
+    var nf=e.next_feature;
+    if(!nf){
+      el('earn-next').innerHTML = e.all_enabled
+        ? '<div class="ebanner" style="color:var(--green)">All policy features earned — NN fully promoted out of shadow.</div>'
+        : '<span class="offline">earning data not available (policy not loaded)</span>';
+      el('earn-ladder').innerHTML=''; el('earn-caveat').innerHTML=''; return;
+    }
+    var b=nf.bars;
+    el('earn-next').innerHTML='<div class="ebanner">next feature to auto-enable: <b style="color:var(--cyan)">'+nf.feature+'</b>'+
+        (nf.all_met?' <span style="color:var(--green);font-size:10px">● ready</span>':'')+'</div>'+
+      ebar('experiences', num(b.experience.have)||0, b.experience.need, b.experience.pct)+
+      ebar('decisive win-rate', ((num(b.win_rate.have)||0)*100).toFixed(1)+'%', (b.win_rate.need*100).toFixed(0)+'%', b.win_rate.pct)+
+      ebar('shadow A/B decisions', num(b.shadow_ab.have)||0, b.shadow_ab.need, b.shadow_ab.pct);
+    var rows=(e.ladder||[]).map(function(r){
+      var st=r.enabled?'<span style="color:var(--green)">● live</span>'
+        :(r.all_met?'<span style="color:var(--amber)">○ ready</span>'
+        :'<span style="color:var(--dim)">○ '+Math.round((r.bars.experience.pct||0)*100)+'% exp</span>');
+      return '<div class="lrow"><span>'+r.feature+'</span>'+st+'</div>';
+    }).join('');
+    var live=(e.ladder||[]).filter(function(r){return r.enabled;}).length;
+    el('earn-ladder').innerHTML='<div class="lhead">feature ladder ('+live+'/'+(e.ladder||[]).length+' live)</div>'+rows;
+    el('earn-caveat').innerHTML='Experiences accrue from <b>real interaction outcomes only</b> — shadow A/B does not write the buffer (by design, to protect the training gradient). ~'+b.experience.need+' real turns to the first flag. Do not synthesize reps.';
+  }
   function renderRecovery(){
     // reuse the snapshot validation_pack signal would need another fetch; keep banner off here (yardsticks are inherently "immature by design", not recovery).
   }
@@ -135,7 +182,7 @@
     el('mode').textContent='policy '+((POL&&POL.mode)||'—')+' · wm v'+((WM&&WM.version)||'—');
   }
 
-  function renderAll(){ renderBanner(); renderWorldModel(); renderPolicy(); renderAutonomyAB(); }
+  function renderAll(){ renderBanner(); renderWorldModel(); renderPolicy(); renderAutonomyAB(); renderEarning(); }
 
   function refresh(){
     Promise.allSettled([

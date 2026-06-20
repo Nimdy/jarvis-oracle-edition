@@ -1198,6 +1198,9 @@ class ConsciousnessEngine:
                 exp_count, report.nn_decisive_win_rate,
                 shadow_ab_total=report.total_decisions,
             )
+            # Surface the buffer fill so the dashboard can show earning progress.
+            from policy.telemetry import policy_telemetry
+            policy_telemetry.experience_count = exp_count
         except Exception as exc:
             logger.warning("Policy feature auto-enable failed: %s", exc)
 
