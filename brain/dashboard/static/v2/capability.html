@@ -162,6 +162,19 @@
     .sip-diff .d-del{color:var(--red);}
     .sip-diff .d-hdr{color:var(--cyan);}
     .sip-diff .d-ctx{color:var(--muted);}
+    /* Phase 2: full-parity specialist cards */
+    .specgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px;}
+    .speccard{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:rgba(255,255,255,.02);}
+    .sc-hd{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+    .sc-name{font-weight:700;font-size:.86rem;color:var(--text);}
+    .sc-status{font-size:.64rem;font-weight:700;letter-spacing:.03em;}
+    .sc-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;margin-top:4px;}
+    .sc-k{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+    .sc-v{font-size:.82rem;font-weight:700;color:var(--text);margin-top:1px;}
+    .sc-dim{font-weight:400;color:var(--muted);font-size:.66rem;}
+    .sc-dist{margin-top:8px;border-top:1px solid var(--line);padding-top:6px;}
+    .sc-distbar{display:flex;height:6px;border-radius:3px;overflow:hidden;margin:4px 0;}
+    .sc-distleg{display:flex;flex-wrap:wrap;gap:3px 8px;font-size:.64rem;}
   </style>
 </head>
 <body>
@@ -440,30 +453,53 @@
       'GPU layers '+(num(coder.gpu_layers)===null?'—':coder.gpu_layers)+' (CPU/standby). total_generations=<b>'+(num(coder.total_generations)||0)+'</b> is expected on a cold loop.';
   }
 
+  // Full-parity specialist cards (ports the proven static Shadow-Intelligence renderer):
+  // maturity / signals(F:L) / best+train accuracy / attempts / networks / last-signal /
+  // quarantined / failures + the label/reason distribution bar. Data: SPEC (already fetched).
+  function kv(k,v){ return '<div class="sc-kv"><div class="sc-k">'+k+'</div><div class="sc-v">'+v+'</div></div>'; }
+  function distBar(s){
+    var dist=s.claim_label_distribution||s.reason_distribution; if(!dist||!Object.keys(dist).length) return '';
+    var title=s.claim_label_distribution?'Label Distribution':'Reason Distribution';
+    var keys=Object.keys(dist).sort(function(a,b){return (dist[b]||0)-(dist[a]||0);});
+    var total=keys.reduce(function(a,k){return a+(dist[k]||0);},0); if(!total) return '';
+    var pal=['var(--cyan)','var(--green)','var(--magenta,#c0f)','var(--amber)','var(--red)','var(--muted)'];
+    var bar=keys.map(function(k,i){return '<div style="width:'+((dist[k]/total)*100)+'%;background:'+pal[i%pal.length]+';min-width:1px;"></div>';}).join('');
+    var leg=keys.map(function(k,i){return '<span style="color:'+pal[i%pal.length]+'">'+escH(k)+': <b>'+dist[k]+'</b></span>';}).join(' ');
+    return '<div class="sc-dist"><div class="sc-k">'+escH(title)+'</div><div class="sc-distbar">'+bar+'</div><div class="sc-distleg">'+leg+'</div></div>';
+  }
   function renderSpecialists(){
     var list=(SPEC||{}).specialists||[];
     var dist=(SPEC||{}).distillation||{};
-    if(!list.length){ el('spec-list').innerHTML='<div class="offline">specialists offline</div>'; return; }
-    var rows=list.map(function(s){
-      var mat=s.maturity||'—';
-      var acc=num(s.best_accuracy);
-      // only color accuracy meaningfully for non-bootstrap; bootstrap=cold-start, show dim
-      var accColor = (mat==='bootstrap')?'var(--dim)':bandColor(acc,0.75,0.6);
-      var accTxt = acc===null?'—':(acc.toFixed(3));
-      var sig=num(s.signals_total)||0;
-      var shadow = (s.shadow_only===true);
-      return '<div class="spec">'+
-        '<span class="focus">'+cap(s.focus)+' '+(shadow?V2.tag('self','shadow'):V2.tag('earned','live'))+'</span>'+
-        '<span class="mat" style="color:'+(mat==='stable'?'var(--green)':'var(--muted)')+'">'+mat+'</span>'+
-        '<span class="acc" style="color:'+accColor+'">'+accTxt+'<div class="k" style="font-size:8px">best acc</div></span>'+
-        '<span class="sig">'+sig+'<div class="k" style="font-size:8px">signals</div></span>'+
+    if(!list.length){ el('spec-list').innerHTML='<div class="offline">specialists offline</div>'; el('spec-contrast').innerHTML=''; return; }
+    var matColors={bootstrap:'var(--red)',early_noisy:'var(--amber)',preliminary:'var(--cyan)',meaningful:'var(--green)',stable:'var(--magenta,#c0f)'};
+    function pctv(v){ v=num(v); return (v===null||v<=0)?'0%':Math.round(v*100)+'%'; }
+    el('spec-list').innerHTML='<div class="specgrid">'+list.map(function(s){
+      var mc=matColors[s.maturity]||'var(--muted)';
+      var statusCol=s.disabled?'var(--red)':(s.status==='active'?'var(--green)':(s.status==='quarantined'?'var(--amber)':'var(--muted)'));
+      var statusLabel=s.disabled?'DISABLED':String(s.status||'idle').toUpperCase();
+      var ls=num(s.last_signal_s);
+      var lastSig=ls===null?'never':(ls<120?Math.round(ls)+'s ago':Math.round(ls/60)+'m ago');
+      var ba=num(s.best_accuracy), ta=num(s.best_training_accuracy);
+      return '<div class="speccard" style="border-left:3px solid '+mc+'">'+
+        '<div class="sc-hd"><span class="sc-name">'+escH(cap(String(s.focus||'').replace(/_/g,' ')))+'</span>'+
+          '<span class="sc-status" style="color:'+statusCol+'">'+escH(statusLabel)+'</span></div>'+
+        '<div style="margin:2px 0 4px;">'+(s.shadow_only===true?V2.tag('self','shadow'):V2.tag('earned','live'))+'</div>'+
+        '<div class="sc-grid">'+
+          kv('Maturity','<span style="color:'+mc+'">'+escH(s.maturity||'unknown')+'</span>')+
+          kv('Signals',(num(s.signals_total)||0)+' <span class="sc-dim">(F:'+(num(s.signals_features)||0)+' L:'+(num(s.signals_labels)||0)+')</span>')+
+          kv('Best Acc','<span style="color:'+(ba>0?'var(--green)':'var(--muted)')+'">'+pctv(ba)+'</span>')+
+          kv('Train Acc','<span style="color:'+(ta>0?'var(--green)':'var(--muted)')+'">'+pctv(ta)+'</span>')+
+          kv('Attempts',(num(s.total_attempts)||0))+
+          kv('Networks',(num(s.network_count)||0))+
+          kv('Last Signal',escH(lastSig))+
+          kv('Quarantined','<span style="color:'+((num(s.signals_quarantined)||0)>0?'var(--amber)':'var(--muted)')+'">'+(num(s.signals_quarantined)||0)+'</span>')+
+          ((num(s.failure_count)||0)>0?kv('Failures','<span style="color:var(--red)">'+s.failure_count+'/3</span>'):'')+
+        '</div>'+distBar(s)+
       '</div>';
-    }).join('');
-    el('spec-list').innerHTML=rows;
+    }).join('')+'</div>';
     el('spec-contrast').innerHTML=
-      'All specialists are <b>shadow — not live-scoring</b> (authority telemetry_only). '+
-      'Only <b>dream_synthesis</b> reached maturity <b>stable</b> (0.810 best acc, 522 signals); the rest are bootstrap cold-start where 0.000 accuracy is by design, not breakage. '+
-      'Distillation pool: <b>'+(num(dist.total_signals)||0)+'</b> signals system-wide ('+(num(dist.total_quarantined)||0)+' quarantined).';
+      'Distillation stream: <b>'+(num(dist.total_signals)||0)+'</b> total signals · <b>'+(num(dist.total_quarantined)||0)+'</b> quarantined. '+
+      'All specialists are <b>shadow — telemetry-only</b> (authority telemetry_only, live_influence off); they mature from real outcomes. Bootstrap / 0% is cold-start by design, not breakage.';
   }
 
   function renderAcquisition(){
