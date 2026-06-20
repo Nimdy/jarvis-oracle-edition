@@ -243,7 +243,7 @@
     var st=(g.stats||{}).by_status||{};
     var focus=g.current_focus;
     el('goal-stats').innerHTML=
-      stat('current focus', focus?('<span style="font-size:13px">'+focus+'</span>'):'<span style="font-size:13px;color:var(--amber)">none</span>')+
+      stat('current focus', focus?('<span style="font-size:13px">'+(focus.title||focus.goal_id||'active goal')+'</span>'):'<span style="font-size:13px;color:var(--amber)">none</span>')+
       stat('active', (g.active_goals||[]).length, (g.active_goals||[]).length>0?'var(--green)':'var(--amber)')+
       stat('paused', num(st.paused)||0, (num(st.paused)||0)>0?'var(--amber)':'var(--green)')+
       stat('completed (session)', num(st.completed)||0, 'var(--green)')+
