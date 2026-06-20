@@ -143,6 +143,33 @@ class ModelRegistry:
             ],
         }
 
+    def training_advisory(self, margin: float = 0.02) -> dict[str, Any]:
+        """[Part A] Shadow-only, ADVISORY view: would the best-trained candidate beat
+        the active model on validation loss? Read-only — this NEVER grants control
+        authority. Validation loss is imitation-of-kernel fit, not proof of beating
+        the kernel live; the NN must still win the shadow A/B to actually be promoted.
+        Surfaced only so the dashboard can show "a better-trained model is ready, held
+        in shadow pending a live win" instead of looking dead.
+        """
+        active = self.get_active()
+        if active is None:
+            return {"has_better_candidate": False, "active_version": 0,
+                    "note": "no active model yet"}
+        cands = [v for v in self._state.versions if not v.is_active]
+        if not cands:
+            return {"has_better_candidate": False, "active_version": active.version}
+        best = min(cands, key=lambda v: v.validation_loss)
+        active_loss = active.validation_loss
+        return {
+            "has_better_candidate": best.validation_loss < active_loss - margin,
+            "active_version": active.version if active else 0,
+            "active_loss": round(active_loss, 4) if active else None,
+            "best_candidate_version": best.version,
+            "best_candidate_arch": best.arch,
+            "best_candidate_loss": round(best.validation_loss, 4),
+            "note": "advisory only (training-loss quality) — NOT a live win, not promoted",
+        }
+
     # -- persistence ---------------------------------------------------------
 
     def _save_state(self) -> None:

@@ -2645,10 +2645,11 @@ class TestAU01QueueRemoveGuarded:
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestPolicyShadowTickNotInBuffer:
-    """Shadow tick experience writes were removed from the buffer.
-
-    The evaluator's score_retrospective() still uses health rewards for A/B
-    comparison — only the experience buffer write is gone.
+    """Shadow tick experience writes were removed from the buffer, and (Part A,
+    2026-06-20) the flat health reward is no longer scored into the A/B window
+    either — near-constant health flooded it with ~96% ties and made the win-rate
+    gate uncrossable. Only the varied interaction-outcome path scores the A/B now.
+    The shadow tick still records the pending NN proposal + health observability.
     """
 
     def _get_shadow_eval_body(self):
@@ -2666,10 +2667,15 @@ class TestPolicyShadowTickNotInBuffer:
         assert "experience_buffer.add(" not in body, \
             "Shadow tick must NOT write to the experience buffer"
 
-    def test_score_retrospective_still_called(self):
+    def test_shadow_tick_does_not_score_health_into_ab(self):
+        """[Part A] The shadow tick must NOT feed near-constant health rewards into
+        the A/B window — that flooded it with ~96% ties and made the win-rate gate
+        uncrossable. Only the varied interaction-outcome path scores the A/B now."""
         body = self._get_shadow_eval_body()
-        assert "score_retrospective" in body, \
-            "Evaluator retrospective scoring must remain in shadow path"
+        assert "score_retrospective(health_reward)" not in body, \
+            "Shadow tick must NOT score flat health rewards into the A/B (Part A)"
+        assert "_compute_health_reward()" in body, \
+            "Shadow tick should still compute health for observability (reward_history)"
 
     def test_record_pending_shadow_still_called(self):
         body = self._get_shadow_eval_body()

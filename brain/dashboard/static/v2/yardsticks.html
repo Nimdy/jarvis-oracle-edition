@@ -173,7 +173,12 @@
     }).join('');
     var live=(e.ladder||[]).filter(function(r){return r.enabled;}).length;
     el('earn-ladder').innerHTML='<div class="lhead">feature ladder ('+live+'/'+(e.ladder||[]).length+' live)</div>'+rows;
-    el('earn-caveat').innerHTML='Experiences accrue from <b>real interaction outcomes only</b> — shadow A/B does not write the buffer (by design, to protect the training gradient). ~'+b.experience.need+' real turns to the first flag. Do not synthesize reps.';
+    var adv=(POL&&POL.training_advisory)||{};
+    var advHtml='';
+    if(adv.has_better_candidate){
+      advHtml='<div style="margin-bottom:7px;color:var(--cyan)">Training-quality advisory: a better-trained model is ready — <b>v'+adv.best_candidate_version+'</b> ('+adv.best_candidate_arch+', loss '+adv.best_candidate_loss+') beats active <b>v'+adv.active_version+'</b> (loss '+adv.active_loss+') on training fit, but is <b>held in shadow</b> pending a live win. Advisory only — never auto-promoted on loss.</div>';
+    }
+    el('earn-caveat').innerHTML=advHtml+'Experiences accrue from <b>real interaction outcomes only</b> — shadow ticks no longer flood the A/B with health-reward ties (Part A), so the win-rate is now measured against a signal that varies. ~'+b.experience.need+' real turns to the first flag. Do not synthesize reps.';
   }
   function renderRecovery(){
     // reuse the snapshot validation_pack signal would need another fetch; keep banner off here (yardsticks are inherently "immature by design", not recovery).

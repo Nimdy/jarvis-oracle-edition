@@ -2387,6 +2387,7 @@ def _build_policy_cache(engine: Any) -> dict[str, Any]:
                 snap["registry_total_versions"] = rs.get("total_versions", snap.get("registry_total_versions", 0))
                 snap["registry_active_version"] = rs.get("active_version", snap.get("registry_active_version", 0))
                 snap["registry_active_arch"] = rs.get("active_arch", snap.get("registry_active_arch", "none"))
+                snap["training_advisory"] = reg.training_advisory()
         except Exception:
             pass
         return snap

@@ -931,9 +931,14 @@ class ConsciousnessEngine:
                 "response_length_hint": self._policy_response_length or "",
                 "thought_weights_delta": dict(self._consciousness.config.thought_weights) if self._consciousness else {},
             }
-            # Score the PREVIOUS pending shadow using current health as outcome
+            # [Part A] Health reward is recorded for OBSERVABILITY only (reward_history
+            # below). It is deliberately NOT scored into the A/B window anymore: near-
+            # constant health (~0.4-0.8) flooded the window with ~96% ties and contaminated
+            # the shared _prev_reward across sources, making the win-rate gate uncrossable
+            # no matter how well models trained. Only the VARIED interaction-outcome reward
+            # drives A/B scoring now (record_interaction_outcome -> score_retrospective),
+            # which also leaves _prev_reward a clean within-interaction-stream delta.
             health_reward = self._compute_health_reward()
-            self._policy_evaluator.score_retrospective(health_reward)
 
             from policy.telemetry import policy_telemetry
             policy_telemetry.record_reward(health_reward)
@@ -951,13 +956,14 @@ class ConsciousnessEngine:
                             type(self._state_encoder).__name__ if self._state_encoder is not None else "None",
                             buf_len)
 
-            # Shadow ticks are NOT written to the experience buffer.
-            # Health rewards are near-constant (~1.0) under normal operation,
-            # which collapses the advantage-weighted training signal. Only
-            # interaction outcomes (record_interaction_outcome) produce varied
-            # rewards that give the NN a meaningful gradient.
-            # The evaluator's score_retrospective() above still uses health
-            # rewards for A/B comparison — that path is unaffected.
+            # Shadow ticks are NOT written to the experience buffer, and (as of
+            # Part A) no longer drive A/B scoring either. Health rewards are near-
+            # constant (~0.4-0.8) under normal operation, which both collapses the
+            # advantage-weighted training signal AND flooded the A/B window with ties.
+            # Only interaction outcomes (record_interaction_outcome) produce varied
+            # rewards that give the NN a meaningful gradient and a real, uncontaminated
+            # A/B win signal. The shadow tick still records the NN's pending proposal
+            # (record_pending_shadow above) so the next interaction outcome can score it.
 
             self._auto_enable_policy_features()
 
