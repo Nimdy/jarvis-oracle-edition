@@ -315,7 +315,7 @@ _BASE_TIER_PROFILES: dict[GpuTier, ModelProfile] = {
     "high": ModelProfile(
         llm_model="qwen3:8b",
         llm_fast_model="qwen3:4b",
-        vision_model="qwen2.5vl:7b",
+        vision_model="qwen3-vl:8b",
         stt_model="large-v3-turbo",
         stt_compute_type="int8_float16",
         stt_device="cuda",
@@ -337,7 +337,7 @@ _BASE_TIER_PROFILES: dict[GpuTier, ModelProfile] = {
     "premium": ModelProfile(
         llm_model="qwen3:8b",
         llm_fast_model="qwen3:8b",
-        vision_model="qwen2.5vl:7b",
+        vision_model="qwen3-vl:8b",
         stt_model="large-v3",
         stt_compute_type="int8_float16",
         stt_device="cuda",
@@ -359,7 +359,7 @@ _BASE_TIER_PROFILES: dict[GpuTier, ModelProfile] = {
     "ultra": ModelProfile(
         llm_model="qwen3:14b",
         llm_fast_model="qwen3:8b",
-        vision_model="qwen2.5vl:7b",
+        vision_model="qwen3-vl:8b",
         stt_model="large-v3",
         stt_compute_type="float16",
         stt_device="cuda",
@@ -381,7 +381,7 @@ _BASE_TIER_PROFILES: dict[GpuTier, ModelProfile] = {
     "extreme": ModelProfile(
         llm_model="qwen3:32b",
         llm_fast_model="qwen3:14b",
-        vision_model="qwen2.5vl:7b",
+        vision_model="qwen3-vl:8b",
         stt_model="large-v3",
         stt_compute_type="float16",
         stt_device="cuda",

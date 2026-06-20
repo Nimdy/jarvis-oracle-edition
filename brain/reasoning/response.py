@@ -399,7 +399,7 @@ class ResponseGenerator:
         self._ollama = OllamaClient(
             host=cfg.get("host", "http://localhost:11434"),
             model=cfg.get("model", "qwen3:8b"),
-            vision_model=cfg.get("vision_model", "qwen2.5vl:7b"),
+            vision_model=cfg.get("vision_model", "qwen3-vl:8b"),
             temperature=cfg.get("temperature", 0.7),
             max_tokens=cfg.get("max_tokens", 1024),
             keep_alive=cfg.get("keep_alive", "5m"),

@@ -570,11 +570,11 @@ case "$TIER" in
     minimal) DEF_MODEL="qwen3:1.7b"; DEF_FAST="qwen3:1.7b"; DEF_VISION="";;
     low)     DEF_MODEL="qwen3:4b";   DEF_FAST="qwen3:1.7b"; DEF_VISION="";;
     medium)  DEF_MODEL="qwen3:8b";   DEF_FAST="qwen3:4b";   DEF_VISION="";;
-    high)    DEF_MODEL="qwen3:8b";   DEF_FAST="qwen3:4b";   DEF_VISION="qwen2.5vl:7b";;
-    premium) DEF_MODEL="qwen3:8b";   DEF_FAST="qwen3:8b";   DEF_VISION="qwen2.5vl:7b";;
-    ultra)   DEF_MODEL="qwen3:14b";  DEF_FAST="qwen3:8b";   DEF_VISION="qwen2.5vl:7b";;
-    extreme) DEF_MODEL="qwen3:32b";  DEF_FAST="qwen3:14b";  DEF_VISION="qwen2.5vl:7b";;
-    *)       DEF_MODEL="qwen3:8b";   DEF_FAST="qwen3:4b";   DEF_VISION="qwen2.5vl:7b";;
+    high)    DEF_MODEL="qwen3:8b";   DEF_FAST="qwen3:4b";   DEF_VISION="qwen3-vl:8b";;
+    premium) DEF_MODEL="qwen3:8b";   DEF_FAST="qwen3:8b";   DEF_VISION="qwen3-vl:8b";;
+    ultra)   DEF_MODEL="qwen3:14b";  DEF_FAST="qwen3:8b";   DEF_VISION="qwen3-vl:8b";;
+    extreme) DEF_MODEL="qwen3:32b";  DEF_FAST="qwen3:14b";  DEF_VISION="qwen3-vl:8b";;
+    *)       DEF_MODEL="qwen3:8b";   DEF_FAST="qwen3:4b";   DEF_VISION="qwen3-vl:8b";;
 esac
 
 MODEL="${OLLAMA_MODEL:-$DEF_MODEL}"

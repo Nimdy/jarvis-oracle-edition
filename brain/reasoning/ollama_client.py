@@ -23,7 +23,7 @@ class OllamaClient:
         self,
         host: str = "http://localhost:11434",
         model: str | None = None,
-        vision_model: str = "qwen2.5vl:7b",
+        vision_model: str = "qwen3-vl:8b",
         temperature: float = 0.7,
         max_tokens: int = 512,
         keep_alive: str = "5m",
