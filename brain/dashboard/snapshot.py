@@ -2377,6 +2377,18 @@ def _build_policy_cache(engine: Any) -> dict[str, Any]:
             )
         except Exception:
             snap["earning"] = {}
+        # Registry view: sync from the REAL on-disk registry. The telemetry copy
+        # lags the boot-restore (it under-reported total_versions=0 / active=none
+        # even with a loaded 342-version registry), which read as "never trained".
+        try:
+            reg = getattr(getattr(engine, "_promotion_pipeline", None), "_registry", None)
+            if reg is not None:
+                rs = reg.get_status()
+                snap["registry_total_versions"] = rs.get("total_versions", snap.get("registry_total_versions", 0))
+                snap["registry_active_version"] = rs.get("active_version", snap.get("registry_active_version", 0))
+                snap["registry_active_arch"] = rs.get("active_arch", snap.get("registry_active_arch", "none"))
+        except Exception:
+            pass
         return snap
     except Exception:
         logger.warning("Snapshot: policy cache failed", exc_info=True)

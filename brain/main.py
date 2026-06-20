@@ -752,12 +752,25 @@ async def main() -> None:
 
         if TORCH_AVAILABLE:
             restored_nn = _restore_active_policy_controller(policy_registry, state_encoder)
+            from policy.telemetry import policy_telemetry as _pt
             if restored_nn is not None:
                 policy_interface.set_nn_controller(restored_nn)
+                # Honest telemetry: reflect that the live NN is the restored active
+                # model, not a fresh untrained default (the boot-restore previously
+                # left model_id="none" even after loading a trained model).
+                try:
+                    _act = policy_registry.get_active()
+                    if _act is not None:
+                        _pt.model_id = f"v{_act.version:04d}"
+                        _pt.model_version = _act.version
+                        _pt.arch = _act.arch
+                except Exception:
+                    logger.warning("Policy telemetry model-id sync failed", exc_info=True)
             else:
                 default_nn = PolicyNNController(arch="mlp2", input_dim=STATE_DIM)
                 default_nn.set_encoder(state_encoder)
                 policy_interface.set_nn_controller(default_nn)
+                _pt.model_id = "default_untrained"  # honest: running a cold default, no restore
             policy_interface.set_governor(policy_governor)
             policy_interface.enable()
             policy_evaluator.set_mode("shadow")
