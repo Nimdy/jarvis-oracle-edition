@@ -453,6 +453,18 @@ class ContextBuilder:
 
         _pc0 = len(parts)
         if perception_context:
+            if tool_hint == "vision":
+                # VISION GROUNDING firewall: the caption below is exactly what the vision
+                # model reported from the live frame. Forbid the LLM from authoring a scene
+                # — perception claims are the high-stakes truth class (integrity = floor).
+                parts.append(
+                    "VISION GROUNDING — you are the mouth, not the eyes. The [Live camera view] "
+                    "below is exactly what your vision model reported from the live camera frame. "
+                    "Report ONLY what it states. Do NOT invent or assume people, faces, clothing, "
+                    "objects, lighting, or activity that is not in it. If it indicates you cannot "
+                    "see, say you cannot see right now — never guess."
+                )
+                parts.append("")
             parts.append(perception_context)
             parts.append("")
         _section_sizes["perception"] = sum(len(p) for p in parts[_pc0:])

@@ -3632,15 +3632,19 @@ async def handle_transcription(
         tone = engine.get_state()["tone"]
         if ollama and pi_snapshot_url:
             try:
+                # Honest "warming up" while the VLM cold-loads: the vision model shares VRAM
+                # with the chat model, so the first look after a chat turn swaps it in (~seconds).
+                # Say what's actually happening — never a guessed scene while the eyes load.
+                await _broadcast_chunk_sync("One moment — focusing my vision.", tone)
                 scene_desc = await describe_scene(pi_snapshot_url, ollama, claude)
-                try:
-                    await ollama.unload_model(ollama.vision_model)
-                except Exception:
-                    pass
+                # Do NOT force-unload: keep_alive (5m) keeps the eyes warm for follow-up looks;
+                # Ollama manages the VRAM swap with the chat model on demand (fewer cold-loads).
                 if scene_desc and "aren't available" not in scene_desc and "can't see" not in scene_desc:
+                    # The FRESH frame caption is the SOLE authority for "what do you see".
+                    # Deliberately do NOT prepend the ambient/cached scene_context: its
+                    # "Physical: person / user present" claims can contradict the live frame
+                    # and are exactly the stale material that drove the original confab.
                     vision_ctx = f"[Live camera view]\n{scene_desc}"
-                    if scene_context:
-                        vision_ctx = f"{scene_context}\n{vision_ctx}"
                     full_reply = ""
                     chunks_sent = 0
                     async for sentence, is_final in response_gen.respond_stream(
@@ -3650,6 +3654,7 @@ async def handle_transcription(
                         speaker_name=speaker,
                         user_emotion=emotion,
                         conversation_id=conversation_id,
+                        tool_hint="vision",
                         style_instruction=_style_instruction,
                     ):
                         if _cancelled():

@@ -765,6 +765,14 @@ class ResponseGenerator:
             max_tokens = min(max_tokens or _VOICE_CAP, _VOICE_CAP)
             logger.info("General knowledge override: temp=%.2f, max_tokens=%d (factual, voice-capped)",
                         temperature, max_tokens)
+        elif tool_hint == "vision":
+            # Grounded to the live camera caption — low temp so the model reports what the
+            # VLM actually saw and does not embellish/invent a scene. Pairs with the VISION
+            # GROUNDING firewall in context.build_system_prompt.
+            temperature = 0.3
+            max_tokens = min(max_tokens or _VOICE_CAP, _VOICE_CAP)
+            logger.info("Vision override: temp=%.2f, max_tokens=%d (grounded to camera caption, voice-capped)",
+                        temperature, max_tokens)
         elif self._fast_model and complexity == "simple":
             model_override = self._fast_model
             max_tokens = 150

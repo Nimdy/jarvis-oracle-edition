@@ -80,5 +80,9 @@ async def describe_scene_stream(
         yield "Vision models aren't available right now."
         return
 
-    async for token in ollama_client.describe_image_stream(image_b64, prompt):
-        yield token
+    try:
+        async for token in ollama_client.describe_image_stream(image_b64, prompt):
+            yield token
+    except Exception as exc:
+        logger.warning("Vision stream failed (cold-load/timeout?): %s", exc)
+        yield "I can't see clearly right now."
