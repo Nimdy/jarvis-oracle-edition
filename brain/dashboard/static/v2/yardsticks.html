@@ -70,6 +70,14 @@
       <div id="earn-ladder"></div>
       <div class="caveat" id="earn-caveat"></div>
     </section>
+
+    <section class="card col12">
+      <h2>Self-Sensing · learning beyond persistence (shadow)</h2>
+      <div class="note">The <em>live</em> version of the persistence-vs-predictive split above: a shadow loop predicts the next lidar frame, scores it against ground truth vs the "nothing changed" baseline, and tracks learning-progress. <b>authority = none</b> (drives nothing yet) — the seed of the autonomous-growth engine.</div>
+      <div class="dual" id="ss-stats"></div>
+      <div class="pillrow" id="ss-pills"></div>
+      <div class="caveat" id="ss-caveat"></div>
+    </section>
   </main>
 
 <script src="/static/v2/shared.js"></script>
@@ -78,7 +86,7 @@
   "use strict";
   var V2=window.V2;
   var fetchJSON=V2.fetchJSON, num=V2.num, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el;
-  var WM=null, POL=null, AB=null, lastOkTs=0;
+  var WM=null, POL=null, AB=null, SS=null, lastOkTs=0;
   V2.renderNav('/static/v2/yardsticks.html');
 
   function statBlock(k, v, sub, color){
@@ -180,6 +188,28 @@
     }
     el('earn-caveat').innerHTML=advHtml+'Experiences accrue from <b>real interaction outcomes only</b> — shadow ticks no longer flood the A/B with health-reward ties (Part A), so the win-rate is now measured against a signal that varies. ~'+b.experience.need+' real turns to the first flag. Do not synthesize reps.';
   }
+  function renderSelfSensing(){
+    var d=SS||{};
+    if(!d || d.observations===undefined){
+      el('ss-stats').innerHTML='<span class="offline">self-sensing not loaded yet (needs restart + lidar)</span>';
+      el('ss-pills').innerHTML=''; el('ss-caveat').innerHTML=''; return;
+    }
+    var skd=num(d.skill_vs_persistence_dynamic), ska=num(d.skill_vs_persistence), lp=num(d.learning_progress), df=num(d.dynamic_fraction)||0;
+    function pc(x){ return x===null?'—':((x>=0?'+':'')+(x*100).toFixed(1)+'%'); }
+    el('ss-stats').innerHTML=
+      statBlock('Skill vs persistence — dynamic', pc(skd), 'the real signal (moving frames); validated +44.5%', skd===null?'var(--dim)':bandColor(skd,0.30,0.10))+
+      statBlock('Skill vs persistence — all', pc(ska), 'incl. static frames (persistence-dominated)', ska===null?'var(--dim)':bandColor(ska,0.20,0.05))+
+      statBlock('Learning progress', lp===null?'—':((lp>=0?'+':'')+lp.toFixed(3)), lp>0?'skill still rising':'plateaued / declining', lp>0?'var(--green)':'var(--muted)')+
+      statBlock('Dynamic fraction', (df*100).toFixed(0)+'%', 'how much the world moved', df>0.1?'var(--text)':'var(--amber)');
+    var auth=d.authority||{}, pr=d.predictor||{};
+    el('ss-pills').innerHTML=
+      '<span class="pill"><span class="pk">scored </span><span class="pv">'+(num(d.scored)||0)+'</span></span>'+
+      '<span class="pill"><span class="pk">predictor </span><span class="pv">'+(pr.fitted?('fitted · '+(pr.refits||0)+' refits'):'warming up')+'</span></span>'+
+      '<span class="pill"><span class="pk">pred err </span><span class="pv">'+(num(d.prediction_error_ema_m)!==null?num(d.prediction_error_ema_m).toFixed(3)+'m':'—')+'</span> <span class="pk">vs persist </span><span class="pv">'+(num(d.persistence_error_ema_m)!==null?num(d.persistence_error_ema_m).toFixed(3)+'m':'—')+'</span></span>'+
+      '<span class="pill"><span class="pk">authority </span><span class="pv" style="color:'+(auth.influences_behavior?'var(--amber)':'var(--green)')+'">'+(auth.influences_behavior?'LIVE':'shadow · none')+'</span></span>'+
+      '<span class="pill"><span class="pk">beating persistence </span><span class="pv" style="color:'+(d.beating_persistence?'var(--green)':'var(--amber)')+'">'+(d.beating_persistence?'yes':'not yet')+'</span></span>';
+    el('ss-caveat').innerHTML='<b>Negative control built in:</b> fed static input it reports no signal (never fabricates); ground truth = the real next lidar frame. Sparse by nature — only the moving moments carry signal (which is why the world-model above is ~98% persistence). docs/AUTONOMOUS_GROWTH_STRATEGY.md.';
+  }
   function renderRecovery(){
     // reuse the snapshot validation_pack signal would need another fetch; keep banner off here (yardsticks are inherently "immature by design", not recovery).
   }
@@ -187,17 +217,19 @@
     el('mode').textContent='policy '+((POL&&POL.mode)||'—')+' · wm v'+((WM&&WM.version)||'—');
   }
 
-  function renderAll(){ renderBanner(); renderWorldModel(); renderPolicy(); renderAutonomyAB(); renderEarning(); }
+  function renderAll(){ renderBanner(); renderWorldModel(); renderPolicy(); renderAutonomyAB(); renderEarning(); renderSelfSensing(); }
 
   function refresh(){
     Promise.allSettled([
       fetchJSON('/api/world-model/diagnostics'),
       fetchJSON('/api/policy'),
-      fetchJSON('/api/eval/autonomy-ab')
+      fetchJSON('/api/eval/autonomy-ab'),
+      fetchJSON('/api/self-sensing')
     ]).then(function(r){
       if(r[0].status==='fulfilled'){WM=r[0].value; lastOkTs=Date.now();}
       if(r[1].status==='fulfilled') POL=r[1].value;
       if(r[2].status==='fulfilled') AB=r[2].value;
+      if(r[3].status==='fulfilled') SS=r[3].value;
       renderAll();
     });
   }
