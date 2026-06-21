@@ -208,7 +208,11 @@
       '<span class="pill"><span class="pk">pred err </span><span class="pv">'+(num(d.prediction_error_ema_m)!==null?num(d.prediction_error_ema_m).toFixed(3)+'m':'—')+'</span> <span class="pk">vs persist </span><span class="pv">'+(num(d.persistence_error_ema_m)!==null?num(d.persistence_error_ema_m).toFixed(3)+'m':'—')+'</span></span>'+
       '<span class="pill"><span class="pk">authority </span><span class="pv" style="color:'+(auth.influences_behavior?'var(--amber)':'var(--green)')+'">'+(auth.influences_behavior?'LIVE':'shadow · none')+'</span></span>'+
       '<span class="pill"><span class="pk">beating persistence </span><span class="pv" style="color:'+(d.beating_persistence?'var(--green)':'var(--amber)')+'">'+(d.beating_persistence?'yes':'not yet')+'</span></span>';
-    el('ss-caveat').innerHTML='<b>Negative control built in:</b> fed static input it reports no signal (never fabricates); ground truth = the real next lidar frame. Sparse by nature — only the moving moments carry signal (which is why the world-model above is ~98% persistence). docs/AUTONOMOUS_GROWTH_STRATEGY.md.';
+    var ct=d.curiosity_target, ma=d.most_active_sector;
+    var curio = ct ? ('<b style="color:var(--cyan)">Curiosity → sector '+ct.sector+' ('+ct.deg+'°)</b>, learning-progress +'+ct.learning_progress)
+                   : '<b style="color:var(--dim)">Curiosity → quiet / scene mastered</b> (no novel target right now)';
+    var active = ma ? ('most active → sector '+ma.sector+' ('+ma.deg+'°), skill '+(ma.skill!==null?((ma.skill*100).toFixed(0)+'%'):'—')) : 'most active → —';
+    el('ss-caveat').innerHTML='<div style="margin-bottom:6px">'+curio+' &nbsp;·&nbsp; '+active+' <span style="color:var(--dim)">(shadow suggestion — influences nothing)</span></div><b>Negative control built in:</b> fed static input it reports no signal (never fabricates); ground truth = the real next lidar frame. docs/AUTONOMOUS_GROWTH_STRATEGY.md.';
   }
   function renderRecovery(){
     // reuse the snapshot validation_pack signal would need another fetch; keep banner off here (yardsticks are inherently "immature by design", not recovery).
