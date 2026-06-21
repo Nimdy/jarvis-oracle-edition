@@ -969,6 +969,40 @@ async def main() -> None:
     if promotion:
         asyncio.get_event_loop().create_task(_policy_tick())
 
+    # -- Self-sensing shadow loop (learning-progress over the lidar world) -----
+    # Predicts the next lidar frame, scores vs the persistence baseline (built-in
+    # negative control), tracks learning-progress. SHADOW: authority=none, writes
+    # nothing. The seed of the autonomous-growth engine — the senses carry a real
+    # non-operator signal (docs/AUTONOMOUS_GROWTH_STRATEGY.md: self-sensing PASS).
+    self_sensing = None
+    try:
+        from cognition.self_sensing import SelfSensingLoop
+        self_sensing = SelfSensingLoop()
+        self_sensing.restore()
+        engine._self_sensing = self_sensing
+
+        async def _self_sensing_tick():
+            while True:
+                try:
+                    perc = getattr(perc_orch, "perception", None)
+                    if perc is not None and hasattr(perc, "get_lidar_telemetry"):
+                        telem = perc.get_lidar_telemetry() or {}
+                        data = telem.get("pi-lidar") or next(iter(telem.values()), {}) or {}
+                        sect = data.get("sectors") or {}
+                        vec = [sect.get(str(k), sect.get(k)) for k in range(12)]
+                        self_sensing.observe(vec, time.time())
+                        if self_sensing._n_obs and self_sensing._n_obs % 100 == 0:
+                            self_sensing.save()
+                except Exception as exc:
+                    logger.debug("Self-sensing tick error: %s", exc)
+                await asyncio.sleep(2.0)
+
+        asyncio.get_event_loop().create_task(_self_sensing_tick())
+        print("  Self-sensing: active (shadow, 2s lidar predict-loop)")
+    except Exception as exc:
+        logger.warning("Self-sensing init failed: %s", exc)
+        print("  Self-sensing: disabled")
+
     DEEP_LEARNING_THRESHOLD_S = 3600.0  # 1 hour without sensors → deep learning mode
     _deep_learning_logged = False
     _gestation_end_handled = False
@@ -1411,6 +1445,13 @@ async def _shutdown(
         save_intention_registry()
     except Exception:
         logger.debug("intention_registry save on shutdown failed", exc_info=True)
+
+    try:
+        ss = getattr(engine, "_self_sensing", None)
+        if ss is not None:
+            ss.save()
+    except Exception:
+        logger.debug("self-sensing save on shutdown failed", exc_info=True)
 
     buf = getattr(engine, "_experience_buffer", None)
     if buf is not None and hasattr(buf, "flush"):

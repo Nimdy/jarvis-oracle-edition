@@ -755,6 +755,7 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         },
 
         "policy": _build_policy_cache(ctx.engine),
+        "self_sensing": _build_self_sensing_cache(ctx.engine),
 
         "self_improve": _build_self_improve_cache(ctx.engine),
         "codegen": _build_codegen_cache(ctx.engine),
@@ -2358,6 +2359,18 @@ def _build_matrix_cache(engine: Any) -> dict[str, Any]:
         logger.warning("Snapshot: matrix expansion failed", exc_info=True)
 
     return result
+
+
+def _build_self_sensing_cache(engine: Any) -> dict[str, Any]:
+    """Self-sensing shadow loop status (lidar predict-beyond-persistence). O(1) read."""
+    try:
+        loop = getattr(engine, "_self_sensing", None)
+        if loop is None:
+            return {"status": "not_loaded"}
+        return loop.get_status()
+    except Exception:
+        logger.debug("Snapshot: self-sensing cache failed", exc_info=True)
+        return {"status": "error"}
 
 
 def _build_policy_cache(engine: Any) -> dict[str, Any]:

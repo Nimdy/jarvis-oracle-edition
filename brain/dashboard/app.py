@@ -989,6 +989,11 @@ def _create_app() -> FastAPI:
             "active_arch": p.get("registry_active_arch", "none"),
         }
 
+    @app.get("/api/self-sensing")
+    async def api_self_sensing():
+        """Self-sensing shadow loop: lidar predict-beyond-persistence + learning-progress."""
+        return _cache.get("self_sensing", {})
+
     @app.get("/api/self-improve")
     async def api_self_improve():
         return _cache.get("self_improve", {})
