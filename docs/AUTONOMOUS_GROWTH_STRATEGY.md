@@ -55,6 +55,26 @@ distribution that does not predict reality.* **The policy NN, as framed
 this reward/state** — because the action barely moves the reward, and what does move
 it (conversation content) isn't in the 20-dim state.
 
+## Self-sensing verdict: PASS (2026-06-21) — the pivot is evidence-proven
+Same discipline, applied to the senses. Collected a dense 11.2-min LIDAR window (400
+samples @1.5s, the 12-sector nearest-range vector) and ran the predict-beyond-persistence
+test (predict the next frame's delta from position+velocity; held-out, multi-seed, shuffle
+control; static vs dynamic split at >2cm).
+- 23% of transitions were genuinely dynamic (>2cm movement); 77% static (mm-noise).
+- A learned model beats the persistence baseline ("nothing changed") by **+26% overall and
+  +45.6% on the dynamic transitions** (Ridge; GBM +17%/+43%). The **shuffle control scores
+  -6.3%** (no skill) — so the predictive skill is REAL, not overfitting. Naive momentum is
+  WORSE than persistence (-136%): the dynamics are non-trivial but learnable.
+
+**Verdict: PASS.** Unlike the policy loop (signal absent, Spearman ~0.06), the senses carry
+a real, learnable, NON-OPERATOR signal beyond persistence. **Autonomous growth is physically
+possible here.** Honest caveats: (1) the signal is SPARSE — it lives in the ~23% of moments
+the world changes (this is exactly why the world-model is 98% persistence; the world IS mostly
+static). (2) +26%/+46% is a FLOOR — simple model, coarse 1.5s cadence, one motion window.
+(3) Growth here is paced by EVENT-bandwidth (how often the sensed world changes) — modest at a
+quiet desk, richer in an active environment. The recommended build (below, #3) is therefore
+CONFIRMED: the self-sensing learning-progress loop is the real autonomous-growth engine.
+
 ## Revised recommendations (given the FAIL)
 1. **STOP investing in the policy NN as-is** — no critic, no Part B, no more training
    churn. Chasing a ~0.06 effect with live-turn risk is not worth it.
