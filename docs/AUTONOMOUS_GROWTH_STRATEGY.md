@@ -75,6 +75,15 @@ static). (2) +26%/+46% is a FLOOR — simple model, coarse 1.5s cadence, one mot
 quiet desk, richer in an active environment. The recommended build (below, #3) is therefore
 CONFIRMED: the self-sensing learning-progress loop is the real autonomous-growth engine.
 
+**LIVE CONFIRMED (2026-06-21, commit 5d0f5aa):** the shadow loop was built and is now
+earning end-to-end in the wild. After ~30 min in shadow: 906 scored frames,
+`skill_vs_persistence_dynamic` **+0.463** (matches the +0.445 offline validation),
+`learning_progress` **+0.079** (skill still rising), `beating_persistence` **true**,
+dynamic_fraction 0.33 — all at **authority=none**, 0 errors, state persisted. The negative
+control holds (fed static input it reports no signal). This is the first non-operator,
+self-supervised learning signal JARVIS provably earns from its own senses. Phase 2 (next):
+a /v2 panel + letting the learning-progress signal target curiosity — still shadow until earned.
+
 ## Revised recommendations (given the FAIL)
 1. **STOP investing in the policy NN as-is** — no critic, no Part B, no more training
    churn. Chasing a ~0.06 effect with live-turn risk is not worth it.

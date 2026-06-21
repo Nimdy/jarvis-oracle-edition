@@ -33,6 +33,32 @@
 
 ---
 
+## 2026-06-21 — First non-operator learning signal, confirmed earning live (self-sensing, shadow)
+- **Pillar:** #9 Learning/growth from lived experience · #3 World-model · #8 Outward grounding.
+- **What:** An offline critic diagnostic first proved the policy NN's reward carries *no* learnable
+  signal (Spearman ~0.06 — a phantom; 348 trained versions were competence on a synthetic
+  distribution). The same discipline, applied to the **senses**, found the opposite: the live lidar
+  world is predictable **beyond persistence** (+26% overall / +45.6% on dynamic moments,
+  shuffle-confirmed). A shadow learning-progress loop was built to harvest it (predict next frame →
+  check vs ground truth → reward error-reduction) and is now **confirmed earning live**: after ~30
+  min in shadow — 906 scored frames, `skill_vs_persistence_dynamic` **+0.463** (matches the +0.445
+  offline validation), `learning_progress` **+0.079** (skill still rising), `beating_persistence`
+  **true**, dynamic_fraction 0.33 — all at **authority=none**.
+- **Significance:** **Milestone** — the first time JARVIS provably earns a REAL, non-operator,
+  self-supervised learning signal from its own senses, end-to-end live. It is the empirically-grounded
+  answer to "can it grow on its own": for tuning cognition-knobs, no (phantom); for sensory
+  prediction, yes. The autonomous-growth loop has a real fuel source for the first time — and it was
+  won by *measuring before building*, twice, and acting on a FAIL.
+- **Not:** NOT growth that *does* anything yet — it is SHADOW, authority=none, drives no
+  behavior/belief/memory. NOT unlimited — the signal is SPARSE (lives in the ~33% of moments the
+  world moves; static frames are trivially persistence-predictable), paced by event-bandwidth, and
+  +46% is a FLOOR (simple ridge, ~2s cadence, one narrow sense). NOT consciousness. The achievement
+  is that the signal is real, harvestable, and **honestly measured** — a persistence negative-control
+  is built in; fed static input the loop reports *no* signal rather than fabricating one.
+- **Evidence:** `/api/self-sensing` live (obs 907, scored 906, skill_dynamic 0.463, LP 0.079,
+  beating_persistence true, authority all false, 0 errors, state persisted); offline validation
+  skill_dynamic 0.445; commits `115ffb3` (verdict) + `5d0f5aa` (build). `docs/AUTONOMOUS_GROWTH_STRATEGY.md`.
+
 ## 2026-06-20 — No-confabulation floor reaches the *eyes* (grounded perception)
 - **Pillar:** #10 Embodiment / perception · #1 Integrity / honest self-knowledge.
 - **What:** The conversational VISION route ("what do you see?") was **confabulating**. It fetched a
