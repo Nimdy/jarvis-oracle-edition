@@ -103,16 +103,21 @@ The system has been running continuously since the March 2026 brain reset. It ha
 
 ## Proven & Observable Capabilities
 
+> Honest current state (June 2026). Subsystems labeled **Shadow / Dormant / Gated** are
+> maturing by design — that is not a defect. For live numbers see `/api/maturity-gates`.
+> Some rows were recently re-labeled *down* to match verified runtime (world-model, policy,
+> autonomy) after a deep signal audit — see `docs/AUTONOMOUS_GROWTH_STRATEGY.md`.
+
 | Area | Status | Notes / Evidence |
 |---|---:|---|
 | Local-first operation | Fully operational | Pi 5 senses + desktop GPU brain, zero cloud required |
 | Consciousness maturation | Integrative stage | Highest evolution stage reached post-gestation |
-| Oracle Benchmark | 96.0 Gold / Ascendant | 7 domains, all green |
+| Oracle Benchmark | 96.0 Gold / Ascendant | 7 benchmark domains green — does NOT imply every internal maturity gate is green; several subsystems below are intentionally shadow/dormant |
 | Epistemic stack | 13 layers, all shipped | Capability Gate, truth calibration, belief graph, soul integrity, contradiction engine |
-| World Model | Level 2 active | 30k+ validated predictions, ~99.8% accuracy |
-| Neural Policy | 7/8 features promoted | Shadow A/B evaluation, 1,490+ experiences |
+| World Model | **Shadow** (L1-gated) | The pooled ~99.8% is dominated by tautological *persistence* rules ("a stable thing stays stable"); the real *predictive* signal is **4 validations @ 0.25**. Promotion needs ≥50 preds @ ≥0.65 (`cognition/promotion.py`). `jarvis_eval` itself flags the pooled number as "context only — not the score." |
+| Neural Policy | **Shadow, frozen at v10** | Critic diagnostic (2026-06): (state,action)→reward Spearman **~0.06**, R²~0 on 838 live tuples — signal too weak to grow on. 342 versions trained on a synthetic distribution; **0/8 features promoted** to live control. See `docs/AUTONOMOUS_GROWTH_STRATEGY.md`. |
 | Hemisphere NNs | 12+ Tier-1 specialists | Speaker, face, emotion, voice, diarize, plan, diagnostic, code_quality, claim_classifier, dream_synthesis, skill_acquisition, and more |
-| Autonomous research | Level 2 safe-apply | 8+ measured positive interventions |
+| Autonomous research | **Dormant** | Last self-initiated learning job **2026-06-04**; grounding spark at `P0_passive`, queue operator-gated (`auto_fires=false`), `current_ok=false` — the curiosity→exploration loop is not currently turning. |
 | Self-improvement | Stage 2 human approval | Scanner, codegen, sandbox, apply, health check, rollback proven |
 | Plugin acquisition | Full pipeline proven | 2 active plugins: unit converter + dice roller |
 | Skill acquisition hardening | Proof-gated | Skill contracts, operational handoff approval, plan quality checks, terminal failure closure, synthetic weight room |

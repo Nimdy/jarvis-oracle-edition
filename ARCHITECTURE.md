@@ -1,6 +1,11 @@
 # JARVIS Architecture
 
 > **Validated 2026-06-09** by a multi-agent investigation of the live code (18 subsystem deep-readers + adversarial verifiers). Each section was re-checked against the source; maturity is labeled honestly — **SHIPPED** (live), **SHADOW** (computes, zero authority by design), **GATED** (earned-not-yet), **DESIGNED** (not built). *Gate-blocked ≠ broken.* Supersedes the April data-flow reference.
+>
+> **Post-snapshot deltas (since 2026-06-09) — read alongside the sections below:**
+> - **Policy NN reframed from "gated-not-broken" to a measurement/SIGNAL FAILURE.** An offline critic diagnostic on 838 live experience tuples found (state,action)→reward Spearman **~0.06 / R²~0**; the trained 342 versions were competence on a synthetic distribution that does not predict reality, and the shadow-A/B win-signal was non-causal (`nn_reward=kernel_reward=actual_reward`). **Part A** shipped (commit `ee0caa7`): flat health rewards no longer flood the A/B — only varied interaction outcomes score it. Full analysis: `docs/AUTONOMOUS_GROWTH_STRATEGY.md`.
+> - **Vision grounding firewall shipped** (v1.3.0, commit `63c3eca`): "what do you see" is grounded in the real camera frame or honestly withheld — no cold-load confabulation.
+> - **Line numbers below have drifted ~10–15 lines** from later edits; every cited symbol still exists. A mechanical refresh is pending.
 
 
 ---
@@ -507,7 +512,7 @@ A small PyTorch model proposes **operational kernel knobs** — never tool selec
 | SPARK external-grounding promotion of win-rate | **gated** | `policy_memory.py:282-342` gated behind ≥20 grounding outcomes AND `external_validation_rate≥0.40` AND orphan_rate trending down; rate returns 0.0 until P3+ emits validations (`:251-280`) |
 | Research TOOL routing learned by policy | **designed (not built / by design unlearned)** | `query_interface.py:436` `_auto_route` is deterministic keyword scoring; policy_memory only re-weights topic pursuit |
 
-**Honest framing:** the NN policy layer is real and well-firewalled but lives in shadow — in this snapshot nothing has been promoted to live control, the M6 expansion rolled back with zero decisions, and the autonomy memory is empty. These are **gated/earned-by-design, not broken**.
+**Honest framing (updated 2026-06-21):** the NN policy layer is real and well-firewalled but lives in shadow — nothing has been promoted to live control, the M6 expansion rolled back with zero decisions, and the autonomy memory is empty. **Correction to the original "gated-not-broken" reading:** a 2026-06 critic diagnostic on 838 live tuples shows this is a **signal failure, not a gate-timing delay** — (state,action)→reward correlates at Spearman ~0.06 / R²~0, so no amount of soak or interleaving promotes a genuinely-better model from this reward, and the 342 trained versions were competence on a synthetic distribution that doesn't predict reality. The reward/state must be redesigned before this loop can earn (see `docs/AUTONOMOUS_GROWTH_STRATEGY.md`).
 
 
 ## Autonomy, Drives & the Grounding Ring (the "spark")
