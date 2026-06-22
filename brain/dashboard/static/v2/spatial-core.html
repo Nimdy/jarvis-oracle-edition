@@ -650,15 +650,17 @@ function renderFrame(){
 
 // ---- interaction ----
 cv.addEventListener('mousedown', function(e){ dragging=true; cv.classList.add('drag'); lastX=e.clientX; lastY=e.clientY; });
-window.addEventListener('mouseup', function(){ dragging=false; cv.classList.remove('drag'); });
+window.addEventListener('mouseup', function(){ if(dragging && _calibManual()) calibPost(); dragging=false; cv.classList.remove('drag'); });
 window.addEventListener('mousemove', function(e){ if(!dragging) return;
   if(viewMode!=='3d'){ lastX=e.clientX; lastY=e.clientY; return; }   // top-down is a fixed map
-  theta += (e.clientX-lastX)*0.008; elev = Math.max(0.25, Math.min(2.4, elev - (e.clientY-lastY)*0.004));
+  if(_calibManual()){ _calibDrag(e.clientX-lastX, e.clientY-lastY); }   // manual: drag aligns the cloud (not orbit)
+  else { theta += (e.clientX-lastX)*0.008; elev = Math.max(0.25, Math.min(2.4, elev - (e.clientY-lastY)*0.004)); }
   lastX=e.clientX; lastY=e.clientY; });
 cv.addEventListener('touchstart', function(e){ if(e.touches.length){dragging=true; lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;} },{passive:true});
 cv.addEventListener('touchmove', function(e){ if(!dragging||!e.touches.length) return;
   if(viewMode!=='3d'){ lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; return; }
-  theta += (e.touches[0].clientX-lastX)*0.008; elev=Math.max(0.25,Math.min(2.4, elev-(e.touches[0].clientY-lastY)*0.004));
+  if(_calibManual()){ _calibDrag(e.touches[0].clientX-lastX, e.touches[0].clientY-lastY); }
+  else { theta += (e.touches[0].clientX-lastX)*0.008; elev=Math.max(0.25,Math.min(2.4, elev-(e.touches[0].clientY-lastY)*0.004)); }
   lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; },{passive:true});
 cv.addEventListener('touchend', function(){ dragging=false; },{passive:true});
 function toggleView(){ viewMode = (viewMode==='top') ? '3d' : 'top';
@@ -679,6 +681,18 @@ function calibPost(){
     focal_px:+document.getElementById('cb_focal').value, yaw_deg:+document.getElementById('cb_yaw').value,
     pitch_row_offset:+document.getElementById('cb_pitch').value, manual:document.getElementById('cb_manual').checked
   })}).catch(function(){});
+}
+// drag-to-align: in MANUAL mode a canvas drag adjusts yaw (←→) + pitch (↕) instead of orbiting the
+// view — this is the "drag to align the cloud onto the walls" the label promised (was never wired).
+function _calibManual(){ var m=document.getElementById('cb_manual'); return !!(m && m.checked); }
+var _calibPostT=0;
+function _calibDrag(dx, dy){
+  var ye=document.getElementById('cb_yaw'), pe=document.getElementById('cb_pitch');
+  if(ye){ ye.value=Math.max(-30, Math.min(30, (+ye.value) + dx*0.10)); }     // horizontal → yaw
+  if(pe){ pe.value=Math.max(-80, Math.min(80, (+pe.value) - dy*0.5)); }      // vertical → pitch row
+  calibLabels();
+  var n=(typeof performance!=='undefined'?performance.now():0);
+  if(n-_calibPostT>=120){ _calibPostT=n; calibPost(); }   // throttle the POST during the drag
 }
 function toggleCalib(){ var p=document.getElementById('calibpanel'); if(p) p.style.display=(p.style.display==='none')?'block':'none'; }
 function resetCalib(){   // snap back to the known-good defaults if the sliders get jacked up
