@@ -390,7 +390,20 @@ function draw(){
   requestAnimationFrame(draw);
 }
 
-// ---- TOP-DOWN floor-plan: the readable default. Lidar-centred radar, NORTH (lidar
+// expanding "sensing" pulse from the lidar core — replaces the static centred radar rings so the
+// animation reads as JARVIS pinging outward from its OWN dot, not a radar grid stranded in the
+// empty canvas behind the sensor. Two staggered rings grow to the room reach and ease-fade out.
+function pulseRings(cx, cy, reach){
+  var t=(typeof performance!=='undefined'? performance.now() : Date.now())/1000, PERIOD=2.8, N=2, pr0=3*DPR;
+  for(var i=0;i<N;i++){
+    var ph=((t/PERIOD)+i/N)%1, rr=pr0+ph*(reach-pr0), al=0.34*(1-ph)*(1-ph);
+    if(al<0.012) continue;
+    ctx.strokeStyle=rgba(COL.cyan, al); ctx.lineWidth=1.6*DPR;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 6.2832); ctx.stroke();
+  }
+}
+
+// ---- TOP-DOWN floor-plan: the readable default. Lidar-centred view + sensing pulse, NORTH (lidar
 //      bearing-0 / +Z) pinned UP, no rotation. Hand-hold the S2 and the room turns
 //      around the fixed centre. Crisp outlines (no tall slabs, no bloom). ----
 function renderTopDown(){
@@ -415,13 +428,13 @@ function renderTopDown(){
   ctx.strokeStyle=rgba(COL.grid,0.30); ctx.lineWidth=1*DPR;
   ctx.beginPath(); ctx.moveTo(cx,cy-reach*1.05); ctx.lineTo(cx,cy+reach*1.05);
   ctx.moveTo(cx-reach*1.05,cy); ctx.lineTo(cx+reach*1.05,cy); ctx.stroke();
-  // range rings + metre labels
-  ctx.font=(12*DPR)+'px monospace';
+  // distance reference: faint metre ticks up the NORTH spoke (the full radar rings are gone)
+  ctx.font=(11*DPR)+'px monospace';
   for(var r=1;r<=Math.ceil(maxr);r++){
-    ctx.strokeStyle=rgba(COL.grid,0.55); ctx.lineWidth=1*DPR;
-    ctx.beginPath(); ctx.arc(cx,cy,r*scale,0,6.2832); ctx.stroke();
-    ctx.fillStyle=rgba(COL.grid,1); ctx.fillText(r+'m', cx+5*DPR, cy - r*scale - 4*DPR);
+    ctx.fillStyle=rgba(COL.grid,0.85); ctx.fillRect(cx-1*DPR, cy - r*scale, 2*DPR, 1.6*DPR);
+    ctx.fillText(r+'m', cx+6*DPR, cy - r*scale - 3*DPR);
   }
+  pulseRings(cx, cy, reach);     // animated sensing pulse from the lidar core (was: range rings)
   // footprint (room outline on the floor)
   var fp=[]; for(i=0;i<pm.length;i++) fp.push(P(pm[i][0],pm[i][1]));
   if(fp.length>2){
@@ -511,14 +524,20 @@ function renderFrame(){
   ctx.lineWidth=1*DPR;
   for(k=g0x;k<=g1x+1e-6;k+=step) gridline([k,0,g0z],[k,0,g1z]);
   for(k=g0z;k<=g1z+1e-6;k+=step) gridline([g0x,0,k],[g1x,0,k]);
-  // range rings
-  ctx.strokeStyle=rgba(COL.cyan,0.16);
-  for(var rad=1; rad<=Math.ceil(extent); rad++){
-    ctx.beginPath(); var st=false;
-    for(var a=0;a<=360;a+=6){ var pp=proj([rad*Math.sin(a*Math.PI/180),0,rad*Math.cos(a*Math.PI/180)]);
-      if(!pp){st=false;continue;} if(!st){ctx.moveTo(pp[0],pp[1]);st=true;} else ctx.lineTo(pp[0],pp[1]); }
-    ctx.stroke();
-  }
+  // sensing PULSE on the floor from the lidar core (replaces the static range rings): expanding
+  // rings projected through the 3D camera, spreading outward from JARVIS's own ground point.
+  (function(){
+    var tt=(typeof performance!=='undefined'?performance.now():Date.now())/1000, PER=2.8, NP=2, maxR=Math.ceil(extent);
+    for(var pj=0;pj<NP;pj++){
+      var ph=((tt/PER)+pj/NP)%1, rr=ph*maxR, al=0.22*(1-ph)*(1-ph);
+      if(al<0.008||rr<0.12) continue;
+      ctx.strokeStyle=rgba(COL.cyan,al); ctx.lineWidth=1.4*DPR;
+      ctx.beginPath(); var st=false;
+      for(var a=0;a<=360;a+=6){ var pp=proj([rr*Math.sin(a*Math.PI/180),0,rr*Math.cos(a*Math.PI/180)]);
+        if(!pp){st=false;continue;} if(!st){ctx.moveTo(pp[0],pp[1]);st=true;} else ctx.lineTo(pp[0],pp[1]); }
+      ctx.stroke();
+    }
+  })();
 
   // lidar offline → ghost the frozen lidar geometry (glow/footprint/reflectivity/walls) so it
   // reads as a last-known still frame, not a live scan. The camera cloud below stays full-strength.
