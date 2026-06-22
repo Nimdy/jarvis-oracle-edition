@@ -32,6 +32,10 @@ CALIB = os.path.expanduser("~/.jarvis/camera_calib.json")   # live manual-calibr
 LAST_ANCHOR = os.path.expanduser("~/.jarvis/last_anchor.json")  # last lidar-MEASURED scale (coast on it)
 STRONG_CORR = 0.6   # auto mode only trusts/caches a fit this well-correlated — a weak fit holds the
                     # last STRONG scale instead of overwriting it (kills the cloud drift/jitter)
+import math as _m
+CLOUD_YAW_OFFSET = _m.radians(90)   # operator: the cloud sits 90deg CW of where it should — a ~90deg
+                    # lidar↔camera MOUNT rotation the anchor's ±15deg bearing search can't reach. Rigid-
+                    # rotate the cloud +90deg (CCW) to seat it on the walls; scale/anchor untouched.
 PX, PY = 320.0, 240.0
 INTERVAL_S = 4.0
 STRIDE = 5            # denser sample → fills the lattice gaps (~12k pts at 640x480)
@@ -182,7 +186,7 @@ def main():
                 scale_source = "cached_no_lidar"
 
             pts = depth_to_points(pred.tolist(), rgb.tolist(), a, focal_px=focal, principal_x=PX,
-                                  principal_y=PY, camera_height_m=cam_h, yaw_rad=yaw_used,
+                                  principal_y=PY, camera_height_m=cam_h, yaw_rad=yaw_used + CLOUD_YAW_OFFSET,
                                   stride=STRIDE, max_points=MAX_POINTS)
             measured = scale_source == "live"
             write_slot({
