@@ -495,7 +495,7 @@ function renderFrame(){
   var rt = vnorm(vcross(f,[0,1,0]));
   var up = vcross(rt,f);
   function rawp(p){ var rel=vsub(p,cam), xc=vdot(rel,rt), yc=vdot(rel,up), zc=vdot(rel,f);
-    if(zc<=0.05) return null; return [xc/zc*focal, -(yc/zc)*focal, zc]; }  // screen +y is DOWN → negate world-up
+    if(zc<=0.05) return null; return [-xc/zc*focal, -(yc/zc)*focal, zc]; }  // +x negated → un-mirror (rt=cross(f,up) was left-handed); +y DOWN → negate world-up
 
   // ---- auto-fit: project the geometry, then scale+centre so it fills the frame
   //      on ANY aspect/screen (kills the dead-space) ----
@@ -609,16 +609,10 @@ function renderFrame(){
     ctx.globalAlpha=1;
   }
 
-  // ---- lidar core + sweep beam + column ----
+  // ---- lidar core + column ----
   ctx.globalAlpha=1;
   ctx.globalCompositeOperation='lighter';
-  // the spinning sweep is a LIVE-scan cue — only draw it when the lidar is actually feeding
-  if(!lidarStale){
-    var sweep = theta*2.3 + performance.now()/700;
-    var s1=proj([extent*0.9*Math.sin(sweep),0.02,extent*0.9*Math.cos(sweep)]);
-    var s2=proj([extent*0.9*Math.sin(sweep+0.2),0.02,extent*0.9*Math.cos(sweep+0.2)]);
-    if(o0&&s1&&s2){ ctx.fillStyle=rgba(COL.cyan,0.18); ctx.beginPath(); ctx.moveTo(o0[0],o0[1]); ctx.lineTo(s1[0],s1[1]); ctx.lineTo(s2[0],s2[1]); ctx.closePath(); ctx.fill(); }
-  }
+  // (the spinning radar sweep beam was removed per operator — the expanding floor pulse is the live cue)
   var otop=proj([0,WALL_H*0.95,0]);
   if(o0&&otop){ ctx.strokeStyle=rgba(COL.white,0.5); ctx.lineWidth=2*DPR; seg(o0,otop); }
   if(o0){ ctx.shadowColor=rgba(COL.cyan,0.95); ctx.shadowBlur=22*DPR;
@@ -646,12 +640,12 @@ cv.addEventListener('mousedown', function(e){ dragging=true; cv.classList.add('d
 window.addEventListener('mouseup', function(){ dragging=false; cv.classList.remove('drag'); });
 window.addEventListener('mousemove', function(e){ if(!dragging) return;
   if(viewMode!=='3d'){ lastX=e.clientX; lastY=e.clientY; return; }   // top-down is a fixed map
-  theta -= (e.clientX-lastX)*0.008; elev = Math.max(0.25, Math.min(2.4, elev - (e.clientY-lastY)*0.004));
+  theta += (e.clientX-lastX)*0.008; elev = Math.max(0.25, Math.min(2.4, elev - (e.clientY-lastY)*0.004));
   lastX=e.clientX; lastY=e.clientY; });
 cv.addEventListener('touchstart', function(e){ if(e.touches.length){dragging=true; lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;} },{passive:true});
 cv.addEventListener('touchmove', function(e){ if(!dragging||!e.touches.length) return;
   if(viewMode!=='3d'){ lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; return; }
-  theta -= (e.touches[0].clientX-lastX)*0.008; elev=Math.max(0.25,Math.min(2.4, elev-(e.touches[0].clientY-lastY)*0.004));
+  theta += (e.touches[0].clientX-lastX)*0.008; elev=Math.max(0.25,Math.min(2.4, elev-(e.touches[0].clientY-lastY)*0.004));
   lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; },{passive:true});
 cv.addEventListener('touchend', function(){ dragging=false; },{passive:true});
 function toggleView(){ viewMode = (viewMode==='top') ? '3d' : 'top';
