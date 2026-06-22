@@ -204,6 +204,13 @@ class AffectPromotion:
         # Promotion is the operator's call and gated; we only *check* eligibility
         # and never flip ourselves to active in P1.  Auto-demote remains active.
         self._maybe_auto_demote()
+        # Persist the EARNED soak clock + backing evidence every tick (the spark-bug
+        # lesson, df7c8bb). record_shadow_tick is the ONLY accrual path for
+        # live_tick_seconds / total_paired / backing_history; without a save here they
+        # live only in RAM and reset to 0 every reboot, so the layer can NEVER clear
+        # MIN_SHADOW_HOURS and is pinned in shadow forever. Small atomic write; this
+        # makes the earned evidence durable only — authority stays operator-gated.
+        self.save()
         return entry_id
 
     @staticmethod

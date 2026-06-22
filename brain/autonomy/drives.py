@@ -293,6 +293,10 @@ class GroundingDrivePromotion:
         if len(self._state.validation_history) > 100:
             self._state.validation_history = self._state.validation_history[-100:]
         self._check_transitions()
+        # Persist the outcome (the spark-bug lesson, df7c8bb). _check_transitions only
+        # saves on a LEVEL CHANGE, which is unreachable at terminal level 2 — so without
+        # this, external validations recorded after promotion are silently lost on reboot.
+        self.save()
 
     def get_status(self) -> dict[str, Any]:
         hist = self._state.validation_history
