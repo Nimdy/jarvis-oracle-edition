@@ -52,6 +52,11 @@ class LidarExtrinsic:
     tx_m: float = field(default_factory=lambda: _env_float("JARVIS_LIDAR_TX_M", 0.0))
     ty_m: float = field(default_factory=lambda: _env_float("JARVIS_LIDAR_MOUNT_HEIGHT_M", 0.0))
     tz_m: float = field(default_factory=lambda: _env_float("JARVIS_LIDAR_TZ_M", 0.0))
+    # Camera optical-centre height in the room frame (metres). Not part of the rigid
+    # lidar→room transform, but a per-rig mount parameter stored alongside it — the Tier-3
+    # depth anchor reads it off the extrinsic (lidar_plane_row uses ty_m − camera_height_m).
+    # Default preserves the prior hard-coded fallback.
+    camera_height_m: float = field(default_factory=lambda: _env_float("JARVIS_CAMERA_HEIGHT_M", 1.219))
 
     @classmethod
     def identity(cls) -> "LidarExtrinsic":
@@ -136,6 +141,7 @@ def load_extrinsic() -> LidarExtrinsic:
             tx_m=float(c.get("tx_m", 0.0)),
             ty_m=float(c.get("ty_m", 0.0)),
             tz_m=float(c.get("tz_m", 0.0)),
+            camera_height_m=float(c.get("camera_height_m", 1.219)),
         )
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         return LidarExtrinsic()   # env-overridable, else identity
