@@ -117,7 +117,7 @@
       <h4>CAMERA ↔ LIDAR CALIBRATION (dense cloud) <span id="cb_reset" onclick="resetCalib()" style="float:right;cursor:pointer;color:var(--cyan);font-weight:400">↺ reset</span></h4>
       <label class="ckrow"><input type="checkbox" id="cb_manual"> manual — drag to align the cloud onto the walls</label>
       <div class="crow"><span class="cl">FOV</span><input type="range" id="cb_focal" min="220" max="900" step="5"><span class="cv" id="cb_focal_v">—</span></div>
-      <div class="crow"><span class="cl">yaw</span><input type="range" id="cb_yaw" min="-30" max="30" step="1"><span class="cv" id="cb_yaw_v">—</span></div>
+      <div class="crow"><span class="cl">yaw</span><input type="range" id="cb_yaw" min="-90" max="90" step="1"><span class="cv" id="cb_yaw_v">—</span></div>
       <div class="crow"><span class="cl">pitch</span><input type="range" id="cb_pitch" min="-80" max="80" step="2"><span class="cv" id="cb_pitch_v">—</span></div>
       <div class="cnote">anchor fit <b id="cb_corr">—</b> · maximise it + watch the cloud snap to the cyan walls</div>
     </div>
@@ -688,7 +688,7 @@ function _calibManual(){ var m=document.getElementById('cb_manual'); return !!(m
 var _calibPostT=0;
 function _calibDrag(dx, dy){
   var ye=document.getElementById('cb_yaw'), pe=document.getElementById('cb_pitch');
-  if(ye){ ye.value=Math.max(-30, Math.min(30, (+ye.value) + dx*0.10)); }     // horizontal → yaw
+  if(ye){ ye.value=Math.max(-90, Math.min(90, (+ye.value) + dx*0.14)); }     // horizontal → yaw
   if(pe){ pe.value=Math.max(-80, Math.min(80, (+pe.value) - dy*0.5)); }      // vertical → pitch row
   calibLabels();
   var n=(typeof performance!=='undefined'?performance.now():0);

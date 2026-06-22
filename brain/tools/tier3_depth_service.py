@@ -30,6 +30,8 @@ BRAIN_PI5 = "http://localhost:9200/api/pi5"
 SLOT = os.path.expanduser("~/.jarvis/dense_points.json")
 CALIB = os.path.expanduser("~/.jarvis/camera_calib.json")   # live manual-calibration slider state
 LAST_ANCHOR = os.path.expanduser("~/.jarvis/last_anchor.json")  # last lidar-MEASURED scale (coast on it)
+STRONG_CORR = 0.6   # auto mode only trusts/caches a fit this well-correlated — a weak fit holds the
+                    # last STRONG scale instead of overwriting it (kills the cloud drift/jitter)
 PX, PY = 320.0, 240.0
 INTERVAL_S = 4.0
 STRIDE = 5            # denser sample → fills the lattice gaps (~12k pts at 640x480)
@@ -154,17 +156,23 @@ def main():
                     a, yaw_used = anchor_best_yaw(row, profile, base_yaw_rad=ex.yaw_rad, focal_px=focal,
                                                   principal_x=PX, search_deg=15.0, step_deg=2.0,
                                                   min_inliers=15, min_corr=0.4)
-                if a.valid:
-                    save_anchor(a, yaw_used, focal)        # remember the scale for lidar-off coasting
+                # Only TRUST + cache a confidently-correlated fit (auto). A weak fit (corr < STRONG_CORR)
+                # would overwrite the good cached scale and make the cloud drift — so a weak frame
+                # HOLDS the last strong scale instead. Manual bypasses (the operator dials the fit).
+                if a.valid and (manual or a.corr >= STRONG_CORR):
+                    save_anchor(a, yaw_used, focal)        # strong → remember the scale for coasting
                     scale_source = "live"
                 else:
-                    cached = load_anchor()                 # live solve refused → coast if we can
-                    if cached is None:
+                    cached = load_anchor()                 # weak/refused → coast on the last STRONG scale
+                    if cached is not None:
+                        a, yaw_used, focal = cached
+                        scale_source = "cached_after_refuse"
+                    elif a.valid:
+                        scale_source = "live"              # bootstrap: no strong cache yet, use this fit
+                    else:
                         log(f"#{n} anchor refused ({a.reason}, corr={a.corr:+.2f}"
                             f"{', manual' if manual else ''}) — no cached scale yet")
                         time.sleep(INTERVAL_S); continue
-                    a, yaw_used, focal = cached
-                    scale_source = "cached_after_refuse"
             else:
                 cached = load_anchor()                     # lidar unplugged → coast on cached scale
                 if cached is None:
