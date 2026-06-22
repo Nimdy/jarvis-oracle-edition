@@ -378,6 +378,12 @@ class SparkPromotion:
         self._state.total_outcomes += 1
         self._state.validation_history.append(1.0 if validated else 0.0)
         self._check_transitions()
+        # Persist EARNED progress on every outcome. Without this, total_outcomes + the shadow
+        # clock live only in memory and reset to zero on every restart — pinning this gate at P0
+        # forever (save() was only ever called on a level transition, which the reset made
+        # unreachable). Persisting the COUNT, not authority: promotion still re-earns the unchanged
+        # 4-condition gate. Mirrors GroundingDrivePromotion's save-on-accumulation.
+        self.save()
 
     def get_status(self) -> dict[str, Any]:
         hist = list(self._state.validation_history)
