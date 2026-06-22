@@ -507,7 +507,7 @@ function renderFrame(){
   for(i=0;i<pm.length;i++){ r=rawp([pm[i][0],0,pm[i][1]]); if(r) probe.push(r); }
   // no lidar geometry (camera-only mode) → fit the frame to the dense cloud itself
   if(!probe.length && dense && dense.length){
-    for(i=0;i<dense.length;i+=6){ r=rawp([dense[i][0],dense[i][1],dense[i][2]]); if(r) probe.push(r); } }
+    for(i=0;i<dense.length;i+=6){ r=rawp([-dense[i][0],dense[i][1],dense[i][2]]); if(r) probe.push(r); } }  // -x: match the cloud's render flip
   if(!probe.length) return;
   var rxn=1e9,rxx=-1e9,ryn=1e9,ryx=-1e9;
   for(i=0;i<probe.length;i++){ var pr=probe[i];
@@ -598,7 +598,9 @@ function renderFrame(){
     ctx.globalCompositeOperation='source-over';
     ctx.globalAlpha=0.7;                                   // SUBORDINATE to the measured walls
     var dprj=[];
-    for(i=0;i<dense.length;i++){ var P=dense[i]; var dq=proj([P[0],P[1],P[2]]);
+    // the camera cloud is horizontally MIRRORED vs the measured walls (camera→lidar x-handedness
+    // in depth_to_points) — negate x so the reconstruction reads the right way round on the walls.
+    for(i=0;i<dense.length;i++){ var P=dense[i]; var dq=proj([-P[0],P[1],P[2]]);
       if(dq) dprj.push([dq[2],dq[0],dq[1],P[3],P[4],P[5]]); }
     dprj.sort(function(a,b){return b[0]-a[0];});           // far first (painter's order)
     var psz=2.2*DPR;
