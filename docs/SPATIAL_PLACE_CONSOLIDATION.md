@@ -139,3 +139,33 @@ shadow lane and claims only a measurable, auditable win. **Build only after pinn
 
 **Bottom line:** sound, real, honestly inside the shadow lane, and worth building — but pin the internals
 (especially #1, the *unenforced* isolation) before writing a line of consolidation code.
+
+## Build + live measurement (2026-06-22)
+Built per the pinned spec:
+- **must-fix #1 (commit 1244e3b):** album isolation is now **enforced** by the validation pack —
+  scan-coverage gap closed (`spatial_episodic_store` + the consolidator added to both scan roots;
+  both scans verified clean). A standalone safety win.
+- **The consolidator** (`memory/spatial_place_consolidator.py`): read-only, **stdlib +
+  `spatial_schema` only**, zero-authority, vector-free, PRE-MATURE. **Calibration-invariant** matching
+  over inter-anchor distances (frame re-origin/rotation invariant) with the pair tolerance derived
+  from `CLASS_MOVE_THRESHOLDS`/`DEFAULT_MOVE_THRESHOLD`; **fail-closed** (<2 stable anchors → its own
+  place, never a false merge). Records carry `record_kind:"place_consolidated"`, pinned-false
+  `AUTHORITY_FLAGS`, `status:"PRE-MATURE"`, `loaded_from_store:true`. [must-fixes #2,3,4,6]
+- **Tests** (`tests/test_spatial_place_consolidation.py`, 7 pass): same-geometry→same `place_id`,
+  calibration-invariance, different→different, unavailable→fail-closed, records vector-free +
+  authority-false + PRE-MATURE. HRR validation-pack tests still green (no regression). [#8]
+- **Read-only `/api/spatial/places`** (TTL-cached 15 min) so the view is visible on the brain.
+- *Deferred honestly (pre-mature-not-missing):* the self-sensing tie-in (#7 — its own gate) and the
+  persisted-records vector-walk check (nothing is persisted yet — this is a read-only view).
+
+**Live measurement (165 sessions — measured, never asserted):**
+- **165 → 86 places (1.92×)** overall; among the **98 place-keyable** sessions: **98 → 19 places
+  (5.16×)**.
+- The top place merges **19 sessions across 6 recalibrations (calib 19–26)** — the same room correctly
+  recognized across frame changes. Calibration-invariant matching cut keyed places **74 → 19** vs
+  naive absolute-position matching (the room was fragmenting across **10** calibration versions).
+- **Honest ceiling:** 67/165 (~40%) **fail-closed** — only one stable object (usually the `tv`) was
+  visible, so the room can't be confirmed from object geometry alone; the keyed sessions further split
+  by *which* objects were visible (tv-only vs tv+chair vs tv+keyboard). The lever for true room-level
+  compression is the **lidar room model (walls + dimensions — always present, calibration-stable)**
+  captured into the album: a future capture-layer increment (#80). **Not tuned green** (§24).

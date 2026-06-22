@@ -666,6 +666,15 @@ def _create_app() -> FastAPI:
             "validation": {},
         })
 
+    @app.get("/api/spatial/places")
+    async def api_spatial_places():
+        """Place-consolidation view: the session-keyed episodic album grouped into persistent
+        PLACES via calibration-invariant geometry matching. Read-only, zero-authority,
+        vector-free, PRE-MATURE — a consolidated 'photo album', not testimony."""
+        return _cache.get("spatial_places", {
+            "status": "not_built", "sessions": 0, "places": 0, "place_records": [],
+        })
+
     @app.post("/api/spatial/calibration", dependencies=[Depends(_require_api_key)])
     async def api_spatial_calibration_update(request: Request):
         """Update spatial calibration parameters.

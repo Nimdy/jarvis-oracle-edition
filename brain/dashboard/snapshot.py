@@ -756,6 +756,7 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
 
         "policy": _build_policy_cache(ctx.engine),
         "self_sensing": _build_self_sensing_cache(ctx.engine),
+        "spatial_places": _build_places_cache(ctx.engine),
 
         "self_improve": _build_self_improve_cache(ctx.engine),
         "codegen": _build_codegen_cache(ctx.engine),
@@ -2371,6 +2372,38 @@ def _build_self_sensing_cache(engine: Any) -> dict[str, Any]:
     except Exception:
         logger.debug("Snapshot: self-sensing cache failed", exc_info=True)
         return {"status": "error"}
+
+
+_PLACES_CACHE: dict[str, Any] = {"ts": 0.0, "data": {}}
+_PLACES_TTL_S = 900.0  # recompute at most every 15 min — reads the whole album (~165 files)
+
+
+def _build_places_cache(engine: Any) -> dict[str, Any]:
+    """Spatial place-consolidation view (read-only, zero-authority, vector-free, PRE-MATURE).
+
+    Groups the session-keyed episodic album into persistent PLACES via calibration-invariant
+    geometry matching (memory.spatial_place_consolidator). TTL-cached because it reads ~165
+    album files and the album changes slowly (one session per boot). Never raises."""
+    import time as _t
+
+    now = _t.time()
+    cached = _PLACES_CACHE["data"]
+    if cached and (now - _PLACES_CACHE["ts"]) < _PLACES_TTL_S:
+        return cached
+    try:
+        from memory.spatial_place_consolidator import SpatialPlaceConsolidator
+
+        result = SpatialPlaceConsolidator().consolidate()
+        # API-trim: keep the summary + the top places by membership (bound the payload).
+        result["place_records"] = sorted(
+            result.get("place_records", []), key=lambda p: -p.get("member_count", 0)
+        )[:25]
+        result["computed_ts"] = round(now, 1)
+        _PLACES_CACHE.update(ts=now, data=result)
+        return result
+    except Exception:
+        logger.warning("Snapshot: spatial_places cache failed", exc_info=True)
+        return cached or {"status": "error", "sessions": 0, "places": 0}
 
 
 def _build_policy_cache(engine: Any) -> dict[str, Any]:
