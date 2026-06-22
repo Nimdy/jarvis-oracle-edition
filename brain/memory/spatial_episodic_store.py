@@ -10,7 +10,7 @@ SAFETY CONTRACT (non-negotiable — see docs deep-dive 2026-05-30):
     MemoryGate/CueGate, or influences policy/belief/autonomy/identity. It is a
     photo album, not testimony.
   * STRUCTURALLY ISOLATED: stdlib only. It imports NO canonical writers
-    (engine.remember, memory.storage/persistence, the event bus) and NO
+    (engine.remember, the canonical memory storage/persistence layer, the event bus) and NO
     policy/belief/autonomy/identity/HRR modules. The ONLY bridge from this album
     to canonical memory is the separate, human-reviewed SpatialMemoryGate ->
     engine.remember path, which is intentionally NOT wired here.

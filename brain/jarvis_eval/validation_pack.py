@@ -220,6 +220,8 @@ _HRR_MODULE_ROOTS: tuple[str, ...] = (
     "cognition/lidar_fusion.py",
     "cognition/lidar_depth.py",
     "memory/hrr_recall_advisor.py",
+    "memory/spatial_episodic_store.py",
+    "memory/spatial_place_consolidator.py",
     "hemisphere/hrr_specialist.py",
     "synthetic/hrr_exercise.py",
 )
@@ -233,6 +235,8 @@ _P5_MENTAL_WORLD_ROOTS: tuple[str, ...] = (
     "cognition/hrr_spatial_encoder.py",
     "cognition/mental_world.py",
     "cognition/mental_navigation.py",
+    "memory/spatial_episodic_store.py",
+    "memory/spatial_place_consolidator.py",
 )
 
 _HRR_FRESHNESS_SECONDS = 30 * 24 * 60 * 60  # 30 days
