@@ -110,6 +110,7 @@
       <button id="b_reset" onclick="resetView()">⟲ recentre</button>
       <button id="b_calib" onclick="toggleCalib()">⚙ calibrate</button>
       <button id="b_matrix" onclick="toggleMatrix()">◉ matrix</button>
+      <button id="b_flip" onclick="cycleFlip()" title="rotate the dense cloud through its 4 orientations until it lands on the walls">⇄ flip <span id="flipv">·</span></button>
     </div>
 
     <div class="calibpanel" id="calibpanel" style="display:none">
@@ -189,6 +190,15 @@ function drawReflPoints(proj){
 }
 function toggleMatrix(){ matrixMode=!matrixMode;
   var b=document.getElementById('b_matrix'); if(b) b.className=matrixMode?'on':''; }
+
+// dense-cloud orientation: 0=none 1=flipX(L/R) 2=flipZ(F/B) 3=flipXZ(both). Lets the operator dial
+// the camera→lidar handedness onto the measured walls without a code round-trip. Default = flipX.
+var cloudFlip = (function(){ var v=parseInt(localStorage.getItem('sc_cloudflip'),10); return isNaN(v)?1:(v&3); })();
+function cloudFX(){ return (cloudFlip&1)?-1:1; }
+function cloudFZ(){ return (cloudFlip&2)?-1:1; }
+function _cloudFlipLabel(){ var el=document.getElementById('flipv'); if(el) el.textContent=['none','X','Z','XZ'][cloudFlip];
+  var b=document.getElementById('b_flip'); if(b) b.className=cloudFlip?'on':''; }
+function cycleFlip(){ cloudFlip=(cloudFlip+1)&3; try{localStorage.setItem('sc_cloudflip',String(cloudFlip));}catch(e){} _cloudFlipLabel(); }
 // matrix palette: map any colour to a green by its luminance (so walls + cloud + points all
 // turn into the code-rain glow when matrix mode is on). Pass-through otherwise.
 function mcol(c){ if(!matrixMode) return c;
@@ -507,7 +517,7 @@ function renderFrame(){
   for(i=0;i<pm.length;i++){ r=rawp([pm[i][0],0,pm[i][1]]); if(r) probe.push(r); }
   // no lidar geometry (camera-only mode) → fit the frame to the dense cloud itself
   if(!probe.length && dense && dense.length){
-    for(i=0;i<dense.length;i+=6){ r=rawp([-dense[i][0],dense[i][1],dense[i][2]]); if(r) probe.push(r); } }  // -x: match the cloud's render flip
+    for(i=0;i<dense.length;i+=6){ r=rawp([cloudFX()*dense[i][0],dense[i][1],cloudFZ()*dense[i][2]]); if(r) probe.push(r); } }  // match the cloud flip
   if(!probe.length) return;
   var rxn=1e9,rxx=-1e9,ryn=1e9,ryx=-1e9;
   for(i=0;i<probe.length;i++){ var pr=probe[i];
@@ -598,9 +608,10 @@ function renderFrame(){
     ctx.globalCompositeOperation='source-over';
     ctx.globalAlpha=0.7;                                   // SUBORDINATE to the measured walls
     var dprj=[];
-    // the camera cloud is horizontally MIRRORED vs the measured walls (camera→lidar x-handedness
-    // in depth_to_points) — negate x so the reconstruction reads the right way round on the walls.
-    for(i=0;i<dense.length;i++){ var P=dense[i]; var dq=proj([-P[0],P[1],P[2]]);
+    // dense cloud orientation is operator-dialled (⇄ flip button) onto the measured walls — the
+    // camera→lidar x/z handedness in depth_to_points doesn't always match the lidar frame.
+    var fx=cloudFX(), fz=cloudFZ();
+    for(i=0;i<dense.length;i++){ var P=dense[i]; var dq=proj([fx*P[0],P[1],fz*P[2]]);
       if(dq) dprj.push([dq[2],dq[0],dq[1],P[3],P[4],P[5]]); }
     dprj.sort(function(a,b){return b[0]-a[0];});           // far first (painter's order)
     var psz=2.2*DPR;
@@ -703,7 +714,7 @@ function tick(){
   });
 }
 
-resize(); clk(); setInterval(clk,1000);
+resize(); clk(); setInterval(clk,1000); _cloudFlipLabel();
 if(window.ResizeObserver){ try{ new ResizeObserver(resize).observe(document.getElementById('stagewrap')); }catch(e){} }
 tick(); setInterval(tick, 5000);
 if(ctx){ requestAnimationFrame(draw); }
