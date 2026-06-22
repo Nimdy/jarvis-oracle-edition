@@ -43,9 +43,22 @@ from perception_orchestrator import PerceptionOrchestrator
 import os
 os.environ.setdefault("TQDM_DISABLE", "1")
 
+# Log to the console AND a rotating file. The console stream goes to the operator's
+# terminal (/dev/pts/N) and is otherwise unrecoverable — the file makes the brain's
+# logs checkable after the fact (~/.jarvis/brain.log, 10MB x 3 rotation).
+_log_handlers: list = [logging.StreamHandler()]
+try:
+    from logging.handlers import RotatingFileHandler as _RotatingFileHandler
+    _LOG_PATH = os.path.join(os.path.expanduser("~"), ".jarvis", "brain.log")
+    os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
+    _log_handlers.append(_RotatingFileHandler(_LOG_PATH, maxBytes=10 * 1024 * 1024, backupCount=3))
+except Exception:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    handlers=_log_handlers,
 )
 logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 logger = logging.getLogger("jarvis.brain")
