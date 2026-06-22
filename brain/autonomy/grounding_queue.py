@@ -454,6 +454,15 @@ class GroundingQueue:
             SparkPromotion.get_instance().record_external_validation(grounded)
         except Exception:
             logger.debug("answer: SparkPromotion record failed", exc_info=True)
+        # P5b earning link: if this belief had a prior SHADOW research conclusion, score it against
+        # the operator's answer — the only thing that earns the SEPARATE AutonomousResearchPromotion
+        # gate (zero-authority; mutates nothing). Safe no-op when there is no pending conclusion.
+        try:
+            from autonomy.autonomous_research import record_operator_answer
+            if rec.belief_id:
+                record_operator_answer(rec.belief_id, validation)
+        except Exception:
+            logger.debug("answer: P5b record_operator_answer failed", exc_info=True)
 
         # Active-tier closure (SAFE subset): externally anchor the belief the operator
         # just validated, so the grounding LOOP closes (the belief stops re-surfacing).

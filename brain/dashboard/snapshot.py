@@ -1624,6 +1624,13 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         except Exception:
             _gr["drive_promotion"] = {}
         try:
+            # P5b — the SEPARATE autonomous-research gate (shadow-execute). Distinct from drive_promotion
+            # above (which is the operator-pull capability); never implies autonomous belief mutation.
+            from autonomy.autonomous_research import get_status as _p5b_status
+            _gr["p5b_autonomous_research"] = _p5b_status()
+        except Exception:
+            _gr["p5b_autonomous_research"] = {}
+        try:
             from consciousness.meta_cognitive_thoughts import TensionThoughtPromotion
             _gr["tension_thought_promotion"] = TensionThoughtPromotion.get_instance().get_status()
         except Exception:

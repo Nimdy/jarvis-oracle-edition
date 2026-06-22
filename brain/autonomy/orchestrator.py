@@ -2408,6 +2408,25 @@ class AutonomyOrchestrator:
             except Exception:
                 logger.debug("shadow grounding-queue (pull) enqueue failed", exc_info=True)
 
+        # P5b SHADOW EXECUTE (default-OFF via ENABLE_P5B_SHADOW): for a factual belief-tension question,
+        # also auto-fire academic_search IN SHADOW (governor + dedup honored inside shadow_research) →
+        # log the would-be conclusion → MUTATE NOTHING. Earns the SEPARATE AutonomousResearchPromotion
+        # gate when the operator later answers this belief. Fire-and-forget so it never blocks the tick.
+        if belief_id and (action.question or ""):
+            try:
+                from autonomy.autonomous_research import shadow_research, ENABLE_P5B_SHADOW
+                if ENABLE_P5B_SHADOW:
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = None
+                    if loop is not None and loop.is_running():
+                        asyncio.ensure_future(
+                            shadow_research(self._query_interface, belief_id,
+                                            action.question or "", facet))
+            except Exception:
+                logger.debug("P5b shadow-fire schedule failed (no-op)", exc_info=True)
+
         logger.info(
             "Grounding drive (SHADOW): queued for operator review via %s "
             "[facet=%s belief=%s urgency=%.2f] — Q: %s",
