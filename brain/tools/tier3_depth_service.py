@@ -32,10 +32,6 @@ CALIB = os.path.expanduser("~/.jarvis/camera_calib.json")   # live manual-calibr
 LAST_ANCHOR = os.path.expanduser("~/.jarvis/last_anchor.json")  # last lidar-MEASURED scale (coast on it)
 STRONG_CORR = 0.6   # auto mode only trusts/caches a fit this well-correlated — a weak fit holds the
                     # last STRONG scale instead of overwriting it (kills the cloud drift/jitter)
-import math as _m
-CLOUD_YAW_OFFSET = _m.radians(90)   # operator: the cloud sits 90deg CW of where it should — a ~90deg
-                    # lidar↔camera MOUNT rotation the anchor's ±15deg bearing search can't reach. Rigid-
-                    # rotate the cloud +90deg (CCW) to seat it on the walls; scale/anchor untouched.
 PX, PY = 320.0, 240.0
 INTERVAL_S = 4.0
 STRIDE = 5            # denser sample → fills the lattice gaps (~12k pts at 640x480)
@@ -158,7 +154,7 @@ def main():
                 else:
                     # auto: search a PHYSICALLY-plausible yaw band; refuse spurious far-off fits.
                     a, yaw_used = anchor_best_yaw(row, profile, base_yaw_rad=ex.yaw_rad, focal_px=focal,
-                                                  principal_x=PX, search_deg=15.0, step_deg=2.0,
+                                                  principal_x=PX, search_deg=180.0, step_deg=4.0,
                                                   min_inliers=15, min_corr=0.4)
                 # Only TRUST + cache a confidently-correlated fit (auto). A weak fit (corr < STRONG_CORR)
                 # would overwrite the good cached scale and make the cloud drift — so a weak frame
@@ -186,7 +182,7 @@ def main():
                 scale_source = "cached_no_lidar"
 
             pts = depth_to_points(pred.tolist(), rgb.tolist(), a, focal_px=focal, principal_x=PX,
-                                  principal_y=PY, camera_height_m=cam_h, yaw_rad=yaw_used + CLOUD_YAW_OFFSET,
+                                  principal_y=PY, camera_height_m=cam_h, yaw_rad=yaw_used,
                                   stride=STRIDE, max_points=MAX_POINTS)
             measured = scale_source == "live"
             write_slot({
