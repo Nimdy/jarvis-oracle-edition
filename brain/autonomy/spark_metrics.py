@@ -422,10 +422,41 @@ class SparkPromotion:
         except Exception:
             logger.debug("Failed to save spark promotion state", exc_info=True)
 
+    def _seed_from_outcomes_log(self) -> None:
+        """One-time reconciliation: with no durable promotion file yet, seed the EARNED outcomes
+        from the grounding-outcomes audit log so the gate reflects reps already validated. They
+        were recorded but never persisted (before the save-on-accumulation fix). Reps ONLY —
+        promotion still re-earns the unchanged 4-condition gate, and the shadow clock is NOT
+        backdated (it must still be in shadow >=4h from now before promoting). Never raises."""
+        try:
+            log = Path(SPARK_PROMOTION_PATH).with_name("grounding_outcomes.jsonl")
+            if not log.exists():
+                return
+            seeded = 0
+            for line in log.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                self._state.total_outcomes += 1
+                self._state.validation_history.append(1.0 if rec.get("grounded") else 0.0)
+                seeded += 1
+            if seeded:
+                logger.info(
+                    "Spark promotion: backfilled %d earned outcomes from grounding_outcomes.jsonl",
+                    seeded)
+                self.save()   # make the reconciled reps durable from here on
+        except Exception:
+            logger.debug("Spark promotion: outcome backfill skipped", exc_info=True)
+
     def _load(self) -> None:
         try:
             path = Path(SPARK_PROMOTION_PATH)
             if not path.exists():
+                self._seed_from_outcomes_log()   # one-time backfill of already-earned reps
                 return
             data = json.loads(path.read_text())
             self._state.level = int(data.get("level", 0) or 0)

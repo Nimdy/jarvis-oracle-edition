@@ -203,7 +203,7 @@ def depth_to_points(disparity_map: Sequence[Sequence[Optional[float]]],
             z = s * d + t                                  # DEPTH: metric Z = scale·pred + shift
             if z <= min_depth_m or z > max_depth_m:        # behind camera / sky-far → HOLE
                 continue
-            x_room = (x - principal_x) * z / focal_px       # right
+            x_room = (principal_x - x) * z / focal_px       # right (negated: camera→lidar x-handedness — un-mirror at the source, BEFORE the yaw rotation below)
             y_room = camera_height_m - (y - principal_y) * z / focal_px   # up (image y down)
             # rotate the horizontal (x_room, z) by −yaw into the lidar frame
             x_l = x_room * cy - z * sy

@@ -193,12 +193,12 @@ function toggleMatrix(){ matrixMode=!matrixMode;
 
 // dense-cloud orientation: 0=none 1=flipX(L/R) 2=flipZ(F/B) 3=flipXZ(both). Lets the operator dial
 // the camera→lidar handedness onto the measured walls without a code round-trip. Default = flipX.
-var cloudFlip = (function(){ var v=parseInt(localStorage.getItem('sc_cloudflip'),10); return isNaN(v)?1:(v&3); })();
+var cloudFlip = (function(){ var v=parseInt(localStorage.getItem('sc_cloudflip_v2'),10); return isNaN(v)?0:(v&3); })();  // default none — the backend now un-mirrors the cloud at the source; this is only an escape hatch
 function cloudFX(){ return (cloudFlip&1)?-1:1; }
 function cloudFZ(){ return (cloudFlip&2)?-1:1; }
 function _cloudFlipLabel(){ var el=document.getElementById('flipv'); if(el) el.textContent=['none','X','Z','XZ'][cloudFlip];
   var b=document.getElementById('b_flip'); if(b) b.className=cloudFlip?'on':''; }
-function cycleFlip(){ cloudFlip=(cloudFlip+1)&3; try{localStorage.setItem('sc_cloudflip',String(cloudFlip));}catch(e){} _cloudFlipLabel(); }
+function cycleFlip(){ cloudFlip=(cloudFlip+1)&3; try{localStorage.setItem('sc_cloudflip_v2',String(cloudFlip));}catch(e){} _cloudFlipLabel(); }
 // matrix palette: map any colour to a green by its luminance (so walls + cloud + points all
 // turn into the code-rain glow when matrix mode is on). Pass-through otherwise.
 function mcol(c){ if(!matrixMode) return c;
