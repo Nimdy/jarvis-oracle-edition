@@ -205,9 +205,11 @@ def depth_to_points(disparity_map: Sequence[Sequence[Optional[float]]],
                 continue
             x_room = (principal_x - x) * z / focal_px       # right (negated: camera→lidar x-handedness — un-mirror at the source, BEFORE the yaw rotation below)
             y_room = camera_height_m - (y - principal_y) * z / focal_px   # up (image y down)
-            # rotate the horizontal (x_room, z) by −yaw into the lidar frame
-            x_l = x_room * cy - z * sy
-            z_l = x_room * sy + z * cy
+            # rotate (x_room, z) by −yaw into the lidar frame. z (the depth/forward axis) is
+            # NEGATED to reverse the dot extrusion direction (operator: "the cloud dots are going
+            # the wrong way") — the dots now extrude the opposite way from the camera.
+            x_l = x_room * cy + z * sy
+            z_l = x_room * sy - z * cy
             r, g, b = (0, 0, 0)
             if crow is not None and x < len(crow):
                 px = crow[x]
