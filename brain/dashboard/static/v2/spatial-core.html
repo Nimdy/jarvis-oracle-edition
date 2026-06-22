@@ -505,7 +505,7 @@ function renderFrame(){
   var rt = vnorm(vcross(f,[0,1,0]));
   var up = vcross(rt,f);
   function rawp(p){ var rel=vsub(p,cam), xc=vdot(rel,rt), yc=vdot(rel,up), zc=vdot(rel,f);
-    if(zc<=0.05) return null; return [-xc/zc*focal, -(yc/zc)*focal, zc]; }  // +x negated → un-mirror (rt=cross(f,up) was left-handed); +y DOWN → negate world-up
+    if(zc<=0.05) return null; return [xc/zc*focal, -(yc/zc)*focal, zc]; }  // screen +y is DOWN → negate world-up
 
   // ---- auto-fit: project the geometry, then scale+centre so it fills the frame
   //      on ANY aspect/screen (kills the dead-space) ----
@@ -654,13 +654,13 @@ window.addEventListener('mouseup', function(){ if(dragging && _calibManual()) ca
 window.addEventListener('mousemove', function(e){ if(!dragging) return;
   if(viewMode!=='3d'){ lastX=e.clientX; lastY=e.clientY; return; }   // top-down is a fixed map
   if(_calibManual()){ _calibDrag(e.clientX-lastX, e.clientY-lastY); }   // manual: drag aligns the cloud (not orbit)
-  else { theta += (e.clientX-lastX)*0.008; elev = Math.max(0.25, Math.min(2.4, elev - (e.clientY-lastY)*0.004)); }
+  else { theta -= (e.clientX-lastX)*0.008; elev = Math.max(0.25, Math.min(2.4, elev - (e.clientY-lastY)*0.004)); }
   lastX=e.clientX; lastY=e.clientY; });
 cv.addEventListener('touchstart', function(e){ if(e.touches.length){dragging=true; lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;} },{passive:true});
 cv.addEventListener('touchmove', function(e){ if(!dragging||!e.touches.length) return;
   if(viewMode!=='3d'){ lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; return; }
   if(_calibManual()){ _calibDrag(e.touches[0].clientX-lastX, e.touches[0].clientY-lastY); }
-  else { theta += (e.touches[0].clientX-lastX)*0.008; elev=Math.max(0.25,Math.min(2.4, elev-(e.touches[0].clientY-lastY)*0.004)); }
+  else { theta -= (e.touches[0].clientX-lastX)*0.008; elev=Math.max(0.25,Math.min(2.4, elev-(e.touches[0].clientY-lastY)*0.004)); }
   lastX=e.touches[0].clientX; lastY=e.touches[0].clientY; },{passive:true});
 cv.addEventListener('touchend', function(){ dragging=false; },{passive:true});
 function toggleView(){ viewMode = (viewMode==='top') ? '3d' : 'top';
