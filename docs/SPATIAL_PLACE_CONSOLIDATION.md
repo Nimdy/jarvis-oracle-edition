@@ -169,3 +169,17 @@ Built per the pinned spec:
   by *which* objects were visible (tv-only vs tv+chair vs tv+keyboard). The lever for true room-level
   compression is the **lidar room model (walls + dimensions — always present, calibration-stable)**
   captured into the album: a future capture-layer increment (#80). **Not tuned green** (§24).
+
+**Live deployment verified (2026-06-22, 3-lens adversarial workflow, re-derived on the brain):**
+governance-green (both structural scans `(True, [])`; deployed code byte-identical, sha256 match),
+metric-honest (`sum(member_count) == sessions`; fail-closed invariant holds with zero violations;
+over-merge test passes — every top-place member within the 0.27 m match radius of the representative),
+and regression-free (all endpoints 200; cache TTL 250 ms→12 ms; self-sensing still ticking).
+
+**Known limitation (surfaced by the verification — labeled honestly, NOT silently merged):** a keyed
+place resting on a *single* anchor pair (exactly 2 anchors, e.g. `tv`+`chair`) is geometrically weak —
+two distinct rooms sharing that one ~1.6 m distance could merge. Safe in this one-household,
+zero-authority shadow, and now **labeled per place** (`key_strength`: `strong` for ≥3 anchors / ≥2 pairs
+vs `weak_single_pair` for 2 anchors), with `places_keyed_strong` / `places_keyed_weak_single_pair`
+counts in the summary. **Precondition before this loop is ever granted authority or generalized beyond
+one home: require ≥2 anchor pairs (≥3 anchors) to key.**

@@ -151,6 +151,19 @@ def _place_id(anchors: list) -> str | None:
     return "place_" + hashlib.sha1(sig.encode("utf-8")).hexdigest()[:12]
 
 
+def _key_strength(anchors: list) -> str:
+    """Honest confidence of a place key. A 2-anchor place rests on a SINGLE inter-anchor
+    distance (one pair) at _PLACE_MATCH_FRACTION — geometrically weak: two distinct rooms
+    that happen to share that one distance would merge. Safe in this single-household,
+    zero-authority shadow, but >=2 pairs (>=3 anchors) should be REQUIRED before this loop
+    is ever granted authority or generalized beyond one home (see docs/SPATIAL_PLACE_
+    CONSOLIDATION.md)."""
+    n = len(anchors)
+    if n < _MIN_STABLE_ANCHORS:
+        return "unkeyed"
+    return "strong" if n >= 3 else "weak_single_pair"
+
+
 class SpatialPlaceConsolidator:
     """Groups the per-session episodic album into persistent PLACES (read-only)."""
 
@@ -216,6 +229,7 @@ class SpatialPlaceConsolidator:
                     "last_seen_ts": s["captured_ts"],
                     "anchors": [{"label": l, "position_room_m": list(p)} for l, p in anchors],
                     "fail_closed_unkeyed": len(anchors) < _MIN_STABLE_ANCHORS,
+                    "key_strength": _key_strength(anchors),
                 })
             else:
                 assigned["member_session_ids"].append(s["session_id"])
@@ -228,13 +242,18 @@ class SpatialPlaceConsolidator:
         # strip the working anchor field + any (impossible) vector keys before emit
         records = [_strip_vectors({k: v for k, v in p.items() if k != "_anchors"}) for p in places]
         n_keyed = sum(1 for p in places if not p["fail_closed_unkeyed"])
+        n_strong = sum(1 for p in places if p["key_strength"] == "strong")
+        n_weak = sum(1 for p in places if p["key_strength"] == "weak_single_pair")
         return {
             "sessions": len(sessions),
             "places": len(places),
             "places_keyed": n_keyed,
+            "places_keyed_strong": n_strong,        # >=3 anchors (>=2 inter-anchor pairs)
+            "places_keyed_weak_single_pair": n_weak,  # 2 anchors -> one distance only (weak)
             "places_unkeyed_failclosed": len(places) - n_keyed,
             "compression_ratio": round(len(sessions) / max(1, len(places)), 2),
             "authority": dict(AUTHORITY_FLAGS),
+            "no_raw_vectors_in_api": True,
             "status": STATUS,
             "lane": LANE,
             "place_records": records,

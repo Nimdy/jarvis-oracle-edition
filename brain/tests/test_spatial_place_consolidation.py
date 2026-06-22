@@ -117,3 +117,26 @@ def test_empty_album_is_safe(tmp_path):
     out = SpatialPlaceConsolidator(tmp_path / "nonexistent").consolidate()
     assert out["sessions"] == 0 and out["places"] == 0
     assert out["compression_ratio"] == 0.0
+
+
+def test_key_strength_honesty(tmp_path):
+    """Place keys are labeled by geometric confidence: >=3 anchors = strong, 2 = weak (one pair)."""
+    album = tmp_path / "episodic"
+    album.mkdir()
+    strong = {  # 3 anchors -> >=2 inter-anchor pairs -> strong
+        "session_id": "strong", "calibration_version": 1, "captured_ts": 100.0,
+        "world": _world(("tv", [0.4, 0.8, 1.85]), ("chair", [0.0, 1.5, 0.3]), ("keyboard", [0.1, 1.2, 0.5])),
+    }
+    weak = {  # different room, 2 anchors -> a single distance -> weak_single_pair
+        "session_id": "weak", "calibration_version": 1, "captured_ts": 200.0,
+        "world": _world(("tv", [5.0, 5.0, 5.0]), ("desk", [6.0, 6.0, 6.0])),
+    }
+    (album / "strong.jsonl").write_text(json.dumps(strong) + "\n", encoding="utf-8")
+    (album / "weak.jsonl").write_text(json.dumps(weak) + "\n", encoding="utf-8")
+    out = SpatialPlaceConsolidator(album).consolidate()
+
+    assert out["places"] == 2  # different rooms, not merged
+    assert sorted(p["key_strength"] for p in out["place_records"]) == ["strong", "weak_single_pair"]
+    assert out["places_keyed_strong"] == 1
+    assert out["places_keyed_weak_single_pair"] == 1
+    assert out["no_raw_vectors_in_api"] is True
