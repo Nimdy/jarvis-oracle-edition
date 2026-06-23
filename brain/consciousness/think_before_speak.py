@@ -4,7 +4,7 @@ The vision (operator): "her internal thoughts are supposed to drive conversation
 before they speak." Today the companion read fires AFTER she speaks (situational_read at
 conversation_handler.py:6026), so her self-knowledge arrives a full turn too late. TBS-0 adds a read of
 the CURRENT user turn BEFORE generation and emits a pre-speech STANCE (lean_concise / give_space /
-match_warmth / check_in / none).
+match_warmth / none).
 
 TBS-0 IS PURE SHADOW (glass-box):
   * Computed BEFORE the reply is generated, but it INJECTS NOTHING into the prompt and changes nothing
@@ -33,8 +33,13 @@ logger = logging.getLogger("jarvis.tbs")
 
 _SHADOW_LOG = str(Path.home() / ".jarvis" / "pre_speech_shadow.jsonl")
 
-# Mirror the behavior_advisory person-aware floor — a learned disposition only counts once it's earned.
-_CONF_FLOOR = 0.30
+# Single source of truth: the behavior_advisory person-aware floor (a learned disposition only counts
+# once earned). IMPORTED, not re-hardcoded, so the two can't silently desync. Fallback if unavailable.
+try:
+    from consciousness.behavior_advisory import _PERSON_AWARE_DISPOSITION_FLOOR as _CONF_FLOOR
+except Exception:
+    _CONF_FLOOR = 0.30
+_LOAD_MAX_LINES = 5000   # bound the glass-box rebuild cost on boot (counts reflect the recent window)
 _VERBOSITY_CONCISE = "prefers concise replies"
 _HUMOR_LANDS = "lands well"
 _NEGATIVE_EMOTIONS = frozenset({"angry", "frustrated", "annoyed", "sad", "upset", "anxious", "fearful"})
@@ -44,7 +49,7 @@ _NEGATIVE_EMOTIONS = frozenset({"angry", "frustrated", "annoyed", "sad", "upset"
 class PreSpeechStance:
     """A pre-speech read of the CURRENT turn. Hypothesis-only; SHADOW (injected=False always in TBS-0)."""
     speaker: str
-    stance: str                 # lean_concise | give_space | match_warmth | check_in | none
+    stance: str                 # lean_concise | give_space | match_warmth | none
     confidence: float
     evidence: list = field(default_factory=list)   # [[signal, value], ...]
     would_inject: "str | None" = None               # the prompt line TBS-2 WOULD inject (logged, not injected)
@@ -86,8 +91,7 @@ class PreSpeechReader:
         cls._instance = None
 
     def read_before_speak(self, *, speaker: str, user_text: str, user_emotion: str = "neutral",
-                          person_model: "dict | None" = None, affect: Any = None,
-                          follow_up: bool = False) -> PreSpeechStance:
+                          person_model: "dict | None" = None) -> PreSpeechStance:
         """Read the CURRENT user turn (NO response_text) → a pre-speech stance. Pure, cheap, never raises.
         SHADOW: the returned stance is LOGGED only; the caller must NOT inject it (TBS-0)."""
         try:
@@ -150,7 +154,10 @@ class PreSpeechReader:
             total = 0
             tail: deque[PreSpeechStance] = deque(maxlen=50)
             with open(_SHADOW_LOG, encoding="utf-8") as f:
-                for line in f:
+                _lines = f.readlines()
+            if len(_lines) > _LOAD_MAX_LINES:        # bound boot cost; counts reflect the recent window
+                _lines = _lines[-_LOAD_MAX_LINES:]
+            for line in _lines:
                     line = line.strip()
                     if not line:
                         continue

@@ -42,10 +42,11 @@ undesigned beyond the loop description. **This doc extends that ladder; it does 
 
 ## The design — `read_before_speak`, shadow-first, earned
 **Step A — build the pre-speech read (small, pure-Python, no LLM, reuses the heuristics).**
-`situational_read.read_before_speak(user_text, person_model, affect) -> PreSpeechStance`. It reads the CURRENT
-user turn (engagement/sentiment proxy from the *incoming* message + the learned person-model + affect) and emits
-a short STANCE — drawn from the existing vocabulary: `lean_concise` / `give_space` / `match_warmth` /
-`check_in` / `none`. It is the existing read heuristics minus `response_text`. Hypothesis-only, confidence-scored.
+`read_before_speak(speaker, user_text, user_emotion, person_model) -> PreSpeechStance`. It reads the CURRENT
+user turn (the incoming message signal + the learned person-model) and emits a short STANCE — drawn from the
+existing vocabulary: `lean_concise` / `give_space` / `match_warmth` / `none` (gated on the earned `_CONF_FLOOR`,
+imported from `behavior_advisory` so it can't desync). Hypothesis-only, confidence-scored. It fires **before the
+routing branches** so it covers **every** speaking turn (validated). Pure-Python, no LLM (~0.01ms/turn).
 
 **Step B — wire it SHADOW (log only; inject nothing).** Call `read_before_speak` once, right after route
 (~conv_handler:2985), before the first `respond_stream`. Pass the stance down alongside `style_instruction`, but
