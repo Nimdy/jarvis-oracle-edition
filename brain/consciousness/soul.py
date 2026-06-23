@@ -22,6 +22,31 @@ from nanoid import generate as nanoid
 from consciousness.events import JarvisTone, JarvisPhase, Memory
 from memory.storage import memory_storage
 
+import re as _re
+
+_PREF_STOPWORDS = frozenset({
+    "the", "a", "an", "is", "are", "to", "of", "and", "or", "for", "in", "on",
+    "with", "his", "her", "their", "my", "your", "that", "this", "it",
+})
+
+
+def _preference_key(payload: str) -> str:
+    """Normalized key for a relationship preference/fact so clean RE-STATEMENTS of the same fact
+    OVERWRITE instead of fragmenting into near-duplicate keys (the old payload[:30] truncation bug
+    that made 'memory of us' blurry). Values are UNCHANGED — only the dict KEY is normalized. For the
+    explicit 'topic: value' form keep the left-of-colon topic. Lives in soul (which owns the
+    Relationship/preferences); conversation_handler imports it from here."""
+    text = (payload or "").strip()
+    if ":" in text:
+        return text.split(":")[0].strip().lower()[:60]
+    low = text.lower()
+    for pre in ("user is ", "user "):
+        if low.startswith(pre):
+            low = low[len(pre):]
+            break
+    toks = [t for t in _re.findall(r"[a-z0-9]+", low) if t not in _PREF_STOPWORDS]
+    return " ".join(sorted(set(toks)))[:60] or low[:30]
+
 logger = logging.getLogger(__name__)
 
 SOUL_VERSION = "3.0.0"
@@ -141,10 +166,35 @@ class IdentityState:
                         removed += 1
                         continue
                     state.relationships[name] = Relationship(**rdata)
-                logger.info("Identity loaded: %d traits, %d relationships%s",
+                # One-time de-dup of fragmented preference keys (the old payload[:30] bug created
+                # near-dup keys for re-statements of the same fact). Re-bucket by the canonical key;
+                # on collision keep the LONGEST value (most complete). EXACT normalized-key only — no
+                # fuzzy merge (synonym near-dups like likes/enjoys stay for the operator-reviewed audit).
+                # Fail-SAFE: if the key helper can't import at this point in boot, just skip the cleanup.
+                deduped = 0
+                try:
+                    for rel in state.relationships.values():
+                        prefs = getattr(rel, "preferences", None)
+                        if not isinstance(prefs, dict) or len(prefs) < 2:
+                            continue
+                        rebucketed: dict[str, str] = {}
+                        for v in prefs.values():
+                            nk = _preference_key(v)
+                            if nk in rebucketed:
+                                deduped += 1
+                                if len(str(v)) > len(str(rebucketed[nk])):
+                                    rebucketed[nk] = v  # keep the most complete statement
+                            else:
+                                rebucketed[nk] = v
+                        if len(rebucketed) != len(prefs):
+                            rel.preferences = rebucketed
+                except Exception:
+                    logger.debug("preference de-dup on load skipped", exc_info=True)
+                logger.info("Identity loaded: %d traits, %d relationships%s%s",
                             len(state.semi_stable_traits), len(state.relationships),
-                            f" ({removed} invalid removed)" if removed else "")
-                if removed:
+                            f" ({removed} invalid removed)" if removed else "",
+                            f" ({deduped} pref dups merged)" if deduped else "")
+                if removed or deduped:
                     state.save()
             except Exception as exc:
                 logger.warning("Failed to load identity: %s", exc)

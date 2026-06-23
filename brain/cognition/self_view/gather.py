@@ -102,6 +102,38 @@ def gather_live_sources(
     # --- broad subsystem inventory from the dashboard build_cache snapshot (P0.6) ---
     sources["subsystems"] = subsystems_from_cache(snapshot)
 
+    # --- self-referential beliefs ("what I believe about myself") — read-only ---
+    # Was a DEAD WIRE: the synthesizer's belief dimension reads sources["beliefs"], which nothing
+    # populated, so it always reported the FALSE "belief graph unavailable". Populate it honestly from
+    # the live store: only ACTIVE, operator-stated (provenance==user_claim) beliefs whose facet is SELF
+    # (the canonical detector — never a person-identity belief). Set even when empty so the synthesizer
+    # reports the TRUE "no self-referential beliefs yet" gap; omit only when the store is truly absent.
+    try:
+        from epistemic.provenance_scorer import classify_facet
+        store = getattr(engine, "belief_store", None) or getattr(engine, "_belief_store", None)
+        if store is None:
+            try:
+                from epistemic.belief_graph import BeliefGraph
+                store = getattr(BeliefGraph.get_instance(), "_belief_store", None)
+            except Exception:
+                store = None
+        if store is not None and hasattr(store, "get_active_beliefs"):
+            self_beliefs = []
+            for b in store.get_active_beliefs():
+                if getattr(b, "provenance", "") != "user_claim":
+                    continue
+                if classify_facet(b) != "self":
+                    continue
+                self_beliefs.append({
+                    "statement": getattr(b, "rendered_claim", "") or getattr(b, "id", ""),
+                    "provenance": getattr(b, "provenance", ""),
+                    "epistemic_status": getattr(b, "epistemic_status", ""),
+                    "belief_confidence": round(float(getattr(b, "belief_confidence", 0.0) or 0.0), 3),
+                })
+            sources["beliefs"] = {"self_beliefs": self_beliefs}
+    except Exception:
+        pass  # honest degrade: omit the key → synthesizer reports "belief graph unavailable"
+
     # --- scoreboard (#9 honest composite) from the eval snapshot ---
     if isinstance(eval_snapshot, dict):
         sb = eval_snapshot.get("scoreboard")

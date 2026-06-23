@@ -234,17 +234,20 @@ class SelfViewSynthesizer:
         for b in items:
             if not isinstance(b, dict):
                 continue
+            prov_field = (b.get("provenance") or "").lower()
             status = (b.get("epistemic_status") or "inferred").lower()
-            # A belief is NEVER a measurement. Grounding only raises it toward advisory.
-            if status in ("externally_grounded", "grounded"):
-                prov = Provenance.ADVISORY
-            elif status in ("provisional",):
+            # A self-belief is NEVER a measurement. The gather only emits operator-stated beliefs
+            # (provenance==user_claim) → INTERNALLY_SCORED (the operator said it; it was NOT externally
+            # validated). Anything else → SELF_SCORED. Nothing here reaches ADVISORY/MEASURED — that
+            # requires external grounding, not this path. (The old epistemic_status branch was a dead
+            # wire: gather never populated these beliefs, so the map never ran.)
+            if prov_field == "user_claim":
                 prov = Provenance.INTERNALLY_SCORED
             else:
                 prov = Provenance.SELF_SCORED
             rendered.append(Fact(
                 b.get("statement") or b.get("id"), prov,
-                note=f"epistemic_status={status}", source="epistemic.belief_graph"))
+                note=f"provenance={prov_field} status={status}", source="epistemic.belief_graph"))
         if not rendered:
             return {"self_beliefs": gap("no self-referential beliefs yet", "epistemic.belief_graph")}
         return {"self_beliefs": rendered}

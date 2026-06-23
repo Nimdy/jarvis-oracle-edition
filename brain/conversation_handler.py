@@ -1933,6 +1933,9 @@ def _store_personal_memory(
     return False
 
 
+from consciousness.soul import _preference_key  # normalized relationship-preference key (soul owns it)
+
+
 def _update_relationship(speaker: str, payload: str, category: str) -> None:
     """Write personal facts and interests to the Relationship record in soul."""
     if not speaker or speaker == "unknown":
@@ -1945,11 +1948,9 @@ def _update_relationship(speaker: str, payload: str, category: str) -> None:
         if payload not in rel.notes and len(rel.notes) < MAX_PREFERENCE_NOTES:
             rel.notes.append(payload)
     elif category == "personal_fact":
-        key = payload.split(":")[0].strip() if ":" in payload else payload[:30]
-        rel.preferences[key] = payload
+        rel.preferences[_preference_key(payload)] = payload
     elif category == "personal_preference":
-        key = payload.split(":")[0].strip() if ":" in payload else payload[:30]
-        rel.preferences[key] = payload
+        rel.preferences[_preference_key(payload)] = payload
 
 
 def _retire_matching_preferences(text: str, speaker: str) -> None:
