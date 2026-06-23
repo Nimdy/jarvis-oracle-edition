@@ -605,6 +605,13 @@ _INTENT_PATTERNS: list[tuple[re.Pattern, ToolType, float]] = [
     # Architecture / self-technical: "explain how you X", "how do you store/fetch/retrieve"
     (re.compile(r"\b(?:explain|describe|tell me)\b.{0,15}\bhow (?:you|your)\b.{0,30}\b(?:stor|fetch|retriev|persist|save|load|index|search|cache|process|handl|manag|encod|decod|access|maintain|compress|optimi)\w*\b", re.I), ToolType.INTROSPECTION, 0.85),
     (re.compile(r"\bhow (?:do you|does your|is your|are your)\b.{0,30}\b(?:stor|memory|retriev|persist|data|librar|databas|vector|embed|index|cache|search)\w*\b", re.I), ToolType.INTROSPECTION, 0.85),
+    # self-PROCESS / reasoning: "how do you reach/get to/arrive at an answer" (the verbs the storage
+    # patterns above miss). Fail-closed self-frame: "you/your" + answer/decision/conclusion.
+    (re.compile(r"\bhow (?:do you|you|does your)\b.{0,30}\b(?:reach|arriv\w*|get to|come up with|figure out|work out|deriv\w*|decid\w*|conclud\w*|produc\w*|generat\w*|land on)\b.{0,20}\b(?:answer|response|conclusion|decision|reply|result)\b", re.I), ToolType.INTROSPECTION, 0.85),
+    # "walk me through / take me through / break down how you X" — explain-triggers line 606 misses.
+    (re.compile(r"\b(?:walk me through|take me through|break down|step me through)\b.{0,20}\bhow (?:you|your)\b", re.I), ToolType.INTROSPECTION, 0.85),
+    # "how your <faculty> works" WITHOUT the do/does auxiliary (fail-closed on a self-faculty question).
+    (re.compile(r"\bhow your\b.{0,30}\b(?:memory|reasoning|mind|brain|thinking|cognition|process\w*|system\w*|model\w*|logic|stor\w*|recall|attention)\b.{0,15}\b(?:work\w*|function\w*|operat\w*|run\w*)\b", re.I), ToolType.INTROSPECTION, 0.82),
     (re.compile(r"\b(?:is|are) (?:it|your|that)\b.{0,15}\b(?:fast|slow|efficient|quick|optimiz)\w*\b.{0,15}\b(?:enough|for you)\b", re.I), ToolType.INTROSPECTION, 0.80),
     (re.compile(r"\bhow would you\b.{0,15}\b(?:optimi|improv|speed|enhanc|fix)\w*\b", re.I), ToolType.INTROSPECTION, 0.80),
     (re.compile(r"\b(?:better way|faster way|more efficient)\b.{0,15}\b(?:to |for you to )\b.{0,25}\b(?:stor|fetch|retriev|process|search|index)\w*\b", re.I), ToolType.INTROSPECTION, 0.80),

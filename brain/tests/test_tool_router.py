@@ -22,6 +22,27 @@ router = ToolRouter()
 # Basic route smoke tests
 # ---------------------------------------------------------------------------
 
+def test_self_process_routing():
+    # Self-PROCESS / faculty questions ("how do you reach an answer", "how your memory works",
+    # "walk me through how you X") ARE introspection — they must never fall to NONE (fail-closed
+    # contract). These were the live gap: they routed to NONE -> ungrounded free-generation.
+    for q in [
+        "Tell me how your memory works.",
+        "explain to me how your memory works",
+        "Tell me how you get to a answer.",
+        "Walk me through how you reach an answer.",
+        "how do you arrive at an answer",
+        "break down how you store memories",
+    ]:
+        assert router.route(q).tool == ToolType.INTROSPECTION, f"{q!r} -> {router.route(q).tool}"
+
+
+def test_self_process_no_false_positives():
+    # Non-self questions with overlapping words must NOT be dragged into introspection.
+    for q in ["how was your day", "walk me through the deployment plan", "reach for the stars"]:
+        assert router.route(q).tool != ToolType.INTROSPECTION, f"{q!r} false-positive"
+
+
 def test_time_routing():
     result = router.route("What time is it?")
     assert result.tool == ToolType.TIME, f"Expected TIME, got {result.tool}"
