@@ -40,6 +40,50 @@ _PERSIST_PATH = Path.home() / ".jarvis" / "conversation_history.json"
 _HISTORY_TTL_S = 3600.0 * 4  # discard messages older than 4 hours on load
 
 
+# ── soul_dims -> voice DIALS (SHADOW) ──────────────────────────────────────
+# The grown personality (semi_stable_traits) currently never reaches the prompt — only flat trait
+# NAMES do. This renders the grown MAGNITUDES as graded voice dials, banded so a weakly-grown dim near
+# 0.5 emits nothing (no over-reading). SHADOW-ONLY: response.py computes this beside the live prompt and
+# logs both for an operator A/B; it is NOT yet sent to the model. Source = semi_stable_traits (NEVER the
+# stale personality_rollback mirror). Model-agnostic (no voice-model strings).
+_DIAL_TRAITS: "dict[str, tuple[str, str]]" = {
+    "curiosity": ("Stay on-task; don't chase tangents.", "Lead with genuine curiosity — ask, explore, follow threads."),
+    "empathy": ("Keep it matter-of-fact.", "Lead with warmth; acknowledge feeling before problem-solving."),
+    "formality": ("Keep it casual and relaxed.", "Hold a precise, composed register."),
+    "verbosity": ("Be terse — the fewest words that fully answer.", "Be expansive — give context and detail."),
+    "humor": ("Play it straight.", "Let dry wit and playfulness through naturally."),
+}
+
+
+def build_dial_trait_block(soul_dims: "dict[str, float] | None") -> str:
+    """SHADOW-ONLY (not sent to the model yet): render GROWN soul_dims as graded voice dials. Banded —
+    only dims meaningfully off the 0.5 midpoint emit a line, so a weakly-grown dim (e.g. humor 0.435)
+    stays silent. Pure + deterministic; safe for an operator A/B vs the flat trait-name prompt."""
+    if not isinstance(soul_dims, dict):
+        return ""
+    lines: list[str] = []
+    for dim, (low_msg, high_msg) in _DIAL_TRAITS.items():
+        v = soul_dims.get(dim)
+        if v is None:
+            continue
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            continue
+        if v >= 0.85:
+            lines.append(f"- {dim} {v:.2f} (strong): {high_msg}")
+        elif v >= 0.65:
+            lines.append(f"- {dim} {v:.2f}: {high_msg}")
+        elif v <= 0.15:
+            lines.append(f"- {dim} {v:.2f} (strong): {low_msg}")
+        elif v <= 0.35:
+            lines.append(f"- {dim} {v:.2f}: {low_msg}")
+        # neutral 0.35-0.65 -> nothing
+    if not lines:
+        return ""
+    return "Voice dials (grown personality):\n" + "\n".join(lines)
+
+
 _TONE_INSTRUCTIONS: dict[JarvisTone, str] = {
     "professional": "Be precise and clear — but still yourself, with quiet warmth. Get it exactly right without going cold or robotic.",
     "casual": "Relax — you're talking with someone you know well. Be warm, easy, and a little playful. A real conversation, not a status report.",

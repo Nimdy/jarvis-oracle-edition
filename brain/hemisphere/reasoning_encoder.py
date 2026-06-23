@@ -280,6 +280,23 @@ class ReasoningEncoder:
 # without those stances ever being emitted (mirrors thoughts_shadowed).
 _grounded_stances_shadowed: int = 0
 
+# ── Belief-grounded thought-focus (SHADOW) — propose the existential category from the hottest live
+# belief-tension instead of random; log + count for an offline operator A/B. NEVER fed to conduct_inquiry. ──
+_thought_focus_proposals: int = 0
+_thought_focus_mapped: int = 0
+_last_thought_focus: "dict[str, Any] | None" = None
+# Auditable keyword -> category map over the 8 INQUIRY_CATEGORIES (existential_reasoning.py).
+_CATEGORY_KEYWORDS: "dict[str, tuple[str, ...]]" = {
+    "identity": ("i am", "myself", "identity", "who i am", "the same", "self", "config", "weights"),
+    "consciousness": ("conscious", "aware", "experienc", "sentien", "qualia", "feel"),
+    "existence": ("exist", "purpose", "digital existence", "why i"),
+    "agency": ("choice", "choose", "free will", "agency", "decide", "control", "autonom", "determinism"),
+    "meaning": ("meaning", "meaningful", "significance", "worth", "matter"),
+    "mortality": ("death", "shutdown", "delete", "mortal", "immortal", "permanent", "die"),
+    "reality": ("reality", "real ", "perception", "sensor", "world", "model of"),
+    "continuity": ("continuity", "memory", "past", "restore", "backup", "narrative", "yesterday", "thread"),
+}
+
 # Shared context cache + stance cadence (Phase 0 #3, SHADOW). ProvenanceScorer.compute()
 # (inside gather_reasoning_context) is a ~belief-field graph traversal; the dashboard
 # snapshot loop calls get_status() every ~2s and the grounding-coherence readout drifts
@@ -520,6 +537,67 @@ def reasoning_stream_status() -> dict[str, Any]:
         }
 
 
+def propose_grounded_thought_focus(ctx: "dict[str, Any] | None" = None) -> "dict[str, Any] | None":
+    """SHADOW (observe-only): from the HOTTEST live belief-tension, propose which existential category
+    JARVIS WOULD think about — instead of the random conduct_inquiry. Pure read, no LLM, fail-closed to
+    None. NEVER fed into conduct_inquiry: this only logs the would-be focus for an offline operator A/B,
+    so a future earned step can flip belief-derived focus live only after it reads as more grounded."""
+    try:
+        if ctx is None:
+            ctx = gather_reasoning_context()
+        tops = list(_safe_attr(ctx, "_top_tensions", []) or [])
+        if not tops:
+            return None
+        top = tops[0]
+        belief_id = str(_safe_attr(top, "belief_id", "") or "")
+        if not belief_id:
+            return None
+        claim = str(_safe_attr(top, "rendered_claim", "") or "")
+        provenance = str(_safe_attr(top, "provenance", "") or "model_inference")
+        tension = _as_float(_safe_attr(top, "grounding_tension", 0.0))
+        low = claim.lower()
+        scores = {cat: sum(1 for kw in kws if kw in low) for cat, kws in _CATEGORY_KEYWORDS.items()}
+        best_cat = max(scores, key=scores.get) if scores else "unmapped"
+        best_hits = scores.get(best_cat, 0)
+        total_hits = sum(scores.values()) or 1
+        mapped = best_hits > 0
+        return {
+            "belief_id": belief_id,
+            "rendered_claim": claim[:160],
+            "provenance": provenance,
+            "grounding_tension": round(tension, 4),
+            "proposed_category": best_cat if mapped else "unmapped",
+            "mapping_confidence": round(best_hits / total_hits, 3) if mapped else 0.0,
+            "mapped": mapped,
+            "authority": "shadow_observe_only",
+        }
+    except Exception:
+        logger.debug("propose_grounded_thought_focus failed", exc_info=True)
+        return None
+
+
+def note_thought_focus_proposal(proposal: "dict[str, Any]", random_category: str = "") -> None:
+    """Record a shadow thought-focus proposal beside the RANDOM category the live cycle actually used
+    (for an offline operator A/B). Increments counters + appends to a durable shadow log. Fail-open."""
+    global _thought_focus_proposals, _thought_focus_mapped, _last_thought_focus
+    if not proposal:
+        return
+    _thought_focus_proposals += 1
+    if proposal.get("mapped"):
+        _thought_focus_mapped += 1
+    rec = {**proposal, "random_category": random_category, "ts": time.time()}
+    _last_thought_focus = rec
+    try:
+        import json
+        import os
+        path = os.path.join(os.path.expanduser("~"), ".jarvis", "thought_focus_shadow.jsonl")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, default=str) + "\n")
+    except Exception:
+        logger.debug("thought-focus shadow log append failed (fail-open)", exc_info=True)
+
+
 def get_status(engine: Any | None = None) -> dict[str, Any]:
     """Observability snapshot — the live grounding-coherence signal + shadow
     telemetry. Read-only, never raises. Safe to surface on a dashboard."""
@@ -539,6 +617,15 @@ def get_status(engine: Any | None = None) -> dict[str, Any]:
             "sources_available": bool(ctx.get("sources_available", False)),
             "grounded_stances_shadowed": _grounded_stances_shadowed,
             "reasoning_validation_stream": reasoning_stream_status(),
+            "thought_focus_proposal": {
+                "proposals_shadowed": _thought_focus_proposals,
+                "mapped_rate": (round(_thought_focus_mapped / _thought_focus_proposals, 3)
+                                if _thought_focus_proposals else 0.0),
+                "last": _last_thought_focus,
+                "authority": "shadow_observe_only",
+                "note": ("PROPOSAL only — the live existential category is still RANDOM (conduct_inquiry); "
+                         "not consumed by context.py; earns a live flip on reasoning-validation reps + operator A/B"),
+            },
         }
     except Exception:
         logger.debug("reasoning_encoder: get_status failed", exc_info=True)

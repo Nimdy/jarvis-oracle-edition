@@ -2078,6 +2078,19 @@ class ConsciousnessSystem:
                 event_bus.emit(EXISTENTIAL_INQUIRY_COMPLETED,
                               inquiry_id=getattr(inquiry, "id", ""),
                               category=getattr(inquiry, "category", ""))
+            # SHADOW thought-focus proposal (observe-only): what existential category JARVIS WOULD pick
+            # from its HOTTEST live belief-tension, vs the random conduct_inquiry above. Logged + counted
+            # for an offline operator A/B; NEVER fed into conduct_inquiry (the live focus stays random
+            # until a future earned step). The grounding-coherence encoder finally informs thought-focus.
+            try:
+                from hemisphere.reasoning_encoder import (
+                    propose_grounded_thought_focus, note_thought_focus_proposal)
+                _prop = propose_grounded_thought_focus()
+                if _prop:
+                    note_thought_focus_proposal(
+                        _prop, random_category=getattr(inquiry, "category", "") if inquiry else "")
+            except Exception:
+                logger.debug("thought-focus shadow proposal skipped", exc_info=True)
         except Exception:
             logger.debug("Existential cycle error", exc_info=True)
 

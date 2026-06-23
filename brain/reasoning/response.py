@@ -524,6 +524,26 @@ class ResponseGenerator:
             style_instruction=style_instruction,
             tool_hint=tool_hint,
         )
+        # SHADOW soul_dims->voice wire: compute the GROWN-dial prompt variant BESIDE the live flat-names
+        # prompt and log BOTH for an operator A/B. The model still receives ONLY `system_prompt` above —
+        # nothing the user hears changes. A live flip is a SEPARATE future step gated on operator review.
+        try:
+            import json as _json, os as _os, time as _time
+            from consciousness.soul import soul_service
+            from reasoning.context import build_dial_trait_block
+            _dims = dict(getattr(soul_service.identity, "semi_stable_traits", {}) or {})
+            _dial_block = build_dial_trait_block(_dims)
+            if _dial_block:
+                _rec = {"ts": _time.time(), "conversation_id": conversation_id or "",
+                        "flat_traits": list(modulation.applied_traits),
+                        "dial_block": _dial_block, "soul_dims": _dims,
+                        "authority": "shadow_observe_only", "sent_to_model": False}
+                _p = _os.path.join(_os.path.expanduser("~"), ".jarvis", "soul_voice_shadow.jsonl")
+                _os.makedirs(_os.path.dirname(_p), exist_ok=True)
+                with open(_p, "a", encoding="utf-8") as _f:
+                    _f.write(_json.dumps(_rec, default=str) + "\n")
+        except Exception:
+            logger.debug("soul-voice shadow log skipped", exc_info=True)
         from reasoning.context import get_resolved_chunks
         resolved = get_resolved_chunks(conversation_id or "")
         if (resolved or surfaced_chunk_ids) and conversation_id:
