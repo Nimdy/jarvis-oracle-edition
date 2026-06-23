@@ -1936,28 +1936,6 @@ def _store_personal_memory(
 from consciousness.soul import _preference_key  # normalized relationship-preference key (soul owns it)
 
 
-def _concise_voice_reply(text: str, max_sentences: int = 3, max_chars: int = 340) -> str:
-    """Trim a bounded self-report to a CONCISE spoken answer. The introspection articulator weaves the
-    full self-view (up to 8 sentences / 600 chars) — too long for voice (operator: "that was bad,
-    summarize"; a one-number question got a 32-second answer). Keep WHOLE sentences (the lead + most-
-    relevant facts come first), never a mid-sentence cut. Scoped to the voice introspection path; the
-    shared articulator is unchanged. If they want more, they ask a follow-up."""
-    if not text:
-        return text
-    import re as _re
-    parts = [p for p in _re.split(r"(?<=[.!?])\s+", text.strip()) if p]
-    out: list[str] = []
-    n = 0
-    for p in parts:
-        if len(out) >= max_sentences:
-            break
-        if out and n + len(p) > max_chars:
-            break
-        out.append(p)
-        n += len(p) + 1
-    return " ".join(out).strip() or text[:max_chars]
-
-
 def _update_relationship(speaker: str, payload: str, category: str) -> None:
     """Write personal facts and interests to the Relationship record in soul."""
     if not speaker or speaker == "unknown":
@@ -3939,11 +3917,6 @@ async def handle_transcription(
                         preferred_categories=_preferred_fact_categories or None,
                     )
                     fallback_reply = articulate_meaning_frame(_intro_frame)
-                    # Voice answers must be CONCISE + scoped to the question (operator feedback:
-                    # "summarize" — a one-number question was returning a 32-second, 8-sentence dump of
-                    # all self-view sections). Trim to the lead + the most-relevant facts. This feeds
-                    # BOTH the pre-LLM bounded path (high-confidence factual Qs) and the LLM-miss fallback.
-                    fallback_reply = _concise_voice_reply(fallback_reply)
                     _shadow_language_compare(
                         conversation_id,
                         introspection_query,
