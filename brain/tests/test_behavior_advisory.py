@@ -104,6 +104,24 @@ class TestBehaviorAdvisory:
         assert any("person-aware" in b for b in pr["blocking"])
         assert pr["min_person_aware_fraction"] == ba._P3P4_MIN_PERSON_AWARE_FRACTION
 
+    def test_warm_read_quarantined_from_p3p4_gate(self, engine):
+        # A purely-warm read (positive + engaged + follow_up, NO corrective signal) produces a
+        # positive-axis advisory WITHOUT touching the corrective P3->P4 counters — else warmth would
+        # self-light the gate we just hardened.
+        from consciousness.situational_read import SituationalRead
+        import time as _t
+        warm = SituationalRead(
+            timestamp=_t.time(), speaker="David", engagement="engaged", user_sentiment="positive",
+            self_check="reply length proportionate", confidence=0.7, evidence=[], salience=0.0,
+            salience_tripped=False, would_have_done=None, warmth_noted=True,
+            warm_would_have_done="lean into rapport", humor_attempted=True)
+        adv = engine.propose(warm, None)
+        assert adv is not None                       # warm read now fires (was corrective-only)
+        assert engine._total == 0 and engine._person_aware == 0       # P3->P4 gate UNTOUCHED
+        assert engine._positive_total == 1                            # counted on the positive axis
+        assert engine.get_status()["positive_axis"]["advisories"] == 1
+        assert engine.get_status()["promotion_readiness"]["advisories_emitted"] == 0
+
     # ── brevity axis (uncages corroboration for a steady/engaged companion) ──
     def _oe_read(self):
         # over-explain on a steady/engaged turn — the case that was previously un-corroborable

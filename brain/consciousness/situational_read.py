@@ -75,6 +75,10 @@ class SituationalRead:
     salience: float              # 0..1 — how notable this moment is
     salience_tripped: bool       # would the gate have opened?
     would_have_done: "str | None"  # the action it WOULD take, if allowed (logged, not taken)
+    # ── positive / warmth axis (SHADOW) — so the read is NOT corrective-only ──
+    warmth_noted: bool = False              # a well-LANDED exchange (positive + engaged + follow-up)
+    warm_would_have_done: "str | None" = None
+    humor_attempted: bool = False           # structural tag: JARVIS's own turn looked playful (evidence only)
     authority: str = "shadow_logged_only"
 
     def to_dict(self) -> dict[str, Any]:
@@ -89,6 +93,9 @@ class SituationalRead:
             "salience": round(self.salience, 3),
             "salience_tripped": self.salience_tripped,
             "would_have_done": self.would_have_done,
+            "warmth_noted": self.warmth_noted,
+            "warm_would_have_done": self.warm_would_have_done,
+            "humor_attempted": self.humor_attempted,
             "authority": self.authority,
         }
 
@@ -105,12 +112,24 @@ class SituationalRead:
             salience=float(d.get("salience", 0.0) or 0.0),
             salience_tripped=bool(d.get("salience_tripped", False)),
             would_have_done=d.get("would_have_done"),
+            warmth_noted=bool(d.get("warmth_noted", False)),
+            warm_would_have_done=d.get("warm_would_have_done"),
+            humor_attempted=bool(d.get("humor_attempted", False)),
             authority=d.get("authority", "shadow_logged_only"),
         )
 
 
 def _word_count(text: str) -> int:
     return len((text or "").split())
+
+
+def _looks_playful(text: str) -> bool:
+    """Coarse STRUCTURAL tag: did JARVIS's OWN turn look playful? Evidence only — asserts nothing.
+    Deliberately conservative (few false positives); a real banter-tone signal can replace it later."""
+    if not text:
+        return False
+    low = text.lower()
+    return any(m in low for m in ("haha", "lol", ";)", ":)", "😄", "😉", "😂", "just kidding", "teasing"))
 
 
 class SituationalReadEngine:
@@ -286,6 +305,19 @@ class SituationalReadEngine:
             elif slow_turn:
                 would = "would consider acknowledging the delay"
 
+        # ── POSITIVE / warmth axis (SHADOW): a well-LANDED exchange (positive + engaged + follow-up),
+        # so the read STOPS being corrective-only. It does NOT raise `salience` above — kept OFF the
+        # corrective gate so it never dominates a withdraw/disengage read; behavior_advisory counts it
+        # on a SEPARATE positive axis. humor_attempted is a structural tag from JARVIS's OWN turn.
+        warmth_noted = bool(sentiment == "positive" and engagement == "engaged" and follow_up)
+        warm_would = ("would consider mirroring the warmth / leaning into the rapport"
+                      if warmth_noted else None)
+        humor_attempted = _looks_playful(response_text)
+        if warmth_noted:
+            evidence.append(["warmth_landed", True])
+        if humor_attempted:
+            evidence.append(["humor_attempted", True])
+
         return SituationalRead(
             timestamp=time.time(),
             speaker=speaker,
@@ -297,6 +329,9 @@ class SituationalReadEngine:
             salience=salience,
             salience_tripped=tripped,
             would_have_done=would,
+            warmth_noted=warmth_noted,
+            warm_would_have_done=warm_would,
+            humor_attempted=humor_attempted,
         )
 
     def get_recent(self, n: int = 10) -> list:

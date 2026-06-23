@@ -109,8 +109,12 @@ class BehaviorAdvisoryEngine:
 
     def __init__(self) -> None:
         self._recent: deque = deque(maxlen=50)
-        self._total = 0           # advisories emitted (salience tripped)
+        self._total = 0           # corrective advisories emitted (salience tripped) — feeds the P3->P4 gate
         self._person_aware = 0    # of those, how many drew on the learned person-model
+        # SEPARATE positive/warmth axis — QUARANTINED from the corrective P3->P4 gate so warm reads can
+        # never light "ready" off self-graded warmth. Earns its own way via operator transcript review.
+        self._positive_total = 0
+        self._positive_person_aware = 0
         self._load()
 
     def _save(self) -> None:
@@ -119,6 +123,8 @@ class BehaviorAdvisoryEngine:
             data = {
                 "total": self._total,
                 "person_aware": self._person_aware,
+                "positive_total": self._positive_total,
+                "positive_person_aware": self._positive_person_aware,
                 "recent": [a.to_dict() for a in self._recent],
             }
             tmp = _STATE_PATH + ".tmp"
@@ -134,6 +140,8 @@ class BehaviorAdvisoryEngine:
                 data = json.load(f)
             self._total = int(data.get("total", 0))
             self._person_aware = int(data.get("person_aware", 0))
+            self._positive_total = int(data.get("positive_total", 0))
+            self._positive_person_aware = int(data.get("positive_person_aware", 0))
             for a in data.get("recent", []):
                 self._recent.append(BehaviorAdvisory.from_dict(a))
         except FileNotFoundError:
@@ -150,15 +158,29 @@ class BehaviorAdvisoryEngine:
         advisory, the anti-chatterbox spine). Never raises, never acts.
         """
         try:
-            if read is None or not getattr(read, "salience_tripped", False):
+            if read is None:
+                return None
+            tripped = bool(getattr(read, "salience_tripped", False))   # corrective gate
+            warm = bool(getattr(read, "warmth_noted", False))          # positive/warmth axis
+            if not (tripped or warm):
                 return None
             advisory = self._build(read, person_model)
         except Exception:
             return None
         self._recent.append(advisory)
-        self._total += 1
-        if any(s.get("person_aware") for s in advisory.suggestions):
-            self._person_aware += 1
+        # Count by AXIS so the positive/warmth axis is QUARANTINED from the corrective P3->P4 gate
+        # (a suggestion without an explicit axis is corrective; only the warm one is "positive").
+        sugg = advisory.suggestions or []
+        corrective = [s for s in sugg if s.get("axis") != "positive"]
+        positive = [s for s in sugg if s.get("axis") == "positive"]
+        if corrective:
+            self._total += 1
+            if any(s.get("person_aware") for s in corrective):
+                self._person_aware += 1
+        if positive:
+            self._positive_total += 1
+            if any(s.get("person_aware") for s in positive):
+                self._positive_person_aware += 1
         self._save()
         return advisory
 
@@ -258,6 +280,25 @@ class BehaviorAdvisoryEngine:
                 "person_aware": False,
             })
 
+        # ── POSITIVE / warmth suggestion (SHADOW, SEPARATE axis) — so the read is not corrective-only.
+        # axis="positive" QUARANTINES it from the P3->P4 corrective gate (counted separately in observe).
+        # person_aware ONLY when the LEARNED humor_reception corroborates (earns over time; forming now).
+        if getattr(read, "warmth_noted", False):
+            humor_rec = str(getattr(pm, "humor_reception", "") or "")
+            humor_conf = float(getattr(pm, "humor_confidence", 0.0) or 0.0)
+            warmth_corr = (humor_rec == "lands well" and humor_conf >= _PERSON_AWARE_DISPOSITION_FLOOR)
+            humor_boost = min(_PERSON_AWARE_MAX_BOOST, round(humor_conf * 0.3, 3))
+            warm_conf = base_conf + (humor_boost if warmth_corr else 0.0)
+            suggestions.append({
+                "adjustment": "lean_into_warmth",
+                "narration": (getattr(read, "warm_would_have_done", None)
+                              or "would consider leaning into the rapport"),
+                "reason": self._reason("a well-landed, warm exchange", warmth_corr, humor_rec),
+                "confidence": round(max(0.0, min(1.0, warm_conf)), 3),
+                "person_aware": warmth_corr,
+                "axis": "positive",
+            })
+
         suggestions.sort(key=lambda s: s["confidence"], reverse=True)
         primary = suggestions[0]["narration"] if suggestions else None
 
@@ -320,6 +361,12 @@ class BehaviorAdvisoryEngine:
             "applies_suggestions": False,
             "advisories_emitted": self._total,
             "person_aware_count": self._person_aware,
+            "positive_axis": {
+                "advisories": self._positive_total,
+                "person_aware": self._positive_person_aware,
+                "note": ("warmth/humor reads — SEPARATE from the corrective P3->P4 gate (never lights it); "
+                         "earns via operator transcript review, never self-scored"),
+            },
             "last": last,
             "promotion_readiness": self._promotion_readiness(),
         }

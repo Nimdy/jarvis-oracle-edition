@@ -78,6 +78,14 @@ _REACTION_ENG = {"engaged": 1.0, "neutral": 0.0, "disengaging": -1.0, "unknown":
 _REACTION_SENT = {"positive": 1.0, "neutral": 0.0, "negative": -1.0}
 
 
+# ── humor_reception axis (a 3rd LEARNED disposition: did JARVIS's humor LAND?) ───────────────
+# Cross-turn, within-person contrast: the person's reaction on the turn AFTER a humor attempt vs their
+# own baseline. EARNED, sample-gated, HYPOTHESIS-only, authority shadow_logged_only, never identity.
+_HUMOR_MIN_SAMPLES = 4           # post-humor reactions before a humor_reception hypothesis forms
+_HUMOR_CONTRAST_FLOOR = 0.4      # post-humor reaction minus baseline to call it landing / falling flat
+_HUMOR_FULL_CONF_SAMPLES = 10
+
+
 def _reaction_score(engagement: str, sentiment: str) -> float:
     """Coarse [-2..+2] read of how the person received an exchange (engagement+sentiment)."""
     return _REACTION_ENG.get(engagement, 0.0) + _REACTION_SENT.get(sentiment, 0.0)
@@ -103,6 +111,12 @@ class PersonModel:
     _oe_reaction_sum: float = 0.0             # summed reaction on those turns
     _all_count: int = 0                       # all turns (the baseline)
     _all_reaction_sum: float = 0.0            # summed reaction over all turns
+    # humor_reception axis (3rd learned disposition — earned from post-humor reactions, cross-turn)
+    humor_reception: str = "forming — not enough reads yet"
+    humor_confidence: float = 0.0
+    _humor_post_count: int = 0                # turns observed AFTER a humor attempt
+    _humor_post_reaction_sum: float = 0.0     # summed reaction on those post-humor turns
+    _last_humor_attempted: bool = False       # did the PREVIOUS turn attempt humor? (cross-turn carry)
     last_updated: float = 0.0
     _eng_counts: dict = field(default_factory=dict)
     _sent_counts: dict = field(default_factory=dict)
@@ -120,6 +134,8 @@ class PersonModel:
             "consistency": round(self.consistency, 3),
             "verbosity_pref": self.verbosity_pref,
             "verbosity_confidence": round(self.verbosity_confidence, 3),
+            "humor_reception": self.humor_reception,
+            "humor_confidence": round(self.humor_confidence, 3),
             "last_updated": self.last_updated,
             "hypothesis": True,
             "authority": "shadow_logged_only",
@@ -171,6 +187,11 @@ class TheoryOfMindEngine:
                     "_oe_reaction_sum": pm._oe_reaction_sum,
                     "_all_count": pm._all_count,
                     "_all_reaction_sum": pm._all_reaction_sum,
+                    "humor_reception": pm.humor_reception,
+                    "humor_confidence": pm.humor_confidence,
+                    "_humor_post_count": pm._humor_post_count,
+                    "_humor_post_reaction_sum": pm._humor_post_reaction_sum,
+                    "_last_humor_attempted": pm._last_humor_attempted,
                     "last_updated": pm.last_updated,
                     "recent": [list(t) for t in pm._recent],
                 }
@@ -201,6 +222,11 @@ class TheoryOfMindEngine:
                 pm._oe_reaction_sum = float(s.get("_oe_reaction_sum", 0.0) or 0.0)
                 pm._all_count = int(s.get("_all_count", 0) or 0)
                 pm._all_reaction_sum = float(s.get("_all_reaction_sum", 0.0) or 0.0)
+                pm.humor_reception = s.get("humor_reception", pm.humor_reception)
+                pm.humor_confidence = float(s.get("humor_confidence", 0.0) or 0.0)
+                pm._humor_post_count = int(s.get("_humor_post_count", 0) or 0)
+                pm._humor_post_reaction_sum = float(s.get("_humor_post_reaction_sum", 0.0) or 0.0)
+                pm._last_humor_attempted = bool(s.get("_last_humor_attempted", False))
                 pm.last_updated = float(s.get("last_updated", 0.0) or 0.0)
                 for item in (s.get("recent") or []):
                     try:
@@ -225,12 +251,14 @@ class TheoryOfMindEngine:
             conf = float(getattr(read, "confidence", 0.0) or 0.0)
             self_check = str(getattr(read, "self_check", "") or "")
             overexplain = bool(self_check) and self_check != "reply length proportionate"
-            return self._update(name, eng, sent, conf, overexplain)
+            humor_attempted = bool(getattr(read, "humor_attempted", False))
+            return self._update(name, eng, sent, conf, overexplain, humor_attempted)
         except Exception:
             return None
 
     def _update(self, name: str, engagement: str, sentiment: str,
-                read_confidence: float, overexplain: bool = False) -> PersonModel:
+                read_confidence: float, overexplain: bool = False,
+                humor_attempted: bool = False) -> PersonModel:
         pm = self._people.get(name)
         if pm is None:
             pm = PersonModel(name=name)
@@ -300,6 +328,31 @@ class TheoryOfMindEngine:
         else:
             pm.verbosity_pref = "forming — not enough over-explained reads yet"
             pm.verbosity_confidence = 0.0
+
+        # ── humor_reception axis (did JARVIS's humor LAND?) — cross-turn within-person contrast ──
+        # THIS turn's reaction (r) scores whether the PREVIOUS turn's humor attempt landed. Reuses the
+        # baseline (_all_*) above. EARNED, sample-gated, HYPOTHESIS-only, never persisted to identity.
+        if pm._last_humor_attempted:
+            pm._humor_post_count += 1
+            pm._humor_post_reaction_sum += r
+        pm._last_humor_attempted = bool(humor_attempted)
+        if pm._humor_post_count >= _HUMOR_MIN_SAMPLES:
+            post_mean = pm._humor_post_reaction_sum / pm._humor_post_count
+            baseline = (pm._all_reaction_sum / pm._all_count) if pm._all_count else 0.0
+            contrast = post_mean - baseline   # > 0 => reacts BETTER after humor (it lands)
+            ramp = min(1.0, pm._humor_post_count / _HUMOR_FULL_CONF_SAMPLES)
+            if contrast >= _HUMOR_CONTRAST_FLOOR:
+                pm.humor_reception = "lands well"
+                pm.humor_confidence = round(min(1.0, contrast / 2.0) * ramp, 3)
+            elif contrast <= -_HUMOR_CONTRAST_FLOOR:
+                pm.humor_reception = "tends to fall flat"
+                pm.humor_confidence = round(min(1.0, -contrast / 2.0) * ramp, 3)
+            else:
+                pm.humor_reception = "neutral / unclear"
+                pm.humor_confidence = 0.0
+        else:
+            pm.humor_reception = "forming — not enough humor reads yet"
+            pm.humor_confidence = 0.0
 
         self._save()
         return pm
