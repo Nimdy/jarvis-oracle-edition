@@ -130,6 +130,14 @@ class SelfSensingLoop:
         # 3) PREDICT the next frame from [position, velocity]
         feats = self._features(vec, self._prev_vec)
         delta_hat = (feats @ self._W) if self._W is not None else np.zeros(N_SECTORS)
+        # MOTION GATE: predict a delta ONLY where the sector ACTUALLY moved (|velocity| above the 2cm lidar
+        # noise floor, DYNAMIC_THRESH_M); tie persistence (delta=0) on still sectors. Without this, the global
+        # ridge's position term hallucinates range-proportional motion on still frames — the "static tax" that
+        # made the predictor WORSE than the trivial baseline on a mostly-still room (and dragged the pooled
+        # headline negative). The dynamic-frame growth signal is unaffected: it only ever scored moving sectors.
+        if self._prev_vec is not None:
+            still = np.abs(vec - self._prev_vec) < DYNAMIC_THRESH_M
+            delta_hat = np.where(still, 0.0, delta_hat)
         self._pending = {"pred": vec + delta_hat, "feats": feats, "base": vec, "t": t}
         self._prev_vec = vec
 
@@ -278,6 +286,10 @@ class SelfSensingLoop:
             "dynamic_fraction": round(self._n_dynamic / scored, 3),
             "skill_vs_persistence": round(skill_all, 4) if skill_all is not None else None,
             "skill_vs_persistence_dynamic": round(skill_dyn, 4) if skill_dyn is not None else None,
+            # The DYNAMIC number is the honest growth signal (the only frames the engine ever claimed to
+            # learn). The overall pools the ~79% static frames where persistence is near-perfect, so it is
+            # noisy and was historically dragged negative by the now-gated phantom-motion tax — read dynamic.
+            "primary_growth_signal": "skill_vs_persistence_dynamic",
             "prediction_error_ema_m": round(self._err_ema, 4) if self._err_ema is not None else None,
             "persistence_error_ema_m": round(self._persist_ema, 4) if self._persist_ema is not None else None,
             "learning_progress": round(lp_val, 5),
