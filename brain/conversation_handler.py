@@ -2987,6 +2987,19 @@ async def handle_transcription(
             logger.info("[LATENCY] route_complete=%.0fms route=%s (conv=%s)",
                         _route_ms, routing.tool.value if routing else "?",
                         conversation_id[:8] if conversation_id else "?")
+            # Think-before-speak TBS-0 (SHADOW pre-speech read): read THIS user turn BEFORE the reply is
+            # generated and emit a stance — LOGGED only, injected into NOTHING (docs/THINK_BEFORE_SPEAK.md).
+            # Runs here (after route, before any respond_stream) so it precedes the reply; cheap, no LLM.
+            try:
+                from consciousness.think_before_speak import pre_speech_reader as _tbs
+                from consciousness.theory_of_mind import theory_of_mind_engine as _tbs_tom
+                from consciousness.affect_state import affect_state as _tbs_affect
+                _tbs.read_before_speak(
+                    speaker=speaker, user_text=text, user_emotion=emotion,
+                    person_model=_tbs_tom.get_model(speaker), affect=_tbs_affect.snapshot(),
+                )
+            except Exception:
+                logger.debug("think-before-speak TBS-0 pre-speech read failed (no-op)", exc_info=True)
             try:
                 if not routing.golden_context:
                     _strict_job_status_probe = get_grounded_learning_job_status_record(engine, text)

@@ -453,9 +453,33 @@
         })()+
         '<div class="note" style="margin:8px 0 4px"><b>Per-turn reads ↓</b></div>';
     }
+    // Think-before-speak TBS-0 (glass box): the PRE-speech read — fires IN TIME (before generation) but
+    // injects nothing yet. Shown beside the post-hoc read so the timing gap is visible.
+    var tbs=(cr.think_before_speak)||{}, tbsHtml='';
+    if(tbs.phase){
+      var dist=tbs.stance_distribution||{};
+      var distStr=Object.keys(dist).map(function(k){return esc(k)+' '+dist[k];}).join(' · ')||'—';
+      var last=tbs.last||{};
+      tbsHtml='<div class="note" style="margin:4px 0"><b>Think-before-speak (TBS-0 — SHADOW pre-speech read).</b> '+
+        'The read that fires <i>in time</i> — BEFORE she generates the reply — but '+
+        '<span style="color:var(--green)">injects nothing yet</span>. It computes a stance from the learned '+
+        'person-model; it earns prompt-injection (TBS-2) only by matching the post-hoc read + transcript review. '+
+        'docs/THINK_BEFORE_SPEAK.md</div>'+
+        '<div class="meta" style="margin-bottom:4px">'+
+        '<span class="lever" style="border-color:var(--green);color:var(--green)">injects_prompt: false</span>'+
+        '<span class="pill">'+(tbs.total_reads||0)+' pre-speech reads</span>'+
+        '<span class="pill">stances: '+distStr+'</span></div>';
+      if(last.stance){
+        tbsHtml+='<div class="q" style="border-left:3px solid var(--cyan);padding-left:8px">'+
+          '<div class="top"><span class="qt">last stance: '+esc(last.stance)+'</span>'+
+          '<span class="pill" style="margin-left:auto">conf '+f2(last.confidence)+'</span></div>'+
+          (last.would_inject?'<div class="meta"><span class="hint">would inject (TBS-2, not now): "'+esc(last.would_inject)+'"</span></div>':'')+'</div>';
+      }
+      tbsHtml+='<div class="note" style="margin:8px 0 4px"><b>Post-turn reads ↓ (fire too late to shape the reply)</b></div>';
+    }
     var rs=cr.recent||[];
-    if(!rs.length && !tomHtml){ el('sitread').innerHTML='<div class="hint">no exchanges read since restart — JARVIS logs an internal read after each conversation turn</div>'; return; }
-    el('sitread').innerHTML=tomHtml+rs.map(function(r){
+    if(!rs.length && !tomHtml && !tbsHtml){ el('sitread').innerHTML='<div class="hint">no exchanges read since restart — JARVIS logs an internal read after each conversation turn</div>'; return; }
+    el('sitread').innerHTML=tbsHtml+tomHtml+rs.map(function(r){
       var sal=num(r.salience), col=salColor(sal||0);
       var ev=(r.evidence||[]).map(function(e){ return esc(String(e[0]))+'='+esc(String(e[1])); }).join(' · ');
       return '<div class="q" style="border-left:3px solid '+col+';padding-left:8px">'+

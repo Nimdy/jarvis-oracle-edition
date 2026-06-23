@@ -1742,6 +1742,14 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
         except Exception:
             _cr["behavior_advisory"] = {}
         try:
+            # Think-before-speak TBS-0 (SHADOW PRE-speech read): the stance computed BEFORE generation,
+            # logged-only (injects_prompt=False). Sits beside the post-hoc read for glass-box comparison —
+            # the read that fires too LATE vs the one that fires in TIME (but injects nothing yet).
+            from consciousness.think_before_speak import pre_speech_reader as _tbs
+            _cr["think_before_speak"] = _tbs.get_status()
+        except Exception:
+            _cr["think_before_speak"] = {}
+        try:
             # Environmental memory-of-normal — the "be there for the room" half (shadow).
             from consciousness.environmental_normal import environmental_normal_engine as _env
             _cr["environmental_normal"] = _env.get_status()
