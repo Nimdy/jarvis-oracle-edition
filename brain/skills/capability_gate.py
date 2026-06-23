@@ -21,7 +21,9 @@ This is the cognitive immune system's first enforcement layer.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
 from collections import deque
 from typing import Any, TYPE_CHECKING
@@ -879,6 +881,12 @@ class CapabilityGate:
         self._confab_unbacked: int = 0
         self._confab_backed_mismatch: int = 0
         self._recent_confabulations: deque[dict[str, Any]] = deque(maxlen=30)
+        # LIFETIME confab track-record — persisted across restart, rebuilt on boot from
+        # ~/.jarvis/capability_gate_confab.jsonl (the spark/affect persistence-bug lesson). The
+        # _confab_* counters above stay per-SESSION; these survive reboots so the firewall's history
+        # is honest instead of zeroing every restart. DASHBOARD-ONLY — never read into a gate decision.
+        self._confab_lifetime: dict[str, int] = {}
+        self._confab_lifetime_total: int = 0
         self._learning_rewrites: int = 0
         self._self_state_rewrites: int = 0
         self._identity_name_stripped: int = 0
@@ -934,12 +942,66 @@ class CapabilityGate:
         if limit and len(recent) > limit:
             recent = recent[-limit:]
         return {
+            # per-SESSION (reset each boot)
             "backed_anthropomorphized": self._confab_backed_anthropomorphized,
             "unbacked": self._confab_unbacked,
             "backed_mismatch": self._confab_backed_mismatch,
             "affect_nickname_rewrites": self._affect_nickname_rewrites,
+            "session_total": (self._confab_backed_anthropomorphized + self._confab_unbacked
+                              + self._confab_backed_mismatch),
+            # LIFETIME (persisted across restart; dashboard-only, never gates a decision)
+            "lifetime": dict(self._confab_lifetime),
+            "lifetime_total": self._confab_lifetime_total,
             "recent": list(reversed(recent)),  # most-recent first
         }
+
+    @staticmethod
+    def _confab_log_path() -> str:
+        return os.path.join(os.path.expanduser("~"), ".jarvis", "capability_gate_confab.jsonl")
+
+    def _append_confab_log(self, record: dict[str, Any]) -> None:
+        """Append one confab record to the durable lifetime log. Fail-OPEN — NEVER raises (a write
+        failure must not break the firewall)."""
+        try:
+            path = self._confab_log_path()
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, default=str) + "\n")
+        except Exception:
+            logger.debug("capability_gate confab-log append failed (fail-open)", exc_info=True)
+
+    def load_persisted_counters(self) -> None:
+        """Boot-load the LIFETIME confab track-record from the durable log (fail-OPEN). Rebuilds the
+        per-classification lifetime totals + seeds the dashboard preview with the last 30 records so
+        the firewall's history survives restart instead of zeroing. DASHBOARD-ONLY — these counters are
+        NEVER read into a gate decision (gate logic reads _claims_blocked/_honesty_failures, untouched)."""
+        try:
+            path = self._confab_log_path()
+            if not os.path.exists(path):
+                return
+            lifetime: dict[str, int] = {}
+            total = 0
+            tail: deque[dict[str, Any]] = deque(maxlen=30)
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except Exception:
+                        continue
+                    cls = rec.get("classification") or "unknown"
+                    lifetime[cls] = lifetime.get(cls, 0) + 1
+                    total += 1
+                    tail.append(rec)
+            self._confab_lifetime = lifetime
+            self._confab_lifetime_total = total
+            if tail and not self._recent_confabulations:
+                self._recent_confabulations.extend(tail)
+            logger.info("capability_gate: loaded %d lifetime confab records from durable log", total)
+        except Exception:
+            logger.debug("capability_gate load_persisted_counters failed (fail-open)", exc_info=True)
 
     # ── Claim classifier teacher signal recording ─────────────────────────
 
@@ -1929,6 +1991,12 @@ class CapabilityGate:
             "real_signal_value": src_raw,
         }
         self._recent_confabulations.append(record)
+        # Durable lifetime track-record (DASHBOARD-ONLY; fail-OPEN — a write error must NEVER break
+        # gating). Read back by load_persisted_counters() on boot so the firewall's history survives.
+        _cls = record.get("classification") or "unknown"
+        self._confab_lifetime[_cls] = self._confab_lifetime.get(_cls, 0) + 1
+        self._confab_lifetime_total += 1
+        self._append_confab_log(record)
 
         try:
             from consciousness.attribution_ledger import attribution_ledger

@@ -230,10 +230,34 @@ class SelfSensingLoop:
 
     # -- telemetry (shadow, read-only) --------------------------------------
 
+    def _regime(self, skill_dyn: float | None, lp: float) -> tuple[str, str, int, bool]:
+        """Read-only LABEL over the existing numbers (authority unchanged): distinguish a quiet
+        world (STARVED — expected at a still desk, NOT a regression) from a genuine predictor
+        failure (FAILED). This exists because the +0.463 headline was a first-30-min reading;
+        live steady-state is volatile + event-bandwidth-gated. attention=True ONLY for FAILED."""
+        recent_dyn = sum(1 for _m, _p, d in self._recent if d)
+        floor = max(5, SKILL_WINDOW // 10)
+        if self._W is None or self._n_scored < SKILL_WINDOW // 4:
+            return "WARMING", "predictor not yet fitted / too few scored frames", recent_dyn, False
+        if skill_dyn is None or recent_dyn < floor:
+            return ("STARVED", "quiet world: only %d dynamic frames in the recent window — too few "
+                    "to score skill (expected at a still desk, NOT a regression)" % recent_dyn,
+                    recent_dyn, False)
+        if skill_dyn < -0.05:
+            return ("FAILED", "predictor below persistence on moving frames (skill_dyn %.3f, %d recent "
+                    "dynamic frames) — genuinely worse than 'no change'" % (skill_dyn, recent_dyn),
+                    recent_dyn, True)
+        if skill_dyn > 0.05 and lp >= 0:
+            return "EARNING", "beating persistence on moving frames + still learning", recent_dyn, False
+        return ("STARVED", "marginal: skill_dyn %.3f near zero / LP %.3f — signal thin, not failing"
+                % (skill_dyn, lp), recent_dyn, False)
+
     def get_status(self) -> dict[str, Any]:
         scored = max(1, self._n_scored)
         skill_all = self._skill(False)
         skill_dyn = self._skill(True)
+        lp_val = self._learning_progress()
+        regime, regime_reason, event_bw, attention = self._regime(skill_dyn, lp_val)
         ps_skill, ps_lp, ps_act = self._per_sector()
         ja = int(np.argmax(ps_act)) if float(ps_act.max()) > 1e-9 else None
         most_active = None
@@ -256,7 +280,17 @@ class SelfSensingLoop:
             "skill_vs_persistence_dynamic": round(skill_dyn, 4) if skill_dyn is not None else None,
             "prediction_error_ema_m": round(self._err_ema, 4) if self._err_ema is not None else None,
             "persistence_error_ema_m": round(self._persist_ema, 4) if self._persist_ema is not None else None,
-            "learning_progress": round(self._learning_progress(), 5),
+            "learning_progress": round(lp_val, 5),
+            # interpretive regime label (read-only; authority unchanged) so a quiet desk reads
+            # as STARVED (expected) not FAILED — the honest steady-state the +0.463 headline missed.
+            "health": {
+                "regime": regime,
+                "reason": regime_reason,
+                "attention": attention,   # True ONLY for FAILED; STARVED/WARMING are not regressions
+                "event_bandwidth_recent": event_bw,
+                "note": "label over the numbers above; STARVED=quiet world (expected), "
+                        "FAILED=predictor worse than persistence on moving frames",
+            },
             "predictor": {
                 "fitted": self._W is not None,
                 "train_samples": len(self._buf),

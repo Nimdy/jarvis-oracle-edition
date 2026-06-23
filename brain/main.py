@@ -604,6 +604,7 @@ async def main() -> None:
         _job_store = LearningJobStore()
         _learning_job_orch = LearningJobOrchestrator(store=_job_store, registry=skill_registry)
         capability_gate.set_orchestrator(_learning_job_orch)
+        capability_gate.load_persisted_counters()  # boot-load the durable confab track-record (dashboard-only)
         engine.enable_learning_jobs(_learning_job_orch)
 
         try:

@@ -41,6 +41,12 @@ _STATE_PATH = os.path.join(_STATE_DIR, "companion_behavior_advisory.json")
 # considered. A STRUCTURAL proxy only — the true correctness gate (did the
 # suggestion match what actually helped?) is EARNED via companion feedback.
 _P3P4_MIN_ADVISORIES = 40
+# Minimum-credibility FLOOR (NOT a target, §24): the P3->P4 structural proxy must not read
+# "ready" on the advisory COUNT alone. Person-aware corroboration (the learned person-model
+# actually informed the suggestion) has to be exercised, else 0/N advisories that learned
+# nothing about the companion would falsely light the gate. Earns up organically as the
+# person-model paths trip; never tuned.
+_P3P4_MIN_PERSON_AWARE_FRACTION = 0.25
 
 # Disposition confidence floor before the learned person-model is allowed to
 # corroborate (raise confidence on) a live suggestion. Below this the ToM model
@@ -282,17 +288,26 @@ class BehaviorAdvisoryEngine:
         total = self._total
         enough = total >= _P3P4_MIN_ADVISORIES
         pa_frac = (self._person_aware / total) if total else 0.0
+        pa_ok = pa_frac >= _P3P4_MIN_PERSON_AWARE_FRACTION
         blocking = []
         if not enough:
             blocking.append("need %d advisories (have %d)" % (_P3P4_MIN_ADVISORIES, total))
+        if total and not pa_ok:
+            blocking.append(
+                "person-aware fraction %.2f below %.2f (%d/%d advisories corroborated by the "
+                "learned person-model)" % (pa_frac, _P3P4_MIN_PERSON_AWARE_FRACTION,
+                                           self._person_aware, total))
         return {
             "gate": "P3->P4",
             "would_promote_to": "P4_behavior_active",
-            "structural_ready": bool(enough),
+            # BOTH the count AND person-aware corroboration must be exercised — a count-only
+            # proxy would declare-ready off advisories that never learned anything actionable.
+            "structural_ready": bool(enough and pa_ok),
             "note": "structural proxy only; true correctness is EARNED via companion feedback, never coded",
             "advisories_emitted": total,
             "person_aware_fraction": round(pa_frac, 3),
             "min_advisories": _P3P4_MIN_ADVISORIES,
+            "min_person_aware_fraction": _P3P4_MIN_PERSON_AWARE_FRACTION,
             "blocking": blocking,
         }
 

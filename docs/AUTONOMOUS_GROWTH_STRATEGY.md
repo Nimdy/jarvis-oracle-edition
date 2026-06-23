@@ -75,14 +75,22 @@ static). (2) +26%/+46% is a FLOOR — simple model, coarse 1.5s cadence, one mot
 quiet desk, richer in an active environment. The recommended build (below, #3) is therefore
 CONFIRMED: the self-sensing learning-progress loop is the real autonomous-growth engine.
 
-**LIVE CONFIRMED (2026-06-21, commit 5d0f5aa):** the shadow loop was built and is now
-earning end-to-end in the wild. After ~30 min in shadow: 906 scored frames,
-`skill_vs_persistence_dynamic` **+0.463** (matches the +0.445 offline validation),
-`learning_progress` **+0.079** (skill still rising), `beating_persistence` **true**,
-dynamic_fraction 0.33 — all at **authority=none**, 0 errors, state persisted. The negative
-control holds (fed static input it reports no signal). This is the first non-operator,
-self-supervised learning signal JARVIS provably earns from its own senses. Phase 2 (next):
-a /v2 panel + letting the learning-progress signal target curiosity — still shadow until earned.
+**LIVE (built + earning, commit 5d0f5aa) — calibrated honestly 2026-06-22:** the shadow loop
+runs end-to-end in the wild at **authority=none**, 0 errors, state persisted, negative control
+holding (fed static input it reports no signal). It is the first non-operator, self-supervised
+learning signal JARVIS provably earns from its own senses.
+
+> ⚠️ **The +0.463 was a FIRST-30-MIN reading, NOT steady state.** Per the SPARSE / event-bandwidth
+> caveat above (:73-75), the live signal is **volatile** and gated on how much the world is moving.
+> A 24-agent live audit (2026-06-22, ~38k obs) observed it swing across `skill_vs_persistence_dynamic`
+> **+0.46 / +0.37 / +0.01 / −0.46** and `learning_progress` **+0.08 / −0.10 / +0.01 / −0.46**, with
+> `beating_persistence` flipping true↔false **purely with desk activity** (dynamic_fraction ~0.19–0.33).
+> At a quiet desk this is **STARVED, not FAILED** — by design, not a regression. The honest claim is
+> "autonomous growth is **physically possible here** and currently beats persistence when the world
+> moves," NOT a stable +0.463. The new read-only `health.regime` field (self_sensing.get_status:
+> WARMING / STARVED / FAILED / EARNING, `attention=True` only for FAILED) makes this legible on /v2 so
+> the live verdict is watched — never tuned green (§24). Phase 2 (next): let learning-progress target
+> curiosity — still shadow, and only after an externally-attributed downstream win earns it.
 
 ## Revised recommendations (given the FAIL)
 1. **STOP investing in the policy NN as-is** — no critic, no Part B, no more training

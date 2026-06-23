@@ -14,15 +14,24 @@ from jarvis_eval.dashboard_adapter import _build_scoreboard, build_dashboard_sna
 from jarvis_eval.config import SCOREBOARD_MIN_SAMPLES, SCOREBOARD_MIN_CATEGORIES, COMPOSITE_ENABLED
 
 
-def _score(cat, score, n):
-    return {"category": cat, "score": score, "sample_size": n}
+# comparator -> epistemic class gates the composite (>=1 world_judged required before it enables)
+_WORLD = "world_model_causal.predictive_accuracy_live"   # world_judged
+_SELF = "pvl.process_contracts"                          # self_verified
+
+
+def _score(cat, score, n, comparator=None):
+    e = {"category": cat, "score": score, "sample_size": n}
+    if comparator:
+        e["raw_metrics"] = {"comparator": comparator}
+    return e
 
 
 def _two_measured():
-    # Two genuine comparators past the sample floor + one still accumulating.
+    # epistemic_integrity is WORLD-JUDGED (satisfies the >=1 world_judged gate); self_report_honesty
+    # is self_verified (real PVL comparator); capability below floor.
     return [
-        _score("epistemic_integrity", 0.83, SCOREBOARD_MIN_SAMPLES + 1),
-        _score("self_report_honesty", 0.77, 108),
+        _score("epistemic_integrity", 0.83, SCOREBOARD_MIN_SAMPLES + 1, _WORLD),
+        _score("self_report_honesty", 0.77, 108, _SELF),
         _score("capability", 1.0, 1),  # below floor -> not measured
     ]
 
@@ -55,10 +64,28 @@ class TestBuildScoreboard:
 
     def test_composite_is_mean_of_measured(self):
         sb = _build_scoreboard([
-            _score("epistemic_integrity", 0.80, 10),
-            _score("self_report_honesty", 0.90, 10),
+            _score("epistemic_integrity", 0.80, 10, _WORLD),
+            _score("self_report_honesty", 0.90, 10, _SELF),
         ])
         assert sb["composite"] == 0.85
+
+    def test_self_verified_only_stays_disabled(self):
+        # Two MEASURED categories but BOTH self_verified -> composite must NOT enable (no world judge).
+        sb = _build_scoreboard([
+            _score("self_report_honesty", 0.90, 10, _SELF),
+            _score("capability", 0.80, 10, _SELF),
+        ])
+        assert sb["composite_enabled"] is False
+        assert sb["coverage"]["world_judged_measured"] == 0
+
+    def test_unknown_comparator_fails_closed(self):
+        # A measured category with no/unknown comparator is NOT counted world_judged.
+        sb = _build_scoreboard([
+            _score("epistemic_integrity", 0.80, 10),          # no comparator -> unknown
+            _score("self_report_honesty", 0.90, 10, _SELF),
+        ])
+        assert sb["coverage"]["world_judged_measured"] == 0
+        assert sb["composite_enabled"] is False
 
 
 class TestBannerRouting:

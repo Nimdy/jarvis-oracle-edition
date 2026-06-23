@@ -94,6 +94,16 @@ class TestBehaviorAdvisory:
         assert pr["structural_ready"] is False          # fresh -> not enough advisories
         assert "EARNED" in pr["note"]
 
+    def test_promotion_readiness_requires_person_aware(self, engine):
+        # Enough advisories but ZERO person-aware (the live 0/155 case) -> still NOT ready. The raw
+        # count must not light the gate; the learned person-model has to have actually informed them.
+        engine._total = ba._P3P4_MIN_ADVISORIES + 120
+        engine._person_aware = 0
+        pr = engine.get_status()["promotion_readiness"]
+        assert pr["structural_ready"] is False
+        assert any("person-aware" in b for b in pr["blocking"])
+        assert pr["min_person_aware_fraction"] == ba._P3P4_MIN_PERSON_AWARE_FRACTION
+
     # ── brevity axis (uncages corroboration for a steady/engaged companion) ──
     def _oe_read(self):
         # over-explain on a steady/engaged turn — the case that was previously un-corroborable

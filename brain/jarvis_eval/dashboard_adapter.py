@@ -321,7 +321,14 @@ def build_dashboard_snapshot(
         "maturity_tracker": maturity_tracker,
         "validation_pack": validation_pack,
         "scorecards": scorecards,
-        "self_report_honesty": {"status": "awaiting_scenario_data", "phase": "B"},
+        # Honest: the live self_report_honesty signal is the PVL process-contracts comparator
+        # (self_verified) carried in the scoreboard bar — NOT a never-built external scenario score.
+        # The old "awaiting_scenario_data" placeholder was the actual lie; the bar is the truth.
+        "self_report_honesty": {"status": "measured_self_verified", "phase": "B",
+                                "epistemic_class": "self_verified",
+                                "note": "live signal = PVL process-contracts (self_verified) in the "
+                                        "scoreboard; external scenario scorer not built; composite no "
+                                        "longer enables on self_verified alone"},
         "emotional_independence": {"status": "not_instrumented", "phase": "B"},
         "scoreboard": scoreboard,
         "oracle_benchmark": oracle_benchmark,
@@ -988,26 +995,45 @@ def _build_scoreboard(scores: list[dict[str, Any]]) -> dict[str, Any]:
     # external/ground-truth samples; the composite only enables once enough categories
     # are really measured. Categories without a real comparator stay visibly empty.
     # Coverage is always reported — the Observer never paints a self-grade as a measurement.
+    # Epistemic class of each comparator (auditable in one place). world_judged = external reality
+    # judged it (world-model prediction vs actual outcome; skill behavioral verification).
+    # self_verified = JARVIS checked its OWN event stream (PVL process contracts) — genuinely better
+    # than a self-GRADE, but NOT an external measurement. Unknown FAILS CLOSED (never world_judged).
+    # The composite must not enable on self_verified/derived categories alone, so the flagship honesty
+    # number can never rest solely on JARVIS certifying itself.
+    COMPARATOR_EPISTEMIC_CLASS = {
+        "world_model_causal.predictive_accuracy_live": "world_judged",
+        "skill_registry.behavioral_verification": "world_judged",
+        "pvl.process_contracts": "self_verified",
+    }
     bars = []
     measured = 0
+    world_judged_measured = 0
     composite_sum = 0.0
     for cat in categories:
         entry = latest.get(cat)
         ss = int(entry.get("sample_size", 0) or 0) if entry else 0
         sc = entry.get("score") if entry else None
         is_measured = bool(entry and sc is not None and ss >= SCOREBOARD_MIN_SAMPLES)
+        comparator = (entry.get("raw_metrics", {}) or {}).get("comparator") if entry else None
+        eclass = COMPARATOR_EPISTEMIC_CLASS.get(comparator, "unknown")  # fail-closed
         bars.append({
             "category": cat,
             "score": sc,
             "sample_size": ss,
             "measured": is_measured,
-            "comparator": (entry.get("raw_metrics", {}) or {}).get("comparator") if entry else None,
+            "comparator": comparator,
+            "epistemic_class": eclass,
         })
         if is_measured:
             measured += 1
             composite_sum += float(sc)
+            if eclass == "world_judged":
+                world_judged_measured += 1
 
-    enabled = COMPOSITE_ENABLED or measured >= SCOREBOARD_MIN_CATEGORIES
+    # Require >=1 WORLD-JUDGED measured category before the composite enables — not a quorum of
+    # self-verified comparators (which would let JARVIS grade its own honesty into the headline).
+    enabled = COMPOSITE_ENABLED or (measured >= SCOREBOARD_MIN_CATEGORIES and world_judged_measured >= 1)
     composite = round(composite_sum / measured, 4) if (enabled and measured) else None
     return {
         "bars": bars,
@@ -1015,6 +1041,8 @@ def _build_scoreboard(scores: list[dict[str, Any]]) -> dict[str, Any]:
         "composite_enabled": enabled,
         "coverage": {
             "measured": measured,
+            "world_judged_measured": world_judged_measured,
+            "requires_world_judged": True,
             "total": len(categories),
             "pct": round(measured / len(categories), 3),
         },
