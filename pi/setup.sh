@@ -48,6 +48,70 @@ pip install --upgrade pip -q 2>&1 | tail -1
 pip install -r requirements.txt -q 2>&1 | tail -1
 echo -e "${GREEN}✓${NC} Dependencies installed"
 
+# --- System Dependencies & Camera Config (idempotent — reproduces a from-zero Pi5 build) ---
+# These are things a fresh Debian/RaspiOS image does NOT have but the senses node requires.
+echo ""
+echo -e "${CYAN}=== System Dependencies & Camera Config ===${NC}"
+NEEDS_REBOOT=0
+
+# (a) apt packages missing on a fresh image: Hailo-10 runtime+driver, PortAudio (sounddevice), i2c-tools
+APT_NEEDED=()
+command -v hailortcli >/dev/null 2>&1 || APT_NEEDED+=("hailo-h10-all")
+ldconfig -p 2>/dev/null | grep -q "libportaudio.so.2" || APT_NEEDED+=("libportaudio2")
+command -v i2cdetect >/dev/null 2>&1 || APT_NEEDED+=("i2c-tools")
+if [ ${#APT_NEEDED[@]} -gt 0 ]; then
+    echo -e "${YELLOW}→${NC} Installing system packages: ${APT_NEEDED[*]}"
+    sudo apt-get update -qq
+    sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get install -y "${APT_NEEDED[@]}"
+    # the Hailo PCIe driver (DKMS) may need a reboot before /dev/hailo0 appears
+    if command -v hailortcli >/dev/null 2>&1 && [ ! -e /dev/hailo0 ]; then NEEDS_REBOOT=1; fi
+    echo -e "${GREEN}✓${NC} System packages installed"
+else
+    echo -e "${GREEN}✓${NC} System packages present (hailort, portaudio, i2c-tools)"
+fi
+
+# (b) IMX519 (Arducam 16MP AF) camera overlay on the CAM0 port — fresh OS ships the driver,
+#     it just needs config.txt (bare 'imx519' defaults to the wrong CSI connector -> EIO).
+CONFIG=/boot/firmware/config.txt; [ -f "$CONFIG" ] || CONFIG=/boot/config.txt
+if [ -f "$CONFIG" ]; then
+    if ! grep -q "^dtoverlay=imx519,cam0" "$CONFIG"; then
+        echo -e "${YELLOW}→${NC} Configuring IMX519 on CAM0 in $(basename "$CONFIG")"
+        sudo cp "$CONFIG" "$CONFIG.bak-jarvis"
+        sudo sed -i "s/^camera_auto_detect=1/camera_auto_detect=0/" "$CONFIG"
+        sudo sed -i "/^dtoverlay=imx519/d" "$CONFIG"
+        echo "dtoverlay=imx519,cam0" | sudo tee -a "$CONFIG" >/dev/null
+        NEEDS_REBOOT=1
+        echo -e "${GREEN}✓${NC} IMX519/CAM0 overlay set (reboot required)"
+    else
+        echo -e "${GREEN}✓${NC} IMX519/CAM0 overlay already set"
+    fi
+fi
+
+# (c) IMX519 autofocus: mainline libcamera has the rpi.af algorithm + the AK7375 lens driver,
+#     but the imx519 tuning file is missing the 'rpi.af' block. Insert it (preserves color tuning).
+AF_SRC="$SCRIPT_DIR/config/imx519_rpi_af.json"
+if [ -f "$AF_SRC" ]; then
+    for TUNE in /usr/share/libcamera/ipa/rpi/pisp/imx519.json /usr/share/libcamera/ipa/rpi/vc4/imx519.json; do
+        [ -f "$TUNE" ] || continue
+        if python3 -c "import json,sys; sys.exit(0 if any('rpi.af' in a for a in json.load(open('$TUNE'))['algorithms']) else 1)" 2>/dev/null; then
+            echo -e "${GREEN}✓${NC} Autofocus tuning present ($(basename "$(dirname "$TUNE")")/imx519.json)"
+        else
+            echo -e "${YELLOW}→${NC} Adding autofocus (rpi.af) to $(basename "$(dirname "$TUNE")")/imx519.json"
+            sudo cp "$TUNE" "$TUNE.bak-preaf"
+            python3 - "$TUNE" "$AF_SRC" > /tmp/imx519_af_merged.json <<'PYEOF'
+import json, sys
+tune, afsrc = sys.argv[1], sys.argv[2]
+d = json.load(open(tune)); af = json.load(open(afsrc))   # af = {"rpi.af": {...}}
+d["algorithms"] = [a for a in d["algorithms"] if "rpi.af" not in a]
+d["algorithms"].append(af)
+json.dump(d, sys.stdout, indent=4)
+PYEOF
+            sudo cp /tmp/imx519_af_merged.json "$TUNE"
+            echo -e "${GREEN}✓${NC} Autofocus tuning installed (active on next camera open)"
+        fi
+    done
+fi
+
 # --- Vision Models ---
 echo ""
 echo -e "${CYAN}=== Hailo Vision Models ===${NC}"
@@ -198,6 +262,11 @@ echo -e "  All audio intelligence (wake word, VAD, STT, TTS) runs on brain"
 echo ""
 echo -e "${GREEN}✓ Setup complete!${NC}"
 echo ""
+if [ "${NEEDS_REBOOT:-0}" -eq 1 ]; then
+    echo -e "${YELLOW}⚠ REBOOT REQUIRED${NC} — the camera overlay and/or Hailo PCIe driver need a reboot to take effect."
+    echo -e "  Run: ${CYAN}sudo reboot${NC}   then re-run ${CYAN}./setup.sh${NC} to launch the senses node."
+    exit 0
+fi
 echo -e "${CYAN}=== Launching via start.sh (clean start) ===${NC}"
 echo ""
 exec "$SCRIPT_DIR/start.sh" "$@"

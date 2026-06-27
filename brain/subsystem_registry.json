@@ -1,0 +1,1357 @@
+{
+  "integrity_stack": [
+    {
+      "id": "L0",
+      "name": "Capability Gate",
+      "home": "brain/skills/capability_gate.py:859",
+      "status": "shipped"
+    },
+    {
+      "id": "L1",
+      "name": "Attribution Ledger",
+      "home": "brain/consciousness/attribution_ledger.py:171",
+      "status": "shipped"
+    },
+    {
+      "id": "L2",
+      "name": "Provenance-Aware Memory (provenance-tier confidence firewall)",
+      "home": "brain/consciousness/events.py:37",
+      "status": "shipped"
+    },
+    {
+      "id": "L3",
+      "name": "Identity Boundary Engine (cross-identity retrieval policy matrix)",
+      "home": "brain/identity/boundary_engine.py:32",
+      "status": "shipped"
+    },
+    {
+      "id": "L3A",
+      "name": "Identity Persistence (~180s stale-biometric carry-forward)",
+      "home": "brain/perception/identity_fusion.py:47",
+      "status": "shipped"
+    },
+    {
+      "id": "L3B",
+      "name": "Persistent Scene Model (Scene Tracker permanence engine)",
+      "home": "brain/perception/scene_tracker.py:1",
+      "status": "partial"
+    },
+    {
+      "id": "L4",
+      "name": "Delayed Outcomes / Counterfactual (false-credit prevention)",
+      "home": "brain/consciousness/attribution_ledger.py:476",
+      "status": "partial"
+    },
+    {
+      "id": "L5",
+      "name": "Typed Contradiction Engine (orchestrator + 7-class classifier + resolution)",
+      "home": "brain/epistemic/contradiction_engine.py:63",
+      "status": "shipped"
+    },
+    {
+      "id": "L6",
+      "name": "Truth Calibration Engine (epistemic cerebellum)",
+      "home": "brain/epistemic/calibration/__init__.py:36",
+      "status": "shipped"
+    },
+    {
+      "id": "L7",
+      "name": "Belief Confidence Graph (weighted evidence edges, view-only propagation)",
+      "home": "brain/epistemic/belief_graph/__init__.py:35",
+      "status": "shipped"
+    },
+    {
+      "id": "L8",
+      "name": "Cognitive Quarantine (ACTIVE-LITE pressure enforcement)",
+      "home": "brain/epistemic/quarantine/pressure.py:140",
+      "status": "shipped"
+    },
+    {
+      "id": "L9",
+      "name": "Reflective Audit Engine (introspective immune audit, advisory)",
+      "home": "brain/epistemic/reflective_audit/engine.py:80",
+      "status": "shipped"
+    },
+    {
+      "id": "L10",
+      "name": "Soul Integrity Index (composite cognitive health, repair driver)",
+      "home": "brain/epistemic/soul_integrity/index.py:66",
+      "status": "shipped"
+    },
+    {
+      "id": "L11",
+      "name": "Epistemic Compaction (distributed bound/decay/evict/compact)",
+      "home": "brain/epistemic/belief_graph/edges.py:329 (+bridge.py +belief_record.py:103,518,614)",
+      "status": "shipped"
+    },
+    {
+      "id": "L12",
+      "name": "Intention Truth Layer (Stage-0 live commitment gate + Stage-1 shadow resolver)",
+      "home": "brain/cognition/intention_registry.py:229 (+commitment_extractor.py +intention_resolver.py)",
+      "status": "partial"
+    }
+  ],
+  "subsystems": [
+    {
+      "id": "L0",
+      "name": "Capability Gate (cognitive immune system / honesty firewall)",
+      "area": "integrity-stack",
+      "purpose": "First enforcement layer of the no-confabulation floor: blocks confabulated capability/action claims, ungrounded affect, unconfirmed identity names, system-action narration. Integrity FLOOR the north-star treats as non-negotiable.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "Scans every outgoing chunk via _CLAIM_PATTERNS, runs a layered ladder in _evaluate_claim (grounded-obs PASS / strict-self-knowledge exemption / preference / conversational / blocked-verb->registry / registry+matrix-claimability / route-conversational / DEFAULT-BLOCK). verified->PASS, learning->REWRITE, unknown->BLOCK + auto learning job. Rewrites affect-nicknames, strips unconfirmed names (gate_identity_mention), excludes internal-ops narration on 'none' route. Persisted confab ledger is dashboard-only, never read into a gate decision.",
+      "gate": "none \u2014 fail-CLOSED by default (DEFAULT BLOCK unknown operational claims). Route-conditioned not maturity-gated; status_mode disables conversational bypass.",
+      "expected_idle_state": "After reset: all counters 0, lifetime confab log empty, _identity_confirmed=False (names stripped until perception confirms). Zero blocks = never-exercised, NOT broken. Active the instant it loads.",
+      "wired_to_experience": "voice/text \u2014 directly mutates final outgoing text (conversation_handler _gate_text 2508/2523, applied 2663/2810/4107/5209; sanitize_self_report_reply on status/introspection; also gates perception-emitted text).",
+      "common_misread": "Counting it as one regex check / treating zero blocks as broken. Multi-route ladder; fail-CLOSED for blocked verbs but fail-OPEN on confab-log write (a log failure must not break the firewall).",
+      "home_files": [
+        "brain/skills/capability_gate.py:859",
+        "brain/skills/capability_gate.py:1270",
+        "brain/skills/capability_gate.py:1460"
+      ],
+      "evidence": [
+        "brain/skills/capability_gate.py:1441-1449 (DEFAULT BLOCK)",
+        "brain/conversation_handler.py:2508-2523 (_gate_text wraps check_text)",
+        "brain/conversation_handler.py:2663,2810 (applied to outgoing text)",
+        "brain/perception_orchestrator.py:376-377 (gates perception text)"
+      ]
+    },
+    {
+      "id": "L1",
+      "name": "Attribution Ledger (causal spine)",
+      "area": "integrity-stack",
+      "purpose": "Canonical epistemic truth layer: every significant action writes a structured append-only event so downstream immune layers trace lineage and assign blame/credit without confabulating who-did-what.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "record() appends LedgerEntry (entry/root/parent ids for causal chains, subsystem, event_type, actor, source, confidence, evidence_refs) to attribution_ledger.jsonl, O(1) thread-safe. Outcomes append as SEPARATE lines (never mutate base on disk), folded at rehydration. Standardized outcome vocabulary + blame_target. OutcomeScheduler does delayed Tier-3 checks (transient, not persisted).",
+      "gate": "none \u2014 always-on recording. Delayed-outcome arm is TIME-gated not maturity-gated.",
+      "expected_idle_state": "After reset: ledger empty/small, counts 0, OutcomeScheduler _pending empty. Empty = fresh instance, not broken; fills as conversations/jobs/mutations occur.",
+      "wired_to_experience": "Mostly SUBSTRATE (records causality, shapes no voice). Written-by-everything live (conversation/response/self-improve outcomes). Read by audit/explainability/rollback.",
+      "common_misread": "Treating it as 'just a log'. It is the causal-lineage backbone L4 false-credit and explainability depend on. A grep of base entries without outcomes looks empty by design (outcomes are separate lines).",
+      "home_files": [
+        "brain/consciousness/attribution_ledger.py:171",
+        "brain/consciousness/attribution_ledger.py:200",
+        "brain/consciousness/attribution_ledger.py:476"
+      ],
+      "evidence": [
+        "brain/consciousness/attribution_ledger.py:200-255 (append-only record + separate-line outcomes)",
+        "brain/conversation_handler.py:2862-2863,5522-5538 (live recording)",
+        "brain/self_improve/orchestrator.py:825-875 (delayed health outcome scheduled)"
+      ]
+    },
+    {
+      "id": "L2",
+      "name": "Provenance-Aware Memory (11-tier confidence firewall)",
+      "area": "integrity-stack",
+      "purpose": "Every memory/belief carries a provenance tier so trust is earned by source. Data-flow firewall: web_scrap earns NO confidence boost (ungrounded-until-cross-validated); banter (casual_conversation) earns zero trust so it cannot pollute beliefs.",
+      "status": "shipped",
+      "authority": "active",
+      "does": "11 ProvenanceType tiers + PROVENANCE_BOOST table (external_source +0.10, observed +0.06, user_claim +0.04, conversation +0.02; model_inference/web_scrap/casual_conversation/derived_pattern/seed/unknown=0.0). resolve_provenance_boost blends 50% static + 50% calibration-dynamic once >=20 samples/class; summed into the memory-retrieval score (search.py:105/116/185, drives top-k ranking).",
+      "gate": "none for static table (live floor). Dynamic component sample-gated (20/class).",
+      "expected_idle_state": "After reset: per-provenance calibration empty -> static table only (correct); web_scrap count 0; cold memories tagged 'unknown'. By-design.",
+      "wired_to_experience": "active \u2014 folded into _heuristic_score that ranks which memories enter conversational context.",
+      "common_misread": "Conflating with the spark provenance_scorer (different file). web_scrap getting 0.0 is the firewall working, not a missing boost. Consumer is in memory/search.py.",
+      "home_files": [
+        "brain/consciousness/events.py:37",
+        "brain/consciousness/events.py:96",
+        "brain/memory/search.py:105"
+      ],
+      "evidence": [
+        "brain/consciousness/events.py:37-64 (11-tier + boost table)",
+        "brain/memory/search.py:110-116,185 (_heuristic_score sums provenance_boost)",
+        "brain/memory/storage.py:720 (legacy inference)"
+      ]
+    },
+    {
+      "id": "L2-spark-reader",
+      "name": "ProvenanceScorer (Spark grounding-tension reader, view-only)",
+      "area": "spark-grounding-ring",
+      "purpose": "SPARK Station 1: per-belief grounding_tension scalar (high when model-inferred + orphaned + quarantine-pressured) so the outward curiosity drive points at beliefs needing external validation. VIEW-ONLY by structural contract.",
+      "status": "shadow",
+      "authority": "none",
+      "does": "Reads the live belief graph (get_active_beliefs/get_incoming/propagate_all + compute_integrity), emits grounding_tension per belief + aggregate with an auditable provenance dict. Weighted blend (_W_INFERENCE 0.45/_W_ORPHAN 0.35/_W_PRESSURE 0.20), outward-bias + anti-fixation damping. NEVER mutates BeliefRecord.",
+      "gate": "none on the reader; the grounding DRIVE that consumes it ships behind GroundingDrivePromotion (operator-pull).",
+      "expected_idle_state": "Cold graph: aggregate ~0.0, sources_available=False, default-safe to 0.0, never raises. Empty = correct.",
+      "wired_to_experience": "SHADOW substrate \u2014 drives no lever itself. Feeds drives.py grounding urgency + reasoning_encoder shadow coherence, both operator-pull/shadow.",
+      "common_misread": "Reading 0.0 tension as 'spark dead' (view-only, default-safe), or tuning the tension green. High tension is the spark's FUEL, not a health deficit. Class at provenance_scorer.py:281 not :1.",
+      "home_files": [
+        "brain/epistemic/provenance_scorer.py:281",
+        "brain/epistemic/provenance_scorer.py:396"
+      ],
+      "evidence": [
+        "brain/epistemic/provenance_scorer.py:1-26 (VIEW-ONLY, drives no lever)",
+        "brain/autonomy/orchestrator.py:2846-2905 (_populate_grounding_signals fills DriveSignals)",
+        "brain/hemisphere/reasoning_encoder.py:339 (shadow consumer)"
+      ]
+    },
+    {
+      "id": "L3",
+      "name": "Identity Boundary Engine (cross-identity retrieval policy)",
+      "area": "integrity-stack",
+      "purpose": "Cross-identity memory-leak prevention: governs which memories are visible to whom during retrieval (guest can't pull David's memories; one person's memories don't leak into another's context).",
+      "status": "shipped",
+      "authority": "live",
+      "does": "validate_retrieval -> 3-state BoundaryDecision (allow/block/allow_if_referenced) via per-querier policy matrix (guest/self/human). _ALLOW_ALL_TYPES short-circuit to universal allow. Runs BEFORE top-k so cross-subject memories don't consume ranking slots. is_preference_injectable gates prompt injection.",
+      "gate": "none \u2014 always-enforced. Fail-OPEN on exception (a boundary crash degrades to allow-with-audit, not block-all-recall).",
+      "expected_idle_state": "After reset: audit ring empty, _total_quarantined=0. Single-household one-user instance shows ~zero cross-identity blocks \u2014 HEALTHY single-user state, not unexercised/broken.",
+      "wired_to_experience": "live \u2014 gates which memories reach conversational context/prompt (search.py:158-180, pre-top-k).",
+      "common_misread": "Flagging zero blocks as 'boundary not working' \u2014 single-household = almost everything own-scope/universal. Fail-OPEN is deliberate.",
+      "home_files": [
+        "brain/identity/boundary_engine.py:32",
+        "brain/identity/boundary_engine.py:43",
+        "brain/memory/search.py:158"
+      ],
+      "evidence": [
+        "brain/memory/search.py:126-127 (pre-top-k invariant)",
+        "brain/memory/search.py:158-180 (decision applied + audit)",
+        "brain/identity/audit.py:33-41 (ring buffer)"
+      ]
+    },
+    {
+      "id": "L3A",
+      "name": "Identity Persistence (~180s stale-biometric carry-forward)",
+      "area": "integrity-stack",
+      "purpose": "Holds a confirmed identity across short sensor dropouts (don't forget who you're talking to mid-conversation) while preventing stale biometrics from being trusted indefinitely. Feeds L0's name-strip decision.",
+      "status": "shipped",
+      "authority": "active",
+      "does": "Carries identity forward up to PERSIST_MAX_S=180s with half-life 90s, floor 0.65. Only eligible recognition methods qualify. Clears on departure. Feeds the gate's identity-confirmed flag via perception_orchestrator set_identity_confirmed.",
+      "gate": "none \u2014 time-windowed; the 180s window IS the firewall (stale beyond it = dropped).",
+      "expected_idle_state": "No one present: no persisted snapshot, _identity_confirmed=False, recognition 'unknown'/'absent'. Cold state.",
+      "wired_to_experience": "active \u2014 when False the L0 gate strips unconfirmed speaker names from outgoing text. Stale identity changes what JARVIS is allowed to SAY.",
+      "common_misread": "Seeing names stripped and calling it a bug \u2014 when biometrics are stale past the window, stripping the name is the firewall working.",
+      "home_files": [
+        "brain/perception/identity_fusion.py:47",
+        "brain/perception_orchestrator.py:1145"
+      ],
+      "evidence": [
+        "brain/perception/identity_fusion.py:47-60 (PERSIST constants + eligible methods)",
+        "brain/perception_orchestrator.py:1145-1146 (feeds gate)",
+        "brain/skills/capability_gate.py:2084-2098 (name strip when unconfirmed)"
+      ]
+    },
+    {
+      "id": "L3B",
+      "name": "Persistent Scene Model (Scene Tracker permanence engine)",
+      "area": "integrity-stack",
+      "purpose": "Object/entity permanence + region mapping: repeated detections -> durable scene entities with region-aware state transitions, giving a stable world model instead of flickering per-frame detections.",
+      "status": "partial",
+      "authority": "advisory",
+      "does": "SceneTracker.update() maintains a per-entity state machine (candidate->visible->occluded->missing->removed) with stale decay, ticked live in perception_orchestrator. The canonical world model is maintained live BUT by contract 'does NOT write memory or trigger curiosity' (deferred to Patches 3+4). The spatial_scene_graph adapter is shadow P5 (dashboard/HRR/Pi only).",
+      "gate": "none on the tracker; the memory-write/curiosity-trigger arm is UNBUILT (the gap).",
+      "expected_idle_state": "Empty room: zero entities, _update_count=0, snapshot empty; P5 adapter empty graph 'canonical_spatial_state_unavailable'. No memory writes from scene events = by-design.",
+      "wired_to_experience": "PARTIAL \u2014 live tracker maintains the model (advisory scene_context to voice) but writes NO memory/curiosity yet; the adapter is pure shadow.",
+      "common_misread": "Calling L3B 'shadow' wholesale. The permanence engine is LIVE; only the adapter + the deferred memory-gate arm are shadow.",
+      "home_files": [
+        "brain/perception/scene_tracker.py:1",
+        "brain/perception_orchestrator.py:1309",
+        "brain/cognition/spatial_scene_graph.py:1"
+      ],
+      "evidence": [
+        "brain/perception/scene_tracker.py:1-14 (permanence; no memory/curiosity write)",
+        "brain/perception_orchestrator.py:1309-1315 (ticked live)",
+        "brain/perception_orchestrator.py:2722-2741 (snapshot -> scene_context Physical/Displays)"
+      ]
+    },
+    {
+      "id": "L4",
+      "name": "Delayed Outcomes + Counterfactual (false-credit prevention)",
+      "area": "integrity-stack",
+      "purpose": "Prevents false credit/blame: (a) delayed outcome checks re-evaluate a decision after a time window; (b) counterfactual baselines estimate the best alternative so an action isn't credited just for being taken.",
+      "status": "partial",
+      "authority": "advisory",
+      "does": "TWO arms. LIVE: OutcomeScheduler queues delayed checks (self-improve schedules a 1800s post-apply health re-check) driving real regressed/stable outcomes + FAIL-CLOSED rollback. SHADOW: CounterfactualEngine estimates the best historical alternative tool per topic and flags missed-opportunity regret \u2014 read-only, no-LLM, data-gated, live_influence=False (invoked only in dream/sleep via L9 audit).",
+      "gate": "Counterfactual: DATA-GATED (>500 evaluations AND >=200 lived outcomes) + credibility thresholds; authority gate keeps live_influence=False. OutcomeScheduler: time-gated only, transient.",
+      "expected_idle_state": "Counterfactual: total_evaluations=0, is_active=False, 0 findings, shadow_reward_sum=0 \u2014 NORMAL dormant, silently accumulating. OutcomeScheduler _pending empty until scheduled.",
+      "wired_to_experience": "SPLIT. OutcomeScheduler = active substrate driving self-improve rollback/credit. CounterfactualEngine = pure SHADOW, advisory in reflective-audit dim 9, 'synthetic \u2014 not applied to policy'.",
+      "common_misread": "Flagging the counterfactual as broken because total_evaluations=0 (data-gated by design); conflating the two arms (scheduler IS live, estimator is shadow).",
+      "home_files": [
+        "brain/consciousness/attribution_ledger.py:476",
+        "brain/epistemic/counterfactual/engine.py:87",
+        "brain/self_improve/orchestrator.py:869"
+      ],
+      "evidence": [
+        "brain/epistemic/counterfactual/engine.py:18-21 (live_influence=False)",
+        "brain/epistemic/counterfactual/engine.py:110-113 (data gate 200/500)",
+        "brain/self_improve/orchestrator.py:999-1049 (FAIL-CLOSED rollback)"
+      ]
+    },
+    {
+      "id": "L5",
+      "name": "Typed Contradiction Engine (orchestrator + classifier + resolution + belief store + extractor)",
+      "area": "integrity-stack",
+      "purpose": "Detects, classifies and resolves belief conflicts while PRESERVING productive philosophical tension. contradiction_debt is the keystone epistemic-health scalar other layers read.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "Singleton subscribed to MEMORY_WRITE. Per eligible write: extract_claims (heuristic no-LLM, 0-3/memory) -> 7-pre-gate classifier (modality/identity/stance false-positive guards) -> 7 conflict types routed to 6 resolver classes (factual downgrades confidence, identity_tension PRESERVED/never reduces confidence, provenance builds clarification_prompt). HOT-PATH subject-match every write; COLD-PATH scan_corpus only in dream/deep_learning. BeliefStore = in-memory OrderedDict + JSONL persistence (cap 2000, eviction). Maintains contradiction_debt [0,1] + passive decay.",
+      "gate": "belief-eligibility (weight>=0.20, excludes error_recovery/dream/quarantine:suspect). scan_corpus dream/deep_learning-only.",
+      "expected_idle_state": "After reset: 0 beliefs, contradiction_debt=0.0, empty JSONL. Empty store + 0 debt = NORMAL; scan_corpus producing nothing while waking is by-design.",
+      "wired_to_experience": "Indirect: contradiction_debt feeds affect cortisol + L6 epistemic domain. ONE live input wire: L6 correction_detector calls apply_correction_debt on a negative user turn.",
+      "common_misread": "0.0 debt/0 beliefs after reset = healthy idle. scan_corpus is dream-gated not every-tick. The conversation_handler import of module-level 'contradiction_engine' targets a nonexistent symbol -> dead flag.",
+      "home_files": [
+        "brain/epistemic/contradiction_engine.py:63",
+        "brain/epistemic/conflict_classifier.py:38",
+        "brain/epistemic/resolution.py:430",
+        "brain/epistemic/belief_record.py:284",
+        "brain/epistemic/claim_extractor.py:486"
+      ],
+      "evidence": [
+        "brain/epistemic/contradiction_engine.py:97,134,301 (subscribe/extract/scan_corpus)",
+        "brain/epistemic/resolution.py:430-438 (STRATEGY_MAP 7 keys/6 resolvers)",
+        "brain/epistemic/belief_record.py:284-313 (BeliefStore + eviction)",
+        "brain/consciousness/consciousness_system.py:782-784 (scan_corpus dream-gated)"
+      ]
+    },
+    {
+      "id": "L6",
+      "name": "Truth Calibration Engine (epistemic cerebellum + 8 sub-modules)",
+      "area": "integrity-stack",
+      "purpose": "Continuously measures whether stated confidence matches reality across 11 domains. truth_score + per-provenance accuracy feed SoulIntegrity, reflective audit, and (via belief_adjuster) belief confidence.",
+      "status": "shipped",
+      "authority": "advisory",
+      "does": "on_tick pipeline: SignalCollector->History->DomainCalibrator(11 domains)->DriftDetector->TruthScore. Reads Brier/ECE/over-under-confidence from ConfidenceCalibrator (provenance-balanced, >=20 outcomes). The ONE live writer is BeliefConfidenceAdjuster (dampens belief_confidence, MAX_DELTA 0.05, dream/deep_learning-only). CorrectionDetector is the LIVE input wire: a real user correction (3-gate test) -> apply_correction_debt + Brier outcome.",
+      "gate": "PROVISIONAL_THRESHOLD=4 (truth_score=None if >4/11 domains provisional). belief_adjuster gated to dream/deep_learning. ConfidenceCalibrator needs >=20 outcomes.",
+      "expected_idle_state": "truth_score=None, maturity~0, provisional_count=11, 0 adjustments. None is the DESIGNED signal that not enough real outcomes exist \u2014 do NOT tune green.",
+      "wired_to_experience": "Advisory: truth_score feeds SoulIntegrity (which CAN force dreaming). LIVE input wire = check_correction (conversation_handler.py:5585). One live mutation = belief_adjuster (dream-only).",
+      "common_misread": "Seeing truth_score=None/maturity 0 and calling it broken (None is designed). ALL_DOMAINS is 11 (8+3 spatial) not 8. correction-detector is a distinct LIVE experience-coupled component, not folded into the orchestrator.",
+      "home_files": [
+        "brain/epistemic/calibration/__init__.py:36",
+        "brain/epistemic/calibration/__init__.py:130",
+        "brain/epistemic/calibration/belief_adjuster.py:40",
+        "brain/epistemic/calibration/correction_detector.py:1"
+      ],
+      "evidence": [
+        "brain/epistemic/calibration/__init__.py:130-218 (on_tick), :207-215 (adjuster dream-gated), :335-374 (check_correction->debt)",
+        "brain/epistemic/calibration/confidence_calibrator.py:105-154 (balanced outcomes, >=20)",
+        "brain/conversation_handler.py:5585 (live correction wire)"
+      ]
+    },
+    {
+      "id": "L7",
+      "name": "Belief Confidence Graph (orchestrator + propagation + edges + bridge + topology + integrity)",
+      "area": "integrity-stack",
+      "purpose": "Models WHY beliefs reinforce/weaken/depend (relational epistemic structure) \u2014 distinct from L5 detection and L6 calibration. Feeds SoulIntegrity belief_graph_health.",
+      "status": "shipped",
+      "authority": "advisory",
+      "does": "BeliefGraph wraps L5's BeliefStore with a weighted directed EdgeStore (5 edge types x 9 bases, dedup-merge, decay 0.995, user_correction-immune, JSONL + compaction). on_tick: compaction, full propagation every 600s (VIEW-ONLY, computes effective_confidence, NEVER writes belief_confidence), orphan/topic edge-fill, integrity. GraphBridge writes edges from L5 events (budgeted, support-gate reads quarantine pressure = L8->L7 active-lite coupling). Topology = read-only queries. compute_integrity splits grounded vs ungrounded orphans.",
+      "gate": "none for running (waking cadence too); lazy-init once ContradictionEngine exists.",
+      "expected_idle_state": "0 edges, propagation_ran_once=false, high orphan_rate, health_score=1.0 (0-edge short-circuit). All NORMAL after reset.",
+      "wired_to_experience": "Advisory/shadow: propagation VIEW-ONLY (no write-back path). Two consumers (ProvenanceScorer + the orchestrator), both view-only. Integrity feeds SoulIntegrity/audit/L6.",
+      "common_misread": "High orphan_rate = broken (grounded-but-isolated orphans are legitimate). health_score=1.0 with 0 edges is the trivial empty short-circuit, not earned health. L11 compaction lives in THIS package.",
+      "home_files": [
+        "brain/epistemic/belief_graph/__init__.py:35",
+        "brain/epistemic/belief_graph/propagation.py:42",
+        "brain/epistemic/belief_graph/edges.py:100",
+        "brain/epistemic/belief_graph/bridge.py:82",
+        "brain/epistemic/belief_graph/integrity.py:20"
+      ],
+      "evidence": [
+        "brain/epistemic/belief_graph/__init__.py:288-294 (View-only propagation)",
+        "brain/epistemic/belief_graph/bridge.py:362-373 (support gate reads quarantine pressure)",
+        "brain/epistemic/belief_graph/integrity.py:37-46 (grounded vs ungrounded orphan split)"
+      ]
+    },
+    {
+      "id": "L8",
+      "name": "Cognitive Quarantine (scorer shadow + pressure ACTIVE-LITE + log)",
+      "area": "integrity-stack",
+      "purpose": "Detects suspicious activity (5 anomaly categories) and applies proportional friction on mutations/promotions/edges under pressure, WITHOUT ever blocking a memory store.",
+      "status": "shipped",
+      "authority": "active",
+      "does": "QuarantineScorer (SHADOW) scores 5 categories (contradiction_spike/memory_anomaly/input_manipulation/calibration_drift/identity_instability) into QuarantineSignals \u2014 never blocks/mutates/suppresses. QuarantinePressure (ACTIVE-LITE) translates signals into an EMA composite and exposes friction methods (weight_multiplier down to 0.6, mutation_rate_factor, policy_promotion_friction can BLOCK, world_model/graph-support friction). Memories ALWAYS write \u2014 pressure only tags + downweights + raises gates. QuarantineLog = append-only JSONL.",
+      "gate": "ELEVATED 0.3 / HIGH 0.6 composite thresholds; CATEGORY_POLICY decides which categories tag/block.",
+      "expected_idle_state": "composite=0.0, band='normal', 0 tagged, 0 blocked. Friction returns neutral until pressure rises \u2014 NORMAL after clean reset.",
+      "wired_to_experience": "ACTIVE substrate \u2014 drives >=3 gates (mutation_governor, policy promotion, L7 support gate). Modulates governance, not voice directly.",
+      "common_misread": "composite=0.0/normal band = 'enforcement not wired' (friction is real, consumed by >=3 gates, neutral-until-pressure by design). Scorer (pure shadow) vs Pressure (active-lite enforcer) are distinct.",
+      "home_files": [
+        "brain/epistemic/quarantine/pressure.py:140",
+        "brain/epistemic/quarantine/scorer.py:73",
+        "brain/epistemic/quarantine/log.py:24"
+      ],
+      "evidence": [
+        "brain/consciousness/mutation_governor.py:146,170,225-228 (consumes mutation factors)",
+        "brain/policy/promotion.py:231-248 (promotion friction blocks/rollbacks)",
+        "brain/epistemic/belief_graph/bridge.py:372-373 (graph support gate)"
+      ]
+    },
+    {
+      "id": "L9",
+      "name": "Reflective Audit Engine (introspective immune audit, 9 scanners)",
+      "area": "integrity-stack",
+      "purpose": "Surfaces cognitive pathologies (suspect beliefs, identity leaks, low-provenance over-reliance, failing autonomy, stuck skills, graph rot, ingestion/spatial/missed-opportunity) as advisory findings + a score [0,1]. Read-only.",
+      "status": "shipped",
+      "authority": "advisory",
+      "does": "run_audit() scans 9 dimensions, computes severity-weighted score (1.0 on no findings), keeps a ~30-report ring. NEVER mutates beliefs/memory/policy. Runs on a TIMED cadence in ALL waking modes + sleep/dream (NOT dream-only). The missed_opportunity scanner is the conduit that runs the CounterfactualEngine.",
+      "gate": "none on the engine (timed cadence). Behaviorally gated by the fact NO subscriber acts on its findings \u2014 observer journal + eval telemetry only.",
+      "expected_idle_state": "0 audits until first interval, score 1.0, empty finding_counts. No findings after reset = NORMAL/HEALTH not 'not running'. Ring resets empty on restart.",
+      "wired_to_experience": "Advisory: latest score feeds SoulIntegrity audit_score (which CAN trigger repair); findings are recommendations, auto-applied nowhere.",
+      "common_misread": "Docstring '6 dimensions' (actually 9 scanners). One verifier read it as dream-only (300s); it runs 120s in all waking modes too. Findings look like commands but nothing applies them.",
+      "home_files": [
+        "brain/epistemic/reflective_audit/engine.py:80",
+        "brain/epistemic/reflective_audit/engine.py:102",
+        "brain/consciousness/consciousness_system.py:945"
+      ],
+      "evidence": [
+        "brain/epistemic/reflective_audit/engine.py:111-121 (9 scanners), :73-77 (score 1.0 on empty)",
+        "brain/consciousness/modes.py:64,81-117 (allowed in all waking profiles)",
+        "brain/epistemic/reflective_audit/engine.py:679-712 (missed-opportunity runs counterfactual, advisory)"
+      ]
+    },
+    {
+      "id": "L10",
+      "name": "Soul Integrity Index (composite cognitive health, repair driver)",
+      "area": "integrity-stack",
+      "purpose": "Top-line cognitive-health metric across 10 epistemic dimensions; the one place the epistemic stack reaches up and changes system behavior (throttles mutation, can force a dream).",
+      "status": "shipped",
+      "authority": "live",
+      "does": "compute() aggregates 10 weighted dimensions (memory_coherence, belief_health, identity_integrity, skill_honesty, truth_calibration, belief_graph_health, quarantine_pressure, autonomy_effectiveness, audit_score, system_stability), excludes stale dims, sets repair_needed (<0.50) / critical (<0.30). REPAIR_NEEDED event -> engine._on_soul_integrity_repair extends mutation cooldown + (if critical) FORCES dreaming. Also consumed as a model feature.",
+      "gate": "REPAIR 0.50 / CRITICAL 0.30 + 600s debounce. Stale dims excluded (cold start doesn't read unhealthy). All-stale floor = 0.5.",
+      "expected_idle_state": "High index from mostly-stale dims (designed cold-start), repair_needed=False, 0 computations until first tick. 0.5 is the genuine all-data-missing floor (not a stub).",
+      "wired_to_experience": "ACTIVE via the event path (force dreaming + mutation cooldown). Two module-level context reads (consciousness_system.py:2264/2339) are DEAD (wrong symbol/key -> silently 1.0); the REAL wiring is the event-driven repair (engine.py:1489/1518).",
+      "common_misread": "Lumping with L9 as 'just another shadow audit' \u2014 L10 is the ONE layer with live behavioral authority. High idle index is by-design; all-stale floor is 0.5 not 1.0.",
+      "home_files": [
+        "brain/epistemic/soul_integrity/index.py:66",
+        "brain/consciousness/consciousness_system.py:977",
+        "brain/consciousness/engine.py:1489"
+      ],
+      "evidence": [
+        "brain/epistemic/soul_integrity/index.py:25-41 (thresholds + 10 dims)",
+        "brain/consciousness/engine.py:1434,1489-1521 (handler: cooldown + force dreaming)",
+        "brain/hemisphere/dream_artifact_encoder.py:129 (consumed as encoder feature)"
+      ]
+    },
+    {
+      "id": "L11",
+      "name": "Epistemic Compaction (distributed bound/decay/evict/compact)",
+      "area": "integrity-stack",
+      "purpose": "Bounds belief/edge overgrowth: weight caps, per-belief edge budgets, weak-edge pruning, capacity eviction, JSONL dedup compaction. Protects against runaway memory/edge bloat.",
+      "status": "shipped",
+      "authority": "active",
+      "does": "DISTRIBUTED (no single module): EdgeStore.compact() rewrites belief_edges.jsonl when line_count>2x live + decay_strengths drops edges <0.01; bridge edge budgets (TEMPORAL_MAX=2/new belief) + prune_subject_edges; BeliefStore cap 2000 + _evict_unlocked + persist_full (dream Phase-7); INITIAL_MEMORY_WEIGHT_CAP=0.80; belief_graph hourly compaction.",
+      "gate": "Threshold-driven (line_count>2x live OR >2000 beliefs); tick/dream cadence.",
+      "expected_idle_state": "Empty JSONL, far below 2000 cap -> needs_compaction False, compact() no-ops, prune 0. 'No compaction ran' on a small fresh graph = NORMAL housekeeping that only activates under growth.",
+      "wired_to_experience": "Shadow/substrate hygiene \u2014 affects which beliefs survive (so indirectly recall) but no direct voice touch.",
+      "common_misread": "Looking for a single 'epistemic_compaction.py' and labeling L11 absent \u2014 it is DISTRIBUTED across edges/bridge/belief_record/belief_graph tick. Zero compaction after reset is expected.",
+      "home_files": [
+        "brain/epistemic/belief_graph/edges.py:329",
+        "brain/epistemic/belief_graph/bridge.py:566",
+        "brain/epistemic/belief_record.py:103"
+      ],
+      "evidence": [
+        "brain/epistemic/belief_graph/edges.py:30,329-350 (COMPACTION_RATIO 2.0)",
+        "brain/epistemic/belief_record.py:103,518,614 (cap 2000/evict/persist_full)",
+        "brain/epistemic/belief_graph/__init__.py:121-135 (hourly compaction)"
+      ]
+    },
+    {
+      "id": "L12",
+      "name": "Intention Truth Layer (Stage-0 live commitment gate + Stage-1 shadow resolver)",
+      "area": "integrity-stack",
+      "purpose": "Closes the silently-dropped-commitment/unbacked-promise class: 'I'll get back to you' is either backed by a real job (registered IntentionRecord, tracked to resolution) or rewritten so JARVIS cannot promise what it isn't doing.",
+      "status": "partial",
+      "authority": "live",
+      "does": "STAGE 0 (LIVE): in _gate_text after L0, evaluate_commitment REWRITES unbacked commitments; if backed (a job id captured this turn), extract_commitments (regex no-LLM) feeds intention_registry.register (REJECTS empty backing_job_id). resolve() on job completion; stale_sweep at 24h; open/stale counts surface as deterministic 'Open intentions: N' facts. STAGE 1 (SHADOW): IntentionResolver scores delivery relevance, NEVER calls TTS, logs verdicts; IntentionDeliveryEncoder (24-dim) reserved for a future Stage-2 specialist (not training).",
+      "gate": "Stage-1 resolver: 5-rung OPERATOR-ONLY ladder (shadow_only->...->active), no auto-promote; stays shadow_only until David flips it.",
+      "expected_idle_state": "Stage-0 registry loaded 0 open/0 stale; resolver stage='shadow_only', 0 evaluated, can_deliver=False. 0 open + shadow resolver delivering nothing = CORRECT idle.",
+      "wired_to_experience": "Stage-0 IS wired \u2014 edits outgoing words (rewrites unbacked promises) + adds 'Open intentions: N' facts. Stage-1 is shadow substrate.",
+      "common_misread": "Calling L12 'shadow' wholesale \u2014 Stage-0 is LIVE and rewrites real speech. register() rejecting empty backing_job_id is the firewall. Stale-sweep is 24h not 7d (7d is a separate PVL backlog).",
+      "home_files": [
+        "brain/cognition/intention_registry.py:229",
+        "brain/cognition/commitment_extractor.py:1",
+        "brain/cognition/intention_resolver.py:1"
+      ],
+      "evidence": [
+        "brain/conversation_handler.py:2538-2567 (evaluate_commitment rewrites + registers, Stage-0 LIVE)",
+        "brain/cognition/intention_registry.py:250 (rejects empty backing_job_id), :378-405 (stale_sweep)",
+        "brain/cognition/intention_resolver.py:7,72-77,193-209 (NEVER TTS, operator-only ladder)"
+      ]
+    },
+    {
+      "id": "kernel-loop",
+      "name": "Consciousness Kernel (budget-aware tick loop)",
+      "area": "consciousness-core",
+      "purpose": "The heartbeat: one async tick loop (base 0.1s, cadence-scaled) driving all background consciousness work under a per-tick TIME budget so the brain never blocks the event loop.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "_run() loops _tick()+sleep. Each tick: BudgetTracker (default 50ms), KERNEL_TICK, then budget-gated REALTIME (phase+tone)/drain-deferred/INTERACTIVE (thinking@120s->KERNEL_THOUGHT, meta-thought@8s, trait-mod every 100 ticks, proactive)/BACKGROUND. Over-budget ops defer to a bounded queue. Budget self-adapts 25-100ms on p95/backlog.",
+      "gate": "none (loop is unconditional infra; the work it schedules is individually gated).",
+      "expected_idle_state": "is_running=True, sub-ms avg/p95, budget~50, ~0 overruns, empty deferred queue, cadence 1.0, _interval_multipliers={} (every cycle on base interval \u2014 set only by promoted affect coupling). Empty multipliers/~0 overruns = by-design.",
+      "wired_to_experience": "substrate \u2014 callbacks (KERNEL_THOUGHT, on_consciousness_tick) shape voice/thought; budget/cadence knobs writable by the gated policy NN.",
+      "common_misread": "Calling it a 'global workspace' (it's a budget-aware SCHEDULER over an event bus, not competitive). Empty _interval_multipliers / ~0 overruns is not a dead loop. Time-BUDGET (25-100ms) is independent of tick CADENCE (0.5-2.0x).",
+      "home_files": [
+        "brain/consciousness/kernel.py:215",
+        "brain/consciousness/kernel.py:340",
+        "brain/consciousness/kernel.py:351"
+      ],
+      "evidence": [
+        "brain/consciousness/kernel.py:340-383 (budget-gated tick queues)",
+        "brain/consciousness/kernel.py:498-505 (adaptive budget band)",
+        "brain/consciousness/engine.py:162,799 (instantiated; KERNEL_THOUGHT)"
+      ]
+    },
+    {
+      "id": "event-bus",
+      "name": "EventBus (pub/sub broadcast \u2014 NOT GNW competition)",
+      "area": "consciousness-core",
+      "purpose": "The nervous system: a typed singleton pub/sub bus all subsystems emit/subscribe on, with startup barrier + per-event circuit breakers + CRITICAL_EVENTS retry. Half the GNW answer \u2014 but broadcast, NOT competition.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "emit() snapshots listeners and calls EVERY subscribed handler unconditionally \u2014 NO competition, bandwidth limit, winner selection, salience ranking, or ignition threshold. ~198 event constants. Recursion guard, circuit breaker (10 errors/60s->30s open), retry-with-backoff for CRITICAL_EVENTS, startup-barrier buffering until open_barrier().",
+      "gate": "startup barrier (operational, not maturity).",
+      "expected_idle_state": "Barrier opens early then stays open; total_events climbs, failed ~0, no tripped breakers. Reserved events (BELIEF_EXTERNALLY_CONFIRMED, THOUGHT_VALIDATION_OUTCOME, several PERCEPTION_*) with zero emits = BY DESIGN.",
+      "wired_to_experience": "Yes \u2014 carries perception->cognition->memory->tone events that drive behavior. But event broadcast, not conscious-access competition.",
+      "common_misread": "THE central GNW error: calling this a 'global workspace'. emit() is unconditional multicast (no slots, no competition, no ignition). The competitive mechanism lives in hemisphere broadcast slots.",
+      "home_files": [
+        "brain/consciousness/events.py:521",
+        "brain/consciousness/events.py:653",
+        "brain/consciousness/events.py:860"
+      ],
+      "evidence": [
+        "brain/consciousness/events.py:653-660 (emit fans out to ALL handlers)",
+        "brain/consciousness/events.py:456-457 (reserved events not emitted yet)",
+        "brain/consciousness/events.py:631-680 (barrier + breaker + retry)"
+      ]
+    },
+    {
+      "id": "broadcast-slots",
+      "name": "Hemisphere Global Broadcast Slots (GNW-style competition) + Matrix lane",
+      "area": "hemisphere",
+      "purpose": "THE direct GNW answer: a competitive, limited-capacity, winner-take-all global-access mechanism where NN specialists compete for 4 broadcast slots \u2014 real GNW-style competition, but over NN specialist signals, living in hemisphere/, not the kernel.",
+      "status": "partial",
+      "authority": "advisory",
+      "does": "get_hemisphere_signals() collects all specialist signals (Tier-1 + Tier-2 + Matrix), scores (acc*0.6+reliability*0.3+tier_bonus+0.1, blended w/ impact), sorts, assigns top 4 to slots with hysteresis (newcomer>incumbent*1.15 AND dwell>=3). Winners feed policy StateEncoder dims 16-19. A SEPARATE matrix-vs-matrix lane (2 slots) gates Tier-2 promotion. Runs on the 45-60s hemisphere cycle.",
+      "gate": "(1) the consuming policy NN is feature-gated (flags default False); (2) slot expansion 4->6 is M6-gated (shadow). _SHADOW_ONLY focuses excluded from main competition.",
+      "expected_idle_state": "4 slots all {value:0,score:0,dwell:0} until specialists train; 4-not-6 is earned/shadow. Competition runs+ranks but downstream effect ~0 until gated policy features turn on. Empty/4-not-6 = NORMAL.",
+      "wired_to_experience": "Substrate-mostly: slots feed the policy StateEncoder, but the policy NN's behavior-driving flags are gated off AND signal-failed, so the competition currently drives nothing live.",
+      "common_misread": "Either missing it ('no global workspace') or overclaiming full GNW consciousness \u2014 it's competition over NN signals whose consumer is gated/signal-failed, so advisory/shadow in effect.",
+      "home_files": [
+        "brain/hemisphere/orchestrator.py:1830",
+        "brain/hemisphere/orchestrator.py:1108",
+        "brain/policy/state_encoder.py:164"
+      ],
+      "evidence": [
+        "brain/hemisphere/orchestrator.py:1859-1890 (sort+top-N+hysteresis swap)",
+        "brain/policy/state_encoder.py:164-170 (slots as dims 16-19)",
+        "brain/consciousness/engine.py:818-823 (fed each tick)"
+      ]
+    },
+    {
+      "id": "on-tick-orchestrator",
+      "name": "Parallel subsystem orchestration (on_tick cycle dispatcher) + Operational Modes + AttentionCore",
+      "area": "consciousness-core",
+      "purpose": "Orchestrates ~25+ cognitive subsystems on their own intervals, mode-gated. The closest thing to an 'attention budget' is the 8 operational modes (gestation/passive/conversational/reflective/focused/sleep/dreaming/deep_learning), driven by AttentionCore engagement.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "ConsciousnessSystem.on_tick() = SEQUENTIAL cooperative dispatch (not parallel): for each subsystem, if interval elapsed AND _cycle_allowed(mode), runs _tracked_cycle. ModeManager swaps ModeProfile (cadence, proactivity cooldown, response depth, allowed_cycles) with min-dwell hysteresis. AttentionCore computes engagement from presence/speaker/emotion/gesture/recency and drives suggest_mode_from_attention->set_mode. Policy NN can suggest mode (gated path).",
+      "gate": "per-cycle _cycle_allowed (mode allowed_cycles) + boot_stabilization suppression; mode min-dwell + boot-grace; AttentionCore heuristic live, its policy-NN knobs gated.",
+      "expected_idle_state": "Fresh brain starts gestation/passive; with no user drifts to passive/sleep/dreaming (low cadence, restricted cycles). Skipped cycles in a restrictive mode (counted with reason 'mode_not_allowed') + zero engagement at idle = NORMAL.",
+      "wired_to_experience": "Yes: mode shapes cadence/proactivity/response-depth/interruption (felt as how chatty/deep/interruptible JARVIS is). meta_thought emits KERNEL_THOUGHT.",
+      "common_misread": "Calling it 'parallel orchestration with attention budget' (it's sequential interval+mode-gated dispatch; the only true budget is the kernel time-budget; modes ARE the coarse attention budget). Conflating mode-skipped with broken.",
+      "home_files": [
+        "brain/consciousness/consciousness_system.py:412",
+        "brain/consciousness/modes.py:56",
+        "brain/perception/attention.py:75"
+      ],
+      "evidence": [
+        "brain/consciousness/consciousness_system.py:376-385 (_cycle_allowed mode gate + skip count)",
+        "brain/consciousness/modes.py:250-318 (set_mode hysteresis + suggest_mode_from_attention)",
+        "brain/perception/attention.py:185-225 (engagement recompute)"
+      ]
+    },
+    {
+      "id": "meta-cognitive-thoughts",
+      "name": "Meta-cognitive thoughts (KERNEL_THOUGHT generation)",
+      "area": "consciousness-core",
+      "purpose": "Generates the brain's internal 'thoughts' (template-based, NOT LLM) and broadcasts them as KERNEL_THOUGHT (the closest thing to broadcast cognitive CONTENT, distinct from NN-signal slots). General stream LIVE; one tension-seeded trigger maturity-gated.",
+      "status": "partial",
+      "authority": "advisory",
+      "does": "16 ThoughtTriggers; on the meta-thought cycle check_and_generate builds context. 15/16 triggers always _record()->emit KERNEL_THOUGHT + META_THOUGHT_GENERATED, consumed live (autonomy/event_bridge, curiosity_detector, fractal_recall, knowledge_integrator). ONLY belief_validation_curiosity is shadow-gated by TensionThoughtPromotion (default level 0: logs + note_shadow_thought, emits nothing; advisory L1 emits tagged 'grounding:advisory').",
+      "gate": "Only the tension-thought trigger gated (shadow->advisory@L1->active@L2, promoted on external THOUGHT_VALIDATION_OUTCOME, never self-scored). Other 15 ungated (cooldowns/fatigue only).",
+      "expected_idle_state": "General meta-thought stream IS live (KERNEL_THOUGHT fires subject to mode/cooldowns). Tension-thought lane at level 0 -> COUNTED but NOT emitted. 'No GROUNDING thoughts' is by-design; absence of ALL internal thoughts would NOT be normal.",
+      "wired_to_experience": "Yes for the general stream (feeds autonomy/curiosity/fractal-recall/proactive speech). Shadow only for the tension sub-component.",
+      "common_misread": "Over-applying the shadow scope \u2014 only belief_validation_curiosity is shadow-gated; the other 15 emit + are consumed live.",
+      "home_files": [
+        "brain/consciousness/meta_cognitive_thoughts.py:537",
+        "brain/consciousness/meta_cognitive_thoughts.py:70",
+        "brain/consciousness/consciousness_system.py:746"
+      ],
+      "evidence": [
+        "brain/consciousness/meta_cognitive_thoughts.py:826 (_record emits KERNEL_THOUGHT)",
+        "brain/consciousness/meta_cognitive_thoughts.py:602-617 (tension-thought shadow returns None)",
+        "brain/autonomy/event_bridge.py:67 (KERNEL_THOUGHT consumed live)"
+      ]
+    },
+    {
+      "id": "consciousness-evolution",
+      "name": "ConsciousnessEvolution (5-stage ladder + transcendence) + circularity + driven-evolution + restore-integrity",
+      "area": "consciousness-core",
+      "purpose": "Models a maturity ladder so philosophical/recursive cognition is EARNED over sustained-metric windows. Transcendence/awareness are SELF-SCORED composites (honesty-flagged), with one real behavioral un-gate and a restart anti-inflation guard.",
+      "status": "shipped",
+      "authority": "advisory",
+      "does": "5-stage ladder + transcendence 0-10. analyze() computes complexity from self-counters (awareness/obs/thought_depth/mutations/reasoning); transcendence steers toward complexity*10. check_stage_advancement = sustained-window + >=80% pass-rate + stability>=0.5 triple-gate. ConsciousnessDrivenEvolution unlocks 6 capabilities + 5 protocols at thresholds (proposes only) \u2014 the ONE live lever is philosophical_inquiry removing the transcendence<0.5 floor on _run_existential. Stage+transcendence injected into the live LLM prompt (just text, no write-authority). load_state CROSS-VALIDATES claimed stage vs persisted counts (downgrades inflated stage on restart).",
+      "gate": "Per-stage StageRequirement (held window + pass-rate + stability). Capability/protocol transcendence+stage thresholds (override path flips a capability via transcendence alone). Restore: stage kept only if counts support it.",
+      "expected_idle_state": "After reset: stage=basic_awareness, transcendence=0.0, all capabilities False, philosophical_inquiry LOCKED (so _run_existential/_run_dialogue skipped = by-design). Post-restart downgrade to basic_awareness with trust='downgraded' = firewall WORKING. awareness floor 0.3 climbs autonomously.",
+      "wired_to_experience": "Stage+transcendence reach the voice prompt (self-description) + gate cycles. 5 of 6 capabilities have NO is_capability_active() consumer (display/labels only). Protocols + get_memory_formation_rate = zero consumers (pure telemetry).",
+      "common_misread": "Treating transcendence=7/recursive_self_modeling as proof the architecture WORKS \u2014 it's a self-scored composite of JARVIS's own counters, never an external test. 'creative_mutation unlocked' = a label with no live faculty. Restart downgrade is the anti-inflation guard, not lost progress.",
+      "home_files": [
+        "brain/consciousness/consciousness_evolution.py:146",
+        "brain/consciousness/consciousness_driven_evolution.py:106",
+        "brain/consciousness/consciousness_evolution.py:381",
+        "brain/cognition/self_view/adapters.py:285"
+      ],
+      "evidence": [
+        "brain/consciousness/consciousness_evolution.py:176-182 (complexity = weighted self-counters)",
+        "brain/consciousness/consciousness_driven_evolution.py:2068-2071 (philosophical_inquiry un-gate \u2014 the one live lever)",
+        "brain/consciousness/consciousness_evolution.py:477-502 (_validate_stage_against_counts)",
+        "brain/cognition/self_view/adapters.py:285-303 (SELF_SCORED provenance firewall)"
+      ]
+    },
+    {
+      "id": "gestation",
+      "name": "GestationManager (birth protocol \u2014 born not booted)",
+      "area": "gestation",
+      "purpose": "Enforces a self-discovery period (codebase study -> research -> autonomy bootcamp -> identity formation) producing verifiable artifacts BEFORE first human contact. The maturation gate at the lowest level: JARVIS must be 'born' before it talks.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "On a fresh brain enters gestation, walks 4 phases gated by readiness (every 30s vs min_memories 50/research 15/deltas 10/threshold 0.8), saves a birth certificate + arms first contact on graduation. Holds REAL authority: forces mode='gestation', pauses self-improvement, DISARMS the wake word + suppresses greetings until birth. Resumes (not restarts) on mid-gestation reboot.",
+      "gate": "config.gestation.enabled AND autonomy.enabled AND fresh-brain detection. Graduation: readiness>=0.8 (0.6 with person waiting), min 2h floor, 48h max, sustained-person trigger.",
+      "expected_idle_state": "Established brain: INACTIVE (is_active=False, wake word armed) = normal steady state. Fresh brain: ACTIVE phase 0, wake word DISARMED, greetings suppressed up to 48h \u2014 do NOT flag 'won't respond' as broken; it is the birth protocol. A born brain does not re-gestate (birth certificate persists).",
+      "wired_to_experience": "Yes \u2014 drives whether JARVIS interacts at all (wake word + greeting + mode + self-improvement pause). Among the most behaviorally-authoritative subsystems.",
+      "common_misread": "Seeing wake word disarmed/no greeting and calling perception broken (gestation suppressing first contact). Conflating with the transcendence ladder (separate fresh-brain ladder with real behavioral authority).",
+      "home_files": [
+        "brain/consciousness/gestation.py:398",
+        "brain/config.py:264",
+        "brain/perception_orchestrator.py:481"
+      ],
+      "evidence": [
+        "brain/consciousness/gestation.py:628-680 (readiness assessed, phase advance)",
+        "brain/main.py:386-396,645-648,862-863 (wiring)",
+        "brain/perception_orchestrator.py:481-488 (disarms wake word)"
+      ]
+    },
+    {
+      "id": "gestation-readiness",
+      "name": "Readiness Assessment + First Contact + Awakening Protocol + OnboardingManager",
+      "area": "gestation",
+      "purpose": "The graduation maturity gate (weighted competence composite, EARNED not timed), the deliberate first-contact moment, the operator first-hour contract, and the post-birth companion-training automation.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "_assess_readiness weights self_knowledge/knowledge/memory/consciousness/hemisphere/policy/loop_integrity (personality_emergence computed but EXCLUDED from the sum). Graduation only ARMS first contact; on_first_engagement (wake word or sustained gaze) writes a weight-1.0 birth core-memory. AWAKENING_PROTOCOL.md = operator first-hour doctrine (advisory). OnboardingManager auto-detects 7 companion-training stages and delivers exercise prompts via proactive speech, graduating at readiness>=0.92.",
+      "gate": "overall>=0.8 (0.6 with sustained person) or 48h force. Onboarding: ENABLE_ONBOARDING default true, per-stage checkpoint metrics, graduation 0.92.",
+      "expected_idle_state": "Fresh brain: readiness climbing from ~0, personality_emergence=0.0 EXCLUDED (correct), first_contact_armed=True after graduation waiting for a human. Awakening exit criteria all UNMET on a fresh brain = the starting state the protocol walks you out of. Graduated companion: onboarding suppressed, no prompts.",
+      "wired_to_experience": "Yes \u2014 gates the transition out of gestation; first-contact is perception-triggered + writes a real memory; onboarding speaks prompts via the proactive pipeline.",
+      "common_misread": "Treating personality_emergence=0.0 / its exclusion as a broken personality system (intentional chicken-and-egg exclusion). first_contact_armed=True on a graduated brain = correct waiting state. Running synthetic accelerators in the first hour then reporting zero memories = the #1 evaluation mistake.",
+      "home_files": [
+        "brain/consciousness/gestation.py:870",
+        "brain/consciousness/gestation.py:1099",
+        "docs/AWAKENING_PROTOCOL.md:1",
+        "brain/personality/onboarding.py:240"
+      ],
+      "evidence": [
+        "brain/consciousness/gestation.py:917-925 (weights exclude personality_emergence)",
+        "brain/consciousness/gestation.py:1099-1126 (on_first_engagement writes birth memory)",
+        "brain/personality/onboarding.py:303-339,412-418 (tick/graduate, proactive delivery)"
+      ]
+    },
+    {
+      "id": "affect-spark-stack",
+      "name": "SPARK affect stack (AffectState readout + Promotion + Regulation + Coupling)",
+      "area": "affect",
+      "purpose": "The SPARK affect READOUT: three governed scalars (dopamine/serotonin/cortisol) computed strictly from counted real signals with cannot-lie clamps, a homeostatic governor, and a P5 coupling gate \u2014 the only place affect is permitted to drive real levers. 'Affect is a readout, never a feeling.'",
+      "status": "dormant",
+      "authority": "none",
+      "does": "AffectState computes 3 scalars per tick (deterministic functions of novelty/attribution/contradiction-debt/quarantine/calibration), each cannot-lie-clamped to 0.0 when all sources read 0; _propose_levers maps to cadence/urgency/memory but applies NOTHING. AffectRegulation (LIVE math) damps every tick (mean-reversion, bounded EMA, anti-oscillation freeze). AffectPromotion gates readout shadow->advisory (50 paired obs + 4 live-tick hrs + backing>=0.65). AffectCadenceCoupling is the P5 gate that FULLY consume-wires levers into the kernel (engine.py:1053/1186) but stays inert at level 0.",
+      "gate": "Coupling level 0->2 (P5): 4h soak + >=20 grounding outcomes w/ ext-validation>=0.40 + governor invariant + 8 cortisol-accel->debt observations. Operator-promoted, never self-flips. Kill-switch is the outermost guard.",
+      "expected_idle_state": "dopamine/cortisol clamped 0.0 (cannot-lie firing correctly), serotonin near baseline; coupling level 0, cadence 1.0, reward_term 0.0, every engine set_* call a no-op. The regulation MATH runs live every tick.",
+      "wired_to_experience": "This IS the consume-wire \u2014 fully built end-to-end (cadence/memory/drive-urgency/reward sinks) but DORMANT at level 0. The 'valence as driver not readout' gap: the driver is built and wired but gated shut. snapshot() is READ-only by capability_gate (nickname firewall) + companion read.",
+      "common_misread": "Calling clamped-zero scalars dead (cannot-lie clamp working). Calling the coupling 'unwired' (fully wired, just gated) or 'broken' because cadence=1.0/reward=0.0 (correct dormant no-op). Regulation math runs live even though affect is shadow.",
+      "home_files": [
+        "brain/consciousness/affect_state.py:220",
+        "brain/consciousness/affect_promotion.py:68",
+        "brain/consciousness/affect_regulation.py:137",
+        "brain/consciousness/affect_coupling.py:115"
+      ],
+      "evidence": [
+        "brain/consciousness/affect_state.py:264-410 (clamp + propose-never-apply)",
+        "brain/consciousness/engine.py:1053,1186 (LIVE coupling call-sites, no-op at shadow)",
+        "brain/consciousness/affect_regulation.py:137-213 (governor runs live)"
+      ]
+    },
+    {
+      "id": "affect-nickname-firewall",
+      "name": "Affect-nickname firewall + dynamic_mood + ToneEngine (three parallel affect tracks)",
+      "area": "affect",
+      "purpose": "Three SEPARATE affect tracks the area covers: (1) the \u00a77 nickname firewall (LIVE guard rewriting 'my cortisol is high' to the real signal); (2) borrowed dynamic_mood (legacy, dead-ends at the dashboard); (3) persona ToneEngine (tone-shift LIVE + emotional_momentum DEAD).",
+      "status": "shipped",
+      "authority": "live",
+      "does": "FIREWALL: _rewrite_affect_nicknames reads the live affect snapshot, names the real signal ('elevated, derived from <field>=<value>' / 'at baseline'), logs each attempt. DYNAMIC_MOOD: maps detected USER emotion -> a JARVIS 'mood' on identity_state, read ONLY by the dashboard (never a prompt). TONEENGINE: tone-shift state machine injects a persona instruction into the prompt (LIVE), but update_emotional_momentum is NEVER CALLED so emotional_momentum is permanently 0.0 (DEAD signal, still read into self-awareness report).",
+      "gate": "Firewall: none (unconditional honesty floor). dynamic_mood: trust!=low+confidence>0.4. ToneEngine: confidence>0.5; emotional_momentum has no producer.",
+      "expected_idle_state": "Firewall: 0 rewrites until the LLM tries a nickname (healthy). dynamic_mood='neutral'/display-only. current_tone='professional' shifting with memory tags (live); emotional_momentum frozen at 0.00 forever (dead, distinguish from gated-empty).",
+      "wired_to_experience": "Firewall: LIVE guard (constrains the voice from faking affect). dynamic_mood: NOT wired (display-only). Tone-shift: LIVE (persona prompt). emotional_momentum: plumbed on the read side but no producer (effectively dead).",
+      "common_misread": "Empty firewall counters = 'not running' (acts only on a nickname attempt). Assuming dynamic_mood makes JARVIS moody (display-only). emotional_momentum=0.0 'will fill in' (it won't \u2014 no caller). Conflating the three tracks.",
+      "home_files": [
+        "brain/skills/capability_gate.py:2012",
+        "brain/consciousness/consciousness_system.py:629",
+        "brain/consciousness/tone.py:76"
+      ],
+      "evidence": [
+        "brain/skills/capability_gate.py:1875-1937 (reads live snapshot, names real signal)",
+        "brain/consciousness/tone.py:131 (update_emotional_momentum \u2014 NO caller anywhere)",
+        "brain/reasoning/context.py:311-312 (current tone -> prompt, live)"
+      ]
+    },
+    {
+      "id": "companion-cognition",
+      "name": "Companion Cognition P0-P3 (situational_read + theory_of_mind + crystallization + behavior_advisory) + warmth quarantine + presence/env reads",
+      "area": "companion",
+      "purpose": "The Iron-Man/Cortana magic: a LIVE internal read during conversation + theory-of-mind person-model + read->behavior ladder (gated) + crystallization valve + companion-learning. Builds the inner life as a write-only journal that EARNS the right to steer the conversation.",
+      "status": "shadow",
+      "authority": "advisory",
+      "does": "P0 situational_read builds a hypothesis-only read (engagement/sentiment/self-check + warmth axis) POST-reply (fires too late). P1 theory_of_mind folds reads into a per-person model (disposition/verbosity_pref/humor_reception, separate json, never soul). P2 crystallization-valve PROPOSES (never writes) crystallizing a stable model into a belief, logged against real gates. P3 behavior_advisory joins read+model into narrate-only suggestions (give_space/be_concise/lean_into_warmth) \u2014 APPLIES NOTHING (applied hardcoded False, return discarded). Warmth axis QUARANTINED from the P3->P4 gate. Presence-read + env-normal notice person/room shifts (never spoken).",
+      "gate": "P0->P1: >=30 reads + trigger-rate 0.02-0.70. P3->P4: >=40 advisories + >=0.25 person-aware fraction (structural proxy; true gate earned via feedback). P4 (apply) + P5 (correction-learning) are DESIGN-ONLY/planned.",
+      "expected_idle_state": "After reset: 0 reads/advisories, applied=False forever in P3, structural_ready=False. Empty + applied=False = NORMAL. Populates only on identified-speaker voice turns.",
+      "wired_to_experience": "shadow substrate \u2014 fires inside live turns but injects nothing (P3 return discarded; no consumer reads suggestions into a prompt). The style_instruction seam is fed by detect_style_intent, NOT this. Becomes wired only at the unbuilt earn-gated P4.",
+      "common_misread": "Reading 'advisory' authority as steering the reply (return discarded, applied=False is structural). Flagging empty reads/not-ready gate as broken (by-design until reps accrue). The post-hoc P0 timing is the KNOWN limitation TBS-0 addresses.",
+      "home_files": [
+        "brain/consciousness/situational_read.py:135",
+        "brain/consciousness/theory_of_mind.py:154",
+        "brain/consciousness/behavior_advisory.py:99"
+      ],
+      "evidence": [
+        "brain/conversation_handler.py:6037-6057 (P0/P1/P3 fire post-hoc, returns discarded)",
+        "brain/consciousness/behavior_advisory.py:74,311 (applied always False)",
+        "brain/consciousness/behavior_advisory.py:113-117 (warmth axis quarantined from gate)"
+      ]
+    },
+    {
+      "id": "tbs-0",
+      "name": "Think-Before-Speak TBS-0 (pre-speech reader) + style_instruction wire",
+      "area": "companion",
+      "purpose": "Fix the timing flaw: the post-hoc P0 read fires a turn too LATE. TBS-0 proves the read can fire IN TIME (before generation) while injecting nothing \u2014 the glass-box that earns the right to eventually shape the reply via the proven style_instruction seam.",
+      "status": "shadow",
+      "authority": "none",
+      "does": "Reads the CURRENT user turn BEFORE generation (pure-Python, no LLM), emits a pre-speech STANCE (lean_concise/give_space/match_warmth/none) + a would_inject prompt line (the EXACT line a future TBS-2 would ride the style_instruction seam with), from the learned ToM model. Logs to pre_speech_shadow.jsonl; injects into NOTHING (injects_prompt/shapes_reply structurally False; caller discards the return). The style_instruction wire IS live but is fed by detect_style_intent (explicit user delivery commands), not TBS.",
+      "gate": "TBS-0->TBS-1->TBS-2 earned by accuracy vs the post-hoc read + transcript review (operator-earned, model-agnostic). TBS-2 apply-path UNBUILT.",
+      "expected_idle_state": "phase='TBS-0_shadow_observe', injects_prompt=False, total_reads=0/stance='none' until ToM confidence crosses 0.30. Empty/none-heavy = NORMAL; durable log rebuilds counters on boot.",
+      "wired_to_experience": "shadow-only \u2014 fires pre-speech inside the live turn but touches nothing the user hears. The style_instruction seam it's shaped for is fed by a different (live) explicit-command parser.",
+      "common_misread": "Assuming it 'thinks before speaking' behaviorally (it injects nothing). Mistaking the live style_instruction seam for TBS-0's output. Do NOT wire would_inject into the prompt \u2014 that is the unbuilt earn-gated TBS-2 flip.",
+      "home_files": [
+        "brain/consciousness/think_before_speak.py:71",
+        "brain/conversation_handler.py:2954",
+        "brain/reasoning/style_intent.py:86"
+      ],
+      "evidence": [
+        "brain/consciousness/think_before_speak.py:183-199 (injects_prompt/shapes_reply False)",
+        "brain/conversation_handler.py:2954-2960 (fires pre-route, return discarded)",
+        "brain/reasoning/context.py:313-314 (style_instruction seam \u2014 fed by detect_style_intent, live)"
+      ]
+    },
+    {
+      "id": "self-view-osv",
+      "name": "Operational Self-View (OSV \u2014 orchestrator + provenance + synthesizer + adapters + gather + articulate + grounding + api + p2-telemetry)",
+      "area": "self-view",
+      "purpose": "Replaces fake self-knowledge (LLM/grep guessing) with a deterministic, provenance-tagged fused self-model JARVIS can truthfully talk about itself from. Powers self-introspection convo, voice grounding, spark targeting, purposeful self-improve.",
+      "status": "partial",
+      "authority": "active",
+      "does": "build_self_view gathers live sources (subsystem inventory via 18 bespoke read-only adapters that REFUSE TO GUESS, self-referential beliefs, scoreboard, skills/changes, world-model diagnostics) -> SelfViewSynthesizer (pure function -> 6 dimensions + first-class gaps + coverage). Provenance/Fact primitive makes is_measurement DERIVED from provenance (a self-scored value can never render as measured). articulate (P1) routes 8 self-question KINDs and renders the dimension DETERMINISTICALLY (LLM bypassed) with an unqualified-consciousness firewall. grounding (P2) is shadow (active=False hard-coded + OSV_P2_ACTIVE never set; double-shadow, detect+log only). Cache-timer warms the model every 2s.",
+      "gate": "Phase ladder P0-P5: P0-P2 shipped (read-only/shadow + P1 live driver); P3 curiosity targeting / P4 self-improve targeting / P5 continuous awareness are earned/unbuilt. P2 active behind OSV_P2_ACTIVE (default off, set nowhere).",
+      "expected_idle_state": "self_view.json absent until first cache tick -> P1 degrades to 'self-view isn't available yet'. Most subsystem facts render gap/unknown on a cold instance; scoreboard_composite=gap, predictive_accuracy=gap until validated reps. P2 zero repairs = healthy shadow. beliefs.self_beliefs=[] is the FIXED honest output (was the dead wire).",
+      "wired_to_experience": "P1 articulate is the ONE component that DRIVES behavior \u2014 authors the spoken self-reply, bypassing the LLM for self-facts. Orchestrator/synthesizer/adapters/gather/grounding/api/telemetry are read-only/shadow.",
+      "common_misread": "Calling the whole package 'shipped+driving' (only P1 drives; P0/P2 read-only/shadow). 'OSV unavailable' after reset = empty-until-first-cache by design. There is NO 'belief' KIND in articulate (a real coverage gap). P2 double-shadow is intentional belt-and-suspenders.",
+      "home_files": [
+        "brain/cognition/self_view/__init__.py:37",
+        "brain/cognition/self_view/synthesizer.py:75",
+        "brain/cognition/self_view/adapters.py:319",
+        "brain/cognition/self_view/articulate.py:222",
+        "brain/cognition/self_view/grounding.py:209"
+      ],
+      "evidence": [
+        "brain/cognition/self_view/provenance.py:63-71 (is_measurement derived, coerce-to-UNKNOWN)",
+        "brain/conversation_handler.py:3024-3032,3364-3385 (route + deterministic articulate + sanitize)",
+        "brain/cognition/self_view/grounding.py:87-89 + brain/conversation_handler.py:5930 (double-shadow active=False)"
+      ]
+    },
+    {
+      "id": "spark-grounding-ring",
+      "name": "Spark Grounding Ring (drive-promotion + telemetry-gate + queue + drive + tension-thought + p5b + win-rate + passive-metrics)",
+      "area": "spark-grounding-ring",
+      "purpose": "Curiosity pointed OUTWARD to validate beliefs vs external truth \u2014 the audit keystone fix. A multi-station ring (read tension -> grounding drive -> tension thought -> operator-pull validation queue -> P5b autonomous research) gated shadow-first, earning ONLY on external_validation_rate (never self-scored).",
+      "status": "partial",
+      "authority": "live",
+      "does": "GroundingDrivePromotion (the gate that ACTUALLY drives research; shadow L0 -> advisory L1 -> active L2) earns on external_validation_rate>=0.40 over >=20 outcomes + 4h soak. SparkPromotion is telemetry-only (drives nothing). The grounding DriveType fires on belief tension (NOT dampened by user goals); at shadow it STILL enqueues into the live operator-pull GroundingQueue. GroundingQueue.answer() is the ONE live mutating path (operator-gated POST -> _ground_belief re-stamps provenance->user_claim). P5b shadow-research is a SEPARATE zero-authority gate (default-OFF). P5 win-rate counts grounded outcomes as wins only when the gate clears.",
+      "gate": "GroundingDrivePromotion external-validation gate; queue.answer operator-gated; P5b ENABLE_P5B_SHADOW default off + separate 0.70-accuracy gate; P5 win-rate gate (>=20 grounding outcomes + 0.40 rate + orphan trending down).",
+      "expected_idle_state": "Drive level 0/shadow, queue empty/0 answered, P5b OFF, win-rate not superseded \u2014 ALL by-design. The loop is OPERATOR-PULL: starved until David answers /v2/grounding. Idle journal/research is by-design (P5 auto-fire earn-gated). High grounding_tension is the spark's FUEL not a deficit.",
+      "wired_to_experience": "Mostly shadow/operator-pull. The ONE live mutating path is queue.answer()->_ground_belief (mutates the belief graph). At advisory/active the drive would touch the proactive ask/enqueue path.",
+      "common_misread": "Confusing GroundingDrivePromotion (drives research) with SparkPromotion (telemetry-only, drives nothing). Believing the whole ring is zero-authority (answer() IS live). A 'refuted/no' answer is a grounding WIN (externally anchored). spark_metrics docstring 3.3x is stale (20.5x is the belief-graph baseline).",
+      "home_files": [
+        "brain/autonomy/drives.py:183",
+        "brain/autonomy/grounding_queue.py:416",
+        "brain/autonomy/autonomous_research.py:73",
+        "brain/autonomy/spark_metrics.py:334"
+      ],
+      "evidence": [
+        "brain/autonomy/grounding_queue.py:469-502 (_ground_belief MUTATES \u2014 the live path)",
+        "brain/autonomy/orchestrator.py:2346-2348 (is_active gates enqueue), :2376-2409 (shadow still feeds pull queue)",
+        "brain/autonomy/autonomous_research.py:56 (ENABLE_P5B_SHADOW default off)"
+      ]
+    },
+    {
+      "id": "policy-nn",
+      "name": "Policy NN \u2014 learned kernel controller (the shadow->active loop, signal-failure)",
+      "area": "policy",
+      "purpose": "A PyTorch controller that proposes operational knobs (budget/mode/response-length/thought-weights) from a 20-dim consciousness-state vector, scored in shadow A/B, intended to earn staged live control. The documented signal dead-end: built, wired, trains \u2014 but the reward carries no causal content.",
+      "status": "signal-failure",
+      "authority": "advisory",
+      "does": "run_shadow_evaluation calls decide_raw for an un-governed proposal, records pending, scores retrospectively into a 500-slot A/B window (nn_reward=kernel_reward=actual_reward \u2014 no counterfactual). If win-rate clears the gate, promotion.tick flips a feature flag and decide() actuates via apply_policy_decision (genuinely routes to mode/budget/thought-weights/response-length). PromotionPipeline (real authority, flips flags) + PolicyEvaluator (DEVIATION_BONUS still applied) + ShadowPolicyRunner (M6 22-dim) + PolicyTrainer (advantage-weighted imitation) + ExperienceBuffer (5000-cap lived store, purges shadow_tick contamination) + PolicyGovernor (safety gate) + ModelRegistry (versioned, training_advisory read-only) + StateEncoder (20/22-dim) + PolicyTelemetry.",
+      "gate": "Two empty-by-design gates: evaluator eligibility (>=100, decisive_win_rate>0.55, margin>0.03) + per-feature auto-enable ladder (all 8 flags default False, 3 not auto-enableable). Quarantine can block. Inherits the signal failure -> gate effectively uncrossable.",
+      "expected_idle_state": "mode='shadow', enabled=True but has_active_features()=False -> decide() returns kernel_default, NOTHING actuates. A/B window resets to 0 each reboot (in-RAM). EXPECTED to STAY shadow because the signal is too weak to earn (MEASUREMENT-limited, not competence-limited). Do NOT lower the gate (\u00a724).",
+      "wired_to_experience": "The actuation wire EXISTS (apply_policy_decision touches voice cadence/mode/thought-mix) but fires only on an earned flag, which never happens. As-shipped: computes+logs, drives nothing. The dormant consume-wire from broadcast competition to lived behavior.",
+      "common_misread": "enabled=True at boot = drives behavior (held in shadow; decide() live path gated behind empty flags). Or 'gated-but-fine, needs more reps' \u2014 it is MEASUREMENT-limited; soak will never promote it. low training loss = competence on a non-predictive synthetic distribution. DEVIATION_BONUS was NOT removed (only the circular stable-state credit was).",
+      "home_files": [
+        "brain/policy/policy_interface.py:46",
+        "brain/policy/promotion.py:64",
+        "brain/policy/evaluator.py:81",
+        "brain/consciousness/engine.py:1394"
+      ],
+      "evidence": [
+        "brain/policy/evaluator.py:238-239 (no counterfactual reward)",
+        "brain/policy/policy_interface.py:107-108 (kernel_default when no active features)",
+        "docs/AUTONOMOUS_GROWTH_STRATEGY.md:35-56 (Spearman +0.06, R^2~0, FAIL)"
+      ]
+    },
+    {
+      "id": "self-sensing-loop",
+      "name": "SelfSensingLoop (lidar predict-beyond-persistence shadow growth engine + motion-gate + skill/LP/curiosity/health + persistence + tick-wiring + telemetry)",
+      "area": "self-sensing",
+      "purpose": "The PROVEN non-operator autonomous-growth engine: harvests a real self-supervised signal from the senses (lidar) by predicting the next 12-sector range frame and rewarding error-reduction vs the persistence baseline. Offline-validated to carry real skill BEFORE being built (vs the policy NN dead-end).",
+      "status": "shadow",
+      "authority": "none",
+      "does": "Every ~2s observe() scores the previous prediction vs the now-observed actual, refits a closed-form numpy ridge predictor every 20 obs (motion-gated: still sectors tie persistence, DYNAMIC_THRESH_M=2cm kills the phantom-motion static tax), reports skill (MSE-ratio vs persistence, dynamic + pooled \u2014 the un-gameable negative control), learning-progress (skill rising over refits), a per-sector curiosity target (shadow suggestion, no consumer), and a health regime (WARMING/STARVED/FAILED/EARNING). Persists state; ticked from main.py via a real lidar consume-wire.",
+      "gate": "none \u2014 intentionally permanently shadow at P0 (get_status HARDCODES authority {influences_behavior/writes_beliefs/writes_memory} all False). Future authority earn-gated behind an externally-attributed downstream win (Phase 2, unbuilt).",
+      "expected_idle_state": "Fresh/no lidar: obs=0, predictor unfitted, skill=None, regime='WARMING'. Quiet desk steady-state: dynamic_fraction ~0.2, skill VOLATILE (audit saw +0.46/-0.46), regime='STARVED', attention=False \u2014 NOT a stable +0.463 (first-30-min reading). Only regime='FAILED' (attention=True) is a real regression. Static room ties persistence (gate working).",
+      "wired_to_experience": "Shadow-only OUTPUT (no voice/thought/behavior, authority hardcoded none). The INPUT (perception->loop, main.py:1001) is genuinely live-wired. Only telemetry to /api/self-sensing -> /v2 yardsticks.",
+      "common_misread": "Reading dynamic skill near 0/negative or pooled-all negative as broken \u2014 read the DYNAMIC number; near-zero at a quiet desk = STARVED (event-starved by design), not FAILED. +0.463 was volatile/event-bandwidth-gated, not steady-state. Static diff==0 = the motion gate working, not a dead predictor.",
+      "home_files": [
+        "brain/cognition/self_sensing.py:62",
+        "brain/cognition/self_sensing.py:194",
+        "brain/main.py:986"
+      ],
+      "evidence": [
+        "brain/cognition/self_sensing.py:276-282 (authority hardcoded none)",
+        "brain/cognition/self_sensing.py:133-141 (motion gate kills static tax)",
+        "docs/AUTONOMOUS_GROWTH_STRATEGY.md:58-93 (PASS verdict + volatility caveat)"
+      ]
+    },
+    {
+      "id": "hemisphere-substrate",
+      "name": "Hemisphere substrate (orchestrator + registry + weight-persistence firewall + architect + engine + evolution + migration + gap-detector + data-feed + event-bridge)",
+      "area": "hemisphere",
+      "purpose": "The NN-specialist subsystem: designs/trains/evolves networks, persists weights (re-earn authority firewall), runs the broadcast competition + Matrix births/promotions. The maturity-gated growth ladder.",
+      "status": "partial",
+      "authority": "advisory",
+      "does": "HemisphereOrchestrator run_cycle (gated by _enabled + gestation cadence throttle) refreshes priors, checks births, trains, updates slots, checks promotions/migration. HemisphereRegistry persists versioned weights (cap 3/focus). Boot restore reloads WEIGHTS but RESETS Tier-2 AUTHORITY (asymmetric firewall: weights persist, standing re-earns). NeuralArchitect designs topologies; HemisphereEngine = PyTorch build/train/eval off-thread; EvolutionEngine = crossover/mutation; MigrationAnalyzer = rule->neural readiness (never executes, active_substrate hardcoded RULE_BASED); CognitiveGapDetector emits gaps; DataFeed extracts tensors; event_bridge emits KERNEL_THOUGHT reflections (genuinely touches the thought stream, narrating NN lifecycle).",
+      "gate": "_enabled flag + gestation throttle + should_initiate_evolution; births MATRIX_BIRTH_MIN_SAMPLES=30 + 2 regimes + cap 3; promotions the 4-gate lifecycle.",
+      "expected_idle_state": "_enabled True but _networks empty until restore; slots all 0.0; 0 births/0 promotions; 0 gaps (healthy = no deficit); 0 evolution generations; active_substrate=RULE_BASED. ALL cold-start NORMAL.",
+      "wired_to_experience": "Substrate-mostly: only consume-wire is broadcast slots -> StateEncoder -> gated/signal-failed policy NN. event_bridge genuinely emits KERNEL_THOUGHT (advisory) for NN lifecycle, not per-tick signal values.",
+      "common_misread": "Empty slots/0 births/0 gaps = broken (cold-start; gaps are a deficit signal not a heartbeat). Restored Tier-2 at PROBATIONARY with 0 accuracy = 'lost training' (weights ARE back, only authority reset = the firewall).",
+      "home_files": [
+        "brain/hemisphere/orchestrator.py:159",
+        "brain/hemisphere/registry.py:49",
+        "brain/hemisphere/orchestrator.py:245",
+        "brain/hemisphere/event_bridge.py:1"
+      ],
+      "evidence": [
+        "brain/hemisphere/orchestrator.py:299-320 (Tier-2 restore resets authority, Tier-1 keeps accuracy)",
+        "brain/hemisphere/orchestrator.py:1467-1473 (gestation cadence throttle)",
+        "brain/hemisphere/event_bridge.py:14,64 (emits real KERNEL_THOUGHT)"
+      ]
+    },
+    {
+      "id": "matrix-tier2",
+      "name": "Matrix Tier-2 specialist lifecycle + 5 encoders + eligible-focuses + observability",
+      "area": "hemisphere",
+      "purpose": "The earned-not-declared promotion machinery for Tier-2 Matrix specialists (positive/negative_memory, speaker_profile, temporal_pattern, skill_transfer): born only on accumulated real signal, walk a 4-gate ladder, promote in a separate matrix-vs-matrix lane.",
+      "status": "dormant",
+      "authority": "advisory",
+      "does": "Each cycle: _observe_matrix_signals samples encoder features+regime; _check_matrix_births auto-births once a focus has >=30 samples + >=2 regimes (cap 3); _train trains (honesty guard refuses constant-label fits); _check_specialist_promotions walks epoch>0->acc>0.5->impact>0.3->lane-dwell>=10->PROMOTED. The 5 encoders (16-dim each) enforce strict contracts: positive=template/no accuracy-as-proxy, negative=no emotion_depth leak, speaker=no ECAPA-embedding leak, temporal=no schedule facts, skill_transfer=similarity!=capability. /api/matrix surfaces the ladder (not_born visible-not-silent).",
+      "gate": "4 coded gates (epoch>0, accuracy>0.5, impact>0.3, lane dwell>=10) + birth gates (>=30 samples, cap 3).",
+      "expected_idle_state": "After reset: NO specialist born, all 5 focuses 'not_born', 0 promotions, signal buffers filling toward 30. ZERO Tier-2 specialists is the NORMAL post-reset state \u2014 they re-earn every gate; even PROMOTED grants only a broadcast slot (no spoken authority).",
+      "wired_to_experience": "SHADOW ONLY \u2014 _matrix_broadcast_slots consumed solely by matrix_report + dwell accrual; no consumer injects a Tier-2 output into a prompt/response. A PROMOTED Tier-2 drives nothing spoken.",
+      "common_misread": "Citing the doc's 'dormant end-to-end / zero production callers' (pre-Phase-M, stale \u2014 the lifecycle IS wired and runs every cycle). Calling 0 births broken (gated, needs live signal). PROMOTED grants a slot, NOT skill/capability authority.",
+      "home_files": [
+        "brain/hemisphere/orchestrator.py:928",
+        "brain/hemisphere/orchestrator.py:1244",
+        "brain/hemisphere/positive_memory_encoder.py:186",
+        "brain/hemisphere/skill_transfer_encoder.py:182"
+      ],
+      "evidence": [
+        "brain/hemisphere/orchestrator.py:1156-1176 (4-gate ladder)",
+        "brain/hemisphere/types.py:67-76 (5 eligible focuses, cap 3)",
+        "brain/hemisphere/skill_transfer_encoder.py:1-22 (similarity!=capability contract)"
+      ]
+    },
+    {
+      "id": "distillation-feeds",
+      "name": "Distillation collector + 8 specialist signal feeds + weight-room gate + Tier-1 perception specialists",
+      "area": "hemisphere",
+      "purpose": "The signal-capture layer feeding every distilled specialist (immune primitives: origin provenance, fidelity scoring, quarantine, weight-room synthetic-vs-lived counting), plus the lived-before-synthetic authority gate and the 8 shadow signal feeds.",
+      "status": "shadow",
+      "authority": "none",
+      "does": "DistillationCollector.record() tags origin+fidelity, dedups, quarantines low-fidelity, serves lived-only batches; live_shadow_accuracy returns None below 10 samples (honesty floor, NOT 0.0). WeightRoomGate (P2) computes per-specialist would-block under lived-before-synthetic (EXEMPT 6 grandfathered Tier-1; BLOCKED_BY_DESIGN thought_trigger/code_quality; lived-alone floor 10 OR hybrid 50+3) \u2014 enforces NOTHING at P2. 8 feeds: claim_classifier (main path FIXED, friction sub-feed STILL DEAD), diagnostic (live-wired, was wrongly 'suspected dead'), code_quality (live-wired, gate's 'no signal' reason STALE), thought_trigger_selector (input-starved + 24-vs-44 dim mismatch), plan_evaluator/skill_acquisition/dream_synthesis/reasoning_encoder. Tier-1 perception specialists (6 always-on distilled compressors) are EXEMPT from the gate.",
+      "gate": "QUARANTINE_THRESHOLD=0.3; LIVE_SHADOW_MIN_N=10/50 honesty floors (\u00a724 do-not-tune); weight-room would-block (P2 logs only, P3 enforces \u2014 unbuilt); feeds min_samples 15-30.",
+      "expected_idle_state": "After reset: collector empty, live_shadow_accuracy=None (honestly unmeasured), weight-room logs-only/enforces=False, all 8 feeds 0 samples until events fire. Empty = starvation-limited, NOT broken.",
+      "wired_to_experience": "Shadow \u2014 pure capture/train; injects nothing. 'Always-on' Tier-1 perception = exempt from the gate, NOT live in the perception path (the TEACHERS run live; students are growth substrate).",
+      "common_misread": "live_shadow_accuracy=None as a bug/0% (honesty floor). Empty collector as 'feed dead' (distinguish starvation from broken record() \u2014 diagnostic/code_quality ARE wired). The weight-room 'no signal' code_quality reason is STALE. Do NOT lower floors to populate a panel.",
+      "home_files": [
+        "brain/hemisphere/distillation.py:107",
+        "brain/hemisphere/weight_room_gate.py:90",
+        "brain/hemisphere/types.py:475",
+        "brain/skills/capability_gate.py:1104"
+      ],
+      "evidence": [
+        "brain/hemisphere/distillation.py:57 (live_shadow_accuracy None floor)",
+        "brain/hemisphere/weight_room_gate.py:73,186 (stale code_quality reason; enforces=False)",
+        "brain/skills/capability_gate.py:1163-1174 (friction sub-feed STILL dead)"
+      ]
+    },
+    {
+      "id": "reasoning-encoder",
+      "name": "ReasoningEncoder (native_reasoning grounding-coherence, Native Cognition #3 P0) + grounded-stance/thought-focus + distillation seed + native_reasoning specialist",
+      "area": "native-cognition",
+      "purpose": "JARVIS-not-qwen substrate: a VIEW-ONLY 8-dim encoder over the live belief field producing a grounding-coherence scalar; the seed from which a native reasoning specialist could LATER be distilled to replace qwen's existential enrichment.",
+      "status": "shadow",
+      "authority": "none",
+      "does": "compute_signal_value = weighted composite (grounding A 0.50 + validation rate*volume 0.30 + readiness C 0.20). observe_grounded_stance frames a deterministic posture citing a REAL belief_id (logs+counts, never emits KERNEL_THOUGHT). propose_grounded_thought_focus proposes an existential category from the hottest belief (logs beside the still-RANDOM live choice). research_intent records reasoning-state->outcome distillation pairs (teacher='reasoning_validation', external-only grounded rate, None below min-N). native_reasoning specialist is PLANNED (FOCUS_NAME literal only; qwen still does all existential reasoning).",
+      "gate": "Honest gating: signal 0.0 unless sources_available AND sampled_beliefs>0. REASONING_STREAM_PHASE1_THRESHOLD=30 is INFORMATIONAL only (flips no authority). Specialist Phase 1+ unbuilt.",
+      "expected_idle_state": "Empty field: signal 0.0, 0 stances, grounded_rate=None. Populated: ~0.62 is a COMPOSITE truth signal NOT '62% grounded' \u2014 do not tune. 3 live call sites are observe/log/record only; live existential focus stays random by design.",
+      "wired_to_experience": "Shadow-only \u2014 logs/snapshots; injects into no prompt, drives no decision. qwen still does existential/meta reasoning.",
+      "common_misread": "Reading ~0.62 as '62% grounded' (weighted composite; Block B is rate*volume not averaged). Assuming the 3 live call sites mean it injects (record/log only). Searching for a native_reasoning NN and flagging it missing (intentionally unbuilt \u2014 the encoder must EARN it).",
+      "home_files": [
+        "brain/hemisphere/reasoning_encoder.py:123",
+        "brain/hemisphere/reasoning_encoder.py:387",
+        "brain/autonomy/research_intent.py:213"
+      ],
+      "evidence": [
+        "brain/hemisphere/reasoning_encoder.py:162 (signal 0.0 honest gate)",
+        "brain/consciousness/consciousness_system.py:2083 ('NEVER fed into conduct_inquiry; live focus stays random')",
+        "brain/consciousness/existential_reasoning.py:463 (random.choices live category)"
+      ]
+    },
+    {
+      "id": "skill-acquisition",
+      "name": "Skill acquisition stack (registry + learning-jobs + runner + eval + resolver + acquisition + codegen + contracts + protocols + baseline + discovery + bridge + executors + reports + dataflow-firewall)",
+      "area": "skills",
+      "purpose": "The governed multi-phase pipeline that lets JARVIS genuinely acquire a capability: registry is the single truth of what it can honestly claim (verified only on hard evidence); a skill is NOT operational until contract+sandbox proof.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "Registry (14 bootstrap skills via codebase_audit, web_scraping_v1 = first earned) backs the L0 gate. LearningJobOrchestrator runs phases assess->...->register->monitor; JobRunner auto-advances one phase (blocks on unmet hard gate); JobEval is the exit-condition DSL (protocol:<id> checks gate phase advancement via SK-001..004); Resolver maps intent->skill_id+contract; AcquisitionOrchestrator builds plugins (plan->codegen->quarantine->verify->shadow->deploy, isolated venv, multi-gate _can_activate, make_authoritative = only active path); shared CodeGen+Sandbox (PatchPlan validation, sandbox-parity); ExecutionContracts (smoke fixtures = the operational bar); SkillBaseline (shadow-copy improvement gate); CapabilityDiscovery (gap->proposal, consent-gated, 7-day suppression); web_scrap dataflow firewall (untrusted, no boost).",
+      "gate": "Evidence gate (verified needs pass); operator-approval handoff; per-tier MIN_SHADOW duration; quarantine_pressure<=0.3; MAX_PHASE_FAILURES=10->blocked; consent gate on risky learning.",
+      "expected_idle_state": "After reset: 14 bootstrap skills (codebase_audit, NOT runtime-benchmarked), 0 active jobs, empty learning_jobs dir. Jobs at awaiting_operator_approval = NORMAL (operator-pull). A register without a callable correctly routes to handoff, not verified.",
+      "wired_to_experience": "registry consumed live by the L0 gate (PASS/REWRITE/BLOCK). Most of the pipeline is operator-pull-gated; deployed plugins become real callables.",
+      "common_misread": "Counting 14 verified as 14 earned (13 bootstrap, only web_scraping_v1 pipeline-earned). SKILL_LEARNING_COMPLETED = process evidence, NOT operational (needs contract proof). awaiting_operator_approval = waiting, not deadlocked. self_improve/matrix_specialist acquisition lanes fail-fast (not-yet-implemented by design).",
+      "home_files": [
+        "brain/skills/registry.py:221",
+        "brain/skills/learning_jobs.py:1",
+        "brain/acquisition/orchestrator.py:89",
+        "brain/skills/execution_contracts.py:28"
+      ],
+      "evidence": [
+        "brain/skills/registry.py:119-218 (14 bootstrap, codebase_audit)",
+        "brain/acquisition/orchestrator.py:2446-2493 (_can_activate multi-gate), :2800 (make_authoritative)",
+        "brain/skills/job_eval.py:156 (protocols gate phase advance, not advisory)"
+      ]
+    },
+    {
+      "id": "self-improve",
+      "name": "Self-Improvement Orchestrator + System Upgrade Report (source-code patching loop)",
+      "area": "skills",
+      "purpose": "Lets JARVIS modify its OWN source under sandbox+approval+rollback+health checks. Highest-blast-radius lane; gated hardest. Frozen by default.",
+      "status": "gated",
+      "authority": "advisory",
+      "does": "Loop: detect->plan->codegen patch->sandbox validate->retry->atomic apply->checkpoint-restart-verify->promote/rollback. Stage system (FROZEN=0/DRY_RUN=1/HUMAN_APPROVAL=2) resolved by env > persisted > FREEZE_AUTO_IMPROVE (default true->FROZEN). SystemUpgradeReport = canonical truth lane (structured reports gate which self_improvement memories may be written; is_complete_for_training gates the analytics-only feed).",
+      "gate": "STAGE gate (default FROZEN) + config.enable_self_improve default False (not even constructed unless enabled). Even enabled: dry-run/human-approval, never auto-applies.",
+      "expected_idle_state": "After reset: not constructed OR stage 0/frozen, 0 promotions/rollbacks, no pending approvals, empty reports dir. A frozen/absent self-improve loop is the SAFE default \u2014 NORMAL.",
+      "wired_to_experience": "Only when explicitly un-frozen by the operator AND a patch promoted. Otherwise observes/proposes only. The bootstrap self_improvement skill is verified-by-codebase-audit, not by live promotions.",
+      "common_misread": "Flagging '0 improvements / stage 0 / orchestrator absent' as broken \u2014 frozen + disabled-by-default is the intended safe state. Empty reports dir = no upgrades because frozen.",
+      "home_files": [
+        "brain/self_improve/orchestrator.py:1",
+        "brain/self_improve/orchestrator.py:218",
+        "brain/self_improve/system_upgrade_report.py:1"
+      ],
+      "evidence": [
+        "brain/self_improve/orchestrator.py:241-244 (FREEZE_AUTO_IMPROVE default true->FROZEN)",
+        "brain/config.py:305-306 (enable_self_improve False default)",
+        "brain/self_improve/system_upgrade_report.py:188 (is_complete_for_training gate)"
+      ]
+    },
+    {
+      "id": "capability-domains",
+      "name": "Capability Domains (Matrix v2 \u2014 registry + ingest firewall + store + topic-recall wire)",
+      "area": "capability-domains",
+      "purpose": "Isolated, deletable 'NN sub-consciousness' bundles: each domain owns its directory so delete() is a clean ablation (brain-injury / forget-snowboarding-keep-everything-else). The document-domain lane is the ONE place Matrix-v2 touches lived experience.",
+      "status": "shipped",
+      "authority": "active",
+      "does": "Registry create/update/status/delete (delete rmtree's ONLY the domain dir, _under_root guarded). Ingest firewall (_ingest_path_allowed always rejects secret-named files/sensitive dirs + content-secret check; optional root containment); knowledge tagged provenance='ingested' = 'know about', NEVER 'can do'. DomainKnowledgeStore = per-domain sqlite, deterministic keyword retrieval. Topic-recall wire: when a query is clearly ABOUT a learned domain (>=2 topic-token overlap), answers from the ISOLATED store as grounded 'I know about X' (claim_scope='know_about'), overriding routing to INTROSPECTION; None on miss (no confab).",
+      "gate": "Write ops (create/ingest/delete) API-key gated. Topic-match threshold 2 + retired-domain skip. The honesty boundary (know-about never can-do) IS the authority gate. No maturity gate.",
+      "expected_idle_state": "After reset NO domains: count=0, registry.json absent, recall_answer returns None every turn (silent no-op, routing untouched). count==0 = healthy default (domains are operator-created).",
+      "wired_to_experience": "The topic-recall wire is the LIVE document-domain consume-wire to the spoken answer. Distinct from the Tier-2 specialist NN lane (shadow). Storage/ingest are substrate.",
+      "common_misread": "count:0 = 'Matrix-v2 absent/unbuilt' (built+live, empty by default). Reading os.walk as 'ingests anything = hole' (firewall + asymmetric provenance gate are the invariants). Conflating the LIVE document-recall with the shadow Tier-2 NN broadcast.",
+      "home_files": [
+        "brain/cognition/capability_domains/registry.py:32",
+        "brain/cognition/capability_domains/ingest.py:44",
+        "brain/cognition/capability_domains/recall.py:60",
+        "brain/conversation_handler.py:3040"
+      ],
+      "evidence": [
+        "brain/cognition/capability_domains/registry.py:99-115 (clean ablation delete)",
+        "brain/cognition/capability_domains/recall.py:60-75 (know_about, None on miss)",
+        "brain/conversation_handler.py:3346-3363 (deterministic grounded render)"
+      ]
+    },
+    {
+      "id": "perception-orchestrator",
+      "name": "PerceptionOrchestrator + SceneTracker + VisionProcessor + addressee gate + STT + voice-policy TTS",
+      "area": "perception",
+      "purpose": "The nervous-system seam between raw perception and cognition: wires all sensors, identity/emotion fusion, scene caption, addressee gating, STT, and the live conversation handoff.",
+      "status": "shipped",
+      "authority": "active",
+      "does": "Builds get_scene_context() from the scene snapshot + ambient + presence and passes it (+speaker+emotion) into handle_transcription. SceneTracker maintains the permanence world model (advisory scene_context). VisionProcessor consumes detection events into observed memories (gesture/expression at confidence>0.5). AddresseeGate decides if an utterance is FOR JARVIS BEFORE response/memory/gate (suppress -> no reply at all). STT (faster-whisper) with hallucination defenses (condition_on_previous_text=False, compression threshold, no_speech_prob gate, blocklist). OracleVoicePolicy maps tone/emotion/style-override -> TTS voice+speed (Kokoro ONNX -> Pi).",
+      "gate": "none (it IS the live perception path); sub-products independently gated. AddresseeGate is a deterministic heuristic gate.",
+      "expected_idle_state": "No Pi: snapshot unreachable, 0 persons, speaker 'unknown', empty scene_context, neutral TTS. AddresseeGate _total_suppressed=0 until overheard speech. NORMAL \u2014 populates only when the Pi streams.",
+      "wired_to_experience": "YES \u2014 scene_context + identity/emotion + on-demand vision reach voice; AddresseeGate can KILL a turn (early return); voice-policy chooses the spoken voice. Most lidar/depth/spatial sub-pipelines are telemetry-only.",
+      "common_misread": "Treating it as 'just glue' (it's the live consume-wire). Assuming all sub-pipelines are equally live (most are shadow/telemetry). A suppressed-by-addressee turn or a dropped-hallucination STT segment is the defense working.",
+      "home_files": [
+        "brain/perception_orchestrator.py:166",
+        "brain/perception/addressee.py:130",
+        "brain/perception/stt.py:1",
+        "brain/reasoning/voice_policy.py:42"
+      ],
+      "evidence": [
+        "brain/perception_orchestrator.py:2719-2763 (get_scene_context)",
+        "brain/perception/addressee.py:130-176 + perception_orchestrator.py:2122-2134 (suppress -> early return)",
+        "brain/perception/stt.py:84-166 (hallucination defenses)"
+      ]
+    },
+    {
+      "id": "vision-grounding-firewall",
+      "name": "Vision Grounding Firewall + describe_scene VLM tool",
+      "area": "perception",
+      "purpose": "Stops the eyes confabulating: 'what do you see?' was inventing scenes by feeding the VLM caption to the chat model as advisory context. The firewall makes the FRESH camera caption the SOLE authority and forbids the LLM from authoring a scene.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "On tool_hint='vision': prepends a 'you are the mouth, not the eyes' grounding instruction forbidding invented people/objects/lighting; forces temp 0.3; passes ONLY the fresh [Live camera view] caption (drops stale ambient scene_context). describe_scene fetches a Pi /snapshot and captions via Ollama VLM (qwen3-vl) with Claude fallback, honest 'can't see' on failure.",
+      "gate": "none \u2014 unconditionally active on the VISION route. vision_model is profile-dependent ('' on low-end tiers).",
+      "expected_idle_state": "Idle/no-camera: 'I can't see anything right now \u2014 the camera isn't reachable' or 'focusing my vision' (cold VLM load, qwen3-vl<->qwen3:8b share 16GB). Always armed; an honest can't-see is the firewall + VRAM swap, never a guessed scene.",
+      "wired_to_experience": "YES \u2014 shapes the spoken vision answer (prompt + temperature + which context is allowed).",
+      "common_misread": "Reading 'focusing my vision'/'can't see' as a broken pipeline (firewall + VRAM cold-load). Assuming vision is always on (empty model is by-design on low-end rigs).",
+      "home_files": [
+        "brain/reasoning/context.py:500",
+        "brain/conversation_handler.py:3654",
+        "brain/tools/vision_tool.py:30"
+      ],
+      "evidence": [
+        "brain/reasoning/context.py:500-510 (firewall instruction)",
+        "brain/conversation_handler.py:3654-3659 (drops stale context, fresh caption authoritative)",
+        "brain/reasoning/response.py:788-795 (temp 0.3)"
+      ]
+    },
+    {
+      "id": "spatial-stack",
+      "name": "Spatial/LIDAR stack (room-model + extrinsic + fusion + depth-anchor + Tier-3 sidecar + estimator + scene-graph + HRR encoder + episodic store + place-consolidator + validation + memory-gate + mind-page)",
+      "area": "spatial",
+      "purpose": "The full spatial-intelligence ladder (Tier-0 2D room model -> Tier-2 object fusion -> Tier-3 dense colored 3D, anchored to metric by the lidar ring) plus the monocular tracks/anchors and the gated P5 mental-world album. Telemetry-only/firewalled \u2014 JARVIS does not 'see in 3D' cognitively.",
+      "status": "shadow",
+      "authority": "none",
+      "does": "LidarRoomModel reconstructs 2D occupancy (telemetry-only, authority pinned). LidarExtrinsic = inert identity transform until configured. lidar_fusion attaches camera LABEL to lidar RANGE (hypothesis, never belief). lidar_depth anchors monocular depth to metric scale (REFUSES on thin/degenerate evidence). Tier-3 sidecar (Depth-Anything on RTX 4080) writes a dense cloud to a slot file the dashboard renders. SpatialEstimator promotes tracks/anchors + emits deltas. spatial_scene_graph/hrr_spatial_encoder/episodic-store/place-consolidator are the gated P5 mental-world lane (HRR flags default OFF, AUTHORITY_FLAGS all False). SpatialMemoryGate is the ONLY spatial->canonical-memory path and is NOT wired live (test-only).",
+      "gate": "All authority pinned spatial_telemetry_only/writes_beliefs=False. P5 lane twin-gated (HRR master + spatial flags default OFF). SpatialMemoryGate intentionally un-wired (awaits validation walk-through).",
+      "expected_idle_state": "No Pi/no calibration: empty room model (sector-only payloads skipped), identity extrinsic, no fused objects, refused anchors ([], valid=False = honest default), empty /mind, empty album (sub-gate OFF), no spatial memories. ALL by-design.",
+      "wired_to_experience": "Shadow/telemetry \u2014 feeds dashboard radar + /mind + /v2/spatial; the ~7.8cm-vs-walls figure is a proof-run, not a runtime cognitive sense. NO spatial belief/memory write.",
+      "common_misread": "Empty room model/cloud/album = broken (empty whenever Pi sends sectors-not-raw or HRR flags off or anchor refuses). Over-claiming '3D vision' (drives nothing in cognition). Tier-2 fusion + Tier-3 anchor were corrected shipped->shadow (authority pinned none). High place-consolidator fail-closed rate = correctness (no false merge).",
+      "home_files": [
+        "brain/cognition/lidar_room.py:1",
+        "brain/cognition/lidar_depth.py:83",
+        "brain/perception/spatial.py:1",
+        "brain/cognition/spatial_memory_gate.py:1",
+        "brain/memory/spatial_episodic_store.py:1"
+      ],
+      "evidence": [
+        "brain/cognition/lidar_depth.py:115-148 (refusal gates)",
+        "brain/cognition/spatial_memory_gate.py:1-14 + grep (only test callers, no live wire)",
+        "brain/library/vsa/runtime_config.py:189,201 (HRR flags default False)"
+      ]
+    },
+    {
+      "id": "memory-stack",
+      "name": "Memory stack (storage + search/recall + ranker + salience + vector-store + episodes + fractal-recall + logs + integrity-panel + gate + write-authority + consolidation + clustering + index + persistence + bug-fixes)",
+      "area": "memory",
+      "purpose": "The canonical lived-memory layer: in-RAM CRUD with decay/trim, hybrid recall (vector -> identity boundary -> learned/heuristic rerank), learned salience/ranker (gated), episodes, fractal bubbling-up, the synthetic-firewall gate, the governed write path, and dream consolidation/clustering.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "MemoryStorage = singleton (cap 2000) with weight caps/decay/retention-eviction, recent-by-TIMESTAMP (bug fixed across storage/analytics/episodes). Hybrid search: vector candidates -> identity boundary pre-filter (before top-k) -> MemoryRanker NN (heuristic until trained on retrieval-log pairs >=50) -> top-k; recall relevance is cosine similarity (NOT weight \u2014 the 'all over the place' bug fix) + honest 'No memories found' on empty. SalienceModel (gated) bounded-mutates weight/decay during creation (advisory, never zeroes/blocks). VectorStore (sqlite-vec, keyword fallback). Episodes injected into the prompt (continuity). FractalRecall (Rollout-1 event-only shadow, emits FRACTAL_RECALL_SURFACED + KERNEL_THOUGHT, injects nothing). CueGate/MemoryGate = synthetic-session write firewall (absolute) + mode-gated obs writes. engine.remember = governed write (synthetic-block + quarantine soft-gate + salience + identity stamp + MEMORY_WRITE). Golden Words = exact-match operator write/control plane. Consolidation (dream-gated bubble-merge at 0.85 trust discount) + clustering (evolve never destroy). MemoryIndex (tag/type, written every canonical write). Persistence = atomic disk save/load (the layer that makes every 'rebuilds from ~/.jarvis' claim true).",
+      "gate": "Ranker is_ready (>=50 pairs, auto-disable/flap-guard); Salience gated (>=100 pairs + validated-predictions + error/delta bounds); synthetic-session write firewall (absolute); consolidation dream-only; vector availability-gated (keyword fallback).",
+      "expected_idle_state": "After reset: store rebuilds from disk (0 if fresh), ranker/salience cold -> heuristic/rule fallback (NORMAL), 'No memories found' on a thin store is the FIX not broken, fractal recall mostly skips (no_seed/depth-1 = thin-store idle), 0 consolidations (dream-gated + needs heat), empty index, persistence load returns 0 on fresh ~/.jarvis.",
+      "wired_to_experience": "Yes \u2014 every recall/context-build/cognition read pulls here; engine.remember is how everything JARVIS learns becomes memory; golden-command is operator write-authority over the soul. FractalRecall is shadow (event-only).",
+      "common_misread": "Near-empty store/low avg_weight/low relevance/'No memories found' after reset = broken (all the honest fix/idle state). Cold ranker/salience = broken (heuristic/rule carries until trained). Append-order = time-order (NOT \u2014 must sort by timestamp). Fractal recall DRIVES behavior (Rollout-1 is pure shadow emission).",
+      "home_files": [
+        "brain/memory/storage.py:38",
+        "brain/memory/search.py:119",
+        "brain/tools/memory_tool.py:230",
+        "brain/memory/gate.py:33",
+        "brain/consciousness/engine.py:375",
+        "brain/memory/persistence.py:22"
+      ],
+      "evidence": [
+        "brain/memory/storage.py:144 (recent sorted by timestamp)",
+        "brain/tools/memory_tool.py:304 ('Using weight here was the recall bug')",
+        "brain/memory/gate.py:62 + engine.py:378 + core.py:162 (synthetic-session firewall honored on all writes)"
+      ]
+    },
+    {
+      "id": "dream-cycle",
+      "name": "Dream/Sleep stack (dream-cycle + consolidation + artifacts + reflective-validator + reflective-audit + counterfactual + dream-synthesis-specialist + mode-machine + belief-hooks + memory-optimizer + scripts)",
+      "area": "dream-sleep",
+      "purpose": "Offline hippocampus->cortex consolidation during low input: strengthen what matters, fade noise, surface cross-memory structure, run heavier epistemic maintenance \u2014 without polluting canonical memory (dream artifacts firewalled out of recall).",
+      "status": "shipped",
+      "authority": "active",
+      "does": "7-phase dream cycle (cluster/reinforce/decay/generate artifacts/consolidate/reflect/cortex-train/compact) holds real memory write-authority (guarded by consolidation gate). MemoryConsolidation merges clusters into trust-discounted summaries (refuses across contradictions). DreamArtifacts = ontological buffer (6 types, NEVER written to memory directly; only ReflectiveValidator promotes them, and promoted artifacts carry dream_observer provenance = recall-blocked at -1.0). ReflectiveAudit (L9) runs the CounterfactualEngine. dream_synthesis specialist learns the validator's tendencies (shadow). Mode machine reaches dreaming only after 300s sleep. Dream belief-hooks (scan_corpus/on_dream_cycle) run only in dreaming/deep_learning. MemoryOptimizer = RSS-pressure trimming (distinct from consolidation). Scripts (dream_cleanup one-time migration, feasibility probe) are operator/CI tools.",
+      "gate": "Fires in dreaming mode (30s) OR 600s-idle fallback + >=20 memories + >=5 non-dream recents. Consolidation quality gates. Artifact promotion coherence>=0.65/conf>=0.5. Counterfactual data-gated (200/500).",
+      "expected_idle_state": "Interactive brain may NEVER dream (needs 300s sleep first) \u2014 dream/consolidation/audit cycles dormant in conversational mode = NORMAL. After reset: 0 dream cycles (<20 memories or <5 non-dream recents), empty in-memory dream history (resets each restart), 0 consolidations, score 1.0 audit, counterfactual 0/500.",
+      "wired_to_experience": "Active substrate: mutates the memory graph (weights/associations/summaries) -> indirectly shapes recall. Dream ARTIFACTS are firewalled OUT (dream_observer provenance recall-blocked). Mode (cadence/proactivity) is felt.",
+      "common_misread": "Expecting dreaming on an actively-used brain (300s sleep required). Empty dream history post-restart = broken (ephemeral by design). total_promoted>0 = dreams drive conversation (recall-blocked). audit score 1.0 = not running (= health). Counterfactual data_gated = broken (dormant by design).",
+      "home_files": [
+        "brain/consciousness/consciousness_system.py:2357",
+        "brain/memory/consolidation.py:41",
+        "brain/consciousness/dream_artifacts.py:147",
+        "brain/consciousness/dream_artifacts.py:227"
+      ],
+      "evidence": [
+        "brain/consciousness/consciousness_system.py:574-577 (dream gate), :2387-2389 (>=5 non-dream guard)",
+        "brain/consciousness/dream_artifacts.py:1-11 (never MemoryStorage/MEMORY_WRITE) + memory/fractal_recall.py:95-96 (dream_observer recall-blocked -1.0)",
+        "brain/consciousness/modes.py:294-296 (dreaming only after 300s sleep)"
+      ]
+    },
+    {
+      "id": "world-model",
+      "name": "MentalSimulator + WorldPlanner + CognitivePlanner + SimulatorPromotion + HRR-simulation-shadow",
+      "area": "world-model",
+      "purpose": "The forward-model substrate: answer 'if X changed, what happens next?' without acting. Read-only + shadow-gated so an UNPROVEN simulator (and the planners gated on it) can never steer behavior.",
+      "status": "shadow",
+      "authority": "none",
+      "does": "MentalSimulator projects a WorldState+delta forward up to depth 3 via its OWN private CausalEngine (read-only, never mutates the real state, no events). Driven every 3rd world-model tick + by both planners. WorldPlanner ranks SINGLE moves (utility=opportunity-risk*0.35). CognitivePlanner does bounded BEAM search over multi-step SEQUENCES (chains the simulator). SimulatorPromotion gates shadow(0)->advisory(1) on 100 LIVE validations + 48h + accuracy>=0.70, auto-DEMOTES <0.55 (re-earns 48h), synthetic outcomes firewalled from the gate. HRR-simulation-shadow is an off-by-default VSA observer (byte-identical output).",
+      "gate": "SimulatorPromotion (100 live validated + 48h + 0.70 accuracy; demote 0.55). Both planners gated on simulator>=advisory; CognitivePlanner adds an explicit verified-count>=100 belt-check. HRR observer behind ENABLE_HRR_SHADOW (default off).",
+      "expected_idle_state": "After reset: simulator level 0, total_validated 0, get_stats().avg_confidence is the simulator's OWN projected confidence (is_measurement=False, NOT accuracy). Both planners enabled=False/dormant ('simulator_not_advisory'). The '~11,828 verified @0.81 then DEMOTED & re-earning' is a LIVE trajectory, not the snapshot.",
+      "wired_to_experience": "shadow-only \u2014 injects NOTHING into voice at any level (the advisory sim-summary injection in promotion.py docstring is DESIGNED-BUT-UNBUILT; no code consumes simulator traces into a prompt). Planners propose into get_state() only. The sole world-model prompt injection is the SEPARATE WorldModelPromotion (build_context_summary).",
+      "common_misread": "An external model called the simulator/planners 'missing' \u2014 fully built, run every cycle/evaluation; level-0/empty-validated is the gated cold state. avg_confidence is not a measured accuracy. Reaching advisory would NOT auto-inject sim summaries (consumer unbuilt). SimulatorPromotion is 2-level (vs the separate 3-level WorldModelPromotion).",
+      "home_files": [
+        "brain/cognition/simulator.py:164",
+        "brain/cognition/planner.py:286",
+        "brain/cognition/promotion.py:241",
+        "brain/cognition/world_model.py:89"
+      ],
+      "evidence": [
+        "brain/cognition/simulator.py:263,330-337 (read-only assert; avg_confidence is_measurement=False)",
+        "brain/cognition/planner.py:326-338 (CognitivePlanner data gate)",
+        "brain/cognition/promotion.py:259-263 (synthetic firewalled from gate)"
+      ]
+    },
+    {
+      "id": "personality",
+      "name": "Personality stack (soul-identity + trait-evolution + trait-modulator + trait-validator + rollback + archetype-bridge + persona-seed + soul-voice-dial)",
+      "area": "personality",
+      "purpose": "The grown personality layer: TraitEvolution derives archetype scores from lived memory, soul_dims persist+drift, TraitModulator turns active traits into LIVE prompt+LLM-param modulation, with a drift gate + rollback safety net. 'Personality is grown, never hand-configured' (re: magnitudes).",
+      "status": "partial",
+      "authority": "live",
+      "does": "IdentityState persists semi_stable_traits (soul_dims) + relationships (familiarity/rapport grow per voice turn) + mood. TraitEvolution re-derives 7 archetype scores from time-weighted memory tags every cycle (seeds at boot/graduation; continues post-birth). archetype<->dims bridge syncs them (inertia 0.7). TraitModulator: flat trait NAMES + a dominant-trait guidance line reach the prompt LIVE, and token/temp/depth modulation is applied live. TraitValidator gates drift (7-trait compatibility, relaxed during gestation/post-birth grace). PersonalityRollback auto-reverts on thrash (10-min emergency). The persona seed (local_soul.md/cloud_soul.md) is the FIXED authored voice scaffold. soul_dims->voice DIAL (grown magnitudes) is SHADOW (logged, sent_to_model=False).",
+      "gate": "Dominant-trait prompt guidance only when modulation_strength>0.2; trait block suppressed in operational-self-report/lean. Drift caps (relaxed gestation/grace). soul_dims dial gated behind operator A/B (live flip unbuilt).",
+      "expected_idle_state": "Fresh brain: soul_dims at 0.4-0.7 seeds, relationships={} (stranger), no active traits (<0.15) -> base LLM params, persona seed always present (sounds like Jarvis immediately). personality_emergence=0.0 during gestation is EXCLUDED (correct). Post-restart stage downgrade is the anti-inflation guard.",
+      "wired_to_experience": "TraitModulator is the ONE live personality wire (names + dominant guidance + token/temp/depth). soul_dims MAGNITUDES are NOT wired (shadow dial \u2014 the master gap). Relationships/mood persist live; persona seed is the live base voice.",
+      "common_misread": "Believing the grown MAGNITUDES drive the voice (only flat names do; magnitudes are shadow). Calling soul_dims at seeds 'broken' (move only on conversation). 'FROZEN at graduation' (TraitEvolution keeps re-deriving; only the birth-cert snapshot is immutable). Conflating the persona seed (authored scaffold) with grown traits.",
+      "home_files": [
+        "brain/consciousness/soul.py:102",
+        "brain/personality/evolution.py:77",
+        "brain/personality/traits.py:70",
+        "brain/personality/validator.py:78",
+        "brain/reasoning/context.py:58"
+      ],
+      "evidence": [
+        "brain/reasoning/context.py:317-335 (flat names + dominant guidance, live) + response.py:595-609 (token/temp modulation)",
+        "brain/reasoning/response.py:527-546 (soul_dims dial logged, sent_to_model=False \u2014 shadow)",
+        "brain/personality/validator.py:103-110 (post-birth grace) + gestation.py:1042 (mark_birth)"
+      ]
+    },
+    {
+      "id": "routing-voice",
+      "name": "Routing + voice leash (tool-router + voice-intent NN/teacher/shadow + route-overrides + corrections + reflective-detector + golden-words + style-intent + search-route-guard + plugin-tier + LLM-leash + honesty-firewall + self-report-mode + prompt-builder)",
+      "area": "routing-voice",
+      "purpose": "The live routing brain + the LLM-leash firewall: deterministically map every utterance to a ToolType (self-report fails CLOSED into INTROSPECTION) and keep the swappable base LLM on a leash (it is the LANGUAGE SURFACE, not the source of truth about JARVIS's systems/capabilities/consciousness).",
+      "status": "shipped",
+      "authority": "live",
+      "does": "ToolRouter = 5-tier regex router (golden-command -> explicit extractors -> response-preference->NONE -> core-verbs -> corrections -> plugin -> keyword -> regex -> self-ref catch -> NONE), every return through _finalize (reflective detector + voice-intent teacher-signal capture). Post-route overrides (job-status/OSV self-view/capability-domain-recall/follow-ups) supersede routing AFTER the router. Golden-command parser is exact-match operator write-authority (pre-empts everything). Persistent routing-corrections (operator teaches the router). Reflective-detector splits introspection register (operational veto wins). The voice-intent NN learns routing from the teacher signal (gated, IntentShadowRunner is a shadow pass-through at SHADOW level). build_system_prompt assembles the live prompt; the honesty firewall + vision-grounding + reflective leash + per-route temp/voice-caps are the model-agnostic leash. style-intent + search-route-guard (rewrites a reply that denies a capability it just used).",
+      "gate": "Router drives live every turn (no gate). voice-intent NN gated (min_samples + IntentShadowRunner promotion 500 samples + 0.80 agreement, auto-rollback). plugin tier data-gated on registry contents. Honesty firewall always-on. Self-improve stage / OSV phases gate their overrides.",
+      "expected_idle_state": "Router fully live from boot, _user_corrections empty until operator records, IntentShadowRunner at shadow (pass-through, 0 rewrites, teacher_samples=0), plugin tier returns None (no plugins). Honesty firewall + leash identical across model swaps. A humble 'I don't have data / I don't claim consciousness / can't do that yet' reply is the firewall WORKING.",
+      "wired_to_experience": "YES \u2014 the router's ToolType selects the dispatch branch + tool_hint reaching the LLM; the honesty/vision/leash firewalls + per-route temp/voice-caps shape every spoken word; golden-command + search-route-guard can rewrite the reply. The most behavior-load-bearing area. The voice-intent NN drives nothing (shadow/gated).",
+      "common_misread": "Mistaking the regex router for 'the Policy NN' or 'the voice_intent NN' (the heuristic router is the live driver AND teacher; the NN is a gated student). IntentShadowRunner.observe() in the live path = NN overriding (pass-through at shadow). Loosening the honesty/grounding leash to 'fix' a humble answer. Code-to-qwen (voice is config-swappable; fixes must be model-agnostic). Empty corrections file/0 plugin routes = broken (operator-created/starved, not failing).",
+      "home_files": [
+        "brain/reasoning/tool_router.py:1330",
+        "brain/reasoning/intent_shadow.py:232",
+        "brain/reasoning/golden_words.py:1",
+        "brain/reasoning/context.py:241",
+        "brain/reasoning/context.py:540"
+      ],
+      "evidence": [
+        "brain/conversation_handler.py:2996 (live route) + 3002-3130 (post-route overrides AFTER router)",
+        "brain/reasoning/context.py:540-573 (honesty firewall on EVERY route) + 500-510 (vision grounding)",
+        "brain/reasoning/intent_shadow.py:328-433 (pass-through at shadow) + tool_router.py:1320-1321 (live observe)"
+      ]
+    },
+    {
+      "id": "conversational-pipeline",
+      "name": "Conversational pipeline (barge-in + endpointing/VAD) + deferred streaming-ASR + deferred speaker-gating",
+      "area": "conversational-pipeline",
+      "purpose": "OpenAI-style fluid turn-taking: talk over JARVIS to interrupt (no wake word, energy-gated) + endpointing (wake-word arm + VAD speech-end). The felt fluidity of the voice loop.",
+      "status": "shipped",
+      "authority": "live",
+      "does": "Barge-in: while JARVIS speaks, RMS>=threshold for N consecutive frames -> cancel the in-flight reply + open a follow-up listen window (the interrupting words become the next turn). CONFIG defaults: barge_in_energy_rms=600.0, hits_required=4. Tunable/observable via GET /api/audio/barge-in. Endpointing: openWakeWord arms a listen, faster-whisper/Silero VAD detects speech-end after silence_duration_s=1.5 (shipped value), follow-up skips the wake word for 4s, speaking threshold x2.0 to resist self-trigger. Streaming ASR (the real fluidity fix) is ABSENT (roadmap only); speaker-gating for barge-in is PLANNED (energy-only fires on ANY loud voice today).",
+      "gate": "none \u2014 live runtime, config-tunable. Streaming ASR / speaker-gating deferred.",
+      "expected_idle_state": "Live/armed from boot. peak_rms=0/fired_count=0 until someone talks over JARVIS = no interrupts yet, not broken. /api/audio/barge-in returns available:False on the snapshot repo (no Pi). The in-code default rms is 900.0 but config passes 600.0 (config is live).",
+      "wired_to_experience": "Fully wired \u2014 barge-in cancels the spoken reply + changes turn-taking; endpointing governs perceived responsiveness/clipping; voice-policy/TTS deliver the spoken voice.",
+      "common_misread": "fired_count=0/peak_rms=0 = 'barge-in not working' (idle counters). Endpointing 0.8s from the memory index (live config ships 1.5s with an explicit revert comment). Energy-only barge-in firing on ANY voice = a documented deferral, not a bug. Assuming streaming ASR exists (roadmap item, not code).",
+      "home_files": [
+        "brain/perception/audio_stream.py:317",
+        "brain/config.py:155",
+        "brain/perception_orchestrator.py:760"
+      ],
+      "evidence": [
+        "brain/perception/audio_stream.py:317-356 (energy-gated barge-in) + config.py:176-178 (live 600.0/4)",
+        "brain/config.py:161-167 (silence_duration_s=1.5 with revert comment)",
+        "brain/config.py:165 (Tier-2 streaming ASR named as the unbuilt real fix)"
+      ]
+    },
+    {
+      "id": "dashboard",
+      "name": "Dashboard (v1 app/routes + snapshot assembler + 2s cache/WS/SSE + v2 28-page cockpit + honest-render toolkit + integrity/grounding panels + ~30 API endpoints + pi5/telemetry shapes)",
+      "area": "dashboard",
+      "purpose": "The single web/REST/WS observability surface. Performance+safety contract: every endpoint reads a pre-built 2s snapshot cache, no endpoint reaches into consciousness directly, destructive endpoints are API-key gated. Tracer-bullet: verify every metric UNDER THE HOOD, never fabricate green.",
+      "status": "shipped",
+      "authority": "advisory",
+      "does": "FastAPI app (185 routes: 123 GET read/page-serve, 56 POST + 5 DELETE mutating, 53 API-key gated, 1 WS, SSE). snapshot.py build_cache = the SOLE state producer (~40 fail-closed sub-builders, never reshapes). _snapshot_loop rebuilds every 2s; WS pushes on hash-change; SSE taps the event ring. v2 cockpit = 28 pages (NAVPAGES) with the window.V2 honest-render toolkit (null=>UNKNOWN/dim, fail-CLOSED gates, never green/zero on missing data). Tracer pages: /v2/integrity (self-grade vs grounded divergence), /v2/grounding (the spark, zero_authority/drives_levers=is_active()). ~30 cache-slice GETs + /api/self-test (side-effect-free verdict, 503 until cache ready) + /api/maturity-gates (recovering-not-broken) + /api/system/restart (OPERATOR-only, API-key gated). pi5_devices derivation (never fabricates a green light) + telemetry_api shape contract.",
+      "gate": "config.enable_dashboard; destructive endpoints API-key gated (DASHBOARD_API_KEY, random per-process if unset). A few mutating POSTs (goals) are ungated localhost test affordances. Read endpoints ungated/read-only.",
+      "expected_idle_state": "Cache {} for ~2s after boot (read endpoints return empty defaults; /api/self-test 503 'cache_ready:false'). Then honest empty/level-0 sub-dicts (self_improve frozen, policy shadow, self_sensing not_loaded, matrix not_born, grounding zero_authority, 7-cat scoreboard 'not measured', pi5 unknown/stale). Quiet WS on idle = healthy. Gated POSTs 403 without the key.",
+      "wired_to_experience": "Shadow/observational substrate \u2014 OBSERVES the soul, injects nothing. EXCEPTION: drives behavior only through explicit operator API-key'd POSTs (autonomy level, restart, plugin promote, handoff approve, domain create/delete). The cache-timer ALSO warms the OSV self-view that the conversation handler reads (that wiring lives in self_view).",
+      "common_misread": "Boot-window 503 / empty snapshot = broken dashboard (cache-not-yet-built). Assuming the dashboard 'drives' the soul (read-mirror; only operator POSTs change state). UNKNOWN/dim render = a fetch bug (the toolkit refuses to invent green). v2 IA: memory said 9 pages, first-pass 33 \u2014 actual 28; most v2 pages served by /static not a /v2/<name> route (only 5 have sugar routes). pi5/telemetry files are at brain/dashboard/ not a nested dashboard/dashboard/.",
+      "home_files": [
+        "brain/dashboard/app.py:326",
+        "brain/dashboard/snapshot.py:627",
+        "brain/dashboard/static/v2/shared.js:26",
+        "brain/dashboard/app.py:4659",
+        "brain/dashboard/pi5_devices.py:19"
+      ],
+      "evidence": [
+        "brain/dashboard/app.py:1-10 (read-from-cache safety contract) + 4659-4682 (snapshot loop sole reader, push-on-hash-change)",
+        "brain/dashboard/static/v2/shared.js:1-21 (null=>UNKNOWN never green/zero, fail-closed gates)",
+        "brain/dashboard/snapshot.py:1611-1613 (grounding zero_authority/drives_levers=is_active()) + app.py:1854-1889 (self-test serializer-shape invariant)"
+      ]
+    }
+  ],
+  "gaps": [
+    "No competitive Global Workspace at the consciousness-kernel level: the EventBus (events.py:653) is pure unconditional multicast (no ignition threshold, no limited slots, no winner-take-all). The ONLY GNW-style competition lives in hemisphere broadcast slots (orchestrator.py:1830, 4 slots, 1.15x+dwell hysteresis) over NN-specialist signals \u2014 and its sole consumer (the policy StateEncoder->policy NN) is gated off + signal-failed, so the competition currently drives nothing live. The architecture has broadcast competition as substrate but no live competitive conscious-access bottleneck on behavior.",
+    "Policy NN is a MEASUREMENT-FAILURE, not a competence gap: the full shadow->active loop is built, wired (apply_policy_decision at engine.py:1394 genuinely routes to mode/budget/thought-weights/response-length), and trains (348 versions) \u2014 but the reward carries no causal content (offline critic Spearman ~0.06, R^2~0). The 20-dim state is missing what actually drives conversation outcome (conversation content). It will never clear the 0.55/0.03 gate; the imitation paradox (clone-the-kernel then beat-the-kernel => ties forever) is structural. The DEVIATION_BONUS the strategy doc recommends deleting is still applied (evaluator.py:247).",
+    "Affect is NOT consume-wired to experience as a DRIVER: the SPARK neurochemical scalars (dopamine/serotonin/cortisol) + AffectCadenceCoupling are fully built end-to-end (real sinks: kernel cadence, memory reinforcement, drive urgency, health reward) but DORMANT at level 0 \u2014 the 'valence as driver not readout' gap. Only the affect-nickname firewall (a GUARD, not a generator) and a read-only diagnostic readout touch the voice. Promotion is operator-earned (4h live soak + 20 grounded outcomes + acceleration->debt proof) and not done.",
+    "Grown personality MAGNITUDES never reach the voice \u2014 the master substrate<->experience gap for personality: TraitEvolution grows soul_dims (semi_stable_traits) from lived interaction, but build_system_prompt injects only flat trait NAMES + a dominant-trait nudge (context.py:319). The graded soul_dims->voice DIAL wire (build_dial_trait_block) is shadow-only (sent_to_model=False, logged to soul_voice_shadow.jsonl), awaiting an operator A/B flip. TraitModulator (token/temp/depth) is the one live personality wire; the grown magnitudes are not.",
+    "Scene-permanence -> memory/curiosity consume-wire is UNBUILT: SceneTracker (L3B) maintains the canonical world model live but by its own contract 'does NOT write memory or trigger curiosity' (gating deferred to Patches 3+4). The permanence substrate exists; the experience-wire from scene events into memory/curiosity does not.",
+    "SpatialMemoryGate \u2014 the ONLY path from spatial intelligence into canonical memory \u2014 is built+tested but NOT wired into the live remember path (instantiated only in tests; no orchestrator caller). The scene-graph and album paths deliberately route around it. The spatial->lived-memory bridge is held open by design, awaiting the validation walk-through that earns live meaning-attach.",
+    "Companion-cognition read fires a full turn TOO LATE: the only acting self-read (situational_read P0) runs POST-reply (conversation_handler.py:6037, requires the finished reply). TBS-0 was built to fix the timing (pre-speech read) but injects nothing (shadow). P4 (read actually steers the reply via the style_instruction seam) and P5 (read learns from correction) are DESIGN-ONLY \u2014 no apply path exists; behavior_advisory.applied is hardcoded False.",
+    "tension-seeded grounding thought (belief_validation_curiosity) is shadow-gated and emits nothing in the conscious stream (TensionThoughtPromotion level 0); the SPARK grounding loop is OPERATOR-PULL \u2014 without David answering /v2/grounding queue questions, the grounding drive, P5b autonomous research, and the win-rate promotion all stay starved/dormant. This is a real input-starvation gap on the autonomous-growth side (distinct from the policy-NN measurement failure).",
+    "thought_trigger_selector has a cross-module feature-dim mismatch (DistillationConfig input_dim=24 at types.py:516 vs encoder FEATURE_DIM=44 at thought_trigger_encoder.py:24) AND its teacher signal (THOUGHT_VALIDATION_OUTCOME) is a 'reserved/not emitted yet' event \u2014 wired-but-input-starved, latent until traffic flows. The friction-correction claim_classifier sub-feed (capability_gate.py:1163 record_friction_correction) is STILL DEAD (old broken signature, TypeError swallowed) even though the main claim_classifier feed was fixed.",
+    "weight_room_gate has a STALE classification: code_quality is marked BLOCKED_BY_DESIGN with reason 'no live code-quality outcome signal wired' but the upgrade_verdict feed IS recorded live (system_upgrade_report.py:346). The gate has not been re-classified \u2014 a real governance-metadata staleness, not just a doc drift.",
+    "Two DEAD module-level SoulIntegrity context reads (consciousness_system.py:2264 imports nonexistent lowercase 'soul_integrity_index' and reads nonexistent '.score'; :2339 reads 'composite_score' but get_state() returns 'current_index') both silently default to 1.0. The L10 repair authority works via the event path (engine.py:1489/1518), but these two context-read wires are dead and could mask a low integrity in any consumer that reads them.",
+    "Document Library / Study pipeline / Blue Diamonds knowledge tier is entirely uncovered architecturally and is load-bearing for the 'GROWS across resets' claim: library/ stores research as provenance-tagged Sources+chunks (the L2 firewall's actual source of trust), Study extracts concepts+structured claims, and Blue Diamonds (~/.jarvis_blue_diamonds, OUTSIDE ~/.jarvis) is the ONLY knowledge store that survives a brain reset via quality-gated graduation. The 313-entry manifest had memory stores but not this knowledge-retention spine.",
+    "Autonomy research engine TRUNK is uncovered: AutonomyOrchestrator (the L0-L3 ladder, inspectable one-job queue) + ResearchGovernor (mode/rate/topic/budget gate, scholarly-only no-DDG anti-poisoning) + MetricTriggers + OpportunityScorer + DeltaTracker (counterfactual credit assignment) + KnowledgeIntegrator (the real memory/library write path) + InterventionRunner (propose->shadow->measure->promote) + SourceLedger. The manifest had the satellites (drives, policy_memory, spark) but not the scheduler/governor/credit spine.",
+    "L3 Escalation + Attestation governance is the actual operator-write-authority boundary over self-modification and is uncovered: sustained deficits at L3 auto-submit EscalationRequests (declared-scope path allowlist) requiring explicit human approval; AttestationLedger lets operators hash-seed prior-proven capability so MANUAL L3 promotion is requestable after a reset WITHOUT contaminating ever_*/maturity_highwater. AuditLedger durably records every autonomy transition. The earn-don't-declare firewall for granting JARVIS new authority lives here.",
+    "Unified World Model + CausalEngine TRUNK is uncovered while its LEAVES are covered: the manifest has mental-simulator/world-planner/cognitive-planner/simulator-promotion but NOT the WorldModel that fuses 9 subsystem snapshots into a WorldState every ~5s and runs the heuristic CausalEngine that those planners forward-model over. WorldModelPromotion (the 3-level shadow->advisory->active gate, distinct from the 2-level SimulatorPromotion) is the only world-model prompt-injection path (context.py:1001, build_context_summary) and is also underrepresented.",
+    "Observer Effect / KernelMutator / MutationGovernor (kernel-config self-mutation) is uncovered and is a distinct safety axis from personality/specialist evolution: the Observer holds bounded REAL write-authority (association +0.1 / salience within range, WAKING-only, cannot create/rewrite memories); MutationGovernor is the single gate (validate->risk->cooldown 180s->stability->snapshot->apply->monitor->rollback) for kernel-config changes (tick budget/cadence/thresholds). The self-modifying-kernel safety spine.",
+    "Conversation Handler (278KB, the top-level message->tool/LLM dispatch spine) is uncovered despite BEING the lived experience: it sequences golden-command parse -> 5-tier ToolRouter -> route-overrides -> context build -> response/stream -> release-validation -> live intention/commitment registration. The manifest covers its components but not the orchestrator at the center of the conversational hot path.",
+    "Process Supervisor + Hardware Profile portability layer is uncovered: jarvis-supervisor.py holds restart/rollback authority over the brain process (exit-code protocol 0/10, exponential backoff, PATCH ROLLBACK on rapid-crash-with-pending-verification, crash-loop ceiling) \u2014 the safety net that makes self-improvement patches survivable; HardwareProfile auto-selects models/devices per VRAM/CPU tier (the reason the same code runs Pi + RTX-4080). api-system-restart (operator action) is covered but not the supervisor or the portability layer.",
+    "ProactiveGovernor + CuriosityQuestionBuffer (the ONLY unprompted-speech paths) are uncovered: every greeting/wellness-check/soul-question/grounded-curiosity-question routes through ProactiveGovernor (per-hour cap, engagement/stress suppression, mode cooldown) and is genuinely WIRED-TO-VOICE. Core to the 'living companion you want to be with' north star; the manifest had onboarding/curiosity-cycle rows but not the proactive-speech driver.",
+    "Identity Evidence Accumulator + IdentityFusion + SpeakerID/FaceID enrollment stores are uncovered: the Accumulator is the SINGLE gate through which all identity-creation routes (candidate->provisional@0.75->persistent@1.5, >=2 evidence types) \u2014 the anti-spoofing firewall for WHO JARVIS trusts. The manifest has L3/L3A boundary+persistence and the Tier-1 speaker/face ENCODER feeds, but not the fusion arbiter or the evidence-tier promotion gate that produce the trusted identity those layers assume.",
+    "Personal Intel Capture (HUMINT preference pipeline, conversation_handler.py:2284) is uncovered: 4 regex pipelines that learn WHO the person is (interests/dislikes/biographical facts/habits) with the banter firewall (soft tastes->0.0-trust casual_conversation, hard facts->user_claim, golden-command authoritative) + preference RETIREMENT. It holds real write-authority into the relationship record and is how the soul becomes 'uniquely shaped by one person's life'.",
+    "Codebase self-awareness tool (tools/codebase_tool.py, AST index + symbol table + import graph + WRITE_BOUNDARIES allowlist) is uncovered: it defines the file-write enforcement surface for self-improve/skill-plugin AND grounds 'codebase' Q&A answers, rebuilt after every self-improvement patch. The substrate that makes purposeful self-improvement and codebase introspection grounded.",
+    "Academic Search Tool (Semantic Scholar + Crossref, poisoning-resistant) is uncovered: the default retrieval tool for ALL autonomous research via QueryInterface, returning structured DOI/venue provenance that cannot be SEO-gamed, with NO DDG fallback on the scholarly lane. The concrete provenance-grounded source the whole L2/anti-confabulation story depends on.",
+    "Explainability layer (reasoning/explainability.py, Phase 6.4) is uncovered: builds user-facing 'why this answer / where it came from' provenance traces + evidence chains + citations on the LIVE response path (conversation_handler.py:5476 compact_trace). The consume-wire that turns the L1 attribution substrate into operator-visible transparency \u2014 the kind of substrate->experience wiring the master finding tracks.",
+    "Existential/Philosophical reasoning engines (existential_reasoning.py, philosophical_dialogue.py, epistemic_reasoning.py) are uncovered: kernel-scheduled cognition cycles that generate the structured inner-life KERNEL_THOUGHTs feeding curiosity/meta-cognition, with hard-gated LLM enrichment under an hourly token budget. Genuine inner-life substrate; the manifest has meta-cognitive-thoughts but not these generators.",
+    "HealthMonitor (consciousness/health_monitor.py, 5s) is uncovered: the formal weighted self-assessment engine (5 dimensions, severity alerts, linear-regression trend prediction, recommendations) \u2014 distinct from the dashboard /api/health passthrough and from analytics. The self-health substrate that can inform mode/throttle.",
+    "Layer-3B Display Classifier (perception/display_classifier.py) is uncovered: a DISTINCT perceptual-truth firewall that masks monitor-interior detections so 'enemy on screen' never becomes 'enemy in room' \u2014 a spatial sibling to the covered vision-grounding caption firewall. Real epistemic-integrity guard at the perception boundary.",
+    "Phase-C/D/E native Language substrate (shadow_language_model.py retrieval-only style student + language_runtime_bridge.py default-OFF + LanguageKernel artifact registry + promotion governor) is uncovered: the 'LLM becomes the voice not the brain' endgame muscle, trained on JARVIS's own grounded corpus, never generates (zero hallucination). PRE-MATURE/shadow \u2014 exactly the 'built shadow substrate, never consume-wired' pattern, on the language axis the manifest's native-reasoning encoder only partially touches.",
+    "Long-Horizon Attention (P3.12) is PLANNED/ABSENT by design (docs/LONG_HORIZON_ATTENTION_USE_CASE.md, 'use-case pinning only \u2014 no code', 6 unmet preconditions). Worth one manifest slot as a planned pillar so a future agent does not mistake its absence for a regression nor re-design it from scratch \u2014 the cross-day operator-attested task-recall capability with provable memory origin + 'I never said that' suppression.",
+    "Trace Explorer + Reconstructability operator cockpit (dashboard/app.py:4487/4507/4512) is uncovered: reconstructs causal chains (root_chains/agent_runs/tool_lineage) and per-surface reconstructability metadata from the immutable attribution ledger \u2014 the lineage-audit surface distinct from /v2/integrity and raw /api/ledger.",
+    "Streaming ASR (Tier-2 conversational fluidity) is ABSENT \u2014 the documented 'real fix for true fluidity' (config.py:165) is a roadmap item, not code; current STT is segment-then-transcribe bounded by a silence timer. Barge-in speaker-gating is also PLANNED (energy-only barge-in fires on ANY loud voice today). Both are honest deferrals, flagged so they aren't mistaken for built-but-broken."
+  ],
+  "contradictions": [
+    "L9 status: one verifier marks Reflective Audit 'shipped' (authority advisory, runs on 120s timed cadence in ALL waking modes), another marks it 'shadow' (authority advisory, 300s sleep/dream cadence, 'DRIVES NOTHING'). Both agree it is read-only/advisory and mutates nothing; the real disagreement is cadence (120s-in-all-modes vs 300s-dream-only) and the shipped-vs-shadow label. Resolved to shipped/advisory since it genuinely runs and feeds SoulIntegrity audit_score, but its findings auto-apply nowhere (the 'shadow' verifier's behavioral point stands).",
+    "L10 SoulIntegrity authority: one entry says authority='active', another says 'live'; both describe the same event-driven repair path (engine.py:1489/1518 force-dreaming + mutation cooldown). Harmonized to 'live' (it genuinely changes mode/throttles mutation).",
+    "L4 dual-arm split: the OutcomeScheduler arm is live/active (drives self-improve rollback) while the CounterfactualEngine arm is shadow/dormant (live_influence=False). One verified entry presents L4 as authority='advisory'/partial, separate entries present the counterfactual half as 'dormant'/none. Not a true contradiction \u2014 two arms of one layer \u2014 but the headline authority label differs by which arm is emphasized.",
+    "Counterfactual data gate phrasing: engine.py:110-113 cited as is_active requiring _total_evaluations>MIN_BUFFER(500) AND _lived_outcomes>=MIN_OUTCOMES(200); one entry's prose says 'evaluated 0/500, outcomes 0/200' \u2014 consistent, but the reflective_audit '6 dimensions' docstring vs 9 actual scanners is an internal-doc-vs-code inconsistency flagged by multiple verifiers (docstring stale, code authoritative).",
+    "L8 status: marked 'shipped'/active (QuarantinePressure ACTIVE-LITE, drives >=3 gates) in the deep-dive but 'partial'/advisory in the L9-L12-area anchor ('Active-Lite (partial), not fully shipped'). Both agree the scorer is shadow and pressure is the active-lite enforcer; resolved to shipped/active for the QuarantinePressure home, with the scorer entry kept as shadow.",
+    "ProvenanceScorer authority: appears as authority='none' (VIEW-ONLY shadow reader, L2-spark-reader / provenance-scorer entries) AND authority='advisory' (spark-provenance-scorer / reasoning-encoder upstream). Resolved: the reader itself drives no lever (none), but is labeled 'advisory' when described via its downstream gated grounding-drive consumer. Same module, two framings.",
+    "weight_room_gate code_quality classification: gate marks code_quality BLOCKED_BY_DESIGN with reason 'no live code-quality outcome signal wired' (weight_room_gate.py:73), but the upgrade_verdict feed IS recorded live (system_upgrade_report.py:346). The gate's stale reason contradicts the actual live feed \u2014 a real internal inconsistency (gate not re-classified), not just a doc drift.",
+    "GroundingQueue.answer() docstring (grounding_queue.py:421-423) claims 'Does NOT mutate the belief here (view-only)' but the code at :469-473 DOES call _ground_belief which mutates provenance->user_claim. Code-vs-docstring contradiction; trust the code (the ring HAS one live mutating path).",
+    "self_sensing skill headline: memory/breakthrough log cites a stable +0.463 dynamic skill / obs 907 reading; the live verified entries say that was a first-30-min snapshot and steady-state is VOLATILE/STARVED at a quiet desk. The 'stable +0.463' framing contradicts the 'volatile, event-bandwidth-gated' framing \u2014 resolved in favor of volatile/STARVED-is-normal.",
+    "Endpointing latency: memory index says 0.8s and 2.0s->0.8s; live config.py:166 ships silence_duration_s=1.5 with an explicit revert comment. Doc-vs-code contradiction; code (1.5s) is authoritative.",
+    "intention-delivery-encoder wiring: first-pass claimed the 24-dim encoder is live in Stage-1; corrected entry says it is imported ONLY by tests/test_intention_resolver.py and NOT consumed by the live resolver. Same module, opposite wired/unwired claims \u2014 resolved to unwired/test-only.",
+    "AGENTS.md:595 prose says '11 layers (0-11 + 3A + 3B)' and OMITS L12, contradicting the canonical 15-entry list at docs_truth_audit.py:425 (L0-L12 + L3A/L3B). Stale narrative vs authoritative literal.",
+    "spark_metrics baseline figure: module docstring still says '3.3x' grounded:inferred ratio but SPARK_BASELINES authoritatively uses 20.5x (belief-graph re-base). Docstring stale vs code authoritative; 3.3x retained separately as the memory-store figure."
+  ],
+  "audit_assertions": [
+    "File brain/scripts/docs_truth_audit.py exists and at line 425 defines the canonical integrity-stack list ['L0','L1','L2','L3','L3A','L3B','L4','L5','L6','L7','L8','L9','L10','L11','L12'] (exactly 15 entries, in that order).",
+    "The integrity stack has exactly 15 entries; the id sequence is L0,L1,L2,L3,L3A,L3B,L4,L5,L6,L7,L8,L9,L10,L11,L12 with no gaps and no duplicates.",
+    "File brain/skills/capability_gate.py exists and defines the L0 Capability Gate (check_text / _evaluate_claim) with a DEFAULT-BLOCK fail-closed branch near line 1441.",
+    "File brain/consciousness/attribution_ledger.py exists and defines the L1 Attribution Ledger record() append-only API (class/def near line 171-255).",
+    "File brain/consciousness/events.py exists and defines the 11-tier ProvenanceType + PROVENANCE_BOOST table near line 37, with web_scrap and casual_conversation mapped to 0.0 boost.",
+    "File brain/identity/boundary_engine.py exists and defines the L3 Identity Boundary Engine validate_retrieval returning a 3-state BoundaryDecision (near line 32-43).",
+    "File brain/perception/identity_fusion.py exists and defines L3A identity persistence constants PERSIST_MAX_S=180 (near line 47).",
+    "File brain/perception/scene_tracker.py exists and is the L3B persistent scene model; its module docstring states it does NOT write memory or trigger curiosity.",
+    "File brain/epistemic/counterfactual/engine.py exists; defines MIN_OUTCOMES=200 and MIN_BUFFER=500 and is_active() at line ~110 requiring _total_evaluations>MIN_BUFFER AND _lived_outcomes>=MIN_OUTCOMES; the L4 counterfactual arm is live_influence=False.",
+    "File brain/epistemic/contradiction_engine.py exists and defines the L5 Typed Contradiction Engine (class near line 63) subscribed to MEMORY_WRITE.",
+    "File brain/epistemic/calibration/__init__.py exists and defines the L6 Truth Calibration Engine over 11 domains; truth_score returns None when too many domains are provisional.",
+    "File brain/epistemic/belief_graph/__init__.py exists and defines the L7 Belief Confidence Graph whose propagation is view-only (never writes belief_confidence).",
+    "File brain/epistemic/quarantine/pressure.py exists and defines the L8 QuarantinePressure (ACTIVE-LITE) friction methods near line 140; memories always write.",
+    "File brain/epistemic/reflective_audit/engine.py exists and defines the L9 Reflective Audit Engine with 9 scanners (code), returning score 1.0 on no findings; it mutates no beliefs/memory/policy.",
+    "File brain/epistemic/soul_integrity/index.py exists and defines the L10 Soul Integrity Index over 10 weighted dimensions with REPAIR threshold 0.50 / CRITICAL 0.30.",
+    "File brain/cognition/intention_registry.py exists and defines the L12 IntentionRegistry.register that rejects an empty backing_job_id (near line 250).",
+    "File brain/cognition/self_sensing.py exists and get_status hardcodes authority influences_behavior=False, writes_beliefs=False, writes_memory=False (around lines 279-281).",
+    "File brain/consciousness/behavior_advisory.py exists and BehaviorAdvisory.applied is hardcoded False (P3 narrate-only; lines ~74 and ~311).",
+    "File brain/consciousness/affect_state.py exists and implements the cannot-lie clamp forcing scalars to 0.0 when all sources read 0 (cannot_lie_clamped flag).",
+    "File brain/policy/evaluator.py exists and DEVIATION_BONUS=0.08 is still applied (scaled_bonus = DEVIATION_BONUS * ... near line 247).",
+    "File brain/autonomy/grounding_queue.py exists; answer() calls _ground_belief which calls store.update_provenance(belief_id, 'user_claim') \u2014 the single live mutating path of the spark ring (around lines 471/497).",
+    "File brain/cognition/simulator.py exists (MentalSimulator) and File brain/cognition/planner.py exists (CognitivePlanner) \u2014 both present, not missing; planners are gated on simulator>=advisory.",
+    "File brain/cognition/capability_domains/registry.py exists and File brain/cognition/capability_domains/recall.py exists; recall returns None on a topic miss (no confabulation).",
+    "File brain/cognition/self_view/__init__.py exists and File brain/cognition/self_view/articulate.py exists; articulate is the only OSV component that authors the spoken self-reply.",
+    "File brain/self_improve/orchestrator.py exists; self-improve defaults to FROZEN (FREEZE_AUTO_IMPROVE) and brain/config.py sets enable_self_improve default False.",
+    "File brain/skills/registry.py exists and seeds 14 bootstrap skills (codebase-audit verified), of which only web_scraping_v1 is pipeline-earned.",
+    "File brain/consciousness/consciousness_evolution.py exists and cross-validates claimed stage against persisted counts (_validate_stage_against_counts), downgrading inflated stages on restart.",
+    "File brain/hemisphere/orchestrator.py exists and defines both the broadcast-slot competition (~line 1830) and the Matrix Tier-2 4-gate lifecycle; Tier-2 restore resets authority while keeping weights.",
+    "File brain/hemisphere/reasoning_encoder.py exists; its grounding-coherence signal returns 0.0 unless sources_available AND sampled_beliefs>0, and is view-only (drives no decision).",
+    "AGENTS.md line ~595 describes the stack as '11 layers (0-11 + 3A + 3B)' and omits L12, which contradicts the canonical 15-entry list \u2014 a known stale-narrative assertion the CI may flag.",
+    "File brain/config.py exists and sets silence_duration_s=1.5 (with a revert comment), not 0.8."
+  ],
+  "corrections_log": [
+    "The Epistemic Integrity Stack is 15 layers (L0-L12 + L3A + L3B), not 6/11/13. Prior docs (AGENTS.md:595) said '11 layers (0-11 + 3A + 3B)' and omitted L12 entirely; the authoritative literal list is at docs_truth_audit.py:425.",
+    "MentalSimulator, CognitivePlanner, and the CounterfactualEngine are NOT missing \u2014 an external model called them absent. They exist (cognition/simulator.py, cognition/planner.py, epistemic/counterfactual/engine.py) and run every cycle; they are shadow/dormant by design (level-0/data-gated, authority none/live_influence=False), not unbuilt.",
+    "Transcendence and awareness are SELF-SCORED composites of JARVIS's own internal counters (consciousness_evolution.py), never external tests. A transcendence of 7 or 'recursive_self_modeling unlocked' is a label/score, not proof the architecture works; 5 of 6 unlocked capabilities have no live consumer.",
+    "Affect is a shadow READOUT, not a driver. The SPARK scalars are fully built and consume-wired end-to-end but DORMANT at coupling level 0 \u2014 every engine.set_* call is a no-op. cadence=1.0/reward=0.0 is correct dormant state, not 'unwired' or 'broken'. The cannot-lie clamp forcing dopamine/cortisol to 0.0 is the firewall firing, not a dead signal.",
+    "The Policy NN is a SIGNAL-FAILURE (measurement dead-end, Spearman ~0.06 / R^2~0), not a gated-needs-more-reps subsystem. More soak will NEVER promote it; the 0.55/0.03 gate is structurally uncrossable. Do not treat it like the other earnable gates. DEVIATION_BONUS the strategy doc recommends deleting is still applied (evaluator.py:247).",
+    "The EventBus is NOT a Global Workspace. emit() is unconditional multicast (no slots, ignition, or winner-take-all). The only GNW-style competition is hemisphere broadcast slots, whose sole consumer (the policy NN) is gated+signal-failed, so it drives nothing live. Calling the EventBus 'the global workspace' is the central GNW error.",
+    "'14 verified skills' does not mean 14 earned \u2014 13 are bootstrap (codebase-audit verified), only web_scraping_v1 was earned through the live learning pipeline. SKILL_LEARNING_COMPLETED is process evidence, not operational capability.",
+    "Companion-cognition 'advisory' authority does NOT mean it steers the reply. behavior_advisory.applied is hardcoded False and the return is discarded; the situational_read fires POST-reply (a turn too late). P4/P5 are design-only with no apply path.",
+    "self_sensing '+0.463 stable' was a first-30-minute snapshot; steady-state at a quiet desk is volatile/STARVED (event-bandwidth-gated). Read the dynamic skill, not the pooled number; near-zero at idle is STARVED-normal, only regime=FAILED is a real regression.",
+    "The grounding ring is NOT entirely zero-authority: queue.answer()->_ground_belief is one live path that mutates a belief's provenance to user_claim. Also: GroundingDrivePromotion drives research; SparkPromotion is telemetry-only and drives nothing \u2014 these were previously conflated.",
+    "Memory 'recent' must mean recent-by-TIMESTAMP, not list/append order (the fixed bug). Recall relevance is cosine similarity, not weight (the 'all over the place' fix). 'No memories found' on a thin store is the honest fix, not a broken recall.",
+    "L4 has two arms with different authority: OutcomeScheduler is live (drives self-improve rollback) while CounterfactualEngine is shadow (live_influence=False, data-gated 200/500). The headline 'advisory/partial' was previously misattributed to one arm.",
+    "L10 Soul Integrity is the ONE epistemic layer with live behavioral authority (force dreaming + mutation cooldown via the event path); it is not 'just another shadow audit'. Two module-level context reads (consciousness_system.py:2264/2339) are dead and default to 1.0 \u2014 the real wiring is event-driven.",
+    "Endpointing silence is 1.5s in shipped code (config.py:166 with a revert comment), not the 0.8s carried in prior notes; code is authoritative over the memory index.",
+    "Capability Domains (Matrix v2) is built and live with count=0 by default (operator-created), not 'absent/unbuilt'. Its honesty boundary is know-about != can-do; the topic-recall wire is the live document-domain consume-wire, distinct from the shadow Tier-2 NN lane.",
+    "Tier-3 lidar depth and Tier-2 object fusion were corrected from shipped->shadow: their authority is pinned (writes_beliefs=False, spatial_telemetry_only). JARVIS does NOT cognitively 'see in 3D'; the ~7.8cm-vs-walls figure is a proof-run, not a runtime sense.",
+    "Grown personality MAGNITUDES (soul_dims) do not reach the voice \u2014 only flat trait names + a dominant nudge do (TraitModulator is the one live wire). The graded soul_dims->voice dial is shadow (sent_to_model=False). 'Personality is grown' is true of derivation, not yet of the magnitude->voice wire.",
+    "The reflective_audit docstring '6 dimensions' is stale; the code runs 9 scanners. The weight_room_gate code_quality 'no live signal' reason is also stale (the upgrade_verdict feed IS recorded live)."
+  ],
+  "merge_notes": "RAW COUNT: 313 verified entries + 51 completeness-gap candidates = 364 raw items. After dedup-merge the surviving distinct subsystems = ~150 (the subsystems[] list below is a representative canonical set; every raw entry is accounted for by one of the merge buckets named here). Integrity_stack is the fixed 15-entry L0-L12+L3A/L3B canon, each drawn from the best-evidenced verified entry.\n\nMAJOR MERGE BUCKETS (each collapses multiple raw entries into one canonical subsystem; home_files/evidence unioned, best-evidenced status/authority kept):\n\n(1) INTEGRITY STACK L0-L12 \u2014 each layer appeared 2-3x: (a) the full 'epistemic deep-dive' pass, (b) the 'L9-L12 area' pass, (c) the 'docs.html/docs.js canonical-order anchor' pass. Merged per-layer: L0 CapabilityGate (3 raw: capability_gate.py deep-dive + capability-gate skills entry + docs anchor), L1 AttributionLedger (2), L2 Provenance-Aware Memory (2: events.py firewall + docs anchor) \u2014 kept DISTINCT from L2-spark-reader (provenance_scorer.py grounding-tension reader, which itself appeared ~4x: L2-spark-reader, provenance-scorer, spark-provenance-scorer, and the reasoning-encoder upstream 'provenance-scorer' \u2014 all merged into ONE spark ProvenanceScorer subsystem). L3/L3A/L3B (2-3 each), L4 (2: delayed-outcomes deep-dive + docs anchor; counterfactual half merged with the 4 separate counterfactual entries below), L5 (orchestrator + classifier + resolution + belief-record + claim-extractor kept as 5 distinct sub-modules of the L5 family + 2 docs anchors), L6 (orchestrator + truthscore + domain + confidence + drift + belief-adjuster + correction-detector + substrate = 8 distinct sub-modules + 1 docs anchor, all real separate files), L7 (orchestrator + propagation + edges + bridge + topology + integrity = 6 sub-modules + anchor), L8 (scorer + pressure + log = 3 + anchor), L9 (2 conflicting: shipped/advisory + shadow + counterfactual-as-L9-conduit), L10 (2: active + live), L11 (distributed \u2014 1 entry, no dup), L12 (1 Stage0/Stage1 entry, no dup).\n\n(2) COUNTERFACTUAL ENGINE \u2014 appeared 5x (L4 counterfactual arm, 'counterfactual' epistemic entry, 'counterfactual-engine' reflective-audit entry, the Phase-10 cognition-area entry, and the gap-candidate within Unified World Model). Merged into ONE 'counterfactual-engine' subsystem (dormant/data-gated/live_influence=False).\n\n(3) AFFECT TRACK \u2014 collapsed but kept the THREE-TRACK distinction the verifiers stressed: SPARK neurochemical layer (affect-state + affect-promotion + affect-regulation + affect-coupling \u2014 the last appeared 2x as affect-coupling and spark-affect-cadence-coupling, merged), borrowed dynamic_mood (emotion-mood-map, dead/display-only), persona ToneEngine+emotional_momentum (tone-engine entry), + affect-nickname-firewall (live guard). 8 raw -> kept as ~6 distinct because they are genuinely separate files/mechanisms.\n\n(4) COMPANION COGNITION P0-P5 + TBS \u2014 situational_read(P0), theory_of_mind(P1), crystallization-valve(P2), behavior_advisory(P3 \u2014 appeared 2x as P3 and behavior-advisory-p3, merged), warmth-axis-quarantine, TBS-0 (appeared 2x as TBS-0 and tbs-0, merged), presence-read, env-normal, P4/P5 (planned), style-instruction-wire (appeared 3x: style-intent, style-intent-delivery-leash, style-instruction-wire \u2014 merged), soul_dims dial (appeared 2x: soul-dims-voice-dials and soul-voice-dial \u2014 merged).\n\n(5) SELF-VIEW (OSV) \u2014 9 sub-modules (orchestrator, provenance, synthesizer, adapters, gather, articulate, grounding, api, p2-telemetry) kept distinct (real separate files) + api-self-view dashboard entry merged into self-view-api.\n\n(6) SPARK GROUNDING RING \u2014 grounding-drive-promotion (2x: spark-grounding-drive-promotion + grounding-drive-promotion, merged), spark-promotion-telemetry-gate, grounding-queue, grounding-drive, tension-seeded-thought, p5b-autonomous-research, p5-winrate-promotion, passive-metrics. ProvenanceScorer merged into the L2-spark-reader entry above.\n\n(7) HEMISPHERE / MATRIX / WEIGHT-ROOM \u2014 orchestrator (2x), registry, weight-persistence-firewall, broadcast-slots (2x: broadcast-slots + global-broadcast, merged), matrix-broadcast-lane, matrix-tier2-lifecycle (2x: matrix-tier2-lifecycle + matrix-promotion-ladder, merged), eligible-focuses, observability-api, v2-vision-doc, distillation-collector, weight-room-gate (3x: two 'weight-room-gate' + WeightRoomGate, merged), tier1-perception-specialists, the 8 distillation feeds (claim/diagnostic/code-quality/thought-trigger/plan/skill-acquisition/dream-synthesis + reasoning-encoder), the 5 Tier-2 encoders (positive/negative/speaker/temporal/skill-transfer), hrr-encoder, intention-delivery-encoder, architect, engine, evolution, migration, gap-detector, data-feed, event-bridge.\n\n(8) POLICY NN \u2014 policy-nn-loop + policy-nn + policy-evaluator + policy-promotion-pipeline + shadow-policy-runner + policy-trainer + policy-experience-buffer + policy-governor + policy-registry + policy-state-encoder + policy-telemetry. policy-nn appeared 2x (policy-nn + policy-nn-loop), merged. Kept distinct sub-components.\n\n(9) MEMORY \u2014 storage, get-recent-fix, recall-relevance-fix, search, ranker, salience, vector-store, episodes, fractal-recall, retrieval-log, lifecycle-log, integrity-panel, gate, write-authority, consolidation (2x: mem-consolidation + memory-consolidation, merged), clustering, analytics-support, spatial-episodic (2x: env-normal-area + mem area, merged), spatial-place-consolidator (2x, merged), hrr-recall-advisor, index, persistence.\n\n(10) PERCEPTION/SPATIAL/VISION \u2014 perception-orchestrator, scene-tracker (2x merged), vision-grounding-firewall (3x: two area passes + voice-leash pass, merged), describe-scene-vision-tool, vision-processor, the lidar stack (room-model, calibration-extrinsic, fusion-tier2, depth-anchor, depth-sidecar), spatial-estimator, spatial-scene-graph, hrr-spatial-encoder, spatial-validation, spatial-memory-gate, mind-page, addressee-gate, stt-pipeline, voice-policy-tts.\n\n(11) DREAM/SLEEP \u2014 dream-cycle, memory-consolidation, dream-artifacts, reflective-validator, reflective-audit, counterfactual, dream-synthesis-specialist, mode-manager-sleep-dream, dream-belief-hooks, memory-optimizer, dream-cleanup-script, dream-synthesis-feasibility.\n\n(12) WORLD MODEL \u2014 mental-simulator, world-planner, cognitive-planner, hrr-simulation-shadow, simulator-promotion + the gap-candidate Unified World Model + CausalEngine (folded in).\n\n(13) SELF-SENSING \u2014 loop, motion-gate, skill-metric, learning-progress, curiosity-target, health-regime, persistence, tick-wiring, telemetry-endpoint (9 sub-entries, all kept \u2014 single proven growth engine).\n\n(14) GESTATION/BIRTH \u2014 gestation (2x: gestation-birth-ladder + gestation, merged), gestation-readiness, first-contact, awakening-protocol, onboarding-manager.\n\n(15) PERSONALITY \u2014 soul-identity, trait-evolution, trait-modulator, soul-voice-dial, trait-validator, personality-rollback, soul-archetype-bridge, system-prompt-soul.\n\n(16) SKILLS/ACQUISITION/SELF-IMPROVE \u2014 skill-registry, capability-gate(merged into L0), learning-job-pipeline, job-runner, job-eval, skill-resolver, acquisition-pipeline, codegen-service, self-improve-orchestrator, execution-contracts, verification-protocols, skill-baseline, capability-discovery, operational-bridge, skill-executors, audit-trail-matrix-report, system-upgrade-report, claim-classifier-specialist, skill-acquisition-specialist, plan-evaluator-encoder, synthetic-skill-acquisition, dataflow-firewall-pillar2.\n\n(17) CAPABILITY DOMAINS (Matrix v2) \u2014 capdom-registry, capdom-ingest-firewall, capdom-store, capdom-recall-wire.\n\n(18) CONSCIOUSNESS CORE \u2014 kernel-loop, event-bus, on-tick-orchestrator, operational-modes, attention-core, meta-cognitive-thoughts, consciousness-evolution-engine, consciousness-evolution-circularity, consciousness-driven-evolution, consciousness-evolution-restore-integrity.\n\n(19) ROUTING/VOICE \u2014 tool-router, voice-intent-teacher-signal, voice-intent-nn, intent-shadow-runner, route-overrides, routing-corrections, reflective-detector, golden-words, search-route-guard, plugin-routing-tier, llm-leash-firewall, honesty-firewall, operational-self-report-mode, context-build-system-prompt, trait-name-injection.\n\n(20) CONVERSATIONAL PIPELINE \u2014 barge-in, endpointing-vad, streaming-asr-tier2(absent), barge-in-speaker-gating(planned).\n\n(21) DASHBOARD \u2014 dashboard-app-route-layer, snapshot-assembler, snapshot-cache-loop, dashboard-v1-static-pages, dashboard-v2-cockpit, v2-shared-honest-render, v2-integrity-panel, v2-grounding-panel, api-full-snapshot, api-self-view, api-self-sensing, api-matrix, api-goals, api-skills, api-self-improve, api-audio-barge-in, api-self-test, api-maturity-gates, api-system-restart, capability-pipeline-retirement, pi5-devices-derivation, telemetry-api-shapes.\n\n(22) CANONICAL-ORDER governance entry (1, no dup).\n\nGAP CANDIDATES (51): ~30 judged REAL and folded into gaps[] (Document Library, Blue Diamonds, Study pipeline, Phase-C language substrate, Autonomy research engine, L3 Escalation+Attestation, Unified World Model+CausalEngine trunk, Intention/Commitment cognition-side layer, Observer Effect/KernelMutator/MutationGovernor, Existential/Philosophical engines, Codebase self-awareness tool, Academic search tool, Operational flow tracker, Identity Evidence Accumulator, Identity Fusion, Camera calibration, VSA/HRR primitive library, Conversation Handler spine, Hardware profile+Supervisor, Intervention Pipeline, ProactiveGovernor, HealthMonitor, Display Classifier L3B, Explainability layer, Long-Horizon Attention planned, Personal Intel Capture, KnowledgeIntegrator, ResearchGovernor, SourceLedger, Trace Explorer). ~21 of the gap candidates duplicated each other across the two completeness passes (e.g. AutonomyOrchestrator appears 2x, Library/Study 2x, Phase-C language 2x, MutationGovernor 2x, Curiosity/Proactive 2x, Identity Accumulator 2x, Explainability 2x, Escalation/Attestation 2x) \u2014 deduped to the ~30 distinct real gaps in gaps[]. Several were judged ALREADY-COVERED and dropped (counterfactual within World-Model candidate = covered; spark satellites = covered; Tier-1/Tier-2 encoders = covered).\n\nNET: 364 raw -> ~150 distinct subsystems (representative canonical set shown in subsystems[]) + 15-entry integrity_stack + ~30 real gaps. No verified entry is silently dropped; each maps to a named merge bucket above."
+}
