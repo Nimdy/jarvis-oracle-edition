@@ -1,6 +1,6 @@
 # OSV Unification — feed the architecture manifest into JARVIS's self-view
 
-> Status: **Phase A SHIPPED** (read-only/shadow). Closes the legibility loop: JARVIS describes her
+> Status: **Phases A/B/C/D SHIPPED** (read-only/shadow + gated). Closes the legibility loop: JARVIS describes her
 > own architecture from the SAME code-grounded, drift-locked map that humans + AI agents use —
 > not ~19 bespoke adapters + confabulation. Grounded-first, earn-don't-declare; no behavior authority.
 
@@ -44,7 +44,17 @@ authority. (Needs a brain restart to load.)
   `articulate.py` + the existing P1/P2 introspection.
 - **C:** feed the live topology activity (snapshot deltas + events from the viz tap) into the
   performance/change dimensions — "what's actively working in me right now."
-- **D+ (earned, gated):** curiosity targets the registry gaps; self-improvement closes them. Stays P3+/earned.
+- **D — SHIPPED (shadow/gated):** curiosity targets the self-view's first-class gaps.
+  `autonomy/osv_gap_curiosity.py` (`OSVGapCuriosity`) reads `model["gaps"]` → deduped, bounded,
+  priority-sorted proposals (architecture-first; scoreboard "insufficient-samples" gaps skipped —
+  those need lived reps, not research). Wired into `AutonomyOrchestrator.on_tick` (600s), surfaced in
+  `get_status["gap_curiosity"]`. **Earn-don't-declare + memory-safe (test-locked, 5 tests):** enqueues
+  real research ONLY at `autonomy_level>=3` (MetricTriggers' escalation tier) — default L1 is pure
+  shadow (zero enqueue, zero behavior). Writes NO memories; when earned it rides the orchestrator
+  `enqueue` (dedups across queue+completed+persisted-trace → each gap researched at most once, ever;
+  bounded queue; `scope=local_only` read-only research). Next (earned/future): self-improvement that
+  *closes* a gap — must keep the same dedup+bound discipline (one memory per distinct gap, never
+  per-cycle).
 
 ## Validation (anti-theater)
 1. **Substrate exists** → consume-wire, not new machinery (OSV + registry + live tap all built).
