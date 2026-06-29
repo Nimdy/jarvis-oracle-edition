@@ -12,12 +12,13 @@ dashboard UI formatting.
 """
 from __future__ import annotations
 
+import json
 import logging
 import time
 from pathlib import Path
 from typing import Any
 
-from cognition.self_view.provenance import Fact, gap, unknown
+from cognition.self_view.provenance import Fact, Provenance, gap, unknown
 from cognition.self_view.adapters import ADAPTERS, read_simulator
 
 logger = logging.getLogger("jarvis.self_view")
@@ -91,6 +92,51 @@ def _latest_build_history() -> dict[str, Any] | None:
     return None
 
 
+def architecture_from_registry() -> dict[str, Any]:
+    """Code-grounded structural self-model from the architecture manifest (subsystem_registry.json).
+
+    OSV unification Phase A: gives the self-view the FULL 98-subsystem map (vs the ~19 bespoke
+    snapshot adapters) — "how I'm built." These are ADVISORY structural facts (code-grounded +
+    CI-drift-locked, but NOT live measurements: is_measurement stays False), so registry status is
+    DESIGNED-maturity, never masquerading as live. Live state still comes from the snapshot adapters;
+    live maturity comes from the gates. Read-only; degrades to a first-class gap if unreadable.
+    """
+    reg_path = Path(__file__).resolve().parents[2] / "subsystem_registry.json"
+    try:
+        reg = json.loads(reg_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"_meta": {"lifecycle": gap("architecture manifest unreadable", "subsystem_registry.json")}}
+    subs = reg.get("subsystems") or []
+    src = "architecture_manifest"
+    designed = "designed-maturity (code-grounded, not live — see live gates for current)"
+    inventory: dict[str, Any] = {}
+    for sub in subs:
+        sid = sub.get("id") or sub.get("name")
+        if not sid:
+            continue
+        inventory[sid] = {
+            "name": Fact(sub.get("name"), Provenance.ADVISORY, source=src),
+            "area": Fact(sub.get("area"), Provenance.ADVISORY, source=src),
+            "status": Fact(sub.get("status"), Provenance.ADVISORY, note=designed, source=src),
+            "authority": Fact(sub.get("authority"), Provenance.ADVISORY, source=src),
+            "does": Fact((sub.get("does") or "")[:240], Provenance.ADVISORY, source=src),
+            "home": Fact((sub.get("home_files") or [None])[0], Provenance.ADVISORY, source=src),
+        }
+    stack = reg.get("integrity_stack") or []
+    return {
+        "_meta": {
+            "subsystem_count": Fact(len(subs), Provenance.ADVISORY, source=src),
+            "integrity_layers": Fact(len(stack), Provenance.ADVISORY,
+                                     note="canonical L0-L12 + L3A/L3B", source=src),
+        },
+        "inventory": inventory,
+        "integrity_stack": [
+            {"id": e.get("id"), "name": e.get("name"), "status": e.get("status")} for e in stack
+        ],
+        "gaps": [g for g in (reg.get("gaps") or []) if isinstance(g, str)],
+    }
+
+
 def gather_live_sources(
     engine: Any = None,
     eval_snapshot: dict[str, Any] | None = None,
@@ -101,6 +147,9 @@ def gather_live_sources(
 
     # --- broad subsystem inventory from the dashboard build_cache snapshot (P0.6) ---
     sources["subsystems"] = subsystems_from_cache(snapshot)
+
+    # --- code-grounded architecture manifest: the full 98-subsystem structural self-model (P-A) ---
+    sources["architecture"] = architecture_from_registry()
 
     # --- self-referential beliefs ("what I believe about myself") — read-only ---
     # Was a DEAD WIRE: the synthesizer's belief dimension reads sources["beliefs"], which nothing

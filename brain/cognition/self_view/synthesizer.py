@@ -33,6 +33,7 @@ class SelfModel:
     subsystems: dict[str, Any]
     gaps: list[dict[str, Any]]
     coverage: dict[str, Any]
+    architecture: dict[str, Any] | None = None  # P-A: code-grounded full structural map (manifest)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,6 +47,7 @@ class SelfModel:
             "subsystems": _facts_to_dict(self.subsystems),
             "gaps": self.gaps,
             "coverage": self.coverage,
+            "architecture": _facts_to_dict(self.architecture) if self.architecture else {},
         }
 
 
@@ -83,6 +85,7 @@ class SelfViewSynthesizer:
         belief = self._belief(sources)
         change = self._change(sources)
         subsystems = self._subsystems(sources)
+        architecture = sources.get("architecture") or {}
         gaps = self._gaps(sources, performance, belief)
         coverage = self._coverage(performance, subsystems, gaps)
         return SelfModel(
@@ -96,6 +99,7 @@ class SelfViewSynthesizer:
             subsystems=subsystems,
             gaps=gaps,
             coverage=coverage,
+            architecture=architecture,
         )
 
     # -- Subsystems: the live subsystem surface (P0.5, from build_cache) ----
@@ -291,6 +295,13 @@ class SelfViewSynthesizer:
         if isinstance(sb_self, Fact) and sb_self.is_absent:
             gaps.append({"area": "belief:self_beliefs", "reason": sb_self.note,
                          "source": sb_self.source})
+
+        # architecture-manifest gaps (code-grounded; first-class curiosity targets)
+        arch = s.get("architecture")
+        if isinstance(arch, dict):
+            for g in (arch.get("gaps") or []):
+                gaps.append({"area": "architecture", "reason": str(g)[:300],
+                             "source": "architecture_manifest"})
 
         return gaps
 
