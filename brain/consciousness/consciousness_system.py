@@ -1950,6 +1950,10 @@ class ConsciousnessSystem:
 
             decision = self.governor.evaluate(
                 proposal.changes, proposal.confidence, self._config, health,
+                # FIX (2026-06-29): was omitted -> defaulted to 1.0 -> the awareness<0.4 safety
+                # gate never fired (kernel could self-mutate even at low self-model awareness,
+                # e.g. fresh after a reset when awareness starts ~0.3). Wire the real value.
+                awareness_level=self.observer.awareness_level,
             )
 
             if decision.approved:
@@ -2261,8 +2265,13 @@ class ConsciousnessSystem:
             except Exception:
                 pass
             try:
-                from epistemic.soul_integrity.index import soul_integrity_index
-                soul_int = soul_integrity_index.score
+                # FIX (2026-06-29): was a dead read — `soul_integrity_index`/`.score` don't exist,
+                # so it silently except'd and soul_int stayed 1.0, masking real L10 health from the
+                # intention resolver. Use the real singleton API.
+                from epistemic.soul_integrity.index import SoulIntegrityIndex
+                _si = SoulIntegrityIndex.get_instance().get_current_index()
+                if _si is not None:
+                    soul_int = _si
             except Exception:
                 pass
             try:
@@ -2336,7 +2345,10 @@ class ConsciousnessSystem:
             from epistemic.soul_integrity.index import SoulIntegrityIndex
             si = SoulIntegrityIndex.get_instance()
             si_state = si.get_state()
-            ctx["soul_integrity"] = si_state.get("composite_score", 1.0)
+            # FIX (2026-06-29): get_state() returns "current_index", NOT "composite_score",
+            # so this always fell back to 1.0 (perfect) and masked real degradation.
+            _cur = si_state.get("current_index")
+            ctx["soul_integrity"] = _cur if _cur is not None else 1.0
         except Exception:
             ctx["soul_integrity"] = 1.0
 

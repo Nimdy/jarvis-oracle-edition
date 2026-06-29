@@ -243,19 +243,13 @@ class PolicyEvaluator:
             self._prev_reward = actual_reward
             return
 
-        deviation_magnitude = self._compute_deviation(pending.nn_proposed, pending.kernel_actual)
-        scaled_bonus = DEVIATION_BONUS * min(1.0, deviation_magnitude / 0.15)
-
-        reward_delta = (actual_reward - self._prev_reward) if self._prev_reward is not None else 0.0
-
-        if reward_delta > 0.02:
-            nn_reward += scaled_bonus            # divergence coincided with improvement
-        elif reward_delta < -0.02:
-            kernel_reward += scaled_bonus * 0.5  # divergence coincided with degradation
-        # else: reward stable -> no margin -> tie. No diversity bonus: with the
-        # NN proposal unexecuted, a deviation that neither helped nor hurt is not
-        # evidence of a win (see docstring — removed circular stable-state credit).
-
+        # COUNTERFEIT-CREDIT REMOVED (2026-06-29, floor-integrity fix): the NN proposal is
+        # shadow/UNEXECUTED, so a reward change after a deviation is a coincidence — not evidence
+        # the NN caused it. The old DEVIATION_BONUS credited the NN (or kernel) for divergence that
+        # merely coincided with an improvement/degradation, inflating the A/B win-rate with credit
+        # neither arm earned (AUTONOMOUS_GROWTH_STRATEGY flagged this as a confab in the training
+        # loop). Both arms now score the actual reward only; with no executed NN action there is no
+        # honest causal signal to award — the policy-NN signal-failure is reflected, not papered over.
         self.record_shadow(kernel_reward, nn_reward, nn_is_noop=False)
         self._prev_reward = actual_reward
 
