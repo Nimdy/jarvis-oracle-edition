@@ -65,6 +65,7 @@ PROCESS_INTERVAL_S = 30.0
 METRICS_FEED_INTERVAL_S = 5.0
 DRIVE_EVAL_INTERVAL_S = 60.0
 PROMOTION_CHECK_INTERVAL_S = 300.0
+GAP_CURIOSITY_INTERVAL_S = 600.0  # OSV Phase D: cadence for gap-curiosity (shadow at default; gated)
 QUESTION_DEDUP_EPISODE_LOOKBACK = 100
 QUESTION_DEDUP_COOLDOWN_S = 6 * 3600.0
 
@@ -168,6 +169,17 @@ class AutonomyOrchestrator:
         self._l3_eligibility_announced: bool = False
         self._escalation_store: Any = None
         self._escalation_wire_last_error_log_ts: float = 0.0
+
+        # OSV Phase D: gap-curiosity points research at the self-view's first-class gaps. SHADOW at
+        # default (proposes/surfaces only); enqueues real research ONLY when earned
+        # (autonomy_level >= GAP_CURIOSITY_MIN_LEVEL). Never writes a memory.
+        self._osv_gap_curiosity: Any = None
+        self._last_gap_curiosity_time: float = 0.0
+        try:
+            from autonomy.osv_gap_curiosity import OSVGapCuriosity
+            self._osv_gap_curiosity = OSVGapCuriosity()
+        except Exception:
+            logger.debug("OSV gap-curiosity unavailable", exc_info=True)
 
         self._restore_autonomy_level(config_level=autonomy_level)
 
@@ -744,6 +756,28 @@ class AutonomyOrchestrator:
             refs.append({"kind": "golden_command", "id": trace["golden_command_id"]})
         return refs
 
+    def _feed_gap_curiosity(self) -> None:
+        """OSV Phase D: read the self-view and propose curiosity for its first-class gaps.
+
+        Shadow at default autonomy (computes + surfaces only); enqueues read-only research ONLY when
+        earned — the gate lives inside ``OSVGapCuriosity.feed``. Never writes a memory; never breaks
+        the tick.
+        """
+        if self._osv_gap_curiosity is None:
+            return
+        try:
+            from cognition.self_view import load_self_view
+            model = load_self_view()
+            if not model:
+                return
+            summary = self._osv_gap_curiosity.feed(self, self._autonomy_level, model)
+            if summary.get("enqueued"):
+                logger.info(
+                    "OSV gap-curiosity enqueued %d research intent(s) from self-view gaps",
+                    summary["enqueued"])
+        except Exception:
+            logger.debug("gap-curiosity feed failed", exc_info=True)
+
     def on_tick(self, current_mode: str) -> None:
         if not self._enabled or not self._started:
             return
@@ -754,6 +788,11 @@ class AutonomyOrchestrator:
         if now - self._last_metrics_feed_time >= METRICS_FEED_INTERVAL_S:
             self._last_metrics_feed_time = now
             self._feed_metrics()
+
+        if (self._osv_gap_curiosity is not None
+                and now - self._last_gap_curiosity_time >= GAP_CURIOSITY_INTERVAL_S):
+            self._last_gap_curiosity_time = now
+            self._feed_gap_curiosity()
 
         delta_results = self._delta_tracker.check_pending()
         for dr in delta_results:
@@ -3100,6 +3139,10 @@ class AutonomyOrchestrator:
                 "preview_count": len(self._planner_shadow_previews),
             },
             "grounding_ring": self._build_grounding_ring_status(),
+            "gap_curiosity": (
+                self._osv_gap_curiosity.shadow_state()
+                if self._osv_gap_curiosity is not None else {}
+            ),
         }
 
     def _build_grounding_ring_status(self) -> dict[str, Any]:
