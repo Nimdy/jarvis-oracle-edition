@@ -106,20 +106,83 @@ def _fmt(names: list[str]) -> str:
     return ", ".join(names) if names else "none"
 
 
+# -- architecture manifest (P-A): the code-grounded full structural map -------
+
+def _arch(model: dict[str, Any]) -> dict[str, Any]:
+    a = model.get("architecture")
+    return a if isinstance(a, dict) else {}
+
+
+def _arch_meta(model: dict[str, Any], key: str) -> Any:
+    v = (_arch(model).get("_meta") or {}).get(key)
+    return v.get("value") if isinstance(v, dict) else None
+
+
+def _arch_inventory(model: dict[str, Any]) -> dict[str, Any]:
+    inv = _arch(model).get("inventory")
+    return inv if isinstance(inv, dict) else {}
+
+
+def _arch_status_counts(model: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for v in _arch_inventory(model).values():
+        st = v.get("status") if isinstance(v, dict) else None
+        val = st.get("value") if isinstance(st, dict) else None
+        if val:
+            counts[val] = counts.get(val, 0) + 1
+    return counts
+
+
+def _arch_names_by_status(model: dict[str, Any], statuses: set[str]) -> list[str]:
+    out: list[str] = []
+    for v in _arch_inventory(model).values():
+        st = v.get("status") if isinstance(v, dict) else None
+        val = st.get("value") if isinstance(st, dict) else None
+        if val in statuses:
+            nm = (v.get("name") or {}).get("value")
+            if nm:
+                out.append(str(nm))
+    return out
+
+
+def _arch_areas(model: dict[str, Any]) -> list[str]:
+    areas: set[str] = set()
+    for v in _arch_inventory(model).values():
+        ar = (v.get("area") or {}).get("value") if isinstance(v, dict) else None
+        if ar:
+            areas.add(str(ar))
+    return sorted(areas)
+
+
 # -- per-kind articulation ---------------------------------------------------
 
 def _identity(model: dict[str, Any]) -> str:
     cov = model.get("coverage", {})
     bp = cov.get("subsystems_by_provenance", {})
-    return (
+    parts = [
         "I am JARVIS Oracle Edition, a local cognitive system running across a perception "
-        "node and a brain node. My operational self-view currently tracks "
-        f"{cov.get('subsystem_count', 0)} subsystems: {bp.get('measured', 0)} measured/active, "
-        f"{bp.get('shadow_only', 0)} shadow-only (no behavioral authority yet), "
-        f"{bp.get('self_scored', 0)} self-reported, with some areas I cannot read yet. "
-        "I report from a measured self-model and do not claim capabilities that are gated or "
-        "unverified."
+        "node and a brain node."
+    ]
+    n_sub = _arch_meta(model, "subsystem_count")
+    if n_sub:
+        c = _arch_status_counts(model)
+        n_stack = _arch_meta(model, "integrity_layers")
+        parts.append(
+            f"My code-grounded architecture covers {n_sub} subsystems across "
+            f"{len(_arch_areas(model))} domains, behind a {n_stack}-layer integrity stack "
+            "(L0-L12 plus L3A/L3B). By designed status: "
+            f"{c.get('shipped', 0) + c.get('live', 0)} shipped/live, {c.get('shadow', 0)} shadow, "
+            f"{c.get('dormant', 0)} dormant, {c.get('partial', 0)} partial, "
+            f"{c.get('signal-failure', 0)} signal-failure — that is my designed structure, "
+            "code-grounded but not a live measurement."
+        )
+    parts.append(
+        f"In real time my self-view reads {cov.get('subsystem_count', 0)} subsystems "
+        f"({bp.get('measured', 0)} measured/active, {bp.get('shadow_only', 0)} shadow-only, "
+        f"{bp.get('self_scored', 0)} self-reported), with some areas I cannot read yet. "
+        "I report from this self-model and do not claim capabilities that are gated or unverified."
     )
+    return " ".join(parts)
 
 
 def _capabilities(model: dict[str, Any]) -> str:
@@ -177,11 +240,25 @@ def _weaknesses(model: dict[str, Any]) -> str:
 
 def _gated_capabilities(model: dict[str, Any]) -> str:
     g = _group_subsystems(model)
-    return (
+    base = (
         f"Gate-blocked / dormant (not available): {_fmt(g['dormant'])}. "
         f"Running in shadow with zero behavioral authority (not yet allowed to act): {_fmt(g['shadow'])}. "
         "These are earned, not declared — they activate only when they pass their gates."
     )
+    # Counts (not raw names) from the 98-map: names can contain words the unqualified-claim
+    # guard flags (e.g. a "Consciousness Kernel" subsystem), and counts are honest + sufficient.
+    c = _arch_status_counts(model)
+    n_dormant = c.get("dormant", 0) + c.get("gated", 0)
+    n_shadow = c.get("shadow", 0)
+    n_fail = c.get("signal-failure", 0)
+    total = sum(c.values())
+    if total:
+        base += (
+            f" Across my full {total}-subsystem architecture, by design: "
+            f"{n_dormant} dormant/gate-blocked, {n_shadow} shadow (zero behavioral authority), "
+            f"{n_fail} signal-failure (a measured dead end, not merely gated)."
+        )
+    return base
 
 
 def _unknowns(model: dict[str, Any]) -> str:
