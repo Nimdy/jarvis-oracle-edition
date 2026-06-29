@@ -175,6 +175,36 @@ def _arch_summary(model: dict[str, Any]) -> str:
 
 # -- per-kind articulation ---------------------------------------------------
 
+def _live_activity_line(model: dict[str, Any]) -> str:
+    """Current NN-substrate activity, honestly qualified (P-C). Counts/values only — no raw
+    subsystem names (guard) and no history. Empty if no live-activity section."""
+    la = model.get("live_activity")
+    if not isinstance(la, dict):
+        return ""
+
+    def _v(k: str) -> Any:
+        f = la.get(k)
+        return f.get("value") if isinstance(f, dict) else None
+
+    bits: list[str] = []
+    ss, reg = _v("self_sensing_skill"), _v("self_sensing_regime")
+    if ss is not None or reg:
+        bits.append(f"self-sensing {reg or ''} (dynamic skill {ss}, shadow)".replace("  ", " ").strip())
+    if _v("hemisphere_cycles") is not None:
+        bits.append(f"{_v('hemisphere_cycles')} specialist-NN evolution cycles")
+    if _v("mutations_this_hour") is not None:
+        bits.append(f"{_v('mutations_this_hour')} kernel mutation(s) this hour")
+    if _v("world_model_version") is not None:
+        bits.append(f"world-model v{_v('world_model_version')} (shadow)")
+    if _v("policy"):
+        bits.append(f"policy {_v('policy')}")
+    if _v("transcendence_level") is not None:
+        bits.append(f"transcendence {_v('transcendence_level')} (self-scored, not external evidence)")
+    if not bits:
+        return ""
+    return " What's active in me right now: " + "; ".join(bits) + "."
+
+
 def _identity(model: dict[str, Any]) -> str:
     cov = model.get("coverage", {})
     bp = cov.get("subsystems_by_provenance", {})
@@ -236,7 +266,7 @@ def _health(model: dict[str, Any]) -> str:
     return (
         f"{head} Across my self-view, {cov.get('measured_performance_facts', 0)} performance "
         f"signals are genuinely measured and {cov.get('gap_count', 0)} areas are gaps I can't "
-        "measure yet. I'd rather report a gap than guess."
+        "measure yet. I'd rather report a gap than guess." + _live_activity_line(model)
     )
 
 

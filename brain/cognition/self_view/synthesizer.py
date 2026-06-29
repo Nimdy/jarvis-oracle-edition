@@ -34,6 +34,7 @@ class SelfModel:
     gaps: list[dict[str, Any]]
     coverage: dict[str, Any]
     architecture: dict[str, Any] | None = None  # P-A: code-grounded full structural map (manifest)
+    live_activity: dict[str, Any] | None = None  # P-C: current NN-substrate activity (bounded, no history)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -48,6 +49,7 @@ class SelfModel:
             "gaps": self.gaps,
             "coverage": self.coverage,
             "architecture": _facts_to_dict(self.architecture) if self.architecture else {},
+            "live_activity": _facts_to_dict(self.live_activity) if self.live_activity else {},
         }
 
 
@@ -86,6 +88,7 @@ class SelfViewSynthesizer:
         change = self._change(sources)
         subsystems = self._subsystems(sources)
         architecture = sources.get("architecture") or {}
+        live_activity = sources.get("live_activity") or {}
         gaps = self._gaps(sources, performance, belief)
         coverage = self._coverage(performance, subsystems, gaps)
         return SelfModel(
@@ -100,6 +103,7 @@ class SelfViewSynthesizer:
             gaps=gaps,
             coverage=coverage,
             architecture=architecture,
+            live_activity=live_activity,
         )
 
     # -- Subsystems: the live subsystem surface (P0.5, from build_cache) ----

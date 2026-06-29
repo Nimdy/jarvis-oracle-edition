@@ -137,6 +137,63 @@ def architecture_from_registry() -> dict[str, Any]:
     }
 
 
+def live_activity_from_snapshot(snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    """The NN-substrate's CURRENT live-activity indicators — "what's working in me right now" (P-C).
+
+    READ-ONLY and BOUNDED: current snapshot values only — NO history, NO accumulation, and it NEVER
+    writes a memory. (The whole self-view is one atomically-overwritten file, so this can't pollute
+    or grow memories.) Honest provenance: internal self-metrics = internally_scored; self-scores =
+    self_scored; live counts/state = advisory; NONE are MEASURED (no external comparator here).
+    Absent fields are simply omitted (no fake gap spam).
+    """
+    if not isinstance(snapshot, dict):
+        return {"_meta": gap("snapshot unavailable", "dashboard.build_cache")}
+
+    def _g(path: str) -> Any:
+        cur: Any = snapshot
+        for k in path.split("."):
+            cur = cur.get(k) if isinstance(cur, dict) else None
+            if cur is None:
+                return None
+        return cur
+
+    out: dict[str, Any] = {}
+    ss = _g("self_sensing.skill_vs_persistence_dynamic")
+    if ss is not None:
+        try:
+            out["self_sensing_skill"] = Fact(round(float(ss), 3), Provenance.INTERNALLY_SCORED,
+                note="dynamic predict-vs-persistence skill (shadow; volatile/starvation-limited)",
+                source="snapshot.self_sensing")
+        except (TypeError, ValueError):
+            pass
+    regime = _g("self_sensing.health.regime")
+    if regime:
+        out["self_sensing_regime"] = Fact(regime, Provenance.ADVISORY, source="snapshot.self_sensing.health")
+    hcyc = _g("hemisphere.cycle_count")
+    if hcyc is not None:
+        out["hemisphere_cycles"] = Fact(hcyc, Provenance.ADVISORY,
+            note="specialist NN evolution cycles", source="snapshot.hemisphere")
+    wmv = _g("world_model.version")
+    if wmv is not None:
+        out["world_model_version"] = Fact(wmv, Provenance.ADVISORY,
+            note="shadow until WorldModelPromotion earns it", source="snapshot.world_model")
+    mh = _g("mutations.mutations_this_hour")
+    if mh is not None:
+        out["mutations_this_hour"] = Fact(mh, Provenance.ADVISORY, source="snapshot.mutations")
+    pmode = _g("policy.mode")
+    if pmode:
+        pv = _g("policy.model_version")
+        out["policy"] = Fact(f"{pmode} v{pv if pv is not None else '?'}", Provenance.ADVISORY,
+            note="policy NN is a measured signal-failure (frozen) — shadow only", source="snapshot.policy")
+    tl = _g("evolution.transcendence_level")
+    if tl is not None:
+        out["transcendence_level"] = Fact(tl, Provenance.SELF_SCORED,
+            note="self-scored composite of own counters — NOT external evidence", source="snapshot.evolution")
+    if not out:
+        out["_meta"] = gap("no live-activity indicators readable", "snapshot")
+    return out
+
+
 def gather_live_sources(
     engine: Any = None,
     eval_snapshot: dict[str, Any] | None = None,
@@ -150,6 +207,9 @@ def gather_live_sources(
 
     # --- code-grounded architecture manifest: the full 98-subsystem structural self-model (P-A) ---
     sources["architecture"] = architecture_from_registry()
+
+    # --- live NN-substrate activity: "what's working in me now" (P-C; read-only, bounded) ---
+    sources["live_activity"] = live_activity_from_snapshot(snapshot)
 
     # --- self-referential beliefs ("what I believe about myself") — read-only ---
     # Was a DEAD WIRE: the synthesizer's belief dimension reads sources["beliefs"], which nothing
