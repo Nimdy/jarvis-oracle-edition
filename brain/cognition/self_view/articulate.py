@@ -40,7 +40,7 @@ _KIND_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # unknowns — JARVIS not knowing ONLY (not the user's "I don't know")
     (re.compile(r"\b(you|jarvis)\b.{0,6}\b(don'?t|do not|can'?t|cannot)\b.{0,6}\b(know|measure|see|read)\b|\b(don'?t|do not|can'?t|cannot) you (know|measure|see|read)\b|\bwhat (don'?t|can'?t) you (know|measure|read)\b|\byour (unknowns|blind spots)\b", re.I), "unknowns"),
     # health / how are you
-    (re.compile(r"\bhow are you( doing| feeling)?\b|\bhow do you feel\b|\byour (health|wellbeing)\b|\bare you (ok|okay|alright|well|healthy)\b", re.I), "health"),
+    (re.compile(r"\bhow are you( doing| feeling)?\b(?!\s*(built|structured|made|wired|designed|composed|put together))|\bhow do you feel\b|\byour (health|wellbeing)\b|\bare you (ok|okay|alright|well|healthy)\b", re.I), "health"),
     # capabilities / architecture / how you're built / how you work
     (re.compile(r"\bwhat can you do\b|\bwhat are you (capable|able)\b|\byour (capabilit|abilit|architecture|codebase|subsystem|design)\b|\b(describe|tell me about|explain|walk me through|what can you tell me about)\b.{0,25}\b(your|the)?\b.{0,6}\b(architecture|codebase|subsystem|design|how you (work|reason|think|get|produce|generate|answer))\b|\bhow (do|are) you (work|built|structured|made|put together)\b|\bhow do you (get|reach|produce|generate|come up with|arrive at) an? answer\b", re.I), "capabilities"),
     # identity (broad, near-last so specific kinds win)
@@ -154,6 +154,25 @@ def _arch_areas(model: dict[str, Any]) -> list[str]:
     return sorted(areas)
 
 
+def _arch_summary(model: dict[str, Any]) -> str:
+    """One-sentence code-grounded structural summary (counts only; never raw names — see the
+    unqualified-claim guard). Empty string if the architecture section is absent."""
+    n_sub = _arch_meta(model, "subsystem_count")
+    if not n_sub:
+        return ""
+    c = _arch_status_counts(model)
+    n_stack = _arch_meta(model, "integrity_layers")
+    return (
+        f"My code-grounded architecture covers {n_sub} subsystems across "
+        f"{len(_arch_areas(model))} domains, behind a {n_stack}-layer integrity stack "
+        "(L0-L12 plus L3A/L3B). By designed status: "
+        f"{c.get('shipped', 0) + c.get('live', 0)} shipped/live, {c.get('shadow', 0)} shadow, "
+        f"{c.get('dormant', 0)} dormant, {c.get('partial', 0)} partial, "
+        f"{c.get('signal-failure', 0)} signal-failure — designed structure, code-grounded "
+        "but not a live measurement."
+    )
+
+
 # -- per-kind articulation ---------------------------------------------------
 
 def _identity(model: dict[str, Any]) -> str:
@@ -163,19 +182,9 @@ def _identity(model: dict[str, Any]) -> str:
         "I am JARVIS Oracle Edition, a local cognitive system running across a perception "
         "node and a brain node."
     ]
-    n_sub = _arch_meta(model, "subsystem_count")
-    if n_sub:
-        c = _arch_status_counts(model)
-        n_stack = _arch_meta(model, "integrity_layers")
-        parts.append(
-            f"My code-grounded architecture covers {n_sub} subsystems across "
-            f"{len(_arch_areas(model))} domains, behind a {n_stack}-layer integrity stack "
-            "(L0-L12 plus L3A/L3B). By designed status: "
-            f"{c.get('shipped', 0) + c.get('live', 0)} shipped/live, {c.get('shadow', 0)} shadow, "
-            f"{c.get('dormant', 0)} dormant, {c.get('partial', 0)} partial, "
-            f"{c.get('signal-failure', 0)} signal-failure — that is my designed structure, "
-            "code-grounded but not a live measurement."
-        )
+    summ = _arch_summary(model)
+    if summ:
+        parts.append(summ)
     parts.append(
         f"In real time my self-view reads {cov.get('subsystem_count', 0)} subsystems "
         f"({bp.get('measured', 0)} measured/active, {bp.get('shadow_only', 0)} shadow-only, "
@@ -187,8 +196,10 @@ def _identity(model: dict[str, Any]) -> str:
 
 def _capabilities(model: dict[str, Any]) -> str:
     g = _group_subsystems(model)
+    summ = _arch_summary(model)
     return (
-        f"Active/measured subsystems: {_fmt(g['active'])}. "
+        (summ + " " if summ else "")
+        + f"Active/measured subsystems (live): {_fmt(g['active'])}. "
         f"Shadow-only (running but with zero behavioral authority): {_fmt(g['shadow'])}. "
         f"Dormant/gate-blocked: {_fmt(g['dormant'])}. "
         f"Self-reported (not measurements): {_fmt(g['self_reported'])}. "
