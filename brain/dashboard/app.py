@@ -129,42 +129,52 @@ class _HealthCounters:
 
 
 class _EventStream:
-    """Bounded ring of recent event-bus events for the cockpit SSE feed.
+    """Bounded ring of recent event-bus events — the TRUSTED ROUTING SOURCE for the viz.
 
-    A READ-ONLY tap: each handler is bulletproof (never raises) so it cannot trip
-    the EventBus per-handler circuit breaker for real consumers. Captures a curated
-    set of event types into a fixed ring; the /api/events/stream route streams new
-    entries to the dashboard's Live Cognition Cockpit.
+    Taps the EventBus via ``on_any()`` so it captures EVERY fired event, including types
+    nothing else listens to — NOT a curated allowlist (anything off-list would route
+    invisibly, which would defeat the "trusted source" goal). High-frequency 'firehose'
+    types are throttled so they show as a heartbeat without drowning the meaningful signal.
+    Bulletproof: the observer never raises, so it can't affect the bus or real handlers.
+    The /static/v2/flow.html view routes known events precisely and falls back to a
+    by-domain prefix route for anything not yet explicitly mapped — so nothing is invisible.
     """
 
-    _STREAM_TYPES = (
-        KERNEL_THOUGHT, MEMORY_WRITE, MODE_CHANGE, CONSCIOUSNESS_ANALYSIS,
-        CONVERSATION_RESPONSE, KERNEL_ERROR, AUTONOMY_L3_ACTIVATION_DENIED,
-        PERCEPTION_BARGE_IN,
-    )
+    # Throttled to <=1 per interval into the ring (still visible as a heartbeat). Everything
+    # else passes fully. These are genuine high-frequency / redundant-envelope types.
+    _FIREHOSE = frozenset({
+        "kernel:tick", "perception:event", "perception:raw_audio", "perception:audio_features",
+        "perception:audio_stream_start", "perception:audio_stream_chunk", "perception:audio_stream_end",
+        "memory:decay_cycle", "perception:user_attention",
+    })
+    _FIREHOSE_MIN_INTERVAL_S = 1.0
 
-    def __init__(self, maxlen: int = 300) -> None:
+    def __init__(self, maxlen: int = 400) -> None:
         self._ring: deque = deque(maxlen=maxlen)
         self._seq = 0
         self._lock = threading.Lock()
+        self._last_seen: dict[str, float] = {}
 
     def start(self) -> None:
-        for et in self._STREAM_TYPES:
-            event_bus.on(et, self._make(et))
+        # ONE global tap — sees EVERY fired event (the trusted routing source), not an allowlist.
+        event_bus.on_any(self._capture)
 
-    def _make(self, etype: str) -> Callable[..., None]:
-        def _handler(**kwargs: Any) -> None:
-            try:
-                with self._lock:
-                    self._seq += 1
-                    seq = self._seq
-                summ: dict[str, Any] = {}
-                for k, v in list(kwargs.items())[:6]:
-                    summ[k] = v if isinstance(v, (int, float, bool, type(None))) else str(v)[:140]
-                self._ring.append({"seq": seq, "ts": time.time(), "type": etype, "data": summ})
-            except Exception:  # NEVER raise inside emit() — would trip the bus circuit breaker
-                pass
-        return _handler
+    def _capture(self, event_type: str, kwargs: dict[str, Any]) -> None:
+        try:
+            if event_type in self._FIREHOSE:
+                now = time.time()
+                if now - self._last_seen.get(event_type, 0.0) < self._FIREHOSE_MIN_INTERVAL_S:
+                    return
+                self._last_seen[event_type] = now
+            summ: dict[str, Any] = {}
+            for k, v in list(kwargs.items())[:6]:
+                summ[k] = v if isinstance(v, (int, float, bool, type(None))) else str(v)[:140]
+            with self._lock:
+                self._seq += 1
+                seq = self._seq
+                self._ring.append({"seq": seq, "ts": time.time(), "type": event_type, "data": summ})
+        except Exception:  # NEVER raise — global-observer contract
+            pass
 
     def head(self) -> int:
         return self._seq

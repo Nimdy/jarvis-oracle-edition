@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>JARVIS · Cognitive Flow (dashboardV2)</title>
+<style>
+  :root{
+    --bg:#070710; --panel:#0d0d1c; --edge:#1c2140; --txt:#aeb6e0; --dim:#5a6190;
+    --c-perception:#33d6e0; --c-kernel:#9fb0ff; --c-memory:#f0b03c;
+    --c-consciousness:#b478ff; --c-output:#43e07a; --c-integrity:#ff5a5a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font-family:"DejaVu Sans Mono",ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+  #wrap{display:flex;height:100vh;width:100vw}
+  canvas{flex:1;display:block}
+  #side{width:340px;border-left:1px solid var(--edge);background:var(--panel);
+    display:flex;flex-direction:column;font-size:12px}
+  #hdr{padding:12px 14px;border-bottom:1px solid var(--edge)}
+  #hdr h1{margin:0;font-size:14px;letter-spacing:1px;color:#fff}
+  #hdr .sub{color:var(--dim);font-size:11px;margin-top:3px;line-height:1.4}
+  #status{padding:8px 14px;border-bottom:1px solid var(--edge);font-size:11px}
+  #legend{padding:8px 14px;border-bottom:1px solid var(--edge);font-size:10.5px;line-height:1.8;color:var(--dim)}
+  #legend b{color:var(--txt);font-weight:normal}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  #ledhdr{padding:8px 14px 4px;color:var(--dim);font-size:10px;letter-spacing:1px;text-transform:uppercase}
+  #ledger{flex:1;overflow-y:auto;padding:0 14px 14px}
+  .ev{padding:5px 0;border-bottom:1px solid #131736;font-size:11px}
+  .ev .t{color:#fff} .ev .d{color:var(--dim);font-size:10px;word-break:break-all}
+  .ev .ts{float:right;color:var(--dim);font-size:9.5px}
+  #foot{padding:8px 14px;border-top:1px solid var(--edge);color:var(--dim);font-size:10px}
+  a{color:var(--c-perception);text-decoration:none}
+  #tip{position:fixed;display:none;pointer-events:none;z-index:10;max-width:300px;
+    background:rgba(8,8,20,0.96);border:1px solid var(--edge);border-radius:5px;
+    padding:8px 10px;font-size:11px;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,0.6)}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div id="tip"></div>
+  <div id="side">
+    <div id="hdr">
+      <h1>COGNITIVE FLOW · one turn, end to end</h1>
+      <div class="sub">Every pulse is a <b style="color:#fff">real</b> event off the kernel bus
+        (<code>/api/events/stream</code>). Nodes are real subsystems; dimmed = shadow/dormant by design.
+        Idle cognition → quiet map (no filler).</div>
+    </div>
+    <div id="status">&nbsp;</div>
+    <div id="legend"></div>
+    <div id="ledhdr">live event ledger</div>
+    <div id="ledger"></div>
+    <div id="foot">View A of the Cognitive Flow viz · <a href="/static/v2/cockpit.html">← cockpit</a> ·
+      grounded in docs/COGNITIVE_FLOW_VIZ.md</div>
+  </div>
+</div>
+<script>
+/* ---------- GROUNDED TOPOLOGY (View A: the conversation-turn pipeline) ----------
+   Nodes/edges derived from the REAL emit->on wiring (perception_orchestrator = turn hub;
+   conversation:response -> release_validation; memory:write -> contradiction_engine).
+   status: live | shadow | dormant | gated  (drives opacity — you SEE what isn't live). */
+const STAGES = [
+  { x:0.09, title:"SENSES (Pi)", nodes:[
+      {id:"camera", label:"Camera/Vision", status:"live", dom:"perception"},
+      {id:"mic",    label:"Mic/Audio",     status:"live", dom:"perception"},
+      {id:"lidar",  label:"Lidar",         status:"live", dom:"perception"} ]},
+  { x:0.30, title:"PERCEPTION", nodes:[
+      {id:"perc",   label:"Perception Orchestrator", status:"live", dom:"perception", hub:true} ]},
+  { x:0.50, title:"COGNITION (kernel)", nodes:[
+      {id:"kernel", label:"Consciousness Kernel", status:"live", dom:"kernel"},
+      {id:"think",  label:"Thought / Existential", status:"live", dom:"kernel"},
+      {id:"modes",  label:"Modes",        status:"live", dom:"kernel"},
+      {id:"analysis",label:"Self-Analysis",status:"live", dom:"consciousness"} ]},
+  { x:0.71, title:"MEMORY + INTEGRITY", nodes:[
+      {id:"memory", label:"Memory Store",  status:"live", dom:"memory"},
+      {id:"contra", label:"Contradiction L5", status:"live", dom:"integrity"},
+      {id:"belief", label:"Belief Graph L7", status:"live", dom:"integrity"},
+      {id:"release",label:"Release Validation L0/L12", status:"live", dom:"integrity"} ]},
+  { x:0.91, title:"OUTPUT", nodes:[
+      {id:"resp",   label:"Response", status:"live", dom:"output"} ]},
+];
+// real edges (source node id -> target node id)
+const EDGES = [['analysis','kernel'],['analysis','release'],['analysis','think'],['belief','analysis'],['camera','perc'],['contra','belief'],['kernel','analysis'],['kernel','memory'],['kernel','modes'],['kernel','release'],['kernel','think'],['lidar','perc'],['memory','belief'],['memory','contra'],['mic','perc'],['modes','kernel'],['modes','perc'],['perc','kernel'],['perc','mic'],['perc','resp'],['perc','think'],['release','resp'],['resp','contra'],['resp','perc'],['think','analysis'],['think','kernel'],['think','memory'],['think','release'],['think','resp']];
+// event-type -> {fire: node to flash, via: [edges to pulse], dom}  — GROUNDED: keyed by REAL bus event strings,
+// generated from the 19-agent event-flow audit's viz_routing (only events verified to fire LIVE).
+const ROUTE = {
+  "kernel:thought":{fire:'think',via:[['kernel','think'],['think','resp']],dom:'kernel'},
+  "memory:write":{fire:'memory',via:[['kernel','memory'],['memory','contra']],dom:'memory'},
+  "mode:change":{fire:'modes',via:[['kernel','modes'],['modes','perc']],dom:'consciousness'},
+  "consciousness:analysis":{fire:'analysis',via:[['kernel','analysis']],dom:'consciousness'},
+  "conversation:response":{fire:'resp',via:[['release','resp']],dom:'output'},
+  "kernel:error":{fire:'kernel',via:[],dom:'kernel'},
+  "autonomy:l3_activation_denied":{fire:'release',via:[],dom:'integrity'},
+  "perception:barge_in":{fire:'mic',via:[['mic','perc'],['perc','resp']],dom:'perception'},
+  "kernel:phase_change":{fire:'kernel',via:[['kernel','modes']],dom:'kernel'},
+  "tone:shift":{fire:'think',via:[['kernel','think']],dom:'kernel'},
+  "perception:user_present":{fire:'camera',via:[['camera','perc']],dom:'perception'},
+  "perception:user_present_stable":{fire:'perc',via:[['camera','perc'],['perc','kernel']],dom:'perception'},
+  "perception:user_attention":{fire:'perc',via:[['camera','perc']],dom:'perception'},
+  "perception:wake_word":{fire:'mic',via:[['mic','perc'],['perc','kernel']],dom:'perception'},
+  "perception:transcription":{fire:'mic',via:[['mic','perc'],['perc','kernel']],dom:'perception'},
+  "perception:speaker_identified":{fire:'mic',via:[['mic','perc']],dom:'perception'},
+  "perception:face_identified":{fire:'camera',via:[['camera','perc']],dom:'perception'},
+  "perception:user_emotion":{fire:'perc',via:[['camera','perc'],['mic','perc']],dom:'perception'},
+  "perception:scene_summary":{fire:'camera',via:[['camera','perc']],dom:'perception'},
+  "perception:scene_caption":{fire:'camera',via:[['camera','perc']],dom:'perception'},
+  "perception:playback_complete":{fire:'resp',via:[['resp','perc'],['perc','mic']],dom:'perception'},
+  "perception:sensor_disconnected":{fire:'perc',via:[],dom:'perception'},
+  "confidence:update":{fire:'analysis',via:[['kernel','analysis']],dom:'consciousness'},
+  "consciousness:self_observation":{fire:'analysis',via:[['analysis','think']],dom:'consciousness'},
+  "consciousness:emergent_behavior":{fire:'think',via:[['analysis','think']],dom:'consciousness'},
+  "consciousness:mutation_proposed":{fire:'analysis',via:[['analysis','kernel']],dom:'consciousness'},
+  "mutation:applied":{fire:'kernel',via:[['analysis','kernel']],dom:'consciousness'},
+  "mutation:rejected":{fire:'analysis',via:[['analysis','kernel']],dom:'consciousness'},
+  "mutation:rollback":{fire:'kernel',via:[['analysis','kernel']],dom:'consciousness'},
+  "contradiction:detected":{fire:'contra',via:[['memory','contra'],['contra','belief']],dom:'integrity'},
+  "contradiction:resolved":{fire:'contra',via:[['contra','belief']],dom:'integrity'},
+  "contradiction:tension_held":{fire:'contra',via:[['contra','belief']],dom:'integrity'},
+  "calibration:drift":{fire:'belief',via:[['belief','analysis']],dom:'integrity'},
+  "calibration:correction":{fire:'contra',via:[['resp','contra'],['contra','belief']],dom:'integrity'},
+  "calibration:updated":{fire:'belief',via:[],dom:'integrity'},
+  "belief_graph:edge_created":{fire:'belief',via:[['contra','belief']],dom:'integrity'},
+  "belief_graph:propagation_complete":{fire:'belief',via:[],dom:'integrity'},
+  "belief_graph:integrity_check":{fire:'belief',via:[],dom:'integrity'},
+  "conversation:user_message":{fire:'kernel',via:[['perc','kernel'],['kernel','think']],dom:'output'},
+  "output:validation_recorded":{fire:'release',via:[['think','release'],['release','resp']],dom:'output'},
+  "autonomy:level_changed":{fire:'kernel',via:[],dom:'consciousness'},
+  "autonomy:intent_queued":{fire:'think',via:[['think','kernel']],dom:'consciousness'},
+  "autonomy:intent_blocked":{fire:'release',via:[['think','release']],dom:'integrity'},
+  "autonomy:research_started":{fire:'think',via:[['think','kernel']],dom:'consciousness'},
+  "autonomy:research_completed":{fire:'memory',via:[['think','memory'],['memory','belief']],dom:'consciousness'},
+  "autonomy:research_failed":{fire:'think',via:[['think','kernel']],dom:'consciousness'},
+  "autonomy:research_skipped":{fire:'think',via:[['think','memory']],dom:'consciousness'},
+  "autonomy:delta_measured":{fire:'analysis',via:[['think','analysis']],dom:'consciousness'},
+  "goal:created":{fire:'think',via:[['kernel','think']],dom:'consciousness'},
+  "goal:promoted":{fire:'think',via:[['kernel','think']],dom:'consciousness'},
+  "goal:completed":{fire:'think',via:[['kernel','think']],dom:'consciousness'},
+  "goal:abandoned":{fire:'think',via:[['kernel','think']],dom:'consciousness'},
+  "goal:paused":{fire:'think',via:[['kernel','think']],dom:'consciousness'},
+  "goal:resumed":{fire:'think',via:[['kernel','think']],dom:'consciousness'},
+  "goal:progress_update":{fire:'think',via:[['kernel','think']],dom:'consciousness'}
+};
+const DOMC = {perception:"--c-perception",kernel:"--c-kernel",memory:"--c-memory",
+  consciousness:"--c-consciousness",output:"--c-output",integrity:"--c-integrity"};
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+/* by-domain prefix fallback — so ANY event routes to the right region even if not explicitly
+   mapped above (the stream now taps the WHOLE bus; nothing routes invisibly). */
+const PREFIX = {
+  "perception:":{fire:'perc',dom:'perception'}, "spatial:":{fire:'lidar',dom:'perception'},
+  "kernel:":{fire:'kernel',dom:'kernel'}, "phase:":{fire:'kernel',dom:'kernel'},
+  "tone:":{fire:'think',dom:'kernel'}, "confidence:":{fire:'analysis',dom:'consciousness'},
+  "memory:":{fire:'memory',dom:'memory'}, "consciousness:":{fire:'analysis',dom:'consciousness'},
+  "mutation:":{fire:'analysis',dom:'consciousness'}, "contradiction:":{fire:'contra',dom:'integrity'},
+  "belief_graph:":{fire:'belief',dom:'integrity'}, "belief:":{fire:'belief',dom:'integrity'},
+  "calibration:":{fire:'belief',dom:'integrity'}, "epistemic:":{fire:'belief',dom:'integrity'},
+  "conversation:":{fire:'resp',dom:'output'}, "output:":{fire:'release',dom:'output'},
+  "autonomy:":{fire:'think',dom:'consciousness'}, "goal:":{fire:'think',dom:'consciousness'},
+  "soul:":{fire:'kernel',dom:'consciousness'}, "system:":{fire:'kernel',dom:'kernel'},
+};
+function routeFor(type){
+  if(ROUTE[type]) return Object.assign({mapped:true}, ROUTE[type]);
+  for(const p in PREFIX){ if(type.indexOf(p)===0) return {fire:PREFIX[p].fire,via:[],dom:PREFIX[p].dom,mapped:false}; }
+  return {fire:'kernel',via:[],dom:'kernel',mapped:false};   // last-resort: never invisible
+}
+
+/* hover-inspect data (grounded in subsystem_registry.json) */
+const INFO = {
+  camera:{what:"Pi camera (IMX519) + Hailo detection + face-ID — the eyes.", home:"perception/server.py", status:"live"},
+  mic:{what:"Pi mic stream → brain (16kHz) → ASR / voice in — the ears.", home:"perception_orchestrator.py", status:"live"},
+  lidar:{what:"RPLidar room scans (360 bins) — spatial sense.", home:"cognition/lidar_room.py", status:"live"},
+  perc:{what:"The turn HUB: ingests perception, drives the turn, emits conversation:response.", home:"perception_orchestrator.py", status:"live"},
+  kernel:{what:"Budget-aware tick loop; emits KERNEL_TICK / KERNEL_THOUGHT each cycle.", home:"consciousness/kernel.py:215", status:"live"},
+  think:{what:"Existential / philosophical reasoning — generates the inner-life thoughts.", home:"consciousness/existential_reasoning.py", status:"live"},
+  modes:{what:"Conversational / reflective mode switching; emits MODE_CHANGE.", home:"consciousness/modes.py", status:"live"},
+  analysis:{what:"Self-analysis + reflective audit (9 scanners) — introspective immune check.", home:"epistemic/reflective_audit/engine.py:80", status:"advisory"},
+  memory:{what:"Memory writes (MEMORY_WRITE) — provenance-tagged, fractal recall.", home:"memory/core.py", status:"live"},
+  contra:{what:"L5 Typed Contradiction Engine — subscribes to every MEMORY_WRITE, 7-class conflict check.", home:"epistemic/contradiction_engine.py:63", status:"live"},
+  belief:{what:"L7 Belief Confidence Graph — weighted evidence edges, view-only propagation.", home:"epistemic/belief_graph/__init__.py:35", status:"live"},
+  release:{what:"L0 Capability Gate + L12 Intention — scans every outgoing chunk; the honesty firewall.", home:"skills/capability_gate.py:859", status:"live"},
+  resp:{what:"The response leaving the system (conversation:response).", home:"conversation_handler.py", status:"live"},
+};
+
+/* ---------- layout ---------- */
+const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
+let W=0,H=0,DPR=Math.min(2,window.devicePixelRatio||1);
+const NODES={}; // id -> {x,y,...}
+function layout(){
+  W=cv.clientWidth; H=cv.clientHeight; cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  for(const st of STAGES){
+    const n=st.nodes.length, top=H*0.18, span=H*0.64;
+    st.nodes.forEach((nd,i)=>{
+      const y = n===1 ? H*0.5 : top + span*(i/(n-1));
+      NODES[nd.id]={...nd, px:W*st.x, py:y};
+    });
+  }
+}
+window.addEventListener("resize",layout);
+
+/* ---------- live state ---------- */
+const glow={};            // node id -> 0..1 recent-activity glow (decays)
+const pulses=[];          // {x1,y1,x2,y2,t,col}
+let evCount=0, lastSeq=0, connected=false, startTs=Date.now();
+let unmappedCount=0; const unmappedTypes={};
+
+function nodeColor(nd){return css(DOMC[nd.dom]||"--c-kernel");}
+function statusAlpha(s){return s==="live"?1:s==="gated"?0.55:s==="dormant"?0.35:0.45;}
+
+function ctrl(x1,y1,x2,y2){ const mx=(x1+x2)/2; return [mx,y1,mx,y2]; } // bezier control pts
+function bez(x1,y1,c1x,c1y,c2x,c2y,x2,y2,t){
+  const u=1-t, a=u*u*u,b=3*u*u*t,c=3*u*t*t,d=t*t*t;
+  return [a*x1+b*c1x+c*c2x+d*x2, a*y1+b*c1y+c*c2y+d*y2];
+}
+function firePulse(srcId,dstId,col){
+  const s=NODES[srcId], d=NODES[dstId]; if(!s||!d) return;
+  pulses.push({x1:s.px,y1:s.py,x2:d.px,y2:d.py,t:0,col});
+}
+
+function onEvent(e){
+  evCount++;
+  const r=routeFor(e.type); const col=css(DOMC[r.dom]||"--c-kernel");
+  if(r.fire) glow[r.fire]=1;
+  (r.via||[]).forEach(([a,b])=>firePulse(a,b,col));
+  if(!r.mapped){ unmappedCount++; unmappedTypes[e.type]=(unmappedTypes[e.type]||0)+1; }
+  // ledger
+  const led=document.getElementById("ledger");
+  const div=document.createElement("div"); div.className="ev";
+  const dd = e.data&&Object.keys(e.data).length?JSON.stringify(e.data).slice(0,90):"";
+  const t=new Date((e.ts||Date.now()/1000)*1000).toLocaleTimeString();
+  div.innerHTML='<span class="ts">'+t+'</span><span class="t" style="color:'+col+'">'+
+    (e.type||"event")+'</span>'+(r.mapped?'':' <span style="color:var(--c-memory)">·unmapped</span>')+
+    (dd?'<div class="d">'+dd.replace(/</g,"&lt;")+'</div>':'');
+  led.insertBefore(div,led.firstChild);
+  while(led.children.length>60) led.removeChild(led.lastChild);
+}
+
+/* ---------- render loop ---------- */
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // edges (faint baseline)
+  ctx.lineWidth=1;
+  for(const [a,b] of EDGES){ const s=NODES[a],d=NODES[b]; if(!s||!d)continue;
+    const[c1x,c1y,c2x,c2y]=ctrl(s.px,s.py,d.px,d.py);
+    ctx.beginPath(); ctx.moveTo(s.px,s.py); ctx.bezierCurveTo(c1x,c1y,c2x,c2y,d.px,d.py);
+    ctx.strokeStyle="rgba(120,130,200,0.10)"; ctx.stroke();
+  }
+  // pulses
+  for(let i=pulses.length-1;i>=0;i--){ const p=pulses[i]; p.t+=0.022;
+    const[c1x,c1y,c2x,c2y]=ctrl(p.x1,p.y1,p.x2,p.y2);
+    if(p.t>=1){ pulses.splice(i,1); continue; }
+    // trailing line
+    const[hx,hy]=bez(p.x1,p.y1,c1x,c1y,c2x,c2y,p.x2,p.y2,p.t);
+    ctx.beginPath(); ctx.moveTo(p.x1,p.y1); ctx.bezierCurveTo(c1x,c1y,c2x,c2y,hx,hy);
+    ctx.strokeStyle=p.col; ctx.globalAlpha=0.25*(1-p.t); ctx.lineWidth=1.5; ctx.stroke(); ctx.globalAlpha=1;
+    // head
+    ctx.beginPath(); ctx.arc(hx,hy,3.2,0,7); ctx.fillStyle=p.col;
+    ctx.shadowColor=p.col; ctx.shadowBlur=12; ctx.fill(); ctx.shadowBlur=0;
+  }
+  // stage labels
+  ctx.font="10px monospace"; ctx.textAlign="center";
+  for(const st of STAGES){ ctx.fillStyle="rgba(150,160,210,0.5)"; ctx.fillText(st.title, W*st.x, H*0.10); }
+  // nodes
+  for(const id in NODES){ const nd=NODES[id]; const col=nodeColor(nd);
+    const g=glow[id]||0; const baseA=statusAlpha(nd.status);
+    // neuron strip (echo of the inspiration)
+    ctx.globalAlpha=baseA*0.5;
+    for(let k=0;k<7;k++){ ctx.beginPath(); ctx.arc(nd.px, nd.py-18+k*6, 1.3,0,7);
+      ctx.fillStyle=col; ctx.fill(); }
+    ctx.globalAlpha=1;
+    // node core
+    const R=6+g*5;
+    ctx.beginPath(); ctx.arc(nd.px,nd.py,R,0,7);
+    ctx.fillStyle=col; ctx.globalAlpha=baseA*(0.35+0.65*g);
+    ctx.shadowColor=col; ctx.shadowBlur=g*22; ctx.fill(); ctx.shadowBlur=0; ctx.globalAlpha=1;
+    ctx.beginPath(); ctx.arc(nd.px,nd.py,R,0,7); ctx.strokeStyle=col; ctx.globalAlpha=baseA; ctx.lineWidth=1.2; ctx.stroke(); ctx.globalAlpha=1;
+    // label
+    ctx.font="10.5px monospace"; ctx.fillStyle= g>0.15?"#fff":"rgba(174,182,224,"+baseA+")";
+    ctx.textAlign = nd.px>W*0.8?"right":"left";
+    const lx = nd.px + (nd.px>W*0.8?-14:14);
+    ctx.fillText(nd.label, lx, nd.py+3);
+    glow[id]=Math.max(0,g-0.012); // decay -> activity fades (truthful)
+  }
+  requestAnimationFrame(draw);
+}
+
+/* ---------- legend + status ---------- */
+function buildLegend(){
+  const order=[["perception","perception (Pi senses)"],["kernel","kernel / cognition"],
+    ["consciousness","self-analysis"],["memory","memory writes"],["integrity","integrity / blocked"],
+    ["output","response out"]];
+  document.getElementById("legend").innerHTML =
+    order.map(([k,t])=>'<span class="dot" style="background:'+css(DOMC[k])+'"></span><b>'+t+'</b>').join("<br>");
+}
+function setStatus(){
+  const s=document.getElementById("status");
+  const rate=(evCount/Math.max(1,(Date.now()-startTs)/60000)).toFixed(1);
+  s.innerHTML = (connected
+    ? '<b style="color:'+css("--c-output")+'">● LIVE — /api/events/stream</b>'
+    : '<b style="color:var(--c-memory)">○ stream not connected</b> <span style="color:var(--dim)">(brain may predate the SSE endpoint — needs a restart)</span>')
+    + '<br><span style="color:var(--dim)">events: '+evCount+' · ~'+rate+'/min'+
+      (Object.keys(unmappedTypes).length?' · <span style="color:var(--c-memory)" title="'+Object.keys(unmappedTypes).join(", ")+'">'+Object.keys(unmappedTypes).length+' unmapped</span>':' · all mapped')+'</span>';
+}
+
+/* ---------- SSE ---------- */
+function connect(){
+  const es=new EventSource('/api/events/stream');
+  es.onmessage=function(ev){ try{ const d=JSON.parse(ev.data);
+    if(d && typeof d.seq!=="undefined"){ if(d.seq<=lastSeq && d.seq!==0) {} lastSeq=d.seq; connected=true;
+      if(d.type) onEvent(d); setStatus(); } }catch(e){} };
+  es.onerror=function(){ connected=false; setStatus(); }; // auto-reconnects
+}
+/* hover-inspect: hit-test nodes, show grounded tooltip */
+const tip=document.getElementById("tip");
+cv.addEventListener("mousemove",function(e){
+  const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  let hit=null;
+  for(const id in NODES){ const n=NODES[id], dx=mx-n.px, dy=my-n.py; if(dx*dx+dy*dy<625){ hit=id; break; } }
+  if(hit){ const nd=NODES[hit], inf=INFO[hit]||{};
+    tip.innerHTML='<b style="color:#fff">'+nd.label+'</b> &nbsp;<span style="color:'+nodeColor(nd)+'">● '+(inf.status||nd.status)+'</span>'+
+      '<div style="color:var(--txt);margin-top:3px">'+(inf.what||'')+'</div>'+
+      '<div style="color:var(--dim);margin-top:3px;font-size:10px">'+(inf.home||'')+'</div>';
+    tip.style.display="block"; tip.style.left=Math.min(e.clientX+14,window.innerWidth-310)+"px"; tip.style.top=(e.clientY+14)+"px";
+    cv.style.cursor="pointer";
+  } else { tip.style.display="none"; cv.style.cursor="default"; }
+});
+cv.addEventListener("mouseleave",function(){ tip.style.display="none"; });
+
+layout(); buildLegend(); setStatus(); connect(); draw();
+setInterval(setStatus,2000);
+</script>
+</body>
+</html>

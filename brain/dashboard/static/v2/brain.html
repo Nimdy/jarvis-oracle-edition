@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>JARVIS · Living Topology — the whole brain (dashboardV2)</title>
+<style>
+  :root{ --bg:#060610; --panel:#0c0c1a; --edge:#1a1f3c; --txt:#aeb6e0; --dim:#5a6190; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font-family:"DejaVu Sans Mono",ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+  #wrap{display:flex;height:100vh;width:100vw;overflow:hidden}
+  canvas{flex:1 1 0;display:block;min-width:0}
+  #side{width:330px;border-left:1px solid var(--edge);background:var(--panel);display:flex;flex-direction:column;font-size:12px}
+  #hdr{padding:11px 13px;border-bottom:1px solid var(--edge)}
+  #hdr h1{margin:0;font-size:13px;letter-spacing:.5px;color:#fff}
+  #hdr .sub{color:var(--dim);font-size:10.5px;margin-top:3px;line-height:1.45}
+  #status{padding:7px 13px;border-bottom:1px solid var(--edge);font-size:10.5px}
+  #legend{padding:7px 13px;border-bottom:1px solid var(--edge);font-size:10px;line-height:1.7;color:var(--dim)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  #ledhdr{padding:7px 13px 3px;color:var(--dim);font-size:9.5px;letter-spacing:1px;text-transform:uppercase}
+  #ledger{flex:1;overflow-y:auto;padding:0 13px 12px}
+  .ev{padding:4px 0;border-bottom:1px solid #12162e;font-size:10.5px}
+  .ev .t{color:#fff} .ev .ts{float:right;color:var(--dim);font-size:9px} .ev .d{color:var(--dim);font-size:9px;word-break:break-all}
+  #foot{padding:7px 13px;border-top:1px solid var(--edge);color:var(--dim);font-size:9.5px}
+  a{color:#33d6e0;text-decoration:none}
+  #tip{position:fixed;display:none;pointer-events:none;z-index:10;max-width:320px;background:rgba(6,6,16,.97);
+    border:1px solid var(--edge);border-radius:5px;padding:8px 10px;font-size:10.5px;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,.7)}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div id="tip"></div>
+  <div id="side">
+    <div id="hdr">
+      <h1>LIVING TOPOLOGY · the whole brain</h1>
+      <div class="sub">Every subsystem + the NN substrate. Pulses are <b style="color:#fff">real</b>:
+        bus events (<code>on_any</code>) + snapshot deltas (the NN/internal processes that emit no events).
+        Dim = shadow/dormant/gated by design. Idle = quiet.</div>
+    </div>
+    <div id="status">&nbsp;</div>
+    <div id="legend"></div>
+    <div id="ledhdr">live activity</div>
+    <div id="ledger"></div>
+    <div id="foot"><b style="color:#9fb0ff">scroll</b> = zoom · <b style="color:#9fb0ff">drag</b> = pan · <b style="color:#9fb0ff">dbl-click</b> = reset · hover = detail<br>Phase 2 · <a href="/static/v2/flow.html">← conversation flow</a></div>
+  </div>
+</div>
+<script>
+const CLUSTER_COL = {
+  "senses-perception":"#33d6e0","cognition-kernel":"#9fb0ff","memory":"#f0b03c",
+  "integrity-stack":"#ff5a5a","nn-substrate":"#b478ff","self-mod-evolution":"#ff6ad5",
+  "autonomy-goals":"#43e07a","affect-soul-selfview":"#ff9ec4","output-voice":"#5ad1b0",
+};
+const PREFIX = {
+  "perception:":"perception-orchestrator","spatial:":"lidar","kernel:":"kernel-loop","phase:":"phase-engine",
+  "tone:":"tone-engine","confidence:":"consciousness-observer","memory:":"memory-store","consciousness:":"consciousness-observer",
+  "mutation:":"mutations-engine","contradiction:":"l5-contradiction","belief_graph:":"l7-belief-graph","belief:":"l7-belief-graph",
+  "calibration:":"l6-calibration","epistemic:":"l7-belief-graph","conversation:":"conversation-handler-spine","output:":"release-validation",
+  "autonomy:":"autonomy-orchestrator","goal:":"goals-manager","soul:":"soul-identity-state","system:":"kernel-loop",
+};
+function statusAlpha(s){return s==="shipped"||s==="live"?1:s==="partial"?0.8:s==="gated"?0.5:s==="signal-failure"?0.55:0.4;}
+function getPath(o,p){ if(!o||!p) return undefined; let c=o; for(const k of p.split(".")){ if(c==null) return undefined; c=c[k]; } return c; }
+function resolveMetric(t,s){ return (t||"").replace(/\{([^}]+)\}/g,(m,p)=>{ const v=getPath(s,p.trim()); return v==null?"–":(typeof v==="number"?(Math.round(v*1000)/1000):String(v)).toString().slice(0,18); }); }
+
+const cv=document.getElementById("cv"),ctx=cv.getContext("2d"),tip=document.getElementById("tip");
+let W=0,H=0,COLSPACE=0,DPR=Math.min(2,window.devicePixelRatio||1);
+let TOPO=null, NODES={}, NLIST=[], EDGES=[], EV2NODE={}, COLS=[];
+const glow={}, pulses=[]; const snapVals={}; const metrics={};
+let evCount=0,snapDeltas=0,lastSeq=0,connected=false,snapOk=false,startTs=Date.now();
+let unmapped={};
+// camera: scroll to zoom (toward cursor), drag to pan, dbl-click to reset
+const cam={x:0,y:0,scale:1}; let dragging=false,dragMoved=false,lastX=0,lastY=0;
+cv.addEventListener("wheel",e=>{ e.preventDefault(); const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  const f=e.deltaY<0?1.12:1/1.12, ns=Math.max(0.35,Math.min(9,cam.scale*f));
+  cam.x=mx-(mx-cam.x)*(ns/cam.scale); cam.y=my-(my-cam.y)*(ns/cam.scale); cam.scale=ns; },{passive:false});
+cv.addEventListener("mousedown",e=>{ dragging=true;dragMoved=false;lastX=e.clientX;lastY=e.clientY;cv.style.cursor="grabbing"; });
+window.addEventListener("mouseup",()=>{ dragging=false;cv.style.cursor="grab"; });
+cv.addEventListener("dblclick",()=>{ cam.x=0;cam.y=0;cam.scale=1; });
+
+function layout(){
+  W=cv.clientWidth;H=cv.clientHeight;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  if(!TOPO) return;
+  const nC=COLS.length, topY=H*0.085, botY=H*0.97;
+  COLSPACE = W*0.80/(nC-1);
+  COLS.forEach((cl,ci)=>{
+    const x = W*(0.035 + 0.80*(ci/(nC-1)));
+    const ids=cl.node_ids.filter(id=>NODES[id]); const n=ids.length;
+    ids.forEach((id,j)=>{
+      const y = n===1? (topY+botY)/2 : topY + (botY-topY)*(j/(n-1));
+      NODES[id].px=x; NODES[id].py=y; NODES[id].colIndex=ci;
+    });
+  });
+}
+window.addEventListener("resize",layout);
+
+function clusterColor(n){return CLUSTER_COL[n.cluster]||"#9fb0ff";}
+function firePulse(srcId,dstId,col){ const s=NODES[srcId],d=NODES[dstId]; if(!s||!d||s.px==null||d.px==null)return;
+  pulses.push({x1:s.px,y1:s.py,x2:d.px,y2:d.py,t:0,col}); if(pulses.length>400)pulses.splice(0,100); }
+
+function pulseNode(id,col){ if(!NODES[id])return; glow[id]=1; const n=NODES[id];
+  (n.edges_to||[]).slice(0,6).forEach(t=>{ if(NODES[t]) firePulse(id,t,col); }); }
+
+function ledger(type,detail,col,kind){
+  const led=document.getElementById("ledger"); const div=document.createElement("div");div.className="ev";
+  const t=new Date().toLocaleTimeString();
+  div.innerHTML='<span class="ts">'+t+'</span><span class="t" style="color:'+col+'">'+type+'</span>'+
+    (kind==='snap'?' <span style="color:var(--dim)">·snap</span>':'')+(detail?'<div class="d">'+String(detail).replace(/</g,"&lt;").slice(0,80)+'</div>':'');
+  led.insertBefore(div,led.firstChild); while(led.children.length>70) led.removeChild(led.lastChild);
+}
+
+function onEvent(e){
+  evCount++;
+  let ids=EV2NODE[e.type];
+  if(!ids){ for(const p in PREFIX){ if(e.type.indexOf(p)===0){ ids=[PREFIX[p]]; break; } } }
+  if(!ids){ unmapped[e.type]=(unmapped[e.type]||0)+1; ids=["event-bus"]; }
+  const n0=NODES[ids[0]]; const col=n0?clusterColor(n0):"#9fb0ff";
+  ids.forEach(id=>pulseNode(id,col));
+  const dd=e.data&&Object.keys(e.data).length?JSON.stringify(e.data).slice(0,80):"";
+  ledger(e.type,dd,col,'event');
+}
+
+async function pollSnapshot(){
+  try{
+    const r=await fetch('/api/full-snapshot',{cache:"no-store"}); const s=await r.json(); snapOk=true;
+    for(const n of NLIST){
+      if(n.metric) metrics[n.id]=resolveMetric(n.metric,s);
+      const ap=n.activity_field;
+      if(ap && ap.indexOf(".")>0 && ap.indexOf(" ")<0){
+        const v=getPath(s,ap);
+        if(v!==undefined){
+          const prev=snapVals[n.id];
+          if(prev!==undefined && JSON.stringify(v)!==JSON.stringify(prev)){
+            snapDeltas++; pulseNode(n.id,clusterColor(n));
+            ledger(n.label, ap.split(".").slice(-1)[0]+" → "+String(v).slice(0,24), clusterColor(n),'snap');
+          }
+          snapVals[n.id]=v;
+        }
+      }
+    }
+  }catch(e){ snapOk=false; }
+}
+
+function draw(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,H);
+  ctx.translate(cam.x,cam.y); ctx.scale(cam.scale,cam.scale);
+  // edges (ambient wiring, faint; brighten near active nodes)
+  for(const ed of EDGES){ const a=NODES[ed[0]],b=NODES[ed[1]]; if(!a||!b||a.px==null||b.px==null)continue;
+    const g=Math.max(glow[ed[0]]||0,glow[ed[1]]||0);
+    ctx.beginPath();ctx.moveTo(a.px,a.py);ctx.lineTo(b.px,b.py);
+    ctx.strokeStyle="rgba(120,130,200,"+(0.02+0.55*g)+")";ctx.lineWidth=g>0.1?1.1:0.35;ctx.stroke();
+  }
+  // pulses
+  for(let i=pulses.length-1;i>=0;i--){ const p=pulses[i]; p.t+=0.03; if(p.t>=1){pulses.splice(i,1);continue;}
+    const x=p.x1+(p.x2-p.x1)*p.t, y=p.y1+(p.y2-p.y1)*p.t;
+    ctx.beginPath();ctx.arc(x,y,2.6,0,7);ctx.fillStyle=p.col;ctx.shadowColor=p.col;ctx.shadowBlur=10;ctx.fill();ctx.shadowBlur=0;
+  }
+  // cluster labels
+  ctx.font="10px monospace";
+  COLS.forEach((cl,ci)=>{ const x=W*(0.035+0.80*(ci/(COLS.length-1)));
+    ctx.textAlign = ci===0?"left":(ci===COLS.length-1?"right":"center");
+    ctx.fillStyle="rgba(150,160,210,.6)"; ctx.fillText(cl.label.toUpperCase(), x, H*0.04); });
+  ctx.textAlign="left";
+  // nodes
+  ctx.textAlign="left";
+  for(const n of NLIST){ if(n.px==null)continue; const col=clusterColor(n); const g=glow[n.id]||0; const a=statusAlpha(n.status);
+    const R=2.6+g*5;
+    ctx.beginPath();ctx.arc(n.px,n.py,R,0,7);ctx.fillStyle=col;ctx.globalAlpha=a*(0.3+0.7*g);
+    ctx.shadowColor=col;ctx.shadowBlur=g*16;ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;
+    ctx.beginPath();ctx.arc(n.px,n.py,R,0,7);ctx.strokeStyle=col;ctx.globalAlpha=a*0.8;ctx.lineWidth=0.8;ctx.stroke();ctx.globalAlpha=1;
+    if(n.status==="signal-failure"){ ctx.strokeStyle="#ff5a5a";ctx.globalAlpha=0.9;ctx.beginPath();ctx.moveTo(n.px-3,n.py-3);ctx.lineTo(n.px+3,n.py+3);ctx.moveTo(n.px+3,n.py-3);ctx.lineTo(n.px-3,n.py+3);ctx.stroke();ctx.globalAlpha=1; }
+    // label
+    ctx.font="8px monospace"; ctx.fillStyle= g>0.2?"#fff":"rgba(174,182,224,"+(a*0.8)+")";
+    let lbl=n.label; const maxW=COLSPACE*0.9;   // keep each label inside its column lane
+    if(cam.scale<=1.8 && ctx.measureText(lbl).width>maxW){ while(lbl.length>4 && ctx.measureText(lbl+"…").width>maxW) lbl=lbl.slice(0,-1); lbl+="…"; }
+    ctx.fillText(lbl, n.px+6, n.py+3);
+    glow[n.id]=Math.max(0,g-0.010);
+  }
+  requestAnimationFrame(draw);
+}
+
+function buildLegend(){
+  const cl=COLS.map(c=>'<span class="dot" style="background:'+(CLUSTER_COL[c.key]||"#888")+'"></span>'+c.label).join("<br>");
+  document.getElementById("legend").innerHTML=cl+'<br><span style="color:var(--dim)">dim = shadow/dormant/gated · ✕ = signal-failure</span>';
+}
+function setStatus(){
+  const s=document.getElementById("status"); const rate=(evCount/Math.max(1,(Date.now()-startTs)/60000)).toFixed(0);
+  const um=Object.keys(unmapped).length;
+  s.innerHTML=(connected?'<b style="color:#43e07a">● events LIVE</b>':'<b style="color:#f0b03c">○ events: restart brain for on_any</b>')+
+    ' · '+(snapOk?'<b style="color:#43e07a">● snapshot</b>':'<b style="color:#f0b03c">○ snapshot</b>')+
+    '<br><span style="color:var(--dim)">'+NLIST.length+' nodes · events '+evCount+' (~'+rate+'/m) · snap-deltas '+snapDeltas+(um?' · <span style="color:#f0b03c">'+um+' unmapped</span>':'')+'</span>';
+}
+
+cv.addEventListener("mousemove",e=>{
+  if(dragging){ cam.x+=e.clientX-lastX;cam.y+=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;dragMoved=true;tip.style.display="none";return; }
+  const r=cv.getBoundingClientRect(),mx=(e.clientX-r.left-cam.x)/cam.scale,my=(e.clientY-r.top-cam.y)/cam.scale; let hit=null;
+  for(const n of NLIST){ if(n.px==null)continue; const dx=mx-n.px,dy=my-n.py; if(dx*dx+dy*dy<120){hit=n;break;} }
+  if(hit){ const col=clusterColor(hit);
+    tip.innerHTML='<b style="color:#fff">'+hit.label+'</b> <span style="color:'+col+'">● '+hit.status+(hit.authority?'/'+hit.authority:'')+'</span>'+
+      (metrics[hit.id]?'<div style="color:var(--txt);margin-top:3px">'+metrics[hit.id]+'</div>':'')+
+      (hit.notes?'<div style="color:var(--dim);margin-top:3px">'+hit.notes.replace(/</g,"&lt;")+'</div>':'')+
+      (hit.events&&hit.events.length?'<div style="color:'+col+';margin-top:3px;font-size:9px">'+hit.events.slice(0,4).join(", ")+'</div>':'')+
+      (hit.home?'<div style="color:var(--dim);margin-top:2px;font-size:9px">'+hit.home+'</div>':'');
+    tip.style.display="block";tip.style.left=Math.min(e.clientX+14,window.innerWidth-340)+"px";tip.style.top=Math.min(e.clientY+14,window.innerHeight-160)+"px";cv.style.cursor="pointer";
+  } else { tip.style.display="none";cv.style.cursor="default"; }
+});
+cv.addEventListener("mouseleave",()=>tip.style.display="none");
+
+function connectSSE(){ const es=new EventSource('/api/events/stream');
+  es.onmessage=ev=>{ try{ const d=JSON.parse(ev.data); if(d&&typeof d.seq!=="undefined"){ lastSeq=d.seq;connected=true; if(d.type)onEvent(d); setStatus(); } }catch(e){} };
+  es.onerror=()=>{ connected=false; setStatus(); };
+}
+
+fetch('/static/v2/topology.json',{cache:"no-store"}).then(r=>r.json()).then(t=>{
+  TOPO=t; COLS=t.clusters; EDGES=t.edges||[];
+  for(const n of t.nodes){ NODES[n.id]=n; NLIST.push(n); (n.events||[]).forEach(ev=>{ (EV2NODE[ev]=EV2NODE[ev]||[]).push(n.id); }); }
+  layout(); buildLegend(); setStatus(); draw(); connectSSE(); pollSnapshot(); setInterval(pollSnapshot,2500); setInterval(setStatus,2000);
+}).catch(e=>{ document.getElementById("status").innerHTML='<b style="color:#ff5a5a">failed to load topology.json</b>'; });
+</script>
+</body>
+</html>

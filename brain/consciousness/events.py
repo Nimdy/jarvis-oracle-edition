@@ -531,6 +531,10 @@ class EventBus:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._listeners: dict[str, list[Callable[..., Any]]] = {}
+        # Read-only global observers: see EVERY fired event (event_type, kwargs), including
+        # events nothing else listens to. Powers the dashboard cognitive-flow stream as the
+        # TRUSTED routing source. Bulletproof — never affects real handlers or the bus.
+        self._global_observers: list[Callable[[str, dict[str, Any]], Any]] = []
         self._barrier = _BarrierState.CLOSED
         self._early_queue: list[tuple[str, dict[str, Any]]] = []
         self._max_buffered = 10_000
@@ -605,6 +609,26 @@ class EventBus:
         cleanup = self.on(event_type, _wrapper)
         return cleanup
 
+    def on_any(self, observer: Callable[[str, dict[str, Any]], Any]) -> Callable[[], None]:
+        """Register a global observer that receives (event_type, kwargs) for EVERY fired event.
+
+        Unlike ``on``, this fires even for event types with no per-type listener — so a
+        consumer (the dashboard flow stream) can be the trusted source for ALL routing.
+        Read-only contract: observer exceptions are swallowed and never affect real
+        handlers, the bus, or circuit breakers. Not subject to ``_max_listeners``.
+        """
+        with self._lock:
+            self._global_observers.append(observer)
+
+        def _cleanup() -> None:
+            with self._lock:
+                try:
+                    self._global_observers.remove(observer)
+                except ValueError:
+                    pass
+
+        return _cleanup
+
     # -- emit ---------------------------------------------------------------
 
     def emit(self, event_type: str, **kwargs: Any) -> None:
@@ -651,6 +675,7 @@ class EventBus:
                     return
 
             handlers = list(self._listeners.get(event_type, []))
+            observers = list(self._global_observers)
 
         for handler in handlers:
             t0 = _time.monotonic()
@@ -682,6 +707,15 @@ class EventBus:
                 elapsed_ms = (_time.monotonic() - t0) * 1000.0
                 with self._lock:
                     self._processing_times.append(elapsed_ms)
+
+        # Global observers (read-only tap) — fire for EVERY event, including those with no
+        # per-type handler. Bulletproof: an observer error never affects handlers or the bus,
+        # and never trips a circuit breaker (kept entirely separate from the handler path).
+        for observer in observers:
+            try:
+                observer(event_type, kwargs)
+            except Exception:
+                logger.debug("EventBus global observer error for %s", event_type, exc_info=True)
 
     # -- circuit breaker ----------------------------------------------------
 
