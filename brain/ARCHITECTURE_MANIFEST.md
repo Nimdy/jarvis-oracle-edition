@@ -220,3 +220,104 @@ These are genuine, code-confirmed gaps — *not* idle states. A future agent may
 4. **Shadow means injects-nothing.** "advisory" authority on a companion/affect/policy/world-model subsystem does NOT mean it steers behavior — trace whether the return is consumed. Most are discarded by design.
 5. **Never code-to-qwen, never lower a gate, never delete a firewall, never wire a shadow output into the prompt to light a panel.** That is the exact failure the architecture resists. Promotion is operator-earned on real reps.
 6. **Voice is a swap-in LLM on a leash.** The honesty firewall + grounding leash + per-route caps are the model-agnostic boundary. Fixes to "humble" answers usually belong in routing/grounding, not in the model.
+
+## Round-2 additions — previously-uncovered pillars
+
+49 adversarially-verified pillars added (2 of the original 51 deduped against existing subsystems: ToolRouter 5-tier -> `routing-voice`; Streaming ASR Tier-2 -> `conversational-pipeline` deferred lane). New total subsystem count: 98.
+
+### Knowledge-retention spine (the cross-reset knowledge backbone)
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| Document Library (Sources + Chunks + Index) | shipped | live | brain/library/source.py:88 | EMPTY after reset, refilled from Blue-Diamonds reload + codebase ingestion; reset-VOLATILE | mistaking it for the durable store (it is reset-wiped; only Blue Diamonds survive) |
+| Study Pipeline (concept + claim extraction) | shipped | live | brain/library/study.py:203 | cycle runs every 120s, returns immediately when no unstudied sources; session counters reset per process | reading telemetry zeros as 'dead'; assuming study claims get the +0.10 trust boost |
+| Blue Diamonds (durable reset-surviving archive) | shipped | live | brain/library/blue_diamonds.py:163 | empty-until-earned; high gates mean rejections >> graduations even on a box that ran the brain | flagging empty as broken; looking inside ~/.jarvis (it is at ~/.jarvis_blue_diamonds) |
+
+### Autonomy research-engine trunk + satellites
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| AutonomyOrchestrator (L0-L3 + queue, MAX_QUEUE_SIZE=20) | partial | active | brain/autonomy/orchestrator.py:82 | live at level=1; conversational mode blocks ALL research; L2/L3 actuation inert by design | calling it shadow/broken (L0/L1 are live; only L2/L3 actuation is gated) |
+| ResearchGovernor (mode/rate/topic/budget gate) | shipped | live | brain/autonomy/research_governor.py:70 | blocks every intent in conversational/focused mode (mode_blocked = healthy) | reading high total_blocked as broken |
+| MetricTriggers (sustained-deficit driver) | shipped | live | brain/autonomy/metric_triggers.py:116 | total_triggers=0 = healthy/no deficits; escalation candidates [] below live L3 | flagging 0 triggers as 'never runs' |
+| OpportunityScorer (composite ranking) | shipped | live | brain/autonomy/opportunity_scorer.py:98 | total_scored=0 after reset; existential intents score low (0.15) by design | thinking low existential scores are broken; conflating with the policy NN |
+| DeltaTracker (counterfactual credit) | shipped | live | brain/autonomy/delta_tracker.py:99 | delta_pending.json empty/absent until jobs measure | using raw net_improvement instead of net_attribution |
+| KnowledgeIntegrator (real memory/library write path) | shipped | live | brain/autonomy/knowledge_integrator.py:198 | small library + web_scrap entries (firewall working) | assuming all research output is trusted; mislabeling it shadow |
+| InterventionRunner (propose->shadow->promote) | shadow | advisory | brain/autonomy/intervention_runner.py:40 | empty queues; shadow_active up to 24h is normal | reading 'promoted' as 'changed its own code' (code-patch arm inert) |
+| SourceUsefulnessLedger | shipped | live | brain/autonomy/source_ledger.py:72 | usefulness_rate 0.0 / all-pending until 24h verdicts; neutral 0.5 default | reading 0.0/pending as broken |
+| InternalQueryInterface (scholarly-first, no-DDG) | shipped | live | brain/autonomy/query_interface.py:37 | empty scholarly result rather than open-web scrape | expecting free autonomous web search |
+| AutonomyPolicyMemory (outcome credit + L2/L3 ledger) | shipped | live | brain/autonomy/policy_memory.py:89 | empty after reset; eligible_for_l2/l3=False until reps accrue | conflating it with the signal-failure policy NN |
+
+### Operator-Write-Authority boundary (the authority-governance firewall)
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| EscalationStore (L3 escalation queue) | dormant | none | brain/autonomy/escalation.py:204 | dormant at default L1; no requests generated; persistence files absent | reading empty queue as unbuilt; assuming attestation unlocks it |
+| L3 Escalation Request Queue (human-gated channel) | shipped | live | brain/autonomy/escalation.py:268 | zero escalations at default L1 (double-gated on live L3 + exhausted L1) | calling the channel dead; assuming attestation can trigger it |
+| AttestationLedger (hash-attested ever-proven seed) | shipped | advisory | brain/autonomy/attestation.py:213 | ledger file absent -> prior_attested_ok=false -> request_ok falls back to current_ok | thinking prior_attested_ok bumps ever_*/maturity; thinking only hash_verified counts |
+| AutonomyAuditLedger (durable transition trail) | shipped | none | brain/autonomy/audit_ledger.py:69 | wired=True; JSONL absent/tiny until a transition fires; empty != broken | concluding it 'isn't wired'; hunting for a control-path consumer |
+
+### Unified world model + maturity gate
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| WorldModel trunk | shadow | advisory | brain/cognition/world_model.py:47 | level 0; update_count climbing every 5s; build_context_summary computed but not injected | calling the un-injected SA block broken; expecting conversation-driven population |
+| CausalEngine (heuristic prediction rules) | shadow | live | brain/cognition/causal_engine.py:354 | runs every tick; predictive_accuracy_live=0.0 until lived transitions | conflating overall_accuracy with foresight; calling it dead at 0.0 live |
+| WorldModelPromotion (3-level gate) | gated | live | brain/cognition/promotion.py:52 | level 0 for hours after reset (4h + 50 preds + 0.65 acc) is correct | treating level-2 'active' as shipped; calling level 0 broken |
+
+### Self-modifying-kernel safety spine
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| Observer Effect / ConsciousnessObserver | shipped | live | brain/consciousness/observer.py:166 | awareness_level==0.3 floor; zero memory nudges right after boot | calling 0.3 stuck; trying to let it create/rewrite memories (the firewall) |
+| KernelMutator (analyzer + proposer) | shipped | advisory | brain/consciousness/kernel_mutator.py:473 | proposes nothing until ticks>=100 AND memories>=20 AND 180s | treating zero proposals as dead; assuming proposals = changes |
+| MutationGovernor | partial | live | brain/consciousness/mutation_governor.py:82 | rejects ALL mutations for the first 600s + 3/hr cap for 2h | tuning caps green; missing that the call site omits awareness_level (gate bypassed) |
+| ConsciousnessHealthMonitor | shadow | advisory | brain/consciousness/health_monitor.py:68 | 'unknown'/0.5 on empty history; does NOT gate mutations | reading 0.5 as a health problem; assuming it gates mutations |
+
+### Lived-experience spine (dispatch + unprompted speech + relationship learning)
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| Conversation Handler dispatch spine | shipped | live | brain/conversation_handler.py:2425 | intention registry empty; release-validation passes trivially | treating the huge file / swallows as dead code |
+| ProactiveGovernor + ProactiveBehavior | shipped | live | brain/personality/proactive.py:104 | mostly silent (daily greeting); silence is correct | calling it broken because it rarely speaks; assuming engine.py path runs |
+| Soul-Question / philosophical dialogue system | dormant | advisory | brain/personality/proactive.py:271 | permanently silent: memory_density never passed + answer-handler uncalled | claiming 'wired, just memory-gated' (it is unreachable) |
+| CuriosityQuestionBuffer | shipped | live | brain/personality/curiosity_questions.py:218 | empty/0 after reset; starved by upstream gates, not broken | reading empty buffer as 'curiosity dead'; counting 5 live sources (4 + 1 orphan) |
+| Curiosity question generators (4 live + 1 orphan) | dormant | advisory | brain/personality/curiosity_questions.py:436 | all generators return nothing until each subsystem matures past its gate | grepping a generator and missing the call-site gate |
+| Personal Intel Capture (HUMINT + banter firewall) | shipped | live | brain/conversation_handler.py:2284 | writes nothing until a regex hit; empty profile is correct | assuming all matches become trusted beliefs; counting only 4 pipelines (5 exist) |
+
+### Identity-trust + perceptual-truth firewall
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| Identity Evidence Accumulator | shipped | live | brain/identity/evidence_accumulator.py:136 | 0 persistent identities after reset; trust is earned | calling it broken / force-promoting; reading the score as a percentage |
+| IdentityFusion (voice+face arbiter) | shipped | live | brain/perception/identity_fusion.py:135 | 'absent'/'unknown'/method='none' with no one present | reading firewall verdicts as bugs; assuming it mints durable trust |
+| SpeakerID store (ECAPA-TDNN) | shipped | live | brain/perception/speaker_id.py:37 | 0 profiles / is_known=False pre-enrollment; available=False if no speechbrain | treating available=False as broken vs an unmet optional dependency |
+| FaceID store (MobileFaceNet/ONNX) | shipped | live | brain/perception/face_id.py:40 | 0 profiles / disabled until onnxruntime + mobilefacenet.onnx present | flagging available=False when the model file just isn't downloaded |
+| Display Classifier + display-interior masking | partial | live | brain/perception/scene_tracker.py:138 | nothing to mask / empty classifications with no display in view | assuming the whole pillar is shadow (the masking is the live firewall) |
+| Identity Name Validator | shipped | live | brain/identity/name_validator.py:63 | stateless; silently rejects junk tokens | reading 'invalid name' debug logs as identity broken |
+
+### Grounding tools + user-facing provenance
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| Codebase Self-Awareness Tool | shipped | live | brain/tools/codebase_tool.py:142 | empty index until boot/lazy build; hashes file absent on first run | seeing 0 symbols and calling it broken |
+| Academic Search Tool (S2 + Crossref) | shipped | live | brain/tools/academic_search_tool.py:781 | cold cache / anonymous pools without keys; realtime fallback | treating an empty cache or missing S2 key as broken |
+| Explainability Layer ('why this answer') | partial | active | brain/reasoning/explainability.py:387 | compact_trace fallback_unclassified on empty seed | treating fallback as a bug; assuming the whole layer is live (rich trace unwired) |
+
+### Inner-life thought generators (synthetic-soul monologue)
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| Existential Reasoning Engine | dormant | advisory | brain/consciousness/existential_reasoning.py:162 | zero inquiries until capability OR transcendence>=0.5 / deep_learning | calling it dead; reading enable_existential_reasoning=True as 'running' |
+| Philosophical Dialogue Engine | dormant | advisory | brain/consciousness/philosophical_dialogue.py:194 | empty history until transcendence>=1.0 (higher bar than existential) | assuming it shares existential's 0.5 gate |
+| Epistemic Reasoning Engine (causal models) | shadow | advisory | brain/consciousness/epistemic_reasoning.py:365 | empty _chains (cleared on cleanup event, rebuilt from live feeders) | reading _chains.clear() as self-wiping/broken |
+
+### Native-language endgame (LLM becomes the voice, not the brain)
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| Shadow Language Model (Phase C) | shadow | advisory | brain/reasoning/shadow_language_model.py:70 | available=False / no-op until corpus>=50 | expecting it to generate text or replace the LLM |
+| Runtime Bridge (Phase D guard) | gated | advisory | brain/reasoning/language_runtime_bridge.py:21 | default enabled=False, rollout_mode='off' (fail-closed); blocks all native output | reading default 'off' as a bug or unbuilt |
+| Language Kernel registry (Phase E P1.5) | dormant | advisory | brain/language/kernel.py:161 | get_live_artifact()==None (PRE-MATURE) on a fresh brain | mistaking it for a live model or auto-promoter |
+
+### Runtime / safety net / observability
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| Process Supervisor (jarvis-supervisor.py) | shipped | live | brain/jarvis-supervisor.py:292 | restart_intent/pending_verification files ABSENT (transient only); no rollback = healthy | treating absent files as 'rollback never built'; --once is a debug bypass |
+| HardwareProfile (portability layer) | shipped | live | brain/hardware_profile.py:437 | tier='minimal'/gpu='none' on a Pi is CORRECT | reading low-tier on a CPU box as broken GPU detection |
+| Trace Explorer Cockpit | shipped | live | brain/dashboard/snapshot.py:30 | empty snapshot (entry_count:0) until ledger entries exist | calling empty root_chains broken (mirrors an empty ledger) |
+
+### Planned pillar (no code)
+| name | status | authority | home | expected idle state | common misread |
+|---|---|---|---|---|---|
+| Long-Horizon Attention | planned | none | docs/LONG_HORIZON_ATTENTION_USE_CASE.md:1 | no runtime artifact at all — use-case pinning only | treating the 'autonomy_long_horizon' eval scoreboard hits as the implementation |

@@ -512,6 +512,83 @@ def _check_live_dashboard(host: str, port: int, timeout_s: float, findings: list
     return live
 
 
+_CANONICAL_STACK = [
+    "L0", "L1", "L2", "L3", "L3A", "L3B", "L4", "L5",
+    "L6", "L7", "L8", "L9", "L10", "L11", "L12",
+]
+_VALID_STATUS = {
+    "shipped", "live", "shadow", "dormant", "gated",
+    "partial", "planned", "absent", "signal-failure",
+}
+
+
+def _check_subsystem_registry(repo_root: Path, findings: list[Finding]) -> None:
+    """Lock the architecture manifest against drift.
+
+    The manifest (subsystem_registry.json) is JARVIS's code-grounded self-description.
+    This check fails CI if it drifts from the code: a cited home-file vanished/moved,
+    the 15-layer integrity stack changed order, or a status fell outside the enum.
+    """
+    reg_path = repo_root / "brain" / "subsystem_registry.json"
+    if not reg_path.exists():
+        findings.append(Finding(
+            "registry.missing", SEVERITY_WARN, "brain/subsystem_registry.json",
+            "subsystem_registry.json not found — architecture manifest is not locked.", {},
+        ))
+        return
+    try:
+        reg = json.loads(_read(reg_path))
+    except (ValueError, OSError) as exc:
+        findings.append(Finding(
+            "registry.unparseable", SEVERITY_FAIL, "brain/subsystem_registry.json",
+            f"subsystem_registry.json is not valid JSON: {exc}", {},
+        ))
+        return
+
+    subs = reg.get("subsystems", []) or []
+
+    # 1. Home-file existence — the core anti-drift check.
+    missing: list[str] = []
+    for s in subs:
+        for hf in (s.get("home_files") or []):
+            tok = re.split(r"[ :(]", str(hf).strip(), 1)[0]
+            if "/" not in tok:  # descriptive, not a path
+                continue
+            if not (repo_root / tok).exists():
+                missing.append(f"{s.get('id')}: {tok}")
+    if missing:
+        findings.append(Finding(
+            "registry.home_file_missing", SEVERITY_FAIL, "brain/subsystem_registry.json",
+            "Manifest cites home files that no longer exist (drift — code moved or registry is stale).",
+            {"count": len(missing), "examples": missing[:25]},
+        ))
+
+    # 2. Integrity stack must be the canonical 15 in order.
+    stack_ids = [e.get("id") for e in (reg.get("integrity_stack") or [])]
+    if stack_ids != _CANONICAL_STACK:
+        findings.append(Finding(
+            "registry.integrity_stack_drift", SEVERITY_FAIL, "brain/subsystem_registry.json",
+            "Integrity stack is not the canonical 15-entry L0-L12 + L3A/L3B order.",
+            {"actual": stack_ids, "expected": _CANONICAL_STACK},
+        ))
+
+    # 3. Status enum validity.
+    bad = [f"{s.get('id')}={s.get('status')}" for s in subs if s.get("status") not in _VALID_STATUS]
+    if bad:
+        findings.append(Finding(
+            "registry.bad_status", SEVERITY_WARN, "brain/subsystem_registry.json",
+            "Subsystem status values outside the canonical enum.",
+            {"examples": bad[:20]},
+        ))
+
+    findings.append(Finding(
+        "registry.summary", SEVERITY_INFO, "brain/subsystem_registry.json",
+        f"{len(subs)} subsystems, {len(stack_ids)}-entry integrity stack, "
+        f"{len(reg.get('audit_assertions') or [])} assertions.",
+        {},
+    ))
+
+
 def run_audit(repo_root: Path, *, host: str | None = None, port: int = 9200, timeout_s: float = 5.0) -> dict[str, Any]:
     repo_root = repo_root.resolve()
     findings: list[Finding] = []
@@ -523,6 +600,7 @@ def run_audit(repo_root: Path, *, host: str | None = None, port: int = 9200, tim
     _check_status_marker_usage(repo_root, findings)
     _check_specialist_claims(repo_root, findings)
     _scan_static_claims(repo_root, findings, pvl_count, pvl_groups)
+    _check_subsystem_registry(repo_root, findings)
     live: dict[str, Any] = {"checked": False}
     if host:
         live = _check_live_dashboard(host, port, timeout_s, findings)
