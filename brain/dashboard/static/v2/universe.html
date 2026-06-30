@@ -8,17 +8,20 @@
   <style>
     html,body{height:100%;margin:0;background:#02030a;overflow:hidden;}
     #wrap{position:fixed;inset:0;overflow:hidden;}
-    #sky{position:absolute;inset:0;display:block;}
+    #sky{position:absolute;inset:0;display:block;cursor:grab;}
     #hud{position:absolute;top:10px;left:12px;font-size:11px;color:var(--muted);z-index:5;pointer-events:none;}
     #hud h1{font-size:13px;letter-spacing:.18em;color:var(--text);margin:0 0 4px;font-weight:700;}
-    #hud .sub{font-size:10px;color:var(--dim);max-width:340px;line-height:1.4;}
-    #hud .stat{margin-top:8px;font-variant-numeric:tabular-nums;}
-    #hud .stat b{color:var(--cyan);}
+    #hud .sub{font-size:10px;color:var(--dim);max-width:330px;line-height:1.4;}
+    #hud .stat{margin-top:8px;font-variant-numeric:tabular-nums;} #hud .stat b{color:var(--cyan);}
     #legend{position:absolute;top:10px;right:12px;font-size:10px;color:var(--muted);z-index:5;text-align:right;pointer-events:none;}
     #legend .row{margin:2px 0;} #legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;vertical-align:middle;}
     #plas{position:absolute;bottom:12px;left:12px;font-size:10.5px;color:var(--muted);z-index:5;pointer-events:none;border-left:2px solid var(--line);padding-left:8px;}
-    #plas .ev{color:var(--text);} #plas .ev b{font-variant-numeric:tabular-nums;}
-    #tip{position:absolute;z-index:6;background:rgba(3,8,14,.92);border:1px solid var(--line);border-radius:6px;
+    #plas .ev{color:var(--text);} #plas .ev b{font-variant-numeric:tabular-nums;color:var(--cyan);}
+    #ctl{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:6px;}
+    #ctl button{background:rgba(3,8,14,.8);border:1px solid var(--line);color:var(--muted);border-radius:5px;
+      font-size:11px;padding:4px 11px;cursor:pointer;font-family:inherit;}
+    #ctl button.on{border-color:var(--cyan);color:var(--cyan);}
+    #tip{position:absolute;z-index:7;background:rgba(3,8,14,.94);border:1px solid var(--line);border-radius:6px;
          padding:7px 10px;font-size:10.5px;color:var(--text);max-width:300px;display:none;pointer-events:none;}
     #tip .k{color:var(--cyan);font-weight:700;} #tip .m{color:var(--muted);margin-top:3px;}
     #tip .st{font-size:9px;letter-spacing:.08em;text-transform:uppercase;}
@@ -31,8 +34,12 @@
     <canvas id="sky"></canvas>
     <div id="hud">
       <h1>JARVIS · BRAIN UNIVERSE</h1>
-      <div class="sub">Her neural connectome as a living universe. Every NN + the baseline LLM is a node; edges are real signal paths (strength = live signal flow). Growth + neural plasticity are <em>diffed</em>, not decorative.</div>
+      <div class="sub">Her connectome. White tracts are real signal paths — <em>bundle density = synaptic strength</em>. Motion only when a real signal flows (she's thinking / acting). Growth + plasticity are diffed, not decorative.</div>
       <div class="stat" id="counts">—</div>
+    </div>
+    <div id="ctl">
+      <button id="btnFreeze">⏸ freeze</button>
+      <button id="btnFlow" class="on">⚡ live signals</button>
     </div>
     <div id="legend"></div>
     <div id="plas"></div>
@@ -43,138 +50,172 @@
   <script>
   const cv=document.getElementById('sky'), ctx=cv.getContext('2d');
   let W=0,H=0,DPR=Math.min(2,window.devicePixelRatio||1);
-  function resize(){W=window.innerWidth;H=window.innerHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
-  window.addEventListener('resize',resize); resize();
+  function resize(){W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
+  addEventListener('resize',resize); resize();
 
-  // camera
-  const cam={x:0,y:0,s:1};
-  let drag=null;
-  cv.addEventListener('wheel',e=>{e.preventDefault();const f=Math.exp(-e.deltaY*0.0012);const mx=e.clientX,my=e.clientY;cam.x=mx-(mx-cam.x)*f;cam.y=my-(my-cam.y)*f;cam.s*=f;},{passive:false});
-  cv.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y};});
-  window.addEventListener('mouseup',()=>drag=null);
-  window.addEventListener('mousemove',e=>{ if(drag){cam.x=drag.cx+(e.clientX-drag.x);cam.y=drag.cy+(e.clientY-drag.y);} else hover(e); });
+  const cam={x:0,y:0,s:1}; let drag=null;
+  cv.addEventListener('wheel',e=>{e.preventDefault();const f=Math.exp(-e.deltaY*0.0012);cam.x=e.clientX-(e.clientX-cam.x)*f;cam.y=e.clientY-(e.clientY-cam.y)*f;cam.s*=f;},{passive:false});
+  cv.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y};cv.style.cursor='grabbing';});
+  addEventListener('mouseup',()=>{drag=null;cv.style.cursor='grab';});
+  addEventListener('mousemove',e=>{ if(drag){cam.x=drag.cx+(e.clientX-drag.x);cam.y=drag.cy+(e.clientY-drag.y);} else hover(e); });
   cv.addEventListener('dblclick',()=>{cam.x=0;cam.y=0;cam.s=1;});
-  function toScreen(p){return {x:p.x*cam.s+cam.x+W/2, y:p.y*cam.s+cam.y+H/2};}
+  const toScreen=p=>({x:p.x*cam.s+cam.x+W/2, y:p.y*cam.s+cam.y+H/2});
 
-  // state colours (neuroscience-ish + cosmic)
-  const COL={
-    'teacher':'#c061ff','live-earning':'#00ff99','earning':'#00ccff','training':'#ffd24a',
+  const COL={'teacher':'#c061ff','live-earning':'#00ff99','earning':'#00ccff','training':'#ffd24a',
     'shadow':'#3f7fbf','advisory':'#ffb000','dormant':'#5a6470','staged':'#7a6fb0',
-    'orphaned':'#ff3b5c','broken':'#ff3b5c','unknown':'#46505c','hub':'#1a2a3a'};
-  function nodeColor(n){return COL[n.state]||'#9fb0c0';}
+    'orphaned':'#ff3b5c','broken':'#ff3b5c','unknown':'#46505c'};
+  const nodeColor=n=>COL[n.state]||'#9fb0c0';
 
-  let nodes=[], edges=[], byId={}, stars=[], famAngle={};
+  let nodes=[], edges=[], byId={}, famAngle={}, stars=[];
+  let settled=false, settleT=0, frozen=false, flow=true;
+  const pulses=[]; // {edge, t0, col}
   const now=()=>performance.now();
 
-  function seedStars(){stars=[];for(let i=0;i<260;i++)stars.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.2+.2,a:Math.random()*.5+.1});}
+  function seedStars(){stars=[];for(let i=0;i<300;i++)stars.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.1+.2,a:Math.random()*.45+.08});}
   seedStars();
 
+  // stable per-edge strand offsets (so the filament bundle doesn't jitter)
+  function prepEdge(e,idx){
+    const strands=Math.max(2,Math.round(2+(e.strength||0.1)*9));
+    e._strands=[];
+    let seed=idx*131+7;
+    const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;};
+    for(let i=0;i<strands;i++){e._strands.push({off:(i-(strands-1)/2)*(2.2+rnd()*2.0), bow:(rnd()-0.5)*0.5});}
+  }
+
   function layoutInit(){
-    // region "galaxies" placed radially; baseline LLM at the center (the teacher sun)
     const fams=[...new Set(nodes.filter(n=>!n.is_baseline).map(n=>n.family))];
     fams.forEach((f,i)=>famAngle[f]=(i/fams.length)*Math.PI*2);
-    nodes.forEach(n=>{
-      if(n.is_baseline){n.x=0;n.y=0;}
-      else{const a=famAngle[n.family]||0; const R=260+Math.random()*120; n.x=Math.cos(a)*R+(Math.random()-.5)*120; n.y=Math.sin(a)*R+(Math.random()-.5)*120;}
-      n.vx=0;n.vy=0; if(n.born==null)n.born=now();
-    });
+    nodes.forEach(n=>{ if(n.is_baseline){n.x=0;n.y=0;return;}
+      if(n.x==null){const a=famAngle[n.family]||0,R=250+Math.random()*130;n.x=Math.cos(a)*R+(Math.random()-.5)*110;n.y=Math.sin(a)*R+(Math.random()-.5)*110;n.vx=0;n.vy=0;}});
+    settled=false; settleT=now();
   }
 
   function step(){
-    // force sim: repulsion, edge springs, region gravity toward family centroid, center pull
-    const cen={};  // family centroid
+    const cen={};
     nodes.forEach(n=>{if(n.is_hub)return;(cen[n.family]=cen[n.family]||{x:0,y:0,n:0});cen[n.family].x+=n.x;cen[n.family].y+=n.y;cen[n.family].n++;});
     for(const f in cen){cen[f].x/=cen[f].n;cen[f].y/=cen[f].n;}
+    let ke=0;
     for(let i=0;i<nodes.length;i++){const a=nodes[i];if(a.is_baseline){a.x=0;a.y=0;continue;}
       let fx=0,fy=0;
-      for(let j=0;j<nodes.length;j++){if(i===j)continue;const b=nodes[j];let dx=a.x-b.x,dy=a.y-b.y;let d2=dx*dx+dy*dy+0.01;if(d2<90000){const f=380/d2;fx+=dx*f;fy+=dy*f;}}
+      for(let j=0;j<nodes.length;j++){if(i===j)continue;const b=nodes[j];let dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy+0.01;if(d2<90000){const f=380/d2;fx+=dx*f;fy+=dy*f;}}
       const c=cen[a.family]; if(c){fx+=(c.x-a.x)*0.006;fy+=(c.y-a.y)*0.006;}
-      fx+=(-a.x)*0.0011; fy+=(-a.y)*0.0011; // gentle center gravity
-      a.vx=(a.vx+fx)*0.86; a.vy=(a.vy+fy)*0.86;
+      fx+=(-a.x)*0.0011; fy+=(-a.y)*0.0011;
+      a.vx=(a.vx+fx)*0.84; a.vy=(a.vy+fy)*0.84;
       a.x+=Math.max(-6,Math.min(6,a.vx)); a.y+=Math.max(-6,Math.min(6,a.vy));
+      ke+=a.vx*a.vx+a.vy*a.vy;
     }
     edges.forEach(e=>{const a=byId[e.source],b=byId[e.target];if(!a||!b)return;
       const rest=e.kind==='family'?150:(e.kind==='distill'?320:240);
-      let dx=b.x-a.x,dy=b.y-a.y;let d=Math.sqrt(dx*dx+dy*dy)||1;const k=(d-rest)*0.0009*(e.kind==='family'?0.5:1);
-      if(!a.is_baseline){a.vx+=dx/d*k;a.vy+=dy/d*k;} if(!b.is_baseline){b.vx-=dx/d*k;b.vy-=dy/d*k;}
-    });
+      let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1;const k=(d-rest)*0.0009*(e.kind==='family'?0.5:1);
+      if(!a.is_baseline){a.vx+=dx/d*k;a.vy+=dy/d*k;} if(!b.is_baseline){b.vx-=dx/d*k;b.vy-=dy/d*k;}});
+    if(ke<0.4 || now()-settleT>4500){ settled=true; }   // SETTLE THEN FREEZE — no perpetual drift
+  }
+
+  function edgePt(e,tt){ // point along the edge curve at param tt (0..1), screen space
+    const a=byId[e.source],b=byId[e.target];const pa=toScreen(a),pb=toScreen(b);
+    const mx=(pa.x+pb.x)/2+(pb.y-pa.y)*0.08, my=(pa.y+pb.y)/2-(pb.x-pa.x)*0.08;
+    const u=1-tt; return {x:u*u*pa.x+2*u*tt*mx+tt*tt*pb.x, y:u*u*pa.y+2*u*tt*my+tt*tt*pb.y};
   }
 
   function draw(){
-    ctx.clearRect(0,0,W,H);
-    // space
-    ctx.fillStyle='#02030a'; ctx.fillRect(0,0,W,H);
-    for(const s of stars){ctx.globalAlpha=s.a;ctx.fillStyle='#9fc7ff';ctx.fillRect(s.x,s.y,s.r,s.r);} ctx.globalAlpha=1;
+    ctx.clearRect(0,0,W,H); ctx.fillStyle='#02030a'; ctx.fillRect(0,0,W,H);
+    for(const s of stars){ctx.globalAlpha=s.a;ctx.fillStyle='#8fb6ff';ctx.fillRect(s.x,s.y,s.r,s.r);} ctx.globalAlpha=1;
     const t=now();
-    // edges (filaments) — additive
+    // ---- white filament tracts (bundle density = synaptic strength) ----
     ctx.globalCompositeOperation='lighter';
-    edges.forEach(e=>{const a=byId[e.source],b=byId[e.target];if(!a||!b)return;
+    edges.forEach(e=>{const a=byId[e.source],b=byId[e.target];if(!a||!b||!e._strands)return;
       const pa=toScreen(a),pb=toScreen(b);
-      const str=e.strength||0.12;
-      let col, w;
-      if(e.kind==='family'){col='rgba(90,120,160,'+(0.05+str*0.2).toFixed(3)+')';w=0.5;}
-      else{col='rgba(120,230,255,'+(0.10+str*0.45).toFixed(3)+')';w=(0.4+str*2.2)*cam.s;}
-      // plasticity animation
-      if(e.plasticity==='forming'){const ph=(Math.sin(t*0.006)+1)/2;col='rgba(255,255,255,'+(0.35+ph*0.5).toFixed(3)+')';w=(1.5+ph*2)*cam.s;}
-      else if(e.plasticity==='strengthening'){col='rgba(0,255,153,'+(0.4+str*0.4).toFixed(3)+')';w=(1+str*2.5)*cam.s;}
-      else if(e.plasticity==='weakening'){col='rgba(255,120,60,0.35)';}
-      ctx.strokeStyle=col;ctx.lineWidth=Math.max(0.3,w);
-      ctx.beginPath();ctx.moveTo(pa.x,pa.y);
-      const mx=(pa.x+pb.x)/2+(pb.y-pa.y)*0.08, my=(pa.y+pb.y)/2-(pb.x-pa.x)*0.08;
-      ctx.quadraticCurveTo(mx,my,pb.x,pb.y);ctx.stroke();
+      const dx=pb.x-pa.x,dy=pb.y-pa.y,len=Math.hypot(dx,dy)||1,px=-dy/len,py=dx/len;
+      const str=e.strength||0.1;
+      const base = e.kind==='family' ? 'rgba(120,150,190,' : 'rgba(220,238,255,';
+      const al = e.kind==='family' ? 0.035 : (0.045+str*0.07);
+      const wob = e.kind==='family'?0:1;
+      e._strands.forEach(sd=>{
+        const o=sd.off*cam.s;
+        const mx=(pa.x+pb.x)/2+px*o+(pb.y-pa.y)*0.06*sd.bow*wob, my=(pa.y+pb.y)/2+py*o-(pb.x-pa.x)*0.06*sd.bow*wob;
+        ctx.strokeStyle=base+al.toFixed(3)+')'; ctx.lineWidth=Math.max(0.35,0.6*cam.s);
+        ctx.beginPath();ctx.moveTo(pa.x+px*o,pa.y+py*o);ctx.quadraticCurveTo(mx,my,pb.x+px*o,pb.y+py*o);ctx.stroke();
+      });
+      if(e.plasticity==='strengthening'){ctx.strokeStyle='rgba(0,255,153,.5)';ctx.lineWidth=1.2*cam.s;ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
     });
-    // nodes (glow)
-    nodes.forEach(n=>{if(n.is_hub)return;const p=toScreen(n);const base=(n.size||1.5)*2.4*cam.s;const c=nodeColor(n);
-      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,base*3.5);
-      g.addColorStop(0,c);g.addColorStop(.35,c+'88');g.addColorStop(1,'transparent');
-      ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,base*3.5,0,7);ctx.fill();
+    // ---- live signal pulses (only when real signals flow) ----
+    for(let i=pulses.length-1;i>=0;i--){const pu=pulses[i];const age=(t-pu.t0)/900;if(age>=1){pulses.splice(i,1);continue;}
+      const e=pu.edge;if(!byId[e.source]||!byId[e.target])continue;const pt=edgePt(e,age);
+      const r=(3.2-age*1.6)*cam.s; const g=ctx.createRadialGradient(pt.x,pt.y,0,pt.x,pt.y,r*4);
+      g.addColorStop(0,pu.col);g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.beginPath();ctx.arc(pt.x,pt.y,r*4,0,7);ctx.fill();
+    }
+    // ---- nodes as glowing cells ----
+    nodes.forEach(n=>{if(n.is_hub)return;const p=toScreen(n);const c=nodeColor(n);const rad=(n.size||1.5)*2.3*cam.s;
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,rad*3.2);g.addColorStop(0,c+'cc');g.addColorStop(.4,c+'55');g.addColorStop(1,'transparent');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,rad*3.2,0,7);ctx.fill();
       ctx.globalCompositeOperation='source-over';
-      ctx.fillStyle=c;ctx.beginPath();ctx.arc(p.x,p.y,base,0,7);ctx.fill();
-      // baseline sun pulse
-      if(n.is_baseline){const ph=(Math.sin(t*0.002)+1)/2;ctx.strokeStyle='rgba(192,97,255,'+(0.3+ph*0.4).toFixed(3)+')';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,base*(1.6+ph*0.5),0,7);ctx.stroke();}
-      // growth: new-node birth ring (first ~6s)
-      if(n.plasticity==='new'){const age=(t-n.born)/6000;if(age<1){ctx.strokeStyle='rgba(0,255,153,'+(1-age).toFixed(3)+')';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,base+age*40,0,7);ctx.stroke();}}
+      ctx.fillStyle='#02030a';ctx.beginPath();ctx.arc(p.x,p.y,rad,0,7);ctx.fill();          // cell core (void)
+      ctx.strokeStyle=c;ctx.lineWidth=Math.max(0.8,1.3*cam.s);ctx.beginPath();ctx.arc(p.x,p.y,rad,0,7);ctx.stroke();
+      if(n.is_baseline){ctx.strokeStyle='rgba(192,97,255,.5)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,rad*1.7,0,7);ctx.stroke();}
+      if(n.plasticity==='new'){const age=(t-(n.born||t))/6000;if(age<1){ctx.strokeStyle='rgba(0,255,153,'+(1-age).toFixed(3)+')';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,rad+age*40,0,7);ctx.stroke();}}
       ctx.globalCompositeOperation='lighter';
     });
     ctx.globalCompositeOperation='source-over';
-    // labels for big/important nodes when zoomed in
-    if(cam.s>0.9){ctx.fillStyle='rgba(216,245,236,.75)';ctx.font='9px ui-monospace,monospace';
-      nodes.forEach(n=>{if(n.is_hub)return;if(n.is_baseline||n.size>2.4||cam.s>1.7){const p=toScreen(n);ctx.fillText(n.label,p.x+ (n.size*2.4*cam.s)+3,p.y+3);}});}
+    if(cam.s>1.0){ctx.fillStyle='rgba(120,200,255,.8)';ctx.font='9px ui-monospace,monospace';
+      nodes.forEach(n=>{if(n.is_hub)return;if(n.is_baseline||n.size>2.4||cam.s>1.8){const p=toScreen(n);ctx.fillText(n.label,p.x+(n.size*2.3*cam.s)+4,p.y+3);}});}
   }
 
-  function loop(){step();draw();requestAnimationFrame(loop);}
+  function loop(){ if(!frozen && !settled) step(); draw(); requestAnimationFrame(loop); }
 
-  function hover(e){
-    const tip=document.getElementById('tip');let best=null,bd=18;
-    for(const n of nodes){if(n.is_hub)continue;const p=toScreen(n);const d=Math.hypot(p.x-e.clientX,p.y-e.clientY);const r=(n.size||1.5)*2.4*cam.s+6;if(d<r&&d<bd+r){best=n;bd=d;}}
+  // spawn a signal pulse on an edge touching a family (real event -> she's active here)
+  function pulseFamily(fam,col){
+    if(!flow||frozen)return;
+    const cand=edges.filter(e=>{const a=byId[e.source],b=byId[e.target];return e.kind!=='family'&&((a&&a.family===fam)||(b&&b.family===fam));});
+    const pool=cand.length?cand:edges.filter(e=>e.kind!=='family');
+    if(!pool.length)return;
+    const e=pool[(Math.random()*pool.length)|0];
+    pulses.push({edge:e,t0:now(),col:col||'rgba(150,235,255,0.9)'});
+    if(pulses.length>120)pulses.shift();
+  }
+  const EV_FAM={kernel:'cognition',thought:'cognition',memory:'memory',perception:'perception',
+    vision:'perception',audio:'perception',identity:'perception',belief:'epistemic',contradiction:'epistemic',
+    autonomy:'cognition',spark:'cognition',skill:'skills',capability:'skills',language:'reasoning',
+    voice:'reasoning',intent:'reasoning',hemisphere:'hemisphere',policy:'policy',self:'self_view'};
+  function evFamily(type){const p=String(type||'').split(':')[0].toLowerCase();return EV_FAM[p]||null;}
+
+  function connectSSE(){ try{const es=new EventSource('/api/events/stream');
+    es.onmessage=ev=>{ try{const d=JSON.parse(ev.data);if(!d||!d.type)return;const fam=evFamily(d.type);pulseFamily(fam,'rgba(150,235,255,0.9)');}catch(e){} };
+    es.onerror=()=>{es.close();setTimeout(connectSSE,4000);};
+  }catch(e){} }
+
+  function hover(e){const tip=document.getElementById('tip');let best=null,bd=20;
+    for(const n of nodes){if(n.is_hub)continue;const p=toScreen(n);const d=Math.hypot(p.x-e.clientX,p.y-e.clientY);const r=(n.size||1.5)*2.3*cam.s+6;if(d<r&&d<bd){best=n;bd=d;}}
     if(best){tip.style.display='block';tip.style.left=Math.min(W-310,e.clientX+12)+'px';tip.style.top=(e.clientY+12)+'px';
       tip.innerHTML='<div class="k">'+best.label+'</div><div class="st" style="color:'+nodeColor(best)+'">'+best.state+(best.plasticity?' · '+best.plasticity:'')+'</div>'+
-        (best.nn_type?'<div class="m">type: '+best.nn_type+'</div>':'')+
-        (best.purpose?'<div class="m">'+best.purpose+'</div>':'')+
+        (best.nn_type?'<div class="m">type: '+best.nn_type+'</div>':'')+(best.purpose?'<div class="m">'+best.purpose+'</div>':'')+
         (best.samples?'<div class="m">samples: '+best.samples+(best.accuracy!=null?' · acc '+best.accuracy:'')+'</div>':'')+
         (best.end_state?'<div class="m">→ '+best.end_state+'</div>':'');
     } else tip.style.display='none';
   }
 
   function merge(data){
-    const old={}; nodes.forEach(n=>old[n.id]=n);
-    const incoming=data.nodes||[];
-    nodes=incoming.map(n=>{const o=old[n.id]; if(o){Object.assign(o,n);return o;} n.born=null; return n;});
-    byId={}; nodes.forEach(n=>byId[n.id]=n);
-    edges=data.edges||[];
-    if(Object.keys(old).length===0) layoutInit(); else nodes.forEach(n=>{if(n.x==null){const a=famAngle[n.family]||Math.random()*6.28;n.x=Math.cos(a)*300;n.y=Math.sin(a)*300;n.vx=0;n.vy=0;n.born=now();}});
-    // HUD
+    const old={};nodes.forEach(n=>old[n.id]=n);const had=Object.keys(old).length>0;
+    nodes=(data.nodes||[]).map(n=>{const o=old[n.id];if(o){Object.assign(o,n);return o;}n.born=now();return n;});
+    byId={};nodes.forEach(n=>byId[n.id]=n);
+    edges=data.edges||[];edges.forEach((e,i)=>prepEdge(e,i));
+    if(!had)layoutInit(); else { nodes.forEach(n=>{if(n.x==null){const a=famAngle[n.family]||Math.random()*6.28;n.x=Math.cos(a)*300;n.y=Math.sin(a)*300;n.vx=0;n.vy=0;}}); if(data.plasticity&&data.plasticity.new_nodes&&data.plasticity.new_nodes.length){settled=false;settleT=now();} }
+    // strengthening edges => a real signal flowed: trace a pulse
+    edges.forEach(e=>{if(e.plasticity==='forming'||e.plasticity==='strengthening')pulseFamily((byId[e.target]||{}).family,e.plasticity==='forming'?'rgba(255,255,255,0.95)':'rgba(0,255,153,0.9)');});
     document.getElementById('counts').innerHTML='<b>'+(data.counts?data.counts.nns:0)+'</b> NNs · <b>'+(data.counts?data.counts.edges:0)+'</b> connections · baseline: '+(data.baseline_model||'—');
     const bs=data.by_state||{};
-    document.getElementById('legend').innerHTML=Object.entries({'teacher':'baseline LLM','live-earning':'live (broadcasting)','earning':'earning','training':'training','shadow':'shadow','advisory':'advisory-by-design','staged':'staged','dormant':'dormant'}).map(([k,lbl])=>'<div class="row">'+lbl+(bs[k]?' ('+bs[k]+')':'')+'<span class="dot" style="background:'+(COL[k]||'#888')+'"></span></div>').join('');
+    document.getElementById('legend').innerHTML=Object.entries({'teacher':'baseline LLM','live-earning':'live (broadcasting)','earning':'earning','training':'training','shadow':'shadow','advisory':'advisory-by-design','staged':'staged','dormant':'dormant'}).map(([k,l])=>'<div class="row">'+l+(bs[k]?' ('+bs[k]+')':'')+'<span class="dot" style="background:'+(COL[k]||'#888')+'"></span></div>').join('');
     const pl=data.plasticity||{};
-    if(pl.had_baseline){document.getElementById('plas').innerHTML='<div class="ev">⚡ neural plasticity (since last scan)</div>'+
-      '<div class="ev">growth: <b>'+(pl.new_nodes||[]).length+'</b> new NN · forming: <b>'+(pl.edges_forming||0)+'</b> · strengthening: <b>'+(pl.edges_strengthening||0)+'</b> · weakening: <b>'+(pl.edges_weakening||0)+'</b> · pruned: <b>'+(pl.edges_pruned||0)+'</b></div>';}
-    else document.getElementById('plas').innerHTML='<div class="ev">⚡ plasticity baseline set — changes appear on the next scan</div>';
+    document.getElementById('plas').innerHTML = pl.had_baseline
+      ? '<div class="ev">⚡ plasticity (since last scan)</div><div class="ev">growth <b>'+(pl.new_nodes||[]).length+'</b> · forming <b>'+(pl.edges_forming||0)+'</b> · strengthening <b>'+(pl.edges_strengthening||0)+'</b> · weakening <b>'+(pl.edges_weakening||0)+'</b> · pruned <b>'+(pl.edges_pruned||0)+'</b></div>'
+      : '<div class="ev">⚡ plasticity baseline set — changes appear next scan</div>';
   }
 
+  document.getElementById('btnFreeze').onclick=function(){frozen=!frozen;this.classList.toggle('on',frozen);this.textContent=frozen?'▶ resume':'⏸ freeze';};
+  document.getElementById('btnFlow').onclick=function(){flow=!flow;this.classList.toggle('on',flow);if(!flow)pulses.length=0;};
+
   async function poll(){try{const d=await(await fetch('/api/nn-universe')).json();if(d&&!d.error)merge(d);}catch(e){}}
-  poll(); setInterval(poll, 12000); loop();
+  poll(); setInterval(poll,12000); connectSSE(); loop();
   </script>
 </body>
 </html>
