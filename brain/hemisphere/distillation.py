@@ -304,6 +304,17 @@ class DistillationCollector:
                 "total_lived": max(0, _all - _all_syn),
             }
 
+    def get_recent_signals(self, teacher: str, n: int = 8) -> list[dict]:
+        """Recent signal payloads for a teacher (newest first). Read-only — for dashboards/labs."""
+        with self._lock:
+            buf = list(self._buffers.get(teacher, deque()))[-n:]
+        out: list[dict] = []
+        for sig in reversed(buf):
+            d = dict(sig.data) if isinstance(sig.data, dict) else {"data": sig.data}
+            d["ts"] = sig.timestamp
+            out.append(d)
+        return out
+
     _MAX_JSONL_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
     @classmethod

@@ -689,8 +689,10 @@ def _create_app() -> FastAPI:
                     "fidelity": seed.get("fidelity", {}),
                 },
                 "seed_corpus": {
+                    "via": seed.get("via"),
                     "entries": seed.get("entries"),
-                    "cap": seed.get("cap"),
+                    "lived": seed.get("lived"),
+                    "synthetic": seed.get("synthetic"),
                     "by_kind": seed.get("by_kind", {}),
                     "recent": recent_pairs(8),
                 },
@@ -728,7 +730,7 @@ def _create_app() -> FastAPI:
         live = {}
         try:
             from hemisphere.distillation import distillation_collector
-            live = (distillation_collector.get_stats() or {}).get("per_teacher", {})
+            live = (distillation_collector.get_stats() or {}).get("teachers", {})
         except Exception:
             pass
         by_wiring: _C = _C()
