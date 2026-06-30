@@ -70,6 +70,35 @@ Per the autonomous-growth lesson (validate the causal signal offline first — i
   tuned green.
 - Not new authority — Tier-2 broadcast influence is still gated by the existing weight-room + dwell gates.
 
+## Encoder input-liveness audit (2026-06-30 — traced from the context builders)
+The P0 critic showed all 5 focuses flat. Tracing the `_build_*_context` builders shows **two different
+causes** — this reprioritizes the work:
+
+| Focus | Live inputs | Dead/stubbed inputs | Flat because |
+|---|---|---|---|
+| **positive_memory** | recent_memories, memory_density (Block A only) | recent_episodes (Block B), recent_turn_count, **traits**, **mood_positivity**, emotion_positive_bias (Block C) | **DEAD INPUTS** — Block B+C starved; runs on ~2 of 9 inputs |
+| **negative_memory** | recent_memories, density, tier1_failure_rate, quarantine_pressure | recent_episodes, contradiction_debt, low_confidence_retrieval_rate, regression_pressure | **HALF DEAD** (4 live / 4 dead) |
+| **speaker_profile** | full IdentityFusion status (confidence, known, voice/face, conflict, flips, counts…) | current_speaker_interaction_count, rapport_stability | **QUIET DESK** (inputs live; flat = no speaker activity) |
+| **temporal_pattern** | activity counts, time deltas, mode/duration/transitions | rhythm_familiarity | **QUIET DESK** (inputs live; varies with activity) |
+| **skill_transfer** | total_skills, by_status, skills, job counts | capability_type_overlap, transfer_advisory | **LIVE-BUT-SLOW** (skills rarely change) + tautological teacher |
+
+**Why the dead inputs are dead (important + honest):** the builders deliberately leave fields at 0.0
+because the **calibrated upstream accessors don't exist yet** (a positive-valence head on the emotion
+classifier, a normalized contradiction-debt scalar, rapport-stability, rhythm-familiarity) — and the
+authors correctly **refused to wire an uncalibrated proxy** (the comments say it "would silently inflate
+the signal — exactly the failure mode P3.6 forbids"). So this is **not** a forgotten wire; it's a missing
+upstream organ. The orchestrator also holds only the `HemisphereEngine`, not the consciousness engine, so
+mood/traits aren't even reachable from here without threading a handle.
+
+**Reprioritization:**
+- **positive_memory / negative_memory:** the bottleneck is **upstream** (build the calibrated accessors).
+  Building an NN teacher is premature until the inputs are alive. Don't fake them.
+- **speaker_profile / temporal_pattern:** inputs are **live** — flat only because the desk is quiet. These
+  are the real P0 candidates: let the critic accumulate **with varied interaction**, and if a signal shows,
+  they earn P1 first.
+- **P0.5 refinement:** make the critic also measure **input variance**, so it auto-distinguishes
+  "dead/starved inputs" from "quiet environment" instead of us tracing by hand.
+
 ## Honest status
 `positive_memory` (and its four siblings) are correctly tracked as `ORPHANED` in `nn_fleet_registry.json`.
 This redesign is the path to make them genuinely contribute to her cognition — earned, not declared.
