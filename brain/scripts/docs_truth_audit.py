@@ -589,6 +589,51 @@ def _check_subsystem_registry(repo_root: Path, findings: list[Finding]) -> None:
     ))
 
 
+def _check_nn_fleet_registry(repo_root: Path, findings: list[Finding]) -> None:
+    """Lock the NN fleet registry against drift + surface inference-orphaned real NNs.
+
+    nn_fleet_registry.json tracks every NN (toward hundreds). This fails CI if a cited home
+    file vanished, and WARNS with the count of NNs whose inference is ORPHANED/BROKEN so that
+    'feed wired, inference orphaned' regressions stay visible and cannot silently grow.
+    """
+    reg_path = repo_root / "brain" / "nn_fleet_registry.json"
+    if not reg_path.exists():
+        findings.append(Finding(
+            "nnfleet.missing", SEVERITY_WARN, "brain/nn_fleet_registry.json",
+            "nn_fleet_registry.json not found — NN fleet is not tracked.", {},
+        ))
+        return
+    try:
+        reg = json.loads(_read(reg_path))
+    except (ValueError, OSError) as exc:
+        findings.append(Finding(
+            "nnfleet.unparseable", SEVERITY_FAIL, "brain/nn_fleet_registry.json",
+            f"nn_fleet_registry.json is not valid JSON: {exc}", {},
+        ))
+        return
+    recs = reg.get("records", []) or []
+    missing: list[str] = []
+    orphaned: list[str] = []
+    for r in recs:
+        home = str(r.get("home") or "").strip()
+        if home and "/" in home and not (repo_root / "brain" / home).exists():
+            missing.append(f"{r.get('name')}: {home}")
+        if str(r.get("wiring_confirmed")) in ("ORPHANED", "BROKEN"):
+            orphaned.append(str(r.get("name")))
+    if missing:
+        findings.append(Finding(
+            "nnfleet.home_file_missing", SEVERITY_FAIL, "brain/nn_fleet_registry.json",
+            "NN registry cites home files that no longer exist (drift).",
+            {"count": len(missing), "examples": missing[:25]},
+        ))
+    if orphaned:
+        findings.append(Finding(
+            "nnfleet.inference_orphaned", SEVERITY_WARN, "brain/nn_fleet_registry.json",
+            "Real NNs whose inference output nothing consumes (or broken) — doing no work despite existing.",
+            {"count": len(orphaned), "nns": orphaned},
+        ))
+
+
 def run_audit(repo_root: Path, *, host: str | None = None, port: int = 9200, timeout_s: float = 5.0) -> dict[str, Any]:
     repo_root = repo_root.resolve()
     findings: list[Finding] = []
@@ -601,6 +646,7 @@ def run_audit(repo_root: Path, *, host: str | None = None, port: int = 9200, tim
     _check_specialist_claims(repo_root, findings)
     _scan_static_claims(repo_root, findings, pvl_count, pvl_groups)
     _check_subsystem_registry(repo_root, findings)
+    _check_nn_fleet_registry(repo_root, findings)
     live: dict[str, Any] = {"checked": False}
     if host:
         live = _check_live_dashboard(host, port, timeout_s, findings)

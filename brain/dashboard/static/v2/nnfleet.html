@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · NN Fleet (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    .sumrow{display:flex;gap:10px;flex-wrap:wrap;}
+    .sumbox{flex:1 1 0;min-width:110px;border:1px solid var(--line);border-radius:6px;padding:9px 11px;background:rgba(3,8,14,.4);text-align:center;}
+    .sumbox .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .sumbox .k{font-size:9px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-top:2px;}
+    .sumbox.live .v{color:var(--green)} .sumbox.shadow .v{color:var(--cyan)} .sumbox.dormant .v{color:var(--amber)} .sumbox.orphan .v{color:var(--red)}
+    .alarm{border:1px solid var(--red);border-radius:6px;padding:10px 12px;background:rgba(255,59,92,.06);margin-top:4px;}
+    .alarm .ar{font-size:11px;color:#ffb3c0;padding:3px 0;border-bottom:1px dashed rgba(255,59,92,.25);}
+    .alarm .ar b{color:var(--red);} .alarm .ar .fx{color:var(--muted);font-size:10px;}
+    table.fleet{width:100%;border-collapse:collapse;font-size:10.5px;}
+    table.fleet th{text-align:left;color:var(--muted);font-size:9px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--line);padding:5px 6px;position:sticky;top:0;background:var(--panel);}
+    table.fleet td{padding:5px 6px;border-bottom:1px solid rgba(21,33,46,.5);vertical-align:top;color:var(--muted);}
+    table.fleet td.nm{color:var(--text);font-weight:600;white-space:nowrap;}
+    .w{font-weight:700;font-size:9.5px;padding:1px 6px;border-radius:10px;white-space:nowrap;}
+    .w.live{color:var(--green);border:1px solid rgba(0,255,153,.4)} .w.shadow{color:var(--cyan);border:1px solid rgba(0,204,255,.3)}
+    .w.dormant{color:var(--amber);border:1px solid rgba(255,176,0,.3)} .w.orphan{color:var(--red);border:1px solid rgba(255,59,92,.45)}
+    .w.unknown{color:var(--dim);border:1px solid var(--line)}
+    .end{color:var(--dim);font-size:9.5px;} .live-n{font-variant-numeric:tabular-nums;color:var(--text);}
+    tr.real-orphan td{background:rgba(255,59,92,.05);}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · NN FLEET</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Every NN tracked toward <em>hundreds</em>. The lens that matters: <em>wiring_confirmed</em> — the recurring pathology is "feed wired, <b style="color:var(--red)">inference orphaned</b>" (a trained NN nothing consumes). Audit facts + live distillation telemetry.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <main>
+    <section class="card col12">
+      <h2>Fleet wiring <span class="tag" id="gen">—</span></h2>
+      <div class="note" id="note">—</div>
+      <div class="sumrow" id="sum"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>⚠ Orphan / broken alarm <span class="tag derived">real NN, inference not consumed</span></h2>
+      <div class="note">Trained/real NNs whose inference output nothing live consumes, or that are concretely broken. These are doing no work despite existing — the priority backlog.</div>
+      <div class="alarm" id="alarm"></div>
+    </section>
+
+    <section class="card col12">
+      <h2>The fleet</h2>
+      <div class="note">Sorted worst-wiring first. Live = lived/synthetic training samples from the distillation collector (when the NN is a registered teacher).</div>
+      <div style="overflow:auto;max-height:70vh;">
+        <table class="fleet">
+          <thead><tr><th>NN</th><th>family</th><th>wiring</th><th>training</th><th>teacher</th><th>maturity</th><th>live samp</th><th>end-state</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/v2/shared.js"></script>
+  <script>
+    function esc(s){return (s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
+    function tick(){var c=document.getElementById('clock'); if(c) c.textContent=new Date().toLocaleTimeString();}
+    function wcls(w){ w=(w||'').toLowerCase();
+      if(w==='confirmed-live') return 'live';
+      if(w==='confirmed-shadow') return 'shadow';
+      if(w==='confirmed-dormant') return 'dormant';
+      if(w==='orphaned'||w==='broken') return 'orphan';
+      return 'unknown'; }
+    var ORDER={orphan:0,dormant:1,shadow:2,live:3,unknown:4};
+
+    async function refresh(){
+      let d; try{ d=await (await fetch('/api/nn-fleet')).json(); }catch(e){ return; }
+      if(!d||d.error){ document.getElementById('rows').innerHTML='<tr><td colspan="8">unavailable: '+esc((d&&d.detail)||'')+'</td></tr>'; return; }
+      document.getElementById('gen').textContent='audited '+(d.generated||'')+' · '+(d.total||0)+' NNs';
+      document.getElementById('note').textContent=d.note||'';
+
+      var bw=d.by_wiring||{};
+      var cards=[
+        ['live','confirmed-live','live (earning)'],['shadow','confirmed-shadow','shadow'],
+        ['dormant','confirmed-dormant','dormant'],['orphan','ORPHANED','orphaned'],['orphan','BROKEN','broken'],
+        ['unknown','uncertain','uncertain']];
+      document.getElementById('sum').innerHTML=cards.map(function(c){
+        var n=bw[c[1]]||0; return '<div class="sumbox '+c[0]+'"><div class="v">'+n+'</div><div class="k">'+c[2]+'</div></div>';
+      }).join('');
+
+      var al=d.orphan_alarm||[];
+      document.getElementById('alarm').innerHTML = al.length
+        ? al.map(function(a){return '<div class="ar"><b>'+esc(a.name)+'</b> <span style="color:var(--dim)">('+esc(a.family||'')+')</span> — <span class="fx">'+esc(a.fix||'')+'</span></div>';}).join('')
+        : '<div style="font-size:11px;color:var(--green)">none — every real NN\'s inference is consumed</div>';
+
+      var rows=(d.records||[]).slice().sort(function(a,b){
+        return (ORDER[wcls(a.wiring_confirmed)]||9)-(ORDER[wcls(b.wiring_confirmed)]||9);
+      });
+      document.getElementById('rows').innerHTML=rows.map(function(r){
+        var cl=wcls(r.wiring_confirmed);
+        var lv=r.live? (r.live.lived+' / '+r.live.synthetic) : '—';
+        var rowcls=(cl==='orphan')?'real-orphan':'';
+        return '<tr class="'+rowcls+'"><td class="nm">'+esc(r.name)+'</td>'+
+               '<td>'+esc(r.family||'')+'</td>'+
+               '<td><span class="w '+cl+'">'+esc(r.wiring_confirmed||'?')+'</span></td>'+
+               '<td>'+esc(r.training_method||'')+'</td>'+
+               '<td>'+esc((r.teacher_source||'').slice(0,60))+'</td>'+
+               '<td>'+esc((r.maturity_state||'').slice(0,40))+'</td>'+
+               '<td class="live-n">'+lv+'</td>'+
+               '<td class="end">'+esc((r.end_state||'').slice(0,110))+'</td></tr>';
+      }).join('');
+    }
+    refresh(); setInterval(refresh, 8000); tick(); setInterval(tick, 1000);
+  </script>
+</body>
+</html>

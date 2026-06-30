@@ -712,6 +712,44 @@ def _create_app() -> FastAPI:
         except Exception as exc:
             return {"error": "voice-lab unavailable", "detail": str(exc)}
 
+    @app.get("/api/nn-fleet")
+    async def api_nn_fleet():
+        """NN Fleet registry — the trackable map of every NN JARVIS has (audit facts + live distillation
+        telemetry). KEY LENS: wiring_confirmed — the recurring pathology is 'feed wired, inference
+        ORPHANED' (a trained NN nothing consumes). Read-only; toward hundreds of tracked NNs."""
+        import json as _json
+        from pathlib import Path as _P
+        from collections import Counter as _C
+        try:
+            reg = _json.loads((_P(__file__).resolve().parents[1] / "nn_fleet_registry.json").read_text())
+        except Exception as exc:
+            return {"error": "nn-fleet registry unavailable", "detail": str(exc)}
+        records = reg.get("records", [])
+        live = {}
+        try:
+            from hemisphere.distillation import distillation_collector
+            live = (distillation_collector.get_stats() or {}).get("per_teacher", {})
+        except Exception:
+            pass
+        by_wiring: _C = _C()
+        orphan_alarm = []
+        for r in records:
+            nm = r.get("name")
+            if nm in live:
+                r["live"] = live[nm]
+            wc = r.get("wiring_confirmed", "unknown")
+            by_wiring[wc] += 1
+            if wc in ("ORPHANED", "BROKEN"):
+                orphan_alarm.append({"name": nm, "family": r.get("family"), "fix": r.get("fix_needed")})
+        return {
+            "generated": reg.get("generated"),
+            "note": reg.get("note"),
+            "total": len(records),
+            "by_wiring": dict(by_wiring),
+            "orphan_alarm": orphan_alarm,
+            "records": records,
+        }
+
     @app.get("/api/spatial/diagnostics")
     async def api_spatial_diagnostics():
         """Spatial intelligence diagnostics — calibration, tracks, anchors, validation."""
