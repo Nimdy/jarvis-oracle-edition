@@ -830,6 +830,8 @@ async def main() -> None:
             _learning_job_orch.set_context_provider(
                 "distillation_stats", lambda: hemisphere_orch.get_distillation_stats(),
             )
+            if _acq_orch and hasattr(_acq_orch, "set_hemisphere_orchestrator"):
+                _acq_orch.set_hemisphere_orchestrator(hemisphere_orch)
         if perc_orch.presence:
             _learning_job_orch.set_context_provider(
                 "user_present", lambda: perc_orch.presence.get_state().get("is_present", False),

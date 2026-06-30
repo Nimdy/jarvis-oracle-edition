@@ -120,6 +120,7 @@ class AcquisitionOrchestrator:
         self._pressure_level: str = "normal"
         self._suppressed_lanes: set[str] = set()
         self._codegen_service: Any = None
+        self._hemisphere_orchestrator: Any = None  # live engine source for shadow predictions
         self._lane_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=1,
             thread_name_prefix="acquisition-lane",
@@ -128,6 +129,10 @@ class AcquisitionOrchestrator:
 
         self._load_active_jobs()
         self._reconcile_plugin_authority()
+
+    def set_hemisphere_orchestrator(self, orch: Any) -> None:
+        """Wire the live hemisphere orchestrator so shadow predictions reach the loaded NN engine."""
+        self._hemisphere_orchestrator = orch
 
     @staticmethod
     def _default_trigger_patterns(skill_id: str) -> list[str]:
@@ -3356,7 +3361,6 @@ class AcquisitionOrchestrator:
             plan_version = getattr(plan, "version", 0)
 
             from hemisphere.registry import HemisphereRegistry
-            from hemisphere.engine import HemisphereEngine
 
             registry = HemisphereRegistry()
             active_meta = registry.get_active("plan_evaluator")
@@ -3367,7 +3371,10 @@ class AcquisitionOrchestrator:
             if not network_id:
                 return
 
-            engine = HemisphereEngine.get_instance() if hasattr(HemisphereEngine, "get_instance") else None
+            # HemisphereEngine has no get_instance() — the live engine lives on the hemisphere
+            # orchestrator (wired in main.py). The old get_instance() guard always yielded None,
+            # so this shadow prediction was a silent no-op and plan_evaluator never earned signal.
+            engine = getattr(self._hemisphere_orchestrator, "_engine", None)
             if engine is None:
                 return
 
