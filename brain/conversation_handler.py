@@ -3383,6 +3383,20 @@ async def handle_transcription(
             logger.debug("self-view sanitize failed", exc_info=True)
         await _broadcast_chunk_sync(reply, tone)
         _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+        # OSV voice distillation SEED (shadow): after the deterministic grounded reply is spoken,
+        # log a VERIFIED teacher (grounded->warm) pair for a future NATIVE voice NN to distill from.
+        # The baseline LLM is only the teacher here — it never speaks live; this never changes the
+        # reply above and writes only to a bounded corpus (not memories). Fire-and-forget: no latency.
+        if _sv_model:
+            try:
+                import asyncio as _aio
+                from cognition.self_view.voice_seed import capture_teacher_pair
+                _st = engine.get_state()
+                _persona = (f"tone={_st.get('tone', '')}; "
+                            f"traits={', '.join(_st.get('traits', []) or [])}")
+                _aio.create_task(capture_teacher_pair(reply, _sv_kind, ollama, persona_hint=_persona))
+            except Exception:
+                logger.debug("voice-seed schedule skip", exc_info=True)
     elif routing.tool == ToolType.STATUS:
         from tools.introspection_tool import get_structured_status
         from skills.capability_gate import capability_gate as _status_gate
