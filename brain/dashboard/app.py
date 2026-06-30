@@ -666,6 +666,52 @@ def _create_app() -> FastAPI:
                 return last
             return {"error": "self-view unavailable", "detail": str(exc)}
 
+    @app.get("/api/voice-lab")
+    async def api_voice_lab():
+        """NN Lab — the native voice/thought NN distillation pipeline (Teacher -> Seed -> Student ->
+        Gate -> Live). Grounded + honest: the REAL seed corpus + teacher fidelity now; the student /
+        promotion shown as 'not born yet' until built. Read-only; the baseline LLM is TEACHER ONLY."""
+        try:
+            from cognition.self_view.voice_seed import seed_stats, recent_pairs
+            teacher_model = None
+            try:
+                from reasoning.ollama_client import _default_model
+                teacher_model = _default_model()
+            except Exception:
+                pass
+            seed = seed_stats()
+            return {
+                "pipeline": ["teacher", "seed_corpus", "student_nn", "promotion_gate", "live_voice"],
+                "teacher": {
+                    "kind": "baseline_llm",
+                    "model": teacher_model,
+                    "role": "TEACHER ONLY — generates verified training targets; never speaks live",
+                    "fidelity": seed.get("fidelity", {}),
+                },
+                "seed_corpus": {
+                    "entries": seed.get("entries"),
+                    "cap": seed.get("cap"),
+                    "by_kind": seed.get("by_kind", {}),
+                    "recent": recent_pairs(8),
+                },
+                "student_nn": {
+                    "state": "not_born",
+                    "note": "accumulating the distillation seed; the native voice NN is not built yet",
+                    "gate": "weight-room: distill teacher pairs -> match held-out fidelity -> earned promotion",
+                },
+                "promotion_gate": {
+                    "framework": "weight-room (asymmetric: blocks authority, never training)",
+                    "status": "inactive — no student yet",
+                },
+                "live_voice": {
+                    "mode": "deterministic_floor",
+                    "note": "the grounded self-view text speaks; the baseline LLM never speaks live; "
+                            "her native NN takes over only once it earns it",
+                },
+            }
+        except Exception as exc:
+            return {"error": "voice-lab unavailable", "detail": str(exc)}
+
     @app.get("/api/spatial/diagnostics")
     async def api_spatial_diagnostics():
         """Spatial intelligence diagnostics — calibration, tracks, anchors, validation."""

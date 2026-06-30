@@ -36,6 +36,9 @@ _seen: deque[str] = deque(maxlen=_DEDUP_CAP)
 _seen_set: set[str] = set()
 _count_cache: int | None = None
 
+# Since-boot teacher fidelity tally (in-memory; the NN lab reads this). Bounded by construction.
+_fidelity: dict[str, Any] = {"attempts": 0, "logged": 0, "rejected": {}}
+
 
 def _key(kind: str, grounded: str) -> str:
     h = hashlib.sha1(grounded.encode("utf-8", "ignore")).hexdigest()[:16]
@@ -72,9 +75,12 @@ async def capture_teacher_pair(grounded_text: str, kind: str, llm_client: Any,
             status["reason"] = "seed_full"
             return status
 
+        _fidelity["attempts"] += 1
         voiced, meta = await revoice_self_view(grounded_text, llm_client, persona_hint=persona_hint)
         if not meta.get("used_revoice"):
             # teacher output failed the fidelity firewall — do NOT poison the corpus
+            r = str(meta.get("reason", "?")).split(":", 1)[0]
+            _fidelity["rejected"][r] = _fidelity["rejected"].get(r, 0) + 1
             status["reason"] = f"teacher_rejected:{meta.get('reason')}"
             return status
 
@@ -93,6 +99,7 @@ async def capture_teacher_pair(grounded_text: str, kind: str, llm_client: Any,
             _seen_set.clear()
             _seen_set.update(_seen)
 
+        _fidelity["logged"] += 1
         status["logged"] = True
         status["reason"] = "ok"
         return status
@@ -102,6 +109,51 @@ async def capture_teacher_pair(grounded_text: str, kind: str, llm_client: Any,
         return status
 
 
+def by_kind() -> dict[str, int]:
+    counts: dict[str, int] = {}
+    try:
+        if SEED_PATH.exists():
+            for line in SEED_PATH.open():
+                try:
+                    k = json.loads(line).get("kind", "?")
+                except Exception:
+                    continue
+                counts[k] = counts.get(k, 0) + 1
+    except Exception:
+        pass
+    return counts
+
+
+def recent_pairs(n: int = 8) -> list[dict[str, Any]]:
+    """Most recent captured (grounded -> warm) pairs, truncated for display. Read-only."""
+    out: list[dict[str, Any]] = []
+    try:
+        if SEED_PATH.exists():
+            for line in SEED_PATH.read_text().strip().splitlines()[-n:]:
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                out.append({"ts": r.get("ts"), "kind": r.get("kind"),
+                            "grounded": (r.get("grounded") or "")[:260],
+                            "voiced": (r.get("voiced") or "")[:420]})
+    except Exception:
+        pass
+    return list(reversed(out))
+
+
 def seed_stats() -> dict[str, Any]:
-    """Read-only observability for the seed corpus."""
-    return {"path": str(SEED_PATH), "entries": _line_count(), "cap": MAX_SEED_ENTRIES}
+    """Read-only observability for the seed corpus (what the NN lab reads)."""
+    att, logged = _fidelity["attempts"], _fidelity["logged"]
+    return {
+        "path": str(SEED_PATH),
+        "entries": _line_count(),
+        "cap": MAX_SEED_ENTRIES,
+        "by_kind": by_kind(),
+        "fidelity": {
+            "attempts": att,
+            "logged": logged,
+            "rejected": dict(_fidelity["rejected"]),
+            "pass_rate": round(logged / att, 3) if att else None,
+        },
+    }

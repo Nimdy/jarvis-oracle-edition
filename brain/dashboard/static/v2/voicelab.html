@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Voice NN Lab (dashboardV2)</title>
+  <link rel="stylesheet" href="/static/v2/v2.css">
+  <style>
+    /* page-specific only — shared chrome lives in /static/v2/v2.css */
+    .pipe{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;}
+    .stage{flex:1 1 0;min-width:150px;border:1px solid var(--line);border-radius:6px;padding:11px 12px;
+           background:rgba(3,8,14,.45);position:relative;}
+    .stage .sk{font-size:9px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;}
+    .stage .sn{font-size:14px;font-weight:700;color:var(--text);margin:3px 0 6px;}
+    .stage .sv{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .stage .sd{font-size:9.5px;color:var(--dim);margin-top:5px;line-height:1.35;}
+    .stage.on{border-color:rgba(0,255,153,.5);} .stage.on .sv{color:var(--green);}
+    .stage.teach{border-color:rgba(0,204,255,.45);} .stage.teach .sv{color:var(--cyan);}
+    .stage.wait{border-color:rgba(255,176,0,.4);} .stage.wait .sv{color:var(--amber);}
+    .stage.dead{border-color:var(--line);} .stage.dead .sv{color:var(--dim);}
+    .arrow{display:flex;align-items:center;color:var(--muted);font-size:18px;padding:0 6px;}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .big{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .chip{display:inline-block;border:1px solid var(--line);border-radius:12px;padding:2px 10px;margin:3px 5px 0 0;
+          font-size:10px;color:var(--muted);} .chip b{color:var(--text);font-variant-numeric:tabular-nums;}
+    .rej{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);padding:2px 0;border-bottom:1px dashed var(--line);}
+    .rej b{color:var(--amber);font-variant-numeric:tabular-nums;}
+    .pair{border:1px solid var(--line);border-radius:6px;padding:9px 11px;margin-top:9px;background:rgba(3,8,14,.4);}
+    .pair .pk{font-size:9px;letter-spacing:.1em;color:var(--cyan);text-transform:uppercase;}
+    .pair .g{font-size:10.5px;color:var(--muted);margin:4px 0;border-left:2px solid var(--line);padding-left:8px;}
+    .pair .v{font-size:12px;color:var(--text);border-left:2px solid var(--green);padding-left:8px;}
+    .pair .lbl{font-size:8.5px;color:var(--dim);letter-spacing:.08em;}
+    .track{height:7px;background:rgba(255,255,255,.05);border-radius:4px;overflow:hidden;margin-top:6px;}
+    .track .fill{height:100%;background:var(--cyan);}
+    .floorbanner{border:1px solid var(--amber);border-radius:6px;padding:10px 13px;background:rgba(255,176,0,.05);}
+    .floorbanner .k{font-size:9px;letter-spacing:.12em;color:var(--amber);text-transform:uppercase;}
+    .floorbanner .d{font-size:13px;color:#ffd27a;margin-top:3px;line-height:1.4;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS · VOICE NN LAB</h1><span class="v2">dashboardV2</span>
+    <span class="sub">Her first true thought+voice NN, grown by <em>distillation</em>. The baseline LLM is the <em>teacher</em>, never the live voice — her own NN earns the talking. Every number here is real corpus / fidelity data.</span>
+    <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
+  </header>
+  <nav id="v2nav"></nav>
+
+  <main>
+    <section class="card col12">
+      <h2>Distillation Pipeline</h2>
+      <div class="note">Teacher (baseline LLM) re-voices the grounded self-view → the fidelity firewall keeps only faithful pairs → the seed corpus accumulates → a native voice NN distills from it → the weight-room gate promotes it → it does the live talking. Stages light up as they come alive.</div>
+      <div class="pipe" id="pipe"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Teacher Fidelity <span class="tag" id="teacher-model">—</span></h2>
+      <div class="note">How often the teacher produces a <b>faithful</b> re-voice (kept) vs is <b>rejected</b> by the firewall (invented numbers / unqualified claims / refusals). Rejected pairs never enter the corpus.</div>
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px;">
+        <span class="big" id="passrate" style="color:var(--green)">—</span>
+        <span style="font-size:10px;color:var(--muted)">faithful pass-rate (since boot)</span>
+      </div>
+      <div style="font-size:10.5px;color:var(--muted);margin:6px 0 4px;">attempts <b id="att" style="color:var(--text)">—</b> · kept <b id="kept" style="color:var(--green)">—</b></div>
+      <div id="rejections"></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Seed Corpus</h2>
+      <div class="note">Verified (grounded → warm) training pairs — bounded + deduped, written to a corpus file, <b>never the memory store</b>.</div>
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px;">
+        <span class="big" id="entries" style="color:var(--cyan)">—</span>
+        <span style="font-size:10px;color:var(--muted)">/ <span id="cap">—</span> cap</span>
+      </div>
+      <div class="track"><div class="fill" id="capfill" style="width:0%"></div></div>
+      <div style="margin-top:9px;"><span class="lbl" style="font-size:9px;color:var(--dim);">BY KIND</span><div id="bykind" style="margin-top:3px;"></div></div>
+    </section>
+
+    <section class="card col6">
+      <h2>Student NN <span class="tag" id="student-state">—</span></h2>
+      <div class="note" id="student-note">—</div>
+      <div class="floorbanner" style="margin-top:10px;">
+        <div class="k">Promotion gate</div>
+        <div class="d" id="gate-note">—</div>
+      </div>
+    </section>
+
+    <section class="card col6">
+      <h2>Live Voice</h2>
+      <div class="note">What's actually speaking when JARVIS describes herself right now.</div>
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px;">
+        <span class="big" id="livemode" style="font-size:22px;color:var(--amber)">—</span>
+      </div>
+      <div class="floorbanner" style="margin-top:10px;">
+        <div class="k">The principle</div>
+        <div class="d" id="live-note">—</div>
+      </div>
+    </section>
+
+    <section class="card col12">
+      <h2>Recent Teacher Pairs <span class="tag">the distillation data</span></h2>
+      <div class="note">The most recent faithful captures — <b style="color:var(--muted)">grounded</b> (what she knows) → <b style="color:var(--green)">voiced</b> (how the teacher says it). This is what her NN learns from.</div>
+      <div id="pairs"></div>
+    </section>
+  </main>
+
+  <script src="/static/v2/shared.js"></script>
+  <script>
+    function esc(s){return (s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
+    function tick(){var c=document.getElementById('clock'); if(c) c.textContent=new Date().toLocaleTimeString();}
+
+    function stage(cls,k,name,val,desc){
+      return '<div class="stage '+cls+'"><div class="sk">'+k+'</div><div class="sn">'+name+'</div>'+
+             '<div class="sv">'+val+'</div><div class="sd">'+desc+'</div></div>';
+    }
+    var ARROW='<div class="arrow">→</div>';
+
+    async function refresh(){
+      let d;
+      try{ d=await (await fetch('/api/voice-lab')).json(); }catch(e){ return; }
+      if(!d || d.error){ document.getElementById('pipe').innerHTML='<div class="stage dead"><div class="sn">unavailable</div><div class="sd">'+esc((d&&d.detail)||'no data')+'</div></div>'; return; }
+
+      var t=d.teacher||{}, s=d.seed_corpus||{}, st=d.student_nn||{}, g=d.promotion_gate||{}, lv=d.live_voice||{};
+      var fid=t.fidelity||{};
+
+      // --- pipeline ---
+      var entries=s.entries||0;
+      var teachState = (fid.attempts? 'teach':'wait');
+      var pr = (fid.pass_rate!=null)? Math.round(fid.pass_rate*100)+'%':'—';
+      var pipe = stage('teach','baseline llm','Teacher', pr, esc(t.role||'')) + ARROW +
+                 stage(entries? 'on':'wait','firewall','Fidelity gate', (fid.attempts? (fid.logged+'/'+fid.attempts):'idle'), 'keeps only faithful pairs') + ARROW +
+                 stage(entries? 'on':'wait','corpus','Seed', entries, 'verified pairs (cap '+(s.cap||'—')+')') + ARROW +
+                 stage('dead','native nn','Student', (st.state==='not_born'?'not born':st.state), esc(st.note||'')) + ARROW +
+                 stage('wait','weight-room','Live voice', (lv.mode==='deterministic_floor'?'floor':lv.mode), 'native NN once earned');
+      document.getElementById('pipe').innerHTML=pipe;
+
+      // --- teacher fidelity ---
+      document.getElementById('teacher-model').textContent=t.model||'baseline';
+      document.getElementById('passrate').textContent=pr;
+      document.getElementById('att').textContent=(fid.attempts!=null?fid.attempts:'—');
+      document.getElementById('kept').textContent=(fid.logged!=null?fid.logged:'—');
+      var rej=fid.rejected||{}, rk=Object.keys(rej);
+      document.getElementById('rejections').innerHTML = rk.length
+        ? '<div class="lbl" style="font-size:9px;color:var(--dim);margin-top:8px;">REJECTED (kept out of corpus)</div>'+
+          rk.map(function(k){return '<div class="rej"><span>'+esc(k)+'</span><b>'+rej[k]+'</b></div>';}).join('')
+        : '<div style="font-size:10px;color:var(--dim);margin-top:8px;">no rejections yet</div>';
+
+      // --- seed corpus ---
+      document.getElementById('entries').textContent=entries;
+      document.getElementById('cap').textContent=s.cap||'—';
+      document.getElementById('capfill').style.width = (s.cap? Math.min(100,100*entries/s.cap):0)+'%';
+      var bk=s.by_kind||{}, bkk=Object.keys(bk);
+      document.getElementById('bykind').innerHTML = bkk.length
+        ? bkk.map(function(k){return '<span class="chip">'+esc(k)+' <b>'+bk[k]+'</b></span>';}).join('')
+        : '<span style="font-size:10px;color:var(--dim)">empty — accumulates as she answers self-questions</span>';
+
+      // --- student + gate ---
+      document.getElementById('student-state').textContent=st.state||'—';
+      document.getElementById('student-note').textContent=st.note||'—';
+      document.getElementById('gate-note').textContent=st.gate||g.framework||'—';
+
+      // --- live voice ---
+      document.getElementById('livemode').textContent=(lv.mode||'—').replace(/_/g,' ');
+      document.getElementById('live-note').textContent=lv.note||'—';
+
+      // --- recent pairs ---
+      var pairs=s.recent||[];
+      document.getElementById('pairs').innerHTML = pairs.length
+        ? pairs.map(function(p){
+            return '<div class="pair"><div class="pk">'+esc(p.kind||'?')+'</div>'+
+                   '<div class="lbl">GROUNDED (what she knows)</div><div class="g">'+esc(p.grounded)+'</div>'+
+                   '<div class="lbl">VOICED (teacher target)</div><div class="v">'+esc(p.voiced)+'</div></div>';
+          }).join('')
+        : '<div style="font-size:11px;color:var(--dim);padding:8px 0;">No pairs yet. They appear after JARVIS answers a self-question (e.g. "how are you built?") with the live capture wiring active (needs the restart).</div>';
+    }
+
+    refresh(); setInterval(refresh, 5000); tick(); setInterval(tick, 1000);
+  </script>
+</body>
+</html>
