@@ -19,6 +19,14 @@
 > sovereign personal Oracle / dignity-anchor is still the deepest motive; the companion is how it gets
 > delivered.
 >
+> **Self-model foundation (shipped 2026-06-30):** **Brain Universe — the live connectome self-model**
+> (EPIC #82): a passive one-way tap on the *current* running wiring (EventBus + live registries) →
+> a self-discovering, zero-impact connectome (`/api/connectome` + `/v2/universe.html`), with code-grounded
+> design facts and an expected-vs-actual deviation classifier. Plus OSV self-introspection A/B/C/D (#23),
+> an NN-fleet audit + tracking, and 3 real dead-wire fixes. The precondition for *trustworthy* self-
+> improvement (Layer 4, gated, in #82). Retired the stale `topology.json`. Discipline: live-not-stale,
+> validate-the-signal-before-building, earn-don't-declare.
+>
 > **Capability vision in flight:** **Matrix Protocol v2 — Capability Domains** (EPIC #27,
 > design `docs/MATRIX_V2_CAPABILITY_DOMAINS.md`): isolated, deletable skill sub-consciousnesses
 > with envelope-aware, affect-grounded reasoning, a strict repeatable training contract, and an
