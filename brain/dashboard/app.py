@@ -128,6 +128,9 @@ class _HealthCounters:
         }
 
 
+from dashboard import connectome  # live-tap connectome (note_event is O(1), hot-path safe)
+
+
 class _EventStream:
     """Bounded ring of recent event-bus events — the TRUSTED ROUTING SOURCE for the viz.
 
@@ -161,6 +164,7 @@ class _EventStream:
 
     def _capture(self, event_type: str, kwargs: dict[str, Any]) -> None:
         try:
+            connectome.note_event(event_type)   # O(1) liveness tally for the live connectome (zero-impact)
             if event_type in self._FIREHOSE:
                 now = time.time()
                 if now - self._last_seen.get(event_type, 0.0) < self._FIREHOSE_MIN_INTERVAL_S:
@@ -751,6 +755,19 @@ def _create_app() -> FastAPI:
             return build_nn_universe(_engine)
         except Exception as exc:
             return {"error": "nn-universe unavailable", "detail": str(exc)}
+
+    @app.get("/api/connectome")
+    async def api_connectome():
+        """LIVE connectome — a passive one-way tap on the CURRENT running wiring (the Super-Synapse):
+        EventBus subscribers (live + authoritative) + code-derived emitters (provenance-tagged) +
+        liveness (which paths actually fired) + CI-locked design facts (purpose/why/expected-state) +
+        expected-vs-actual deviation. Read-only, zero-write. Replaces stale topology.json; new
+        NNs/hemispheres auto-appear because they emit/subscribe/register."""
+        try:
+            from dashboard.connectome import build_connectome
+            return build_connectome(_engine)
+        except Exception as exc:
+            return {"error": "connectome unavailable", "detail": str(exc)}
 
     @app.get("/api/spatial/diagnostics")
     async def api_spatial_diagnostics():
