@@ -1150,6 +1150,12 @@ def _create_app() -> FastAPI:
             report = _engine.get_matrix_report()
             if report is None:
                 return {"available": False, "reason": "hemisphere orchestrator not enabled"}
+            # Tier-2 P0 critic test (shadow): which focuses carry a real predictable signal
+            # (persistence/variance) — read before building a real teacher. Read-only.
+            try:
+                report["critic_test"] = (_engine.get_hemisphere_state() or {}).get("matrix_critic", {})
+            except Exception:
+                pass
             return {"available": True, **report}
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
