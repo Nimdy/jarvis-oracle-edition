@@ -1161,11 +1161,12 @@ class CapabilityGate:
 
             from hemisphere.distillation import distillation_collector
             distillation_collector.record(
+                teacher="claim_verdict",
                 signal_type="claim_verdict",
                 data=label,
-                source="friction_correction",
-                fidelity=0.7,
                 metadata={"claim_id": claim_id, **label_meta},
+                origin="friction_correction",
+                fidelity=0.7,
             )
             logger.debug(
                 "Friction correction recorded for claim %s (original tag: %s)",
