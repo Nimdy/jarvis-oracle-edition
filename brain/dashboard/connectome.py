@@ -177,20 +177,23 @@ def _design_facts(node_id: str, by_name: dict, by_path: list) -> dict | None:
 
 
 def _classify(node: dict) -> str:
-    """EXPECTED-vs-ACTUAL. Deviation ONLY when designed=live/shipped AND actual=quiet AND no idle sanction.
-    Otherwise as-designed (suppressed) — so self-improvement never targets gated/shadow/staged-by-design."""
+    """EXPECTED-vs-ACTUAL. Deviation ONLY when designed=live/shipped AND the node shows NO observed
+    activity AND no idle sanction. A node with LIT edges (real signal flowing through it) is
+    demonstrably active and is NEVER a deviation — this is the grounded actual-state for subsystem
+    nodes that carry no NN-style `state`. So self-improvement never targets working/as-designed structure."""
     df = node.get("design") or {}
-    designed_live = df.get("status") in ("shipped",) and df.get("authority") in ("live", "active")
-    actual = node.get("state")
-    actual_quiet = actual in ("dormant", "shadow", "unknown", "orphaned", None)
     if not df:
         return "untracked"
-    if designed_live and actual_quiet:
-        idle = (df.get("expected_idle_state") or "").lower()
-        if any(k in idle for k in ("zero", "empty", "never-exercised", "after reset", "idle", "0")):
-            return "as-designed-idle"
-        return "DEVIATION"
-    return "as-designed"
+    # ACTUAL activity, grounded: a live-earning NN state OR demonstrably-firing edges (lit).
+    active = node.get("state") in ("live-earning", "earning", "training") or bool(node.get("_lit"))
+    designed_live = df.get("status") in ("shipped",) and df.get("authority") in ("live", "active")
+    if active or not designed_live:
+        return "as-designed"
+    idle = (df.get("expected_idle_state") or "").lower()
+    if any(k in idle for k in ("zero", "empty", "never", "after reset", "idle", "cold",
+                               "no one", "absent", "not present", "dropout", "0")):
+        return "as-designed-idle"
+    return "DEVIATION"
 
 
 def build_connectome(engine: Any) -> dict[str, Any]:
@@ -258,6 +261,13 @@ def build_connectome(engine: Any) -> dict[str, Any]:
         _add("baseline_llm", kind="baseline", label=_default_model() or "baseline LLM")
     except Exception:
         _add("baseline_llm", kind="baseline", label="baseline LLM")
+
+    # mark nodes touched by a currently-lit edge — demonstrably active, never a deviation
+    for e in edges:
+        if e.get("fired"):
+            for end in (e.get("source"), e.get("target")):
+                if end in nodes:
+                    nodes[end]["_lit"] = True
 
     # 5) annotate design facts + deviation
     dev_counts: dict[str, int] = {}
