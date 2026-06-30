@@ -1,5 +1,26 @@
 # Tier-2 Matrix NN redesign — un-orphan the inference + a real teacher + an earned flip
 
+> ⚠️ **CORRECTION / PARTIAL RETRACTION (2026-06-30, doc-revalidation).** The premise below — that the
+> "orphaned inference" and "circular teacher" are a *pathology to fix* — is **WRONG per the design docs**.
+> Revalidation against `MATRIX_PROTOCOL_GUIDE` + `MATRIX_V2 §4.5.A`/Phase M2 + `WEIGHT_ROOM_DESIGN` found
+> both are **AS-DESIGNED**:
+> - The trained NN is held **advisory until earned** — "Matrix learning creates neural intuition, not
+>   automatic operational authority." The encoder/heuristic **is** the consumed broadcast signal *by
+>   design*; the NN matures off it. **Routing `engine.infer` into the broadcast slot (P2 below) would
+>   VIOLATE the design** (an accuracy-0 CANDIDATE_BIRTH NN would starve the ladder).
+> - The "circular" self-supervised teacher (`encoder value = label`) is the **documented bootstrap**, and
+>   it confers **no authority** (the consumed signal is the encoder, never the NN's self-mimic).
+> - The 0.0 memory-encoder inputs are the **honest P3.6 no-data→no-signal contract**, not dead wires.
+>
+> **Therefore: P1 (real-teacher replacement) and P2 (un-orphan flip) are RETRACTED** — they would break
+> the asymmetric authority gate. **P0 (the shadow critic test) is KEPT**, but reframed: it's a
+> *signal-learnability / birth-eligibility diagnostic* for the existing design (does a focus carry ≥2
+> regimes of real variety), NOT validation for replacing the bootstrap. **DO NOT** route `engine.infer`
+> to the broadcast slot, and **DO NOT** wire `emotion_depth` fidelity / uncalibrated contradiction counts
+> into the memory encoders — both violate the design. If NN observability is wanted, add SHADOW telemetry
+> only (log infer output beside the encoder value for A/B), never as the consumed value.
+> The original design text is kept below for the record.
+
 > Design session (2026-06-30), born from the NN-fleet audit. Diagnoses one specialist (`positive_memory`)
 > end-to-end and proposes the fix for all five Tier-2 Matrix specialists. **Design only — no blind flip.**
 > The first concrete step is a shadow *critic test* that validates the signal BEFORE we build the teacher.
