@@ -32,6 +32,8 @@ window.V2 = (function(){
     ['/static/v2/yardsticks.html','yardsticks'],
     ['/static/v2/memory.html','memory'],
     ['/static/v2/cognition.html','cognition'],
+    ['/static/v2/brain.html','brain map'],
+    ['/static/v2/flow.html','flow'],
     ['#sep','senses'],
     ['/static/v2/identity.html','identity'],
     ['/static/v2/voice.html','voice'],
