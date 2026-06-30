@@ -435,6 +435,11 @@ class IntentShadowRunner:
     # Convenience: most call sites only want the result.
     def observe(self, user_message: str, result: Any) -> Any:
         new_result, _ = self.observe_and_rewrite(user_message, result)
+        # Advance the shadow->live ladder when EARNED. maybe_promote is fully gated internally
+        # (teacher samples >= floor, dwell, agreement >= floor, rollback cooldown) and steps one
+        # level at a time — without this call the ladder never moved (auto-rollback was wired,
+        # promotion was not). Earn-don't-declare: it promotes only when every gate passes.
+        self.maybe_promote()
         return new_result
 
     # ----------------------------------------------------------------------
@@ -683,11 +688,14 @@ def make_hemisphere_inference_fn(
             return resolved_id[0]
         try:
             state = orchestrator.get_state()
-            for hemi in state.get("hemispheres", []) or []:
-                for net in hemi.get("networks", []) or []:
-                    if net.get("focus") == "voice_intent":
-                        resolved_id[0] = net.get("id") or net.get("network_id")
-                        return resolved_id[0]
+            # get_state() nests rows under hemisphere_state.hemispheres, each row carrying
+            # 'focus' + 'active_network_id' (NOT a nested 'networks' list). The old lookup read
+            # the wrong shape -> always None -> 0 NN predictions despite thousands of observations.
+            rows = (state.get("hemisphere_state", {}) or {}).get("hemispheres", []) or []
+            for row in rows:
+                if row.get("focus") == "voice_intent":
+                    resolved_id[0] = row.get("active_network_id")
+                    return resolved_id[0]
         except Exception:
             logger.debug(
                 "intent_shadow: failed to resolve voice_intent network",
@@ -738,12 +746,11 @@ def make_teacher_sample_provider() -> Callable[[], int]:
         try:
             from hemisphere.distillation import distillation_collector
 
-            # The collector exposes per-teacher counts.
-            counts = getattr(distillation_collector, "sample_counts", None)
-            if callable(counts):
-                return int(counts().get("tool_router", 0))
-            if isinstance(counts, dict):
-                return int(counts.get("tool_router", 0))
+            # The collector exposes per-teacher counts via get_stats()["teachers"][teacher]["total"].
+            # The old code read a non-existent 'sample_counts' attr -> always 0 -> promotion gate
+            # could never see teacher samples and stayed shut.
+            teachers = (distillation_collector.get_stats() or {}).get("teachers", {})
+            return int((teachers.get("tool_router") or {}).get("total", 0))
         except Exception:
             logger.debug(
                 "intent_shadow: teacher_sample_provider failed", exc_info=True
