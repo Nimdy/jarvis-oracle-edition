@@ -25,6 +25,18 @@
 
 `TIER2_NN_REDESIGN.md` P1/P2 **retracted**; P0 critic kept as a birth-eligibility/learnability diagnostic.
 
+### Round 2 — the last 2 "ORPHANED" also validated AS-DESIGNED (ORPHANED count → 0)
+| Claim | Verdict | Basis |
+|---|---|---|
+| `intention_delivery` = orphaned/dead | **AS-DESIGNED (staged)** | `types.py:524` "STAGE 2 RESERVED SLOT — DO NOT UNCOMMENT UNTIL STAGE 1 HAS LANDED" — deliberately inert, frozen contract (`INTENTION_STAGE_1_DESIGN.md §2`); training data already produced by IntentionResolver/proactive. |
+| `thought_trigger` = orphaned + "dim mismatch 44 vs 24" | **AS-DESIGNED (shadow spark)** | SPARK §3/§8-P3 `thought_trigger_selector` — wired focus + `DistillationConfig(24→13, dim-asserted)` + a real teacher feed (`THOUGHT_VALIDATION_OUTCOME` via `event_bridge`). Audit's "44 vs 24" was **wrong** (real 24/13). Pure-shadow-until-earned. |
+
+**Meta-finding: all 4 originally-"ORPHANED" NNs were as-designed.** The agent-audit's entire "orphaned
+inference" category was pattern-matching deliberate maturity-gating + reserved scaffolding as bugs. The
+*real* defects were the 3 dead-**wires** (claim feed, intent_shadow, plan_evaluator) — which the audit had
+in other categories. Registry ORPHANED count: 4 → 0. The system is markedly more intentional than the
+audit's headline suggested — which is exactly why the design docs must be read before labeling.
+
 ## The deciding principle (why both calls were right)
 `intent_shadow` and the Tier-2 NN sit on **opposite sides of the earn-don't-declare line**:
 - `intent_shadow` is a **documented autonomous threshold ladder** (absent from every operator-held /
