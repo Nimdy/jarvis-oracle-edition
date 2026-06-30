@@ -92,6 +92,7 @@ EXPANDED_SLOT_COUNT = 6
 # (Phase M2). Buffer is bounded + pruned to keep the latest signal.
 MATRIX_BIRTH_MIN_SAMPLES = 30
 MATRIX_SIGNAL_BUFFER_MAX = 500
+MATRIX_CRITIC_MIN_SAMPLES = 30  # P0 critic: don't issue a dead-end/varies verdict below this
 
 # Phase M2 — self-supervised training of a born Tier-2 specialist: the NN learns
 # to predict its encoder's regime (4-class) from the encoder's features. This is
@@ -961,7 +962,10 @@ class HemisphereOrchestrator:
             distinct = len(counts)
             mean_v = sum(series) / n
             var_v = sum((s - mean_v) ** 2 for s in series) / n
-            if distinct < 2 or var_v < 1e-4:
+            # A verdict needs enough samples to be credible — a flat run of 3 is not a dead end.
+            if n < MATRIX_CRITIC_MIN_SAMPLES:
+                verdict = "insufficient_samples"
+            elif distinct < 2 or var_v < 1e-4:
                 verdict = "dead_end_single_regime"
             elif persistence >= 0.97:
                 verdict = "near_constant_persistence_dominates"
