@@ -194,6 +194,10 @@ class HemisphereOrchestrator:
         # Phase M: per-focus Tier-2 signal samples (features, label) for autonomous
         # birth gating + self-supervised distillation training.
         self._matrix_signal_buffers: dict[str, deque] = {}
+        # P0 Tier-2 critic test (shadow): per-focus raw signal time series (lockstep with the
+        # signal buffers) — measures whether the lived signal is even predictable before we build a
+        # real teacher. Read-only; nothing acts on it.
+        self._matrix_critic_buffers: dict[str, deque] = {}
         self._outcomes_since_train: dict[str, int] = {f.value: 0 for f in HemisphereFocus}
 
         self._research_cache: list[str] = []
@@ -916,14 +920,62 @@ class HemisphereOrchestrator:
                 if ctx is None or enc is None:
                     continue
                 features = [float(x) for x in enc.encode(ctx)]
-                label = self._matrix_label(enc.compute_signal_value(ctx))
+                signal_value = float(enc.compute_signal_value(ctx))
+                label = self._matrix_label(signal_value)
                 buf = self._matrix_signal_buffers.get(focus.value)
                 if buf is None:
                     buf = deque(maxlen=MATRIX_SIGNAL_BUFFER_MAX)
                     self._matrix_signal_buffers[focus.value] = buf
                 buf.append((features, label))
+                # P0 Tier-2 critic test (shadow): record the raw signal time series, lockstep with
+                # `buf`, so we can measure whether the lived signal is even non-trivially predictable
+                # (persistence/variance) BEFORE building a real teacher. No flip, no behavior.
+                cbuf = self._matrix_critic_buffers.get(focus.value)
+                if cbuf is None:
+                    cbuf = deque(maxlen=MATRIX_SIGNAL_BUFFER_MAX)
+                    self._matrix_critic_buffers[focus.value] = cbuf
+                cbuf.append(signal_value)
             except Exception:
                 logger.debug("matrix signal observe failed for %s", focus.value, exc_info=True)
+
+    def _matrix_critic_readout(self) -> dict[str, Any]:
+        """P0 Tier-2 critic test (shadow, read-only): per focus, is the lived signal even
+        non-trivially predictable? Reports sample count, regime distribution, and the PERSISTENCE
+        baseline (how often the regime is unchanged cycle-to-cycle). Near-constant / single-regime
+        => little to learn (a likely dead end); real variety => worth the full features->next fit.
+        Nothing acts on this — it only tells us whether a real teacher is worth building (validate
+        the signal BEFORE building, per the autonomous-growth discipline)."""
+        out: dict[str, Any] = {}
+        for focus, cbuf in self._matrix_critic_buffers.items():
+            series = list(cbuf)
+            n = len(series)
+            if n < 2:
+                out[focus] = {"samples": n, "verdict": "warming"}
+                continue
+            buckets = [self._matrix_label(s) for s in series]
+            same = sum(1 for a, b in zip(buckets, buckets[1:]) if a == b)
+            persistence = same / (n - 1)
+            counts: dict[int, int] = {}
+            for b in buckets:
+                counts[b] = counts.get(b, 0) + 1
+            distinct = len(counts)
+            mean_v = sum(series) / n
+            var_v = sum((s - mean_v) ** 2 for s in series) / n
+            if distinct < 2 or var_v < 1e-4:
+                verdict = "dead_end_single_regime"
+            elif persistence >= 0.97:
+                verdict = "near_constant_persistence_dominates"
+            else:
+                verdict = "varies_worth_full_critic"
+            out[focus] = {
+                "samples": n,
+                "distinct_regimes": distinct,
+                "regime_counts": {str(k): v for k, v in sorted(counts.items())},
+                "persistence_baseline": round(persistence, 3),
+                "signal_variance": round(var_v, 5),
+                "verdict": verdict,
+            }
+        return out
 
     def _check_matrix_births(self) -> None:
         """Autonomously birth a Tier-2 specialist once its focus has accumulated
@@ -2707,6 +2759,7 @@ class HemisphereOrchestrator:
                 for name, df in self._dynamic_focuses.items()
             },
             "distillation": distill_stats,
+            "matrix_critic": self._matrix_critic_readout(),
             "tier1_gating": {
                 "failure_counts": dict(self._tier1_failure_counts),
                 "disabled_for_session": sorted(self._tier1_disabled),
