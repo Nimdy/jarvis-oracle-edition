@@ -188,8 +188,10 @@ def _live_activity_line(model: dict[str, Any]) -> str:
 
     bits: list[str] = []
     ss, reg = _v("self_sensing_skill"), _v("self_sensing_regime")
-    if ss is not None or reg:
-        bits.append(f"self-sensing {reg or ''} (dynamic skill {ss}, shadow)".replace("  ", " ").strip())
+    if ss is not None:
+        bits.append(f"self-sensing {reg or 'active'} (dynamic skill {ss}, shadow)")
+    elif reg:
+        bits.append(f"self-sensing {reg} (shadow; skill still warming up)")
     if _v("hemisphere_cycles") is not None:
         bits.append(f"{_v('hemisphere_cycles')} specialist-NN evolution cycles")
     if _v("mutations_this_hour") is not None:
