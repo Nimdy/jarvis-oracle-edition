@@ -74,13 +74,16 @@
   function seedStars(){stars=[];for(let i=0;i<300;i++)stars.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.1+.2,a:Math.random()*.45+.08});}
   seedStars();
 
-  // stable per-edge strand offsets (so the filament bundle doesn't jitter)
+  // stable per-edge strand offsets (filament bundle, jitter-free). Up to MAX strands precomputed;
+  // how many are DRAWN scales with live signal flow -> use-dependent synaptic strength.
+  const MAX_STRANDS=12;
   function prepEdge(e,idx){
-    const strands=Math.max(2,Math.round(2+(e.strength||0.1)*9));
+    e._base=Math.max(2,Math.round(2+(e.strength||0.1)*4));   // baseline thickness from design strength
     e._strands=[];
     let seed=idx*131+7;
     const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;};
-    for(let i=0;i<strands;i++){e._strands.push({off:(i-(strands-1)/2)*(2.2+rnd()*2.0), bow:(rnd()-0.5)*0.5});}
+    for(let i=0;i<MAX_STRANDS;i++){e._strands.push({off:(i-(MAX_STRANDS-1)/2)*(2.0+rnd()*1.6), bow:(rnd()-0.5)*0.5});}
+    if(e.flow==null)e.flow=0;   // recent-use accumulator (Hebbian): grows on signal, decays when idle
   }
 
   function layoutInit(){
@@ -122,22 +125,22 @@
     ctx.clearRect(0,0,W,H); ctx.fillStyle='#02030a'; ctx.fillRect(0,0,W,H);
     for(const s of stars){ctx.globalAlpha=s.a;ctx.fillStyle='#8fb6ff';ctx.fillRect(s.x,s.y,s.r,s.r);} ctx.globalAlpha=1;
     const t=now();
-    // ---- white filament tracts (bundle density = synaptic strength) ----
+    // ---- white filament tracts: bundle density = SYNAPTIC STRENGTH (baseline + recent signal use) ----
     ctx.globalCompositeOperation='lighter';
     edges.forEach(e=>{const a=byId[e.source],b=byId[e.target];if(!a||!b||!e._strands)return;
       const pa=toScreen(a),pb=toScreen(b);
       const dx=pb.x-pa.x,dy=pb.y-pa.y,len=Math.hypot(dx,dy)||1,px=-dy/len,py=dx/len;
-      const str=e.strength||0.1;
-      const base = e.kind==='family' ? 'rgba(120,150,190,' : 'rgba(220,238,255,';
-      const al = e.kind==='family' ? 0.035 : (0.045+str*0.07);
-      const wob = e.kind==='family'?0:1;
-      e._strands.forEach(sd=>{
-        const o=sd.off*cam.s;
+      const fl=e.flow||0, fam=e.kind==='family';
+      const n=fam?2:Math.min(MAX_STRANDS, e._base + Math.round(fl*8));   // active synapses thicken
+      const al=(fam?0.03:0.045) + fl*0.11;
+      const base = fam ? 'rgba(120,150,190,' : (fl>0.18 ? 'rgba(170,245,255,' : 'rgba(220,238,255,');
+      const wob = fam?0:1;
+      for(let i=0;i<n;i++){const sd=e._strands[i];const o=sd.off*cam.s;
         const mx=(pa.x+pb.x)/2+px*o+(pb.y-pa.y)*0.06*sd.bow*wob, my=(pa.y+pb.y)/2+py*o-(pb.x-pa.x)*0.06*sd.bow*wob;
-        ctx.strokeStyle=base+al.toFixed(3)+')'; ctx.lineWidth=Math.max(0.35,0.6*cam.s);
+        ctx.strokeStyle=base+al.toFixed(3)+')'; ctx.lineWidth=Math.max(0.35,(0.6+fl*0.8)*cam.s);
         ctx.beginPath();ctx.moveTo(pa.x+px*o,pa.y+py*o);ctx.quadraticCurveTo(mx,my,pb.x+px*o,pb.y+py*o);ctx.stroke();
-      });
-      if(e.plasticity==='strengthening'){ctx.strokeStyle='rgba(0,255,153,.5)';ctx.lineWidth=1.2*cam.s;ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
+      }
+      if(e.plasticity==='strengthening'){ctx.strokeStyle='rgba(0,255,153,.45)';ctx.lineWidth=1.2*cam.s;ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();}
     });
     // ---- live signal pulses (only when real signals flow) ----
     for(let i=pulses.length-1;i>=0;i--){const pu=pulses[i];const age=(t-pu.t0)/900;if(age>=1){pulses.splice(i,1);continue;}
@@ -161,7 +164,11 @@
       nodes.forEach(n=>{if(n.is_hub)return;if(n.is_baseline||n.size>2.4||cam.s>1.8){const p=toScreen(n);ctx.fillText(n.label,p.x+(n.size*2.3*cam.s)+4,p.y+3);}});}
   }
 
-  function loop(){ if(!frozen && !settled) step(); draw(); requestAnimationFrame(loop); }
+  function loop(){
+    if(!frozen){ if(!settled) step();
+      if(flow){ for(const e of edges){ if(e.flow>0.002) e.flow*=0.991; } } }  // synaptic use decays when idle
+    draw(); requestAnimationFrame(loop);
+  }
 
   // spawn a signal pulse on an edge touching a family (real event -> she's active here)
   function pulseFamily(fam,col){
@@ -170,6 +177,7 @@
     const pool=cand.length?cand:edges.filter(e=>e.kind!=='family');
     if(!pool.length)return;
     const e=pool[(Math.random()*pool.length)|0];
+    e.flow=Math.min(1,(e.flow||0)+0.5);   // use-dependent strengthening: this synapse just carried signal
     pulses.push({edge:e,t0:now(),col:col||'rgba(150,235,255,0.9)'});
     if(pulses.length>120)pulses.shift();
   }
