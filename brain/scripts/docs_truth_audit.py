@@ -634,6 +634,64 @@ def _check_nn_fleet_registry(repo_root: Path, findings: list[Finding]) -> None:
         ))
 
 
+_CONNECTOME_EXPECTED_DYNAMIC = 6
+
+
+def _check_connectome_emit_map(repo_root: Path, findings: list[Finding]) -> None:
+    """Lock the live connectome's code-derived emitter map (dashboard/connectome.py). It attributes each
+    edge's emitter by scanning .emit() sites; dynamic (variable) emit sites are unattributable ->
+    RELAYED_UNKNOWN. FAIL if the scan parses ~nothing (regression that would blank the emitter side);
+    WARN if the unattributable count drifts up (a new emitter that the connectome can't ground)."""
+    brain = repo_root / "brain"
+    events_py = brain / "consciousness" / "events.py"
+    const_re = re.compile(r'^([A-Z][A-Z0-9_]+)\s*=\s*["\']([a-z_]+:[a-z_0-9]+)["\']', re.M)
+    emit_re = re.compile(r'\.emit(?:_event)?\(\s*([A-Z][A-Z0-9_]+|["\'][a-z_]+:[a-z_0-9]+["\'])')
+    const: dict[str, str] = {}
+    try:
+        for m in const_re.finditer(_read(events_py)):
+            const[m.group(1)] = m.group(2)
+    except OSError:
+        pass
+    if len(const) < 50:
+        findings.append(Finding(
+            "connectome.const_parse", SEVERITY_FAIL, "brain/consciousness/events.py",
+            "Connectome event-const table parsed too few entries — emitter attribution would blank out.",
+            {"parsed": len(const)}))
+        return
+    events: set[str] = set()
+    dynamic = 0
+    for f in brain.rglob("*.py"):
+        sp = str(f)
+        if "/tests/" in sp or "__pycache__" in sp:
+            continue
+        try:
+            txt = _read(f)
+        except OSError:
+            continue
+        if ".emit" not in txt:
+            continue
+        for m in emit_re.finditer(txt):
+            tok = m.group(1)
+            if tok[0] in "\"'":
+                events.add(tok.strip("\"'"))
+            elif tok in const:
+                events.add(const[tok])
+            else:
+                dynamic += 1
+    if len(events) < 60:
+        findings.append(Finding(
+            "connectome.emit_scan", SEVERITY_FAIL, "brain/",
+            "Connectome emit-site scan resolved too few events — likely a parse regression.",
+            {"resolved": len(events)}))
+    if dynamic != _CONNECTOME_EXPECTED_DYNAMIC:
+        findings.append(Finding(
+            "connectome.dynamic_emit_drift", SEVERITY_WARN, "brain/",
+            f"Connectome unattributable (dynamic) emit-site count changed "
+            f"{_CONNECTOME_EXPECTED_DYNAMIC}->{dynamic} — new RELAYED_UNKNOWN edges; confirm the live "
+            "connectome still grounds emitters (bump the expected count if intended).",
+            {"expected": _CONNECTOME_EXPECTED_DYNAMIC, "actual": dynamic}))
+
+
 def run_audit(repo_root: Path, *, host: str | None = None, port: int = 9200, timeout_s: float = 5.0) -> dict[str, Any]:
     repo_root = repo_root.resolve()
     findings: list[Finding] = []
@@ -647,6 +705,7 @@ def run_audit(repo_root: Path, *, host: str | None = None, port: int = 9200, tim
     _scan_static_claims(repo_root, findings, pvl_count, pvl_groups)
     _check_subsystem_registry(repo_root, findings)
     _check_nn_fleet_registry(repo_root, findings)
+    _check_connectome_emit_map(repo_root, findings)
     live: dict[str, Any] = {"checked": False}
     if host:
         live = _check_live_dashboard(host, port, timeout_s, findings)
