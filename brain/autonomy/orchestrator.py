@@ -2849,6 +2849,16 @@ class AutonomyOrchestrator:
         except Exception:
             pass
 
+        # ── Shadow would-attend proposer (STEP 2, authority=none) ──
+        # Third link of the loop: from the carried signal, log where attention
+        # COULD go (+ every no-target tick). Pure observability — sets no
+        # urgency, writes nothing; observe() is exception-safe and one-way.
+        try:
+            from autonomy.curiosity_proposer import get_curiosity_proposer
+            get_curiosity_proposer().observe(signals, now=time.time())
+        except Exception:
+            pass
+
         signals.open_threads = len([i for i in self._queue if i.status == "queued"])
         signals.pending_jobs = signals.open_threads
 
@@ -3177,12 +3187,17 @@ class AutonomyOrchestrator:
         (it was computed-then-discarded before). READ-ONLY / zero authority:
         these values drive NO lever and nothing in urgency reads them. This
         merely proves the bridge is populated; the shadow would-attend proposer
-        (STEP 2) will consume it. A None target on a quiet desk is the
+        (STEP 2) consumes it. A None target on a quiet desk is the
         non-fabrication firewall holding (honest), not a failure."""
+        try:
+            from autonomy.curiosity_proposer import get_curiosity_proposer
+            proposer = get_curiosity_proposer().get_status()
+        except Exception:
+            proposer = {}
         sig = getattr(self, "_last_drive_signals", None)
         if sig is None:
             return {"phase": "P0_bridge_shadow", "authority": "zero_authority",
-                    "drives_levers": False, "populated": False}
+                    "drives_levers": False, "populated": False, "proposer": proposer}
         tgt = None
         if getattr(sig, "self_sensing_target_sector", None) is not None:
             tgt = {
@@ -3199,6 +3214,7 @@ class AutonomyOrchestrator:
             "learning_progress": round(float(sig.self_sensing_lp), 5),
             "regime": sig.self_sensing_regime,
             "curiosity_target": tgt,
+            "proposer": proposer,
             "note": ("self-sensing LP + would-attend target carried into DriveSignals; "
                      "READ-ONLY telemetry — influences no drive urgency (authority=none). "
                      "Quiet desk -> STARVED / target=None is honest non-fabrication."),

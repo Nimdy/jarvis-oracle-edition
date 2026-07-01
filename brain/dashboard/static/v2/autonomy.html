@@ -101,6 +101,12 @@
     </section>
 
     <section class="card col12">
+      <h2>Self-sensing → curiosity bridge <span class="tag self">shadow</span> <span class="asof" id="ssb-asof">autonomy.self_sensing_bridge · —</span></h2>
+      <div class="note">The keystone link: self-sensing's <b>proven</b> growth signal (learning-progress + the sector where the predictor beats persistence most) is <b>carried into the drive signals</b> instead of being computed-then-discarded, and a <b>shadow proposer</b> logs where attention <em>could</em> go. <b>Authority = none</b> — it moves no drive, writes no memory. A quiet desk reads <b>STARVED / no target</b> (the non-fabrication firewall: a static scene never manufactures a target); a real target lights up only when a sector is genuinely moving <em>and</em> still improving.</div>
+      <div id="ssbridge"></div>
+    </section>
+
+    <section class="card col12">
       <h2>Goal Provenance — created vs ignored, by origin <span class="asof" id="gp-asof">goals.producer_health · —</span></h2>
       <div class="note">Where goal candidates come from (<code>conversation</code> / <code>metric</code> / <code>autonomy</code>) and what the loop does with them. <code>created</code> = committed into the goal set; <code>ignored</code> = seen-then-declined. This is the producer side of the <b>lived-vs-internal-metric-churn</b> signal (FIDELITY_ROADMAP §6): high ignore + zero create means the loop is <b>proposing but not committing</b>.</div>
       <div id="goalprov"></div>
@@ -269,6 +275,49 @@
     box.innerHTML=html;
   }
 
+  function renderBridge(){
+    var box=el('ssbridge'); if(!box) return;
+    var b=((FS&&FS.autonomy)||{}).self_sensing_bridge||null;
+    var asof=el('ssb-asof'); if(asof) asof.textContent='autonomy.self_sensing_bridge · '+(b?'live':'—');
+    if(!b){ box.innerHTML='<div class="idleblock">bridge state UNKNOWN — full-snapshot offline</div>'; return; }
+    if(!b.populated){ box.innerHTML='<div class="idleblock">bridge armed — no drive tick yet this session (recovering after reboot)</div>'; return; }
+    var p=b.proposer||{}, tgt=b.curiosity_target||null;
+    var reg=(b.regime||'unknown');
+    var regcol = reg==='EARNING' ? 'var(--green)' : (reg==='FAILED' ? 'var(--amber)' : 'var(--dim)');
+    var html=
+      '<div class="statline">'+
+        '<span><div class="k">regime</div><span class="bigstat" style="color:'+regcol+'">'+reg+'</span></span>'+
+        '<span><div class="k">learning-progress</div><span class="bigstat">'+(num(b.learning_progress)!=null?num(b.learning_progress).toFixed(5):'—')+'</span></span>'+
+        '<span><div class="k">would-attend targets</div><span class="bigstat">'+(num(p.proposals)||0)+'</span></span>'+
+        '<span><div class="k">no-target ticks</div><span class="bigstat" style="color:var(--dim)">'+(num(p.no_target_ticks)||0)+'</span></span>'+
+        '<span><div class="k">target rate</div><span class="bigstat">'+(num(p.target_rate)!=null?(num(p.target_rate)*100).toFixed(1)+'%':'—')+'</span></span>'+
+      '</div>';
+    html+='<div class="gridkv">'+
+      '<span class="k">current target</span><b>'+(tgt?('sector '+tgt.sector+' ('+tgt.deg+'°) · LP '+num(tgt.learning_progress).toFixed(4)+' · skill '+num(tgt.skill).toFixed(4)):'<span style="color:var(--dim)">none — nothing meaningfully improving right now</span>')+'</b>'+
+      '<span class="k">authority</span><b style="color:var(--dim)">'+(b.authority||'zero_authority')+' · drives no lever</b>'+
+      '</div>';
+    // per-sector would-attend histogram (only sectors ever proposed)
+    var sc=p.sector_counts||{}, keys=Object.keys(sc);
+    if(keys.length){
+      var maxc=1; keys.forEach(function(k){ maxc=Math.max(maxc,num(sc[k])||0); });
+      html+='<div class="contrast" style="margin:6px 0 3px">Where it WOULD have attended (session, shadow):</div>';
+      html+=keys.map(function(k){
+        var c=num(sc[k])||0, deg=(num(k)*30);
+        return '<div class="drive"><span class="nm">sec '+k+' ('+deg+'°)</span>'+
+          '<div class="track"><div class="fill" style="width:'+(c/maxc*100).toFixed(0)+'%;background:var(--cyan)"></div></div>'+
+          '<span class="sup">'+c+'×</span></div>';
+      }).join('');
+    }
+    var rec=p.recent||[];
+    if(rec.length){
+      html+='<div class="contrast">Recent would-attend proposals:</div>'+
+        rec.slice(-3).reverse().map(function(r){ return '<div class="qchip">'+cap(String(r.would_attend||''))+'</div>'; }).join('');
+    } else {
+      html+='<div class="contrast">No would-attend proposal yet this session — the desk has been <b>'+reg+'</b> (quiet/plateaued). Move within the Pi\'s view to fuel a live target; the proposer stays silent rather than inventing one.</div>';
+    }
+    box.innerHTML=html;
+  }
+
   function renderBuffer(){
     var box=el('buffer'); if(!box) return;
     var eb=(FS&&FS.experience_buffer)||null;
@@ -356,7 +405,7 @@
     el('mode').textContent='mode '+(b.mode||'—')+' · uptime '+V2.fmtUptime(b.uptime_s)+(num(b.data_freshness_s)!==null?' · fresh '+b.data_freshness_s.toFixed(1)+'s':'');
   }
 
-  function renderAll(){ renderBanner(); renderRecovery(); renderStatus(); renderLog(); renderCuriosity(); renderBuffer(); renderGoalProv(); }
+  function renderAll(){ renderBanner(); renderRecovery(); renderStatus(); renderLog(); renderCuriosity(); renderBridge(); renderBuffer(); renderGoalProv(); }
 
   function refresh(){
     fetchJSON('/api/full-snapshot').then(function(s){ FS=s; lastOkTs=Date.now(); renderAll(); })
