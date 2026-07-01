@@ -93,6 +93,21 @@ class DriveSignals:
     grounding_target_id: str = ""
     grounding_target_claim: str = ""
     grounding_tool_hint: str = "web"
+    # ── Self-sensing → curiosity bridge (STEP 1, SHADOW / authority=none) ──
+    # The ONE proven, non-operator, self-supervised growth signal
+    # (cognition/self_sensing.py): learning-progress + the sector where the
+    # predictor is learning most RIGHT NOW. Carried here so the signal is no
+    # longer computed-then-DISCARDED. STRICTLY READ-ONLY TELEMETRY: nothing in
+    # the urgency computation reads these fields — they drive NO lever. A shadow
+    # would-attend proposer (STEP 2) observes them. On a quiet desk the regime is
+    # STARVED and the target is None (the non-fabrication firewall — a static
+    # scene NEVER manufactures a target).
+    self_sensing_lp: float = 0.0
+    self_sensing_regime: str = "unknown"
+    self_sensing_target_sector: int | None = None
+    self_sensing_target_deg: int | None = None
+    self_sensing_target_lp: float = 0.0
+    self_sensing_target_skill: float = 0.0
 
 
 @dataclass

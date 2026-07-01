@@ -2823,6 +2823,32 @@ class AutonomyOrchestrator:
         except Exception:
             pass
 
+        # ── Self-sensing → curiosity bridge (STEP 1, SHADOW / authority=none) ──
+        # Carry the ONE proven self-supervised growth signal (learning-progress +
+        # the sector where the predictor is learning most) instead of discarding
+        # it. STRICTLY READ-ONLY: nothing below consumes these fields; drive
+        # urgency is UNCHANGED. get_status() is a pure read (no mutation) so this
+        # stays a one-way tap. A quiet desk -> STARVED / target=None is the honest,
+        # non-fabricated state (self_sensing enforces that firewall, not us).
+        try:
+            ss = getattr(self._engine_ref, "_self_sensing", None)
+            if ss is not None:
+                st = ss.get_status()
+                signals.self_sensing_lp = float(st.get("learning_progress") or 0.0)
+                signals.self_sensing_regime = str(
+                    (st.get("health") or {}).get("regime", "unknown")
+                )
+                tgt = st.get("curiosity_target")
+                if isinstance(tgt, dict):
+                    signals.self_sensing_target_sector = tgt.get("sector")
+                    signals.self_sensing_target_deg = tgt.get("deg")
+                    signals.self_sensing_target_lp = float(
+                        tgt.get("learning_progress") or 0.0
+                    )
+                    signals.self_sensing_target_skill = float(tgt.get("skill") or 0.0)
+        except Exception:
+            pass
+
         signals.open_threads = len([i for i in self._queue if i.status == "queued"])
         signals.pending_jobs = signals.open_threads
 
@@ -3143,6 +3169,39 @@ class AutonomyOrchestrator:
                 self._osv_gap_curiosity.shadow_state()
                 if self._osv_gap_curiosity is not None else {}
             ),
+            "self_sensing_bridge": self._build_self_sensing_bridge_status(),
+        }
+
+    def _build_self_sensing_bridge_status(self) -> dict[str, Any]:
+        """STEP 1 telemetry — the self-sensing signal CARRIED into DriveSignals
+        (it was computed-then-discarded before). READ-ONLY / zero authority:
+        these values drive NO lever and nothing in urgency reads them. This
+        merely proves the bridge is populated; the shadow would-attend proposer
+        (STEP 2) will consume it. A None target on a quiet desk is the
+        non-fabrication firewall holding (honest), not a failure."""
+        sig = getattr(self, "_last_drive_signals", None)
+        if sig is None:
+            return {"phase": "P0_bridge_shadow", "authority": "zero_authority",
+                    "drives_levers": False, "populated": False}
+        tgt = None
+        if getattr(sig, "self_sensing_target_sector", None) is not None:
+            tgt = {
+                "sector": sig.self_sensing_target_sector,
+                "deg": sig.self_sensing_target_deg,
+                "learning_progress": round(float(sig.self_sensing_target_lp), 4),
+                "skill": round(float(sig.self_sensing_target_skill), 4),
+            }
+        return {
+            "phase": "P0_bridge_shadow",
+            "authority": "zero_authority",
+            "drives_levers": False,
+            "populated": True,
+            "learning_progress": round(float(sig.self_sensing_lp), 5),
+            "regime": sig.self_sensing_regime,
+            "curiosity_target": tgt,
+            "note": ("self-sensing LP + would-attend target carried into DriveSignals; "
+                     "READ-ONLY telemetry — influences no drive urgency (authority=none). "
+                     "Quiet desk -> STARVED / target=None is honest non-fabrication."),
         }
 
     def _build_grounding_ring_status(self) -> dict[str, Any]:

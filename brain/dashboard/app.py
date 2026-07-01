@@ -1116,6 +1116,13 @@ def _create_app() -> FastAPI:
         """Self-sensing shadow loop: lidar predict-beyond-persistence + learning-progress."""
         return _cache.get("self_sensing", {})
 
+    @app.get("/api/self-sensing/bridge")
+    async def api_self_sensing_bridge():
+        """STEP 1 — the self-sensing signal carried into DriveSignals (read-only,
+        zero authority). Proves the proven growth signal is no longer
+        computed-then-discarded; it drives no lever (the shadow proposer is STEP 2)."""
+        return _cache.get("autonomy", {}).get("self_sensing_bridge", {})
+
     @app.get("/api/self-improve")
     async def api_self_improve():
         return _cache.get("self_improve", {})
