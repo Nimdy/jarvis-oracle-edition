@@ -2846,6 +2846,15 @@ class AutonomyOrchestrator:
                         tgt.get("learning_progress") or 0.0
                     )
                     signals.self_sensing_target_skill = float(tgt.get("skill") or 0.0)
+                # STEP 3 — feed the offline critic-test recorder (shadow, bounded,
+                # authority=none). Reuses THIS get_status read (one-way tap): gathers
+                # per-sector snapshots so the target's causal usefulness can be judged
+                # OFFLINE later. Records nothing actionable, writes only its own file.
+                try:
+                    from cognition.curiosity_critic import get_curiosity_critic
+                    get_curiosity_critic().record_from_status(st, time.time())
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -3194,10 +3203,16 @@ class AutonomyOrchestrator:
             proposer = get_curiosity_proposer().get_status()
         except Exception:
             proposer = {}
+        try:
+            from cognition.curiosity_critic import get_curiosity_critic
+            critic = get_curiosity_critic().get_stats()
+        except Exception:
+            critic = {}
         sig = getattr(self, "_last_drive_signals", None)
         if sig is None:
             return {"phase": "P0_bridge_shadow", "authority": "zero_authority",
-                    "drives_levers": False, "populated": False, "proposer": proposer}
+                    "drives_levers": False, "populated": False,
+                    "proposer": proposer, "critic": critic}
         tgt = None
         if getattr(sig, "self_sensing_target_sector", None) is not None:
             tgt = {
@@ -3215,6 +3230,7 @@ class AutonomyOrchestrator:
             "regime": sig.self_sensing_regime,
             "curiosity_target": tgt,
             "proposer": proposer,
+            "critic": critic,
             "note": ("self-sensing LP + would-attend target carried into DriveSignals; "
                      "READ-ONLY telemetry — influences no drive urgency (authority=none). "
                      "Quiet desk -> STARVED / target=None is honest non-fabrication."),

@@ -281,7 +281,7 @@
     var asof=el('ssb-asof'); if(asof) asof.textContent='autonomy.self_sensing_bridge · '+(b?'live':'—');
     if(!b){ box.innerHTML='<div class="idleblock">bridge state UNKNOWN — full-snapshot offline</div>'; return; }
     if(!b.populated){ box.innerHTML='<div class="idleblock">bridge armed — no drive tick yet this session (recovering after reboot)</div>'; return; }
-    var p=b.proposer||{}, tgt=b.curiosity_target||null;
+    var p=b.proposer||{}, c=b.critic||{}, tgt=b.curiosity_target||null;
     var reg=(b.regime||'unknown');
     var regcol = reg==='EARNING' ? 'var(--green)' : (reg==='FAILED' ? 'var(--amber)' : 'var(--dim)');
     var html=
@@ -295,6 +295,7 @@
     html+='<div class="gridkv">'+
       '<span class="k">current target</span><b>'+(tgt?('sector '+tgt.sector+' ('+tgt.deg+'°) · LP '+num(tgt.learning_progress).toFixed(4)+' · skill '+num(tgt.skill).toFixed(4)):'<span style="color:var(--dim)">none — nothing meaningfully improving right now</span>')+'</b>'+
       '<span class="k">authority</span><b style="color:var(--dim)">'+(b.authority||'zero_authority')+' · drives no lever</b>'+
+      '<span class="k">critic evidence (STEP 3)</span><b>'+(num(c.samples_with_target)||0)+' targeted / '+(num(c.samples)||0)+' samples · '+(num(c.span_hours)||0)+'h soak <span style="color:var(--dim)">→ offline gate</span></b>'+
       '</div>';
     // per-sector would-attend histogram (only sectors ever proposed)
     var sc=p.sector_counts||{}, keys=Object.keys(sc);
