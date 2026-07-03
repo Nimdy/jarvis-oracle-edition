@@ -215,26 +215,35 @@ class SelfSensingLoop:
         return skill, lp, ssp
 
     def _curiosity_target(self) -> dict[str, Any] | None:
-        """SHADOW suggestion: the sector where the model is learning the MOST right now.
+        """SHADOW suggestion: the ACTIVE sector where the predictor is WORST right now
+        (lowest skill) = where there is the most room to learn. Authority = none.
 
-        Authority = none — this only reports where attention COULD go, never acts. Returns
-        None when nothing is meaningfully learnable (a static scene, or pure noise) — it does
-        not fabricate a target. This is the Step-2 curiosity signal: learning-progress points
-        at the region with novel-but-learnable structure (not too easy, not unpredictable).
+        This is ERROR-SEEKING curiosity, and it is EARNED, not assumed. The intuitive
+        alternative — argmax learning-progress ("attend where you're improving most") —
+        FAILED the offline causal gate: it chased skill spikes that revert to the mean
+        (target future skill-change negative, permutation p~=1.0). Error-seeking ("attend
+        where you're worst") was then PRE-REGISTERED and CONFIRMED out-of-sample (held-out
+        1520 samples: future skill-change +0.014/+0.016 at horizons 5/10, beating a random
+        active sector and the all-sector mean, p=0.0003). See docs/CURIOSITY_CRITIC_PREREG.md
+        + cognition/curiosity_critic.py.
+
+        Still SHADOW / predictive-only: it reports WHERE the world-model is weakest; it does
+        NOT act. Whether DIRECTING learning there causally helps is the separate directed-
+        learning A/B (docs/DIRECTED_LEARNING_AB_DESIGN.md), not this readout. Returns None on
+        a static scene (no active sector with a valid skill) — never fabricates a target.
         """
         skill, lp, ssp = self._per_sector()
         if float(ssp.max()) < 1e-9:
             return None
         active = ssp > 0.1 * float(ssp.max())   # only sectors with meaningful recent movement
-        cand = [(j, float(lp[j])) for j in range(N_SECTORS) if active[j]]
+        cand = [j for j in range(N_SECTORS) if active[j] and not math.isnan(skill[j])]
         if not cand:
             return None
-        j, best = max(cand, key=lambda x: x[1])
-        if best <= 0.01:                        # nothing is meaningfully improving -> no target
-            return None
+        j = min(cand, key=lambda k: float(skill[k]))   # error-seeking: the WORST-predicted active sector
         return {"sector": j, "deg": j * 30,
-                "learning_progress": round(best, 4),
-                "skill": round(float(skill[j]), 4) if not math.isnan(skill[j]) else None}
+                "skill": round(float(skill[j]), 4),
+                "learning_progress": round(float(lp[j]), 4),
+                "strategy": "error_seeking_lowest_skill"}
 
     # -- telemetry (shadow, read-only) --------------------------------------
 

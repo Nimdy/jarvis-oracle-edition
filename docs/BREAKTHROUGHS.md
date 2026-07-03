@@ -181,6 +181,31 @@
 - **Not:** clusters, **not chains** — `avg_chain_length` is still 1.0; beliefs cluster by topic but
   don't yet *build on* each other. Recurrence is only half-addressed.
 
+## 2026-07-03 — Earned (out-of-sample-confirmed) curiosity signal — via a *falsified* hypothesis
+- **Pillar:** #9 Learning/growth (autonomous drive) · #1 Integrity (the method *is* the story).
+- **What:** The self-sensing→curiosity bridge's target was put through an offline causal gate. The
+  intuitive definition — attend where **learning-progress** is highest ("where I'm improving most")
+  — **FAILED decisively** (it chased skill spikes that revert to the mean; target future
+  skill-change negative at h=3/5/10, permutation **p≈1.0**). Disciplined re-analysis found the
+  **opposite** works: **error-seeking** — attend the active sector where the predictor is *worst*
+  (lowest skill) — was **pre-registered before the held-out data existed**, then **confirmed
+  out-of-sample** (1,520 fresh samples: future skill-change **+0.014/+0.016** at horizons 5/10,
+  beating a random active sector and the all-sector mean, **p=0.0003**).
+- **Significance:** **Milestone.** The first autonomous-curiosity signal *earned by out-of-sample
+  replication*, not declared — and a clean end-to-end demonstration of the anti-gaming discipline
+  (naive hypothesis falsified → opposite pre-registered → confirmed on held-out data). The
+  critic-test caught a plausible-but-wrong feature (STEP 1/2 looked beautiful — signal carried,
+  proposer fired, spatially coherent) *before* it touched any lever.
+- **Not:** NOT a working drive and NOT causal. It is a **predictive** signal — "where my world-model
+  is weakest" — confirmed to *predict* skill gains, not shown to *cause* them; consistent with
+  (partly) mean-reversion. The passive lidar loop has **no attention actuator** (attending changes
+  no data), so a live "advisory to attend" would be theater. Authority = none throughout. Whether
+  directing *learning* toward the weak sectors causally helps is the separate directed-learning A/B
+  (`docs/DIRECTED_LEARNING_AB_DESIGN.md`), not yet run.
+- **Evidence:** `docs/CURIOSITY_CRITIC_PREREG.md` (locked bar), `scripts/curiosity_critic_oos.py`
+  (CONFIRMED at h5&h10, p=0.0003), the 17h exploratory + 25.7h held-out windows in
+  `~/.jarvis/curiosity_critic_log.json`.
+
 ---
 *Maintained going forward. Append a new dated entry when something genuinely earns it — honest
 significance, stated limits. When in doubt, it's a milestone, not a breakthrough.*
