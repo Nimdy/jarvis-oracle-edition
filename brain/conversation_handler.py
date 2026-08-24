@@ -2485,6 +2485,34 @@ async def handle_transcription(
             return False
         return bool(cancel_flag.get("cancelled"))
 
+    def _persist_spoken_turn(user_text: str, spoken: str) -> None:
+        """Persist the reply that was actually spoken — never a discarded LLM draft.
+
+        Rides engine.remember (synthetic sessions still cannot write). The
+        continuity guard inside _finalize_response refuses OSV-contradicted
+        wipe claims. Callers pass the broadcast text, not the stream buffer.
+        """
+        if _cancelled():
+            return
+        if not (user_text or "").strip() or not (spoken or "").strip():
+            return
+        try:
+            context_builder.add_user_message(user_text, conversation_id=conversation_id)
+        except Exception:
+            logger.debug("spoken-turn user persist skipped", exc_info=True)
+        try:
+            response_gen._finalize_response(
+                user_text,
+                spoken,
+                _conv_start,
+                conversation_id=conversation_id,
+                speaker_name=speaker,
+                user_emotion=emotion,
+                persist_response=True,
+            )
+        except Exception:
+            logger.debug("spoken-turn persist skipped", exc_info=True)
+
     def _broadcast(msg: dict) -> None:
         if conversation_id:
             msg["conversation_id"] = conversation_id
@@ -3383,6 +3411,7 @@ async def handle_transcription(
             logger.debug("self-view sanitize failed", exc_info=True)
         await _broadcast_chunk_sync(reply, tone)
         _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+        _persist_spoken_turn(text, reply)
         # OSV voice distillation SEED (shadow): after the deterministic grounded reply is spoken,
         # log a VERIFIED teacher (grounded->warm) pair for a future NATIVE voice NN to distill from.
         # The baseline LLM is only the teacher here — it never speaks live; this never changes the
@@ -3866,6 +3895,7 @@ async def handle_transcription(
                     "safety_flags": ["bounded_emergence_evidence", "no_sentience_claim"],
                 }
                 _set_golden_outcome("executed")
+                _persist_spoken_turn(introspection_query, reply)
                 return
             introspection_data, intro_meta = get_introspection(engine, query=introspection_query)
             logger.info(
@@ -4190,6 +4220,7 @@ async def handle_transcription(
                         user_emotion=emotion,
                         conversation_id=conversation_id,
                         tool_hint="introspection",
+                        persist_response=False,
                         style_instruction=_style_instruction,
                     ):
                         if _cancelled():
@@ -4263,6 +4294,7 @@ async def handle_transcription(
                 logger.exception("Introspection response error: %s", exc)
                 await _broadcast_chunk_sync(reply, engine.get_state()["tone"])
                 _broadcast({"type": "response_end", "text": "", "tone": engine.get_state()["tone"], "phase": "LISTENING"})
+        _persist_spoken_turn(introspection_query, reply)
     elif routing.tool == ToolType.ACADEMIC_SEARCH:
         engine.set_phase("PROCESSING")
         academic_results = []

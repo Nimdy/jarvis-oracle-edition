@@ -159,6 +159,12 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
   unknowns / consciousness_query / **continuity** (process-restart vs wipe: measured
   memory count + store span; never a blank-slate claim; does **not** steal
   `what do you remember about X` from MEMORY retrieval).
+  **Write-path (lived 2026-08-24):** persist the *spoken* reply, never a discarded
+  LLM draft. An OSV-contradicted wipe/blank-slate claim is not stored as
+  autobiography (`engine.remember` still rides the synthetic-session block).
+  **Recall-path:** MEMORY may not present that contradicted claim as
+  "Jarvis recalled" — the scar stays in the store (never discard), it is not
+  declared as fact. Not a P2 flip; not a wipe.
 - **Strict in claims, rich in capture** (see §6): user-facing answers are conservative and
   non-suppressing; the language guard is regression-tested; "Are you conscious?" uses the §6
   balanced template; P1 may *record* a self-referential anomaly via `observer.observe_emergence`

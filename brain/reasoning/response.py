@@ -618,8 +618,25 @@ class ResponseGenerator:
                            user_emotion: str | None = None,
                            outcome: str = "completed",
                            persist_response: bool = True) -> GeneratedResponse:
-        """Store memory and return structured response after LLM completes."""
+        """Store memory and return structured response after LLM completes.
+
+        Lived 2026-08-24: an LLM wipe-draft was remembered here while fail-closed
+        speech used the measured dump. An OSV-contradicted blank-slate claim is
+        not autobiography — skip both the conversation_history write and
+        engine.remember. The scar is not deleted; it is not declared.
+        """
         latency_ms = int((time.time() - start) * 1000)
+        if persist_response:
+            try:
+                from cognition.self_view import load_self_view
+                from cognition.self_view.articulate import contradicts_measured_continuity
+                if contradicts_measured_continuity(response_text, load_self_view()):
+                    logger.info(
+                        "Skipping conversation persist — OSV-contradicted wipe/blank-slate claim"
+                    )
+                    persist_response = False
+            except Exception:
+                logger.debug("continuity persist guard skipped", exc_info=True)
         if persist_response:
             context_builder.add_assistant_message(response_text, conversation_id=conversation_id)
             context_builder.save()
