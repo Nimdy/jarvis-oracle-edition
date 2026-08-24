@@ -145,6 +145,7 @@ stay in the store (never discard) and must not be recalled as fact.
 
 - Do not merge to `main` unless asked.
 - Do not start/stop supervisor, `main.py`, or lidar. Operator owns the stack.
+- Do not run pytest on the live brain host against `~/.jarvis`. Tests write registries (lived 2026-08-24: `plugin_registry.json` overwritten, restored from snapshot).
 - Sync with `./sync-desktop.sh` when code should hit the brain; they bounce.
 - Do not flip `OSV_P2_ACTIVE`, revoice-live, voice-intent, or native_voice
   unless the operator asks.
