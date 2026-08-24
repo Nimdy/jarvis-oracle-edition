@@ -269,19 +269,22 @@ def _arch_entry_value(model: dict[str, Any], sid: str, field: str) -> Any:
     return None
 
 
+def _authority_is_live(auth: Any) -> bool:
+    return str(auth or "").strip().lower() in ("live", "active")
+
+
 def _answer_path(model: dict[str, Any]) -> str:
     """How a spoken answer is produced — architecture map + measured memory only.
 
-    No inner 'understanding', no confidence percents, no pattern-recognition story.
-    Designed-maturity statuses are labeled as such. Missing inventory → gap, not a fable.
+    Spoken English, not a status dump. No inner 'understanding', no confidence
+    percents, no pattern-recognition story. Missing inventory → gap, not a fable.
+    Designed-maturity tokens stay off the mouth; live vs shadow is the claim.
     """
     perc = _arch_entry_value(model, "perception-orchestrator", "status")
-    perc_auth = _arch_entry_value(model, "perception-orchestrator", "authority")
     route = _arch_entry_value(model, "routing-voice", "status")
     route_auth = _arch_entry_value(model, "routing-voice", "authority")
     mem = _arch_entry_value(model, "memory-stack", "status")
     osv = _arch_entry_value(model, "self-view-osv", "status")
-    osv_auth = _arch_entry_value(model, "self-view-osv", "authority")
     gate = None
     for sid in ("L0", "capability-gate"):
         gate = _arch_entry_value(model, sid, "status")
@@ -294,26 +297,28 @@ def _answer_path(model: dict[str, Any]) -> str:
             "I will not invent one."
         )
 
-    parts: list[str] = []
+    sentences: list[str] = [
+        "I cannot measure a private inner parse, so I will not invent one."
+    ]
+
+    pipe: list[str] = []
     if perc:
-        parts.append(
-            f"Speech in: perception (STT, addressee, identity) is designed-status {perc}"
-            + (f", authority {perc_auth}" if perc_auth else "")
-            + " — code-grounded, not a live sensor readout."
-        )
+        pipe.append("speech is transcribed")
     if route:
-        parts.append(
-            f"Route: the heuristic keyword tool-router is designed-status {route}"
-            + (f", authority {route_auth}" if route_auth else "")
-            + ". It is the live chooser. The voice-intent network is shadow/gated "
-            "and does not drive the turn."
+        if _authority_is_live(route_auth):
+            pipe.append("then a keyword router — that router is live — picks the path")
+        else:
+            pipe.append("then a keyword router is on the map, and I will not call it live")
+        pipe.append("the voice-intent network is shadow and does not drive the turn")
+    if pipe:
+        sentences.append(
+            "From the architecture map, not a live sensor trace: " + ", ".join(pipe) + "."
         )
+
     if osv:
-        parts.append(
-            f"Self-questions I can classify are answered from my operational self-view "
-            f"(designed-status {osv}"
-            + (f", authority {osv_auth}" if osv_auth else "")
-            + ") with no LLM authoring the self-facts."
+        sentences.append(
+            "Self-questions like this are answered from my operational self-view, "
+            "not by the language model inventing facts."
         )
     if mem:
         n = None
@@ -322,20 +327,16 @@ def _answer_path(model: dict[str, Any]) -> str:
             n = int(total) if total is not None else None
         except (TypeError, ValueError):
             n = None
-        mem_line = f"Topic recall uses the memory stack (designed-status {mem})."
+        mem_line = "Topic recall uses the memory stack"
         if n is not None and n > 0:
-            mem_line += f" I currently measure {n} stored memories."
-        mem_line += " Fractal recall is shadow and does not speak."
-        parts.append(mem_line)
+            mem_line += f", I currently measure {n} stored memories"
+        mem_line += ", and fractal recall is shadow and does not speak."
+        sentences.append(mem_line)
     if gate:
-        parts.append(
-            f"Other routes may use the language model as voice only, under the "
-            f"capability gate (designed-status {gate})."
+        sentences.append(
+            "Other routes may use the language model as voice only, under the capability gate."
         )
-    parts.append(
-        "I cannot measure a private inner parse step. I will not invent one."
-    )
-    return " ".join(parts)
+    return " ".join(sentences)
 
 
 def _capabilities(model: dict[str, Any]) -> str:

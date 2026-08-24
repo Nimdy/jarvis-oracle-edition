@@ -154,6 +154,11 @@ class TestArticulation:
         assert "i parse" not in low
         assert "pattern recognition" not in low
         assert contains_unqualified_claim(out) is False
+        # Lived 14:45/14:47: kind was correct, mouth was a designed-status dump.
+        # Keep this speakable. Do not put log headers or inventory tokens on TTS.
+        assert "speech in:" not in low
+        assert "designed-status" not in low
+        assert out.count(".") <= 6
 
     def test_what_can_you_do_stays_capabilities_inventory(self):
         assert classify_self_question("What can you do?") == "capabilities"
