@@ -158,7 +158,10 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
   identity / capabilities / recent_changes / health / weaknesses / gated_capabilities /
   unknowns / consciousness_query / **continuity** (process-restart vs wipe: measured
   memory count + store span; never a blank-slate claim; does **not** steal
-  `what do you remember about X` from MEMORY retrieval).
+  `what do you remember about X` from MEMORY retrieval) / **answer_path**
+  (how a spoken answer is produced: perception → heuristic router live /
+  voice-intent shadow → OSV P1 or memory stack or LLM-as-voice under L0;
+  designed-maturity labeled as such; no inner-parse theater).
   **Write-path (lived 2026-08-24):** persist the *spoken* reply, never a discarded
   LLM draft. An OSV-contradicted wipe/blank-slate claim is not stored as
   autobiography (`engine.remember` still rides the synthetic-session block).

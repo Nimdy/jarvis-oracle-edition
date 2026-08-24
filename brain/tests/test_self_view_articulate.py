@@ -67,9 +67,10 @@ class TestClassify:
             "What can you tell me about your codebase?": "capabilities",
             "Jarvis, tell me about your architecture.": "capabilities",
             "Describe your own architecture.": "capabilities",
-            "Walk me through how you get an answer.": "capabilities",
-            "Walk me through how you reach an answer.": "capabilities",
-            "walk me through how you reach an answer": "capabilities",
+            "Walk me through how you get an answer.": "answer_path",
+            "Walk me through how you reach an answer.": "answer_path",
+            "walk me through how you reach an answer": "answer_path",
+            "how do you reach an answer?": "answer_path",
             "Do you know what you are?": "identity",
             "Tell me something about yourself that I don't know.": "identity",
             "do you have feelings?": "consciousness_query",
@@ -136,6 +137,28 @@ class TestArticulation:
         out = articulate_self_view(_model(), "gated_capabilities").lower()
         assert "shadow" in out
         assert "earned" in out  # earned-not-declared framing
+
+    def test_answer_path_is_measured_not_theater(self):
+        """Lived 14:24: walk-through classified capabilities and recited the
+        architecture inventory. This kind must describe the turn path from the
+        OSV/architecture map — regex router live, voice-intent shadow — and
+        must not invent understanding/feeling/percent-confidence theater.
+        """
+        out = articulate_self_view(_model(), "answer_path")
+        low = out.lower()
+        assert "router" in low or "routing" in low
+        assert "shadow" in low
+        assert "llm" in low or "language model" in low
+        assert "understand" not in low
+        assert "86 percent" not in low and "86%" not in low
+        assert "i parse" not in low
+        assert "pattern recognition" not in low
+        assert contains_unqualified_claim(out) is False
+
+    def test_what_can_you_do_stays_capabilities_inventory(self):
+        assert classify_self_question("What can you do?") == "capabilities"
+        out = articulate_self_view(_model(), "capabilities").lower()
+        assert "active" in out and "shadow" in out
 
     def test_consciousness_is_balanced(self):
         out = articulate_self_view(_model(), "consciousness_query").lower()

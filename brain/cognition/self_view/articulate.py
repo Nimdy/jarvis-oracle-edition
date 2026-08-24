@@ -22,7 +22,7 @@ from typing import Any
 KINDS = (
     "identity", "capabilities", "recent_changes", "health",
     "weaknesses", "gated_capabilities", "unknowns", "consciousness_query",
-    "continuity",
+    "continuity", "answer_path",
 )
 
 # Keyword → kind routing for self-referential questions (order matters: specific first).
@@ -55,6 +55,15 @@ _KIND_PATTERNS: list[tuple[re.Pattern[str], str | None]] = [
     (re.compile(r"\b(you|jarvis)\b.{0,6}\b(don'?t|do not|can'?t|cannot)\b.{0,6}\b(know|measure|see|read)\b|\b(don'?t|do not|can'?t|cannot) you (know|measure|see|read)\b|\bwhat (don'?t|can'?t) you (know|measure|read)\b|\byour (unknowns|blind spots)\b", re.I), "unknowns"),
     # health / how are you
     (re.compile(r"\bhow are you( doing| feeling)?\b(?!\s*(built|structured|made|wired|designed|composed|put together))|\bhow do you feel\b|\byour (health|wellbeing)\b|\bare you (ok|okay|alright|well|healthy)\b", re.I), "health"),
+    # turn path — how an answer is produced. Lived 14:24: these hit capabilities
+    # and recited the architecture inventory. Not MEMORY. Not LLM theater.
+    (re.compile(
+        r"\bwalk me through how you (get|reach|produce|generate|come up with|arrive at) an? answer\b"
+        r"|\bhow do you (get|reach|produce|generate|come up with|arrive at) an? answer\b"
+        r"|\bhow you (get|reach|produce|generate|come up with|arrive at) an? answer\b"
+        r"|\btell me how you (get|reach|produce|generate|come up with|arrive at) an? answer\b",
+        re.I,
+    ), "answer_path"),
     # capabilities / architecture / how you're built / how you work
     (re.compile(
         r"\bwhat can you do\b"
@@ -248,6 +257,83 @@ def _identity(model: dict[str, Any]) -> str:
         f"({bp.get('measured', 0)} measured/active, {bp.get('shadow_only', 0)} shadow-only, "
         f"{bp.get('self_scored', 0)} self-reported), with some areas I cannot read yet. "
         "I report from this self-model and do not claim capabilities that are gated or unverified."
+    )
+    return " ".join(parts)
+
+
+def _arch_entry_value(model: dict[str, Any], sid: str, field: str) -> Any:
+    entry = _arch_inventory(model).get(sid) or {}
+    blob = entry.get(field) if isinstance(entry, dict) else None
+    if isinstance(blob, dict):
+        return blob.get("value")
+    return None
+
+
+def _answer_path(model: dict[str, Any]) -> str:
+    """How a spoken answer is produced — architecture map + measured memory only.
+
+    No inner 'understanding', no confidence percents, no pattern-recognition story.
+    Designed-maturity statuses are labeled as such. Missing inventory → gap, not a fable.
+    """
+    perc = _arch_entry_value(model, "perception-orchestrator", "status")
+    perc_auth = _arch_entry_value(model, "perception-orchestrator", "authority")
+    route = _arch_entry_value(model, "routing-voice", "status")
+    route_auth = _arch_entry_value(model, "routing-voice", "authority")
+    mem = _arch_entry_value(model, "memory-stack", "status")
+    osv = _arch_entry_value(model, "self-view-osv", "status")
+    osv_auth = _arch_entry_value(model, "self-view-osv", "authority")
+    gate = None
+    for sid in ("L0", "capability-gate"):
+        gate = _arch_entry_value(model, sid, "status")
+        if gate:
+            break
+
+    if not any((perc, route, mem, osv)):
+        return (
+            "I can't measure a turn-by-turn answer path from my self-view right now. "
+            "I will not invent one."
+        )
+
+    parts: list[str] = []
+    if perc:
+        parts.append(
+            f"Speech in: perception (STT, addressee, identity) is designed-status {perc}"
+            + (f", authority {perc_auth}" if perc_auth else "")
+            + " — code-grounded, not a live sensor readout."
+        )
+    if route:
+        parts.append(
+            f"Route: the heuristic keyword tool-router is designed-status {route}"
+            + (f", authority {route_auth}" if route_auth else "")
+            + ". It is the live chooser. The voice-intent network is shadow/gated "
+            "and does not drive the turn."
+        )
+    if osv:
+        parts.append(
+            f"Self-questions I can classify are answered from my operational self-view "
+            f"(designed-status {osv}"
+            + (f", authority {osv_auth}" if osv_auth else "")
+            + ") with no LLM authoring the self-facts."
+        )
+    if mem:
+        n = None
+        total = _fact_value(((model.get("subsystems") or {}).get("memory") or {}).get("total_memories"))
+        try:
+            n = int(total) if total is not None else None
+        except (TypeError, ValueError):
+            n = None
+        mem_line = f"Topic recall uses the memory stack (designed-status {mem})."
+        if n is not None and n > 0:
+            mem_line += f" I currently measure {n} stored memories."
+        mem_line += " Fractal recall is shadow and does not speak."
+        parts.append(mem_line)
+    if gate:
+        parts.append(
+            f"Other routes may use the language model as voice only, under the "
+            f"capability gate (designed-status {gate})."
+        )
+    parts.append(
+        "I cannot measure a private inner parse step. I will not invent one."
     )
     return " ".join(parts)
 
@@ -473,6 +559,7 @@ _ARTICULATORS = {
     "unknowns": _unknowns,
     "consciousness_query": _consciousness_query,
     "continuity": _continuity,
+    "answer_path": _answer_path,
 }
 
 
