@@ -508,7 +508,7 @@ _KEYWORD_PATTERNS: list[tuple[list[str], ToolType]] = [
       "do you recognize me", "remember my voice", "learn my voice",
       "remember my face", "learn my face", "enroll me", "register me",
       "save my voice", "record my voice", "record my face",
-      "hear my voice", "look at my face",
+      "hear my voice", "look at my face", "see my face", "look at me",
       "who is speaking", "who's speaking",
       "do you know me", "recognize me",
       "who do you think i am", "who do you think this is",
@@ -857,7 +857,8 @@ _IDENTITY_ENROLLMENT_SIGNALS: frozenset[str] = frozenset({
     "my name is", "is my name", "record my voice", "record my face",
     "learn my voice", "learn my face", "save my voice", "save my face",
     "remember my voice", "remember my face", "hear my voice",
-    "look at my face", "enroll me", "register me",
+    "look at my face", "see my face", "look at me",
+    "enroll me", "register me",
 })
 
 
@@ -866,6 +867,10 @@ def _disambiguate_vision_vs_identity(lower: str, tier1_tool: ToolType) -> ToolTy
     signals are also present. 'Look at my face and record it' is identity work."""
     if tier1_tool != ToolType.VISION:
         return tier1_tool
+    if any(z in lower for z in (
+        "look at me closer", "zoom to me", "zoom in", "get closer", "zoom out",
+    )):
+        return ToolType.CAMERA_CONTROL
     if any(sig in lower for sig in _IDENTITY_ENROLLMENT_SIGNALS):
         return ToolType.IDENTITY
     return ToolType.VISION

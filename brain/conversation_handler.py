@@ -4826,6 +4826,21 @@ async def handle_transcription(
                     except Exception:
                         logger.debug("Evidence accumulator update failed", exc_info=True)
 
+                    parts = []
+                    if voice_ok:
+                        parts.append("voice")
+                    if face_ok:
+                        parts.append("face")
+                    enrolled_str = " and ".join(parts) if parts else "nothing"
+                    _crop_n = 0
+                    try:
+                        _po = getattr(engine, "_perception_orchestrator", None)
+                        _fid = getattr(_po, "face_id", None) if _po else None
+                        if _fid and face_ok:
+                            _crop_n = len(_fid.get_recent_crops(max_crops=3) or [])
+                    except Exception:
+                        _crop_n = 0
+
                     try:
                         import datetime as _dt
                         _now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -4838,74 +4853,46 @@ async def handle_transcription(
                         engine.remember(CreateMemoryData(
                             type="observation",
                             payload=(
-                                f"First met {enroll_name} on {_now}. "
-                                f"Enrolled their {_mod_str} profile during a live conversation. "
-                                f"This was the first time I heard {enroll_name}'s voice "
-                                f"and learned their name."
+                                f"Updated {enroll_name}'s {_mod_str} biometric record on {_now}."
                             ),
                             weight=0.80,
-                            tags=["identity_enrollment", "first_contact",
+                            tags=["identity_enrollment", "biometric_refresh",
                                   f"speaker:{enroll_name.lower()}",
-                                  "milestone", "voice_recognition", "memorable_moment"],
+                                  "milestone", "voice_recognition"],
                             provenance="observed",
                             identity_owner=enroll_name.lower(),
-                            identity_owner_type="person",
+                            identity_owner_type="primary_user",
                             identity_subject=enroll_name.lower(),
-                            identity_subject_type="person",
+                            identity_subject_type="primary_user",
                         ))
                     except Exception:
                         logger.debug("Enrollment memory creation failed", exc_info=True)
 
-                    parts = []
-                    if voice_ok:
-                        parts.append("voice")
-                    if face_ok:
-                        parts.append("face")
-                    enrolled_str = " and ".join(parts) if parts else "nothing"
-
-                    enroll_ctx = (
-                        f"[ENROLLMENT ALREADY COMPLETE for '{enroll_name}']\n"
-                        f"Voice: {'SAVED SUCCESSFULLY' if voice_ok else 'not available'}\n"
-                        f"Face: {'SAVED SUCCESSFULLY' if face_ok else 'not available'}\n"
-                        f"Result: {enrolled_str} enrolled and stored.\n"
-                        "CRITICAL INSTRUCTION: The enrollment is ALREADY FINISHED. Use PAST TENSE ONLY.\n"
-                        f"Good: 'Done, {enroll_name} — I've saved your {enrolled_str}.' or "
-                        f"'Got it, {enroll_name}, you're registered.'\n"
-                        "BAD (do NOT say): 'Let me record' / 'I will store' / 'I can save' — "
-                        "the action is COMPLETE. Do NOT describe future actions.\n"
-                        "Keep your response to 1-2 short sentences confirming what was saved."
-                    )
-
-                    try:
-                        full_reply = ""
-                        chunks_sent = 0
-                        async for sentence, is_final in response_gen.respond_stream(
-                            text,
-                            perception_context=enroll_ctx,
-                            cancel_check=_cancelled,
-                            speaker_name=enroll_name, user_emotion=emotion,
-                            conversation_id=conversation_id,
-                            style_instruction=_style_instruction,
-                        ):
-                            if _cancelled():
-                                break
-                            if is_final:
-                                full_reply = sentence
-                                if chunks_sent == 0 and sentence:
-                                    await _send_sentence(sentence, tone)
-                                await _flush_tts()
-                                _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
-                                continue
-                            await _send_sentence(sentence, tone)
-                            chunks_sent += 1
-                        reply = full_reply
-                    except Exception:
-                        if parts:
-                            reply = f"Got it, {enroll_name}! I've saved your {enrolled_str}. I'll recognize you next time."
+                    # Native finish: store then tell. Do not LLM-narrate a future
+                    # "let me take a snapshot" after the crops are already saved.
+                    if parts:
+                        if face_ok:
+                            reply = (
+                                f"Done, {enroll_name}. I took this look and stored it "
+                                f"in your face record"
+                                + (f" from {_crop_n} crop(s)" if _crop_n else "")
+                                + (f", and refreshed your voice." if voice_ok else ".")
+                                + " I'll use it to recognize you."
+                            )
                         else:
-                            reply = f"I heard you, {enroll_name}, but I wasn't able to save your biometrics right now. Try again."
-                        await _broadcast_chunk_sync(reply, tone)
-                        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                            reply = (
+                                f"Got it, {enroll_name}. I saved your {enrolled_str}. "
+                                f"I didn't get a usable face crop — stay in the camera "
+                                f"and ask me to look at your face again."
+                            )
+                    else:
+                        reply = (
+                            f"I looked, {enroll_name}, but I wasn't able to save "
+                            f"voice or face right now. Try again in the camera."
+                        )
+                    await _broadcast_chunk_sync(reply, tone)
+                    _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                    _persist_spoken_turn(text, reply)
         print(f"  [Identity] {routing.tool.value} handled")
     elif routing.tool == ToolType.SELF_IMPROVE:
         engine.set_phase("PROCESSING")

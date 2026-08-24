@@ -80,6 +80,12 @@ def test_recognition_probes_route_to_identity():
     assert router.route("do you recognize me?").tool == ToolType.IDENTITY
     # must NOT over-capture scene/vision questions
     assert router.route("What do you see right now?").tool == ToolType.VISION
+    # Lived 17:58: "Look at me" / "see my face" captioned the room and never
+    # stored biometrics. Self-face look is IDENTITY enroll/refresh.
+    assert router.route("Look at me.").tool == ToolType.IDENTITY
+    assert router.route("Hey Jarvis, take a fresh look with the camera and see my face.").tool == ToolType.IDENTITY
+    assert router.route("Look around and describe the room").tool == ToolType.VISION
+    assert router.route("look at me closer").tool == ToolType.CAMERA_CONTROL
 
 
 def test_memory_routing():

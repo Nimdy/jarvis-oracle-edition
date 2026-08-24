@@ -161,6 +161,7 @@ letting guests through.
 | “Starting fresh” after restart | Kind `continuity` from measured store | LLM wipe narrative; do not clear `~/.jarvis` |
 | About Skyler dumps OSV | About-X MEMORY override | INTROSPECTION because the query contains “you” |
 | Guest / other person asked about Skyler and she “doesn’t know” | L3 personal security (`guest_blocked_personal`) | Weaken the boundary so recall “works for everyone” |
+| “Look at me / see my face” only describes the shirt | IDENTITY enroll/refresh for this-turn speaker | Lower face 0.55; new biometric stack |
 | David asked about Skyler and she “doesn’t know” | Stamp bug: querier typed guest. Fix resolver. Store still has the dog. | Delete memories or skip L3 |
 | About me is empty / is the dog | Cue rewrite me → this-turn speaker | Hardcode David |
 | Too long / too technical | `response_style`, length hint, ToM, TBS-0, revoice | `briefing_register` |
