@@ -167,3 +167,4 @@ stay in the store (never discard) and must not be recalled as fact.
 | TBS shadow | `docs/THINK_BEFORE_SPEAK.md` |
 | First hour | `docs/FIRST_HOUR_AS_A_RESEARCHER.md` |
 | dashboardV2 wiring / maturity ladder | `docs/V2_SURFACE_TRUTH.md` |
+| Ground-truth audit 2026-08-24 | `docs/GROUND_TRUTH_AUDIT-2026-08-24.md` |
