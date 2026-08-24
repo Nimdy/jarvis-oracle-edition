@@ -2,6 +2,7 @@ import sys
 from types import SimpleNamespace
 
 from tools.memory_tool import (
+    _extract_about_subjects,
     _format_payload_preview,
     _is_system_self_memory,
     _keyword_search,
@@ -135,7 +136,7 @@ def test_search_memory_leads_with_topical_match_and_labels_similarity(monkeypatc
     )
     monkeypatch.setitem(sys.modules, "memory.search", fake_module)
 
-    out = search_memory("what do you remember about Skylar", speaker="David")
+    out = search_memory("what do you remember about Skyler", speaker="David")
     lines = [ln for ln in out.splitlines() if "relevance=" in ln]
     assert lines, out
     # first rendered memory is the topical one, labeled with its similarity
@@ -154,7 +155,7 @@ def test_keyword_fallback_ranks_below_semantic(monkeypatch) -> None:
     # keyword path scores by memory WEIGHT (>1.0 for core) — the old bug source
     core_mem = SimpleNamespace(
         id="mem_core", type="core",
-        payload={"response": "First contact about Skylar: gestation complete."},
+        payload={"response": "First contact about Skyler: gestation complete."},
         tags=("core",), weight=1.50,
     )
     fake_module = SimpleNamespace(
@@ -163,7 +164,7 @@ def test_keyword_fallback_ranks_below_semantic(monkeypatch) -> None:
     )
     monkeypatch.setitem(sys.modules, "memory.search", fake_module)
 
-    out = search_memory("what do you remember about Skylar", speaker="David")
+    out = search_memory("what do you remember about Skyler", speaker="David")
     lines = [ln for ln in out.splitlines() if "relevance=" in ln]
     assert "Skyler is your dog" in lines[0]  # semantic leads
     assert "First contact" in lines[1]       # keyword fill follows
@@ -397,3 +398,83 @@ def test_aboutness_does_not_filter_when_no_referenced_subject(monkeypatch) -> No
     results = _semantic_search("thanks", limit=5, speaker="David", referenced_entities=None)
     assert len(results) == 1
     assert "You're welcome" in results[0][1]
+
+
+def test_extract_about_subject_from_query_without_known_names() -> None:
+    """Lived miss 12:50: Skyler is a remembered dog, not a soul relationship.
+    About-X must come from the query, not get_known_names().
+    """
+    assert "skyler" in {s.lower() for s in _extract_about_subjects(
+        "What do you remember about Skyler?"
+    )}
+    assert _extract_about_subjects("what do you remember about that") == set()
+    assert _extract_about_subjects("what do you remember about me") == set()
+    assert _extract_about_subjects("what do you remember about it") == set()
+
+
+def test_search_memory_about_skyler_does_not_use_identity_names(monkeypatch) -> None:
+    """Public MEMORY path: empty known names, still drop courtesy/curiosity.
+    Identity-boundary refs must not gain Skyler.
+    """
+    courtesy = SimpleNamespace(
+        type="conversation",
+        payload={
+            "response": (
+                "You're welcome, David. I'm here to help whenever you're ready. "
+                "If you ever need a snapshot, a note, or just someone to chat with "
+                "— about Skyler, or anything else."
+            )
+        },
+        weight=0.605,
+        identity_subject="david",
+        identity_subject_type="person",
+        identity_owner_type="person",
+        tags=("conversation", "assistance"),
+    )
+    fact = SimpleNamespace(
+        type="conversation",
+        payload={
+            "response": "Got it, David — Skyler is your border collie. I've updated the record."
+        },
+        weight=0.456,
+        identity_subject="david",
+        identity_subject_type="person",
+        identity_owner_type="person",
+        tags=("conversation",),
+    )
+    curiosity = SimpleNamespace(
+        type="conversation",
+        payload={
+            "response": (
+                "Curiosity Q (identity): I heard someone speaking that I don't "
+                "recognize — it wasn't you, David. Who was that?"
+            )
+        },
+        weight=0.675,
+        identity_subject="david",
+        identity_subject_type="person",
+        identity_owner_type="person",
+        tags=("curiosity_answer",),
+    )
+    captured: dict = {}
+
+    def fake_scored(*_a, **k):
+        captured.update(k)
+        return [(0.51, courtesy), (0.48, fact), (0.44, curiosity)]
+
+    fake_module = SimpleNamespace(
+        semantic_search_scored=fake_scored,
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    monkeypatch.setattr(
+        "tools.memory_tool._extract_referenced_entities",
+        lambda _q: set(),
+    )
+
+    out = search_memory("What do you remember about Skyler?", speaker="David")
+    assert "border collie" in out
+    assert "You're welcome" not in out
+    assert "Curiosity Q" not in out
+    boundary_refs = captured.get("referenced_entities") or set()
+    assert "skyler" not in {str(x).lower() for x in boundary_refs}

@@ -79,6 +79,35 @@ def _extract_referenced_entities(query: str) -> set[str]:
     return refs
 
 
+# Topical "about X" for MEMORY aboutness only — not identity known-names,
+# not Layer 3 boundary. Lived 2026-08-24 12:50: Skyler is a remembered dog,
+# so get_known_names() was {david} and the first-sentence cut never ran.
+_ABOUT_SUBJECT_RE = re.compile(r"\babout\s+([A-Za-z][A-Za-z'-]*)\b", re.I)
+_ABOUT_STOP = _STOP_WORDS | frozenset({
+    "something", "anything", "everything", "stuff", "things",
+    "myself", "yourself", "himself", "herself", "itself",
+})
+
+
+def _extract_about_subjects(query: str) -> set[str]:
+    """Subject tokens after 'about' in a recall query.
+
+    Pronouns and empty fillers are dropped (KNOW-not-guess). Does not write
+    names into identity. Matching later is case-insensitive.
+    """
+    if not query:
+        return set()
+    out: set[str] = set()
+    for match in _ABOUT_SUBJECT_RE.finditer(query):
+        token = (match.group(1) or "").strip()
+        if len(token) < 2:
+            continue
+        if token.lower() in _ABOUT_STOP:
+            continue
+        out.add(token)
+    return out
+
+
 def get_last_memory_tool_summary() -> dict[str, object]:
     return dict(_last_memory_tool_summary)
 
@@ -284,6 +313,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
     query_lower = query.lower()
     identity_context = _build_identity_context(speaker)
     referenced_entities = _extract_referenced_entities(query)
+    aboutness_entities = _extract_about_subjects(query)
 
     if _EPISODE_PATTERNS.search(query):
         ep_results = _search_episodes(query_lower, limit)
@@ -306,6 +336,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
         speaker=speaker,
         identity_context=identity_context,
         referenced_entities=referenced_entities,
+        aboutness_entities=aboutness_entities,
     )
 
     if len(results) < limit:
@@ -315,6 +346,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
             speaker=speaker,
             identity_context=identity_context,
             referenced_entities=referenced_entities,
+            aboutness_entities=aboutness_entities,
         )
         seen = {preview for _, preview in results}
         # Keyword is a lexical FALLBACK, scored by memory weight (not query
@@ -368,6 +400,7 @@ def _semantic_search(
     speaker: str = "",
     identity_context: object | None = None,
     referenced_entities: set[str] | None = None,
+    aboutness_entities: set[str] | None = None,
 ) -> list[tuple[float, str]]:
     """Primary search path using embeddings.
 
@@ -395,7 +428,8 @@ def _semantic_search(
                 continue
             if _is_contradicted_wipe_memory(m, osv):
                 continue
-            if not _leads_with_referenced_subject(m, referenced_entities):
+            aboutness = aboutness_entities if aboutness_entities is not None else referenced_entities
+            if not _leads_with_referenced_subject(m, aboutness):
                 continue
             payload_str = _format_payload_preview(m)
             results.append((float(sim), f"[{m.type}] {payload_str[:200]}"))
@@ -410,6 +444,7 @@ def _keyword_search(
     speaker: str = "",
     identity_context: object | None = None,
     referenced_entities: set[str] | None = None,
+    aboutness_entities: set[str] | None = None,
 ) -> list[tuple[float, str]]:
     """Fallback keyword search with stop-word filtering."""
     results: list[tuple[float, str]] = []
@@ -448,7 +483,8 @@ def _keyword_search(
             continue
         if _is_contradicted_wipe_memory(m, osv):
             continue
-        if not _leads_with_referenced_subject(m, referenced_entities):
+        aboutness = aboutness_entities if aboutness_entities is not None else referenced_entities
+        if not _leads_with_referenced_subject(m, aboutness):
             continue
         payload_str = _format_payload_preview(m)
         tag_str = " ".join(m.tags)
