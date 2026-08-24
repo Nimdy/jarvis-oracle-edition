@@ -6,6 +6,7 @@ from tools.memory_tool import (
     _format_payload_preview,
     _is_system_self_memory,
     _keyword_search,
+    _search_cue_for_speaker,
     _semantic_search,
     search_memory,
 )
@@ -591,3 +592,39 @@ def test_search_memory_about_me_does_not_declare_curiosity_asks(monkeypatch) -> 
     assert "primary user" in out
     assert "Curiosity Q" not in out
     assert "don't recognize" not in out
+
+
+def test_about_me_search_cue_uses_live_speaker_not_hardcoded_companion() -> None:
+    """Lived 13:51 vs 13:52: 'about me' embedded as pronoun; 'about David'
+    found the name. Cue follows the current speaker (voice/face identity),
+    not a hardcoded primary companion — family guests must still work later.
+    Unknown speaker is KNOW-not-guess: do not invent a name.
+    """
+    q = "What do you remember about me?"
+    assert "David" in _search_cue_for_speaker(q, "David")
+    assert "me" not in _search_cue_for_speaker(q, "David").lower().split()
+    assert "Sarah" in _search_cue_for_speaker(q, "Sarah")
+    assert _search_cue_for_speaker(q, "unknown") == q
+    assert _search_cue_for_speaker(q, "") == q
+    skyler = "What do you remember about Skyler?"
+    assert _search_cue_for_speaker(skyler, "David") == skyler
+
+
+def test_search_memory_about_me_embeds_speaker_name(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_scored(query, *a, **k):
+        captured["query"] = query
+        captured.update(k)
+        return []
+
+    monkeypatch.setitem(
+        sys.modules,
+        "memory.search",
+        SimpleNamespace(semantic_search_scored=fake_scored, keyword_search=lambda *a, **k: []),
+    )
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+    search_memory("What do you remember about me?", speaker="David")
+    assert "David" in captured.get("query", "")
+    refs = captured.get("referenced_entities") or set()
+    assert "skyler" not in {str(x).lower() for x in refs}

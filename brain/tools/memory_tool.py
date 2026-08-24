@@ -121,6 +121,28 @@ def _extract_about_subjects(query: str, speaker: str = "") -> set[str]:
     return out
 
 
+_ABOUT_ME_CUE_RE = re.compile(r"\babout\s+(me|myself)\b", re.I)
+
+
+def _search_cue_for_speaker(query: str, speaker: str) -> str:
+    """Embedding/keyword cue for 'about me' uses the live speaker name.
+
+    Lived 13:51 vs 13:52: pronoun 'me' retrieved an empty pool; 'about David'
+    found the name fact. Speaker is whoever voice/face identity resolved
+    *this turn* — not a hardcoded companion — so a family guest saying
+    'about me' later still binds to that guest. Unknown speaker: original
+    query (KNOW-not-guess). Does not enroll names or change Layer 3 refs.
+    """
+    if not query:
+        return query
+    sp = (speaker or "").strip()
+    if sp.lower() in ("", "unknown"):
+        return query
+    if not _ABOUT_ME_CUE_RE.search(query):
+        return query
+    return _ABOUT_ME_CUE_RE.sub(f"about {sp}", query, count=1)
+
+
 def get_last_memory_tool_summary() -> dict[str, object]:
     return dict(_last_memory_tool_summary)
 
@@ -402,6 +424,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
     identity_context = _build_identity_context(speaker)
     referenced_entities = _extract_referenced_entities(query)
     aboutness_entities = _extract_about_subjects(query, speaker=speaker)
+    search_cue = _search_cue_for_speaker(query, speaker)
 
     if _EPISODE_PATTERNS.search(query):
         ep_results = _search_episodes(query_lower, limit)
@@ -419,7 +442,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
             return ep_results
 
     results = _semantic_search(
-        query,
+        search_cue,
         limit,
         speaker=speaker,
         identity_context=identity_context,
@@ -429,7 +452,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
 
     if len(results) < limit:
         kw_results = _keyword_search(
-            query_lower,
+            search_cue.lower(),
             limit - len(results),
             speaker=speaker,
             identity_context=identity_context,
