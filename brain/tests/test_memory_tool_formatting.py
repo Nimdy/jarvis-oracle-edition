@@ -413,6 +413,13 @@ def test_extract_about_subject_from_query_without_known_names() -> None:
     assert _extract_about_subjects("what do you remember about it") == set()
     assert _extract_about_subjects("What do you remember about me?", speaker="David") == {"David"}
     assert _extract_about_subjects("What do you remember about myself?", speaker="David") == {"David"}
+    # Lived 09:38 steal: "know about Skyler from before" is topical recall, not OSV.
+    assert "skyler" in {s.lower() for s in _extract_about_subjects(
+        "What do you know about Skyler from before?"
+    )}
+    assert _extract_about_subjects("Explain how your memory works.") == set()
+    assert _extract_about_subjects("Walk me through how you reach an answer.") == set()
+    assert _extract_about_subjects("What do you know about yourself?") == set()
 
 
 def test_search_memory_about_skyler_does_not_use_identity_names(monkeypatch) -> None:

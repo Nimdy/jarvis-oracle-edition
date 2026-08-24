@@ -28,6 +28,20 @@ def test_none_route_has_personal_activity_memory_fallback() -> None:
     assert "NONE route: personal activity recall native fallback applied" in body
 
 
+def test_about_x_introspection_steal_is_overridden_to_memory() -> None:
+    """Lived 09:38: 'know about Skyler from before' hit Tier 3 self-ref
+    INTROSPECTION and dumped OSV stats. About-X subjects must route MEMORY
+    unless P1 already classified a self-view kind.
+    """
+    src = _source()
+    body = _function_body(src, "handle_transcription")
+    assert "_extract_about_subjects" in body
+    assert "topical about-X recall" in body
+    assert "ToolType.MEMORY" in body
+    search_fn = _function_body(src, "_should_use_memory_search")
+    assert "about_subjects" in search_fn
+
+
 def test_memory_route_uses_search_for_personal_activity_queries() -> None:
     src = _source()
     body = _function_body(src, "handle_transcription")

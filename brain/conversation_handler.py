@@ -1241,6 +1241,8 @@ def _should_use_memory_search(
     lower = (text or "").lower()
     if any(token in lower for token in ("search", "remember", "recall")):
         return True
+    if extracted_args and extracted_args.get("about_subjects"):
+        return True
     return _is_personal_activity_recall_query(text)
 
 
@@ -3060,6 +3062,37 @@ async def handle_transcription(
                         logger.info("Routing override: self-view introspection (kind=%s)", _sv_kind)
             except Exception:
                 logger.debug("self-view route probe failed", exc_info=True)
+
+            # Lived 09:38: "What do you know about Skyler from before?" hit
+            # Tier 3 self-ref INTROSPECTION ("you know") and dumped OSV stats.
+            # An about-X subject (pet, person, topic) is MEMORY recall, not a
+            # self-view kind. P1 kinds (continuity/identity/capabilities) already
+            # won above. "about yourself/your architecture" extracts empty
+            # (stopwords) so those stay introspection. Does not enroll names.
+            try:
+                _sv_already = bool(
+                    routing.extracted_args
+                    and routing.extracted_args.get("self_view_kind")
+                )
+                if (
+                    not routing.golden_context
+                    and not _sv_already
+                    and routing.tool in {ToolType.INTROSPECTION, ToolType.NONE}
+                ):
+                    from tools.memory_tool import _extract_about_subjects
+                    _about = _extract_about_subjects(text, speaker=speaker)
+                    if _about:
+                        routing = RoutingResult(
+                            tool=ToolType.MEMORY,
+                            confidence=0.93,
+                            extracted_args={"about_subjects": sorted(_about)},
+                        )
+                        logger.info(
+                            "Routing override: topical about-X recall (subjects=%s)",
+                            sorted(_about),
+                        )
+            except Exception:
+                logger.debug("about-X memory route probe failed", exc_info=True)
 
             # Matrix v2: topic-triggered Capability Domain recall. If the query is
             # clearly ABOUT a learned domain, answer from that domain's ISOLATED store
