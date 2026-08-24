@@ -52,7 +52,7 @@ _STOP_WORDS = frozenset({
 
 
 def _build_identity_context(speaker: str = "") -> object | None:
-    """Best-effort retrieval identity context for explicit memory queries."""
+    """This-turn querier for L3 personal security. None = no speaker, no lock."""
     if not speaker or speaker == "unknown":
         return None
     try:

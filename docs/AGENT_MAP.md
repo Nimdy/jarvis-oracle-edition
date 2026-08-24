@@ -117,11 +117,37 @@ flowchart LR
 → salience (NN gated, heuristic fallback) → store → vector index → `MEMORY_WRITE`.
 Banter/soft tastes downgrade to `casual_conversation`. Do not add a second store.
 
-**Recall** (`search_memory`): vector → identity boundary → ranker.
+**Recall** (`search_memory`): vector → **L3 personal security** (identity
+boundary) → ranker.
 About-me = **this-turn speaker**, not a hardcoded companion. About-X comes
 from the query, not soul `known_names`. First sentence must be about the
 subject. Curiosity asks are not autobiography. OSV-contradicted wipe claims
 stay in the store (never discard) and must not be recalled as fact.
+
+### Personal security (L3) — this is a lock, not a miss
+
+A guest must not hear David's dog, preferences, or family. The fail-closed
+line ("I don't have a specific memory recorded about that") for the *wrong
+person* is **correct**. Empty recall for the *right* person is a stamp bug
+in `identity/resolver.py`, not a reason to weaken `_policy_guest`.
+
+```mermaid
+flowchart TD
+  q[This-turn speaker]
+  stamp[resolver.resolve_for_memory]
+  vec[vector candidates]
+  l3{L3 personal security}
+  speak[Native MEMORY speaks hits]
+  closed["Fail-closed: I don't have that recorded"]
+
+  q --> stamp --> vec --> l3
+  l3 -->|same person primary_user / known_human| speak
+  l3 -->|guest or other person| closed
+```
+
+Lived 2026-08-24 17:40: David was mis-stamped **guest**, so the lock hid
+Skyler from *him*. Feature working, querier wrong. Do not "fix Skyler" by
+letting guests through.
 
 ---
 
@@ -134,6 +160,8 @@ stay in the store (never discard) and must not be recalled as fact.
 | Walk-through is a 98-list | Kind `answer_path`, not capabilities | Steal into capabilities |
 | “Starting fresh” after restart | Kind `continuity` from measured store | LLM wipe narrative; do not clear `~/.jarvis` |
 | About Skyler dumps OSV | About-X MEMORY override | INTROSPECTION because the query contains “you” |
+| Guest / other person asked about Skyler and she “doesn’t know” | L3 personal security (`guest_blocked_personal`) | Weaken the boundary so recall “works for everyone” |
+| David asked about Skyler and she “doesn’t know” | Stamp bug: querier typed guest. Fix resolver. Store still has the dog. | Delete memories or skip L3 |
 | About me is empty / is the dog | Cue rewrite me → this-turn speaker | Hardcode David |
 | Too long / too technical | `response_style`, length hint, ToM, TBS-0, revoice | `briefing_register` |
 | Wrong tool | Intent class + `nn_fleet_registry.json` | One-off verb regex |

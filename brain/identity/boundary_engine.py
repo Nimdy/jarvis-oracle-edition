@@ -1,7 +1,13 @@
-"""Retrieval boundary engine for Layer 3: Identity Boundary Engine.
+"""Retrieval boundary engine for Layer 3 — personal security.
 
 Enforces identity-based retrieval policies with three states:
 allow, block, and allow_if_referenced.
+
+This is not a ranker nicety. A guest asking about Skyler must not hear
+David's dog. Lived 2026-08-24 17:40 looked like "she doesn't know" when
+David was *mis-stamped as guest* — the block was correct personal security
+on the wrong querier. Do not weaken `_policy_guest` so recall "works"
+for everyone. Fix the stamp (resolver), never the lock.
 """
 
 from __future__ import annotations
@@ -18,6 +24,16 @@ from identity.types import (
 logger = logging.getLogger(__name__)
 
 _ALLOW_ALL_TYPES = frozenset({"self", "environment", "library", "unknown"})
+
+# Reasons that are personal-security blocks (not ranker misses). Logged as such.
+PERSONAL_SECURITY_BLOCK_REASONS = frozenset({
+    "guest_blocked_personal",
+    "cross_identity_blocked",
+    "self_blocked_user_pref",
+    "self_blocked_external",
+    "blocked_external_agent",
+    "cross_subject_not_referenced",
+})
 
 
 @dataclass(frozen=True)
@@ -46,7 +62,7 @@ class IdentityBoundaryEngine:
         candidate_memory: Any,
         referenced_entities: set[str] | None = None,
     ) -> BoundaryDecision:
-        """Check whether a candidate memory is retrievable for the given identity context.
+        """Personal security: is this memory visible to this-turn identity?
 
         Returns a BoundaryDecision with allow/block/allow_if_referenced.
         """
@@ -74,6 +90,7 @@ class IdentityBoundaryEngine:
     def _policy_guest(
         self, sig: RetrievalSignature, needs_res: bool,
     ) -> BoundaryDecision:
+        """Personal security: guests may see library/scene/self, never a person's store."""
         if sig.owner[0] in _ALLOW_ALL_TYPES:
             return BoundaryDecision(allow=True, reason="guest_universal", confidence=1.0)
         return BoundaryDecision(

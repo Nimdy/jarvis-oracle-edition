@@ -20,7 +20,7 @@
     },
     {
       "id": "L3",
-      "name": "Identity Boundary Engine (cross-identity retrieval policy matrix)",
+      "name": "Identity Boundary Engine (personal security retrieval lock)",
       "home": "brain/identity/boundary_engine.py:32",
       "status": "shipped"
     },
@@ -186,16 +186,16 @@
     },
     {
       "id": "L3",
-      "name": "Identity Boundary Engine (cross-identity retrieval policy)",
+      "name": "Identity Boundary Engine (personal security — who may recall whose memories)",
       "area": "integrity-stack",
-      "purpose": "Cross-identity memory-leak prevention: governs which memories are visible to whom during retrieval (guest can't pull David's memories; one person's memories don't leak into another's context).",
+      "purpose": "Personal security: governs which memories are visible to this-turn identity. A guest cannot pull David's dog, family, or preferences. One person's store does not leak into another's spoken recall.",
       "status": "shipped",
       "authority": "live",
       "does": "validate_retrieval -> 3-state BoundaryDecision (allow/block/allow_if_referenced) via per-querier policy matrix (guest/self/human). _ALLOW_ALL_TYPES short-circuit to universal allow. Runs BEFORE top-k so cross-subject memories don't consume ranking slots. is_preference_injectable gates prompt injection.",
       "gate": "none \u2014 always-enforced. Fail-OPEN on exception (a boundary crash degrades to allow-with-audit, not block-all-recall).",
       "expected_idle_state": "After reset: audit ring empty, _total_quarantined=0. Single-household one-user instance shows ~zero cross-identity blocks \u2014 HEALTHY single-user state, not unexercised/broken.",
       "wired_to_experience": "live \u2014 gates which memories reach conversational context/prompt (search.py:158-180, pre-top-k).",
-      "common_misread": "Flagging zero blocks as 'boundary not working' \u2014 single-household = almost everything own-scope/universal. Fail-OPEN is deliberate.",
+      "common_misread": "Flagging zero blocks as 'boundary not working' (single-household own-scope is healthy). Lived 2026-08-24 17:40: David stamped guest \u2192 empty Skyler recall \u2014 that is a STAMP bug in resolver.py, not a broken lock. Do not weaken _policy_guest so 'she knows Skyler for everyone'. Fail-OPEN on exception is deliberate.",
       "home_files": [
         "brain/identity/boundary_engine.py:32",
         "brain/identity/boundary_engine.py:43",

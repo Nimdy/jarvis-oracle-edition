@@ -468,6 +468,33 @@ def test_boundary_guest_does_not_see_david():
     assert not decision.allow
 
 
+def test_personal_security_guest_cannot_recall_skyler():
+    """Lived 17:40: empty Skyler for a *guest* is personal security, not a miss.
+
+    David's border-collie rows stay in the store. The lock hides them from
+    anyone who is not this-turn primary_user David. Do not weaken this.
+    """
+    from identity.boundary_engine import (
+        IdentityBoundaryEngine,
+        PERSONAL_SECURITY_BLOCK_REASONS,
+    )
+    from identity.types import IdentityContext
+    engine = IdentityBoundaryEngine()
+    skyler = _make_memory(
+        identity_owner="david", identity_owner_type="primary_user",
+        identity_subject="david", identity_subject_type="primary_user",
+        payload={"response": "Ah, Skyler — your border collie."},
+    )
+    guest = IdentityContext(identity_id="visitor", identity_type="guest", confidence=0.6)
+    owner = IdentityContext(identity_id="david", identity_type="primary_user", confidence=0.9)
+    blocked = engine.validate_retrieval(guest, skyler)
+    allowed = engine.validate_retrieval(owner, skyler)
+    assert blocked.allow is False
+    assert blocked.reason == "guest_blocked_personal"
+    assert blocked.reason in PERSONAL_SECURITY_BLOCK_REASONS
+    assert allowed.allow is True
+
+
 def test_boundary_cross_subject_blocked_without_reference():
     """Invariant 10: Cross-subject memories not surfaced without explicit reference."""
     from identity.boundary_engine import IdentityBoundaryEngine
