@@ -149,6 +149,45 @@ def _load_osv_for_continuity() -> dict | None:
         return None
 
 
+_LEAD_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _payload_lead_text(memory_obj) -> str:
+    payload = getattr(memory_obj, "payload", None)
+    if isinstance(payload, dict):
+        for key in ("response", "summary", "text", "message", "user_message"):
+            val = str(payload.get(key) or "").strip()
+            if val:
+                return val
+    return str(payload or "").strip()
+
+
+def _first_sentence(text: str) -> str:
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    return _LEAD_SENTENCE_SPLIT.split(raw, maxsplit=1)[0].strip()
+
+
+def _leads_with_referenced_subject(memory_obj, referenced_entities: set[str] | None) -> bool:
+    """Whether a memory may be declared as recall for a topical 'about X' query.
+
+    Lived 2026-08-24 12:16: a courtesy closer that namedrops Skyler in the
+    tail was spoken as 'here's what I remember about Skyler'. Whole-payload
+    contains() would keep that line. Aboutness is the FIRST sentence.
+
+    Empty referenced_entities → True (KNOW-not-guess; do not invent a cut).
+    Does not touch fractal recall, HRR, ranker weights, or identity boundary.
+    """
+    if not referenced_entities:
+        return True
+    lead = _first_sentence(_payload_lead_text(memory_obj))
+    if not lead:
+        return False
+    low = lead.lower()
+    return any(str(ent).lower() in low for ent in referenced_entities if ent)
+
+
 def _is_contradicted_wipe_memory(memory_obj, model: dict | None = None) -> bool:
     """True when a conversation memory's stored reply asserts a wipe the OSV refutes.
 
@@ -356,6 +395,8 @@ def _semantic_search(
                 continue
             if _is_contradicted_wipe_memory(m, osv):
                 continue
+            if not _leads_with_referenced_subject(m, referenced_entities):
+                continue
             payload_str = _format_payload_preview(m)
             results.append((float(sim), f"[{m.type}] {payload_str[:200]}"))
         return results
@@ -406,6 +447,8 @@ def _keyword_search(
         if is_personal_activity and _is_system_self_memory(m):
             continue
         if _is_contradicted_wipe_memory(m, osv):
+            continue
+        if not _leads_with_referenced_subject(m, referenced_entities):
             continue
         payload_str = _format_payload_preview(m)
         tag_str = " ".join(m.tags)

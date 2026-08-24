@@ -303,3 +303,97 @@ def test_format_preview_does_not_replay_wipe_as_jarvis_recalled(monkeypatch) -> 
     assert "starting fresh" not in preview
     assert "August 10" not in preview
     assert "Jarvis recalled:" not in preview
+
+
+def test_topical_search_does_not_speak_courtesy_namedrop_or_curiosity(monkeypatch) -> None:
+    """Lived 2026-08-24 12:16: 'remember about Skyler' spoke a courtesy closer
+    that only namedrops Skyler in the tail, plus an identity curiosity Q.
+    Fractal/HRR did not speak; the native MEMORY renderer did. Aboutness is
+    the first sentence, not a whole-payload contains() — contains() would
+    keep the courtesy line.
+    """
+    courtesy = SimpleNamespace(
+        type="conversation",
+        payload={
+            "response": (
+                "You're welcome, David. I'm here to help whenever you're ready. "
+                "If you ever need a snapshot, a note, or just someone to chat with "
+                "— about Skyler, or anything else."
+            )
+        },
+        weight=0.605,
+        identity_subject="david",
+        identity_subject_type="person",
+        identity_owner_type="person",
+        tags=("conversation", "assistance", "speaker:david"),
+    )
+    fact = SimpleNamespace(
+        type="conversation",
+        payload={
+            "response": (
+                "Got it, David — Skyler is your border collie. "
+                "I've updated the record."
+            )
+        },
+        weight=0.456,
+        identity_subject="david",
+        identity_subject_type="person",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    curiosity = SimpleNamespace(
+        type="conversation",
+        payload={
+            "response": (
+                "Curiosity Q (identity): I heard someone speaking that I don't "
+                "recognize — it wasn't you, David. Who was that? I'd like to know them. "
+                "User answer: Walk me through how you reach an answer."
+            )
+        },
+        weight=0.675,
+        identity_subject="david",
+        identity_subject_type="person",
+        identity_owner_type="person",
+        tags=("curiosity_answer", "curiosity_identity"),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [
+            (0.51, courtesy),
+            (0.48, fact),
+            (0.44, curiosity),
+        ],
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+
+    results = _semantic_search(
+        "What do you remember about Skyler?",
+        limit=5,
+        speaker="David",
+        referenced_entities={"Skyler"},
+    )
+    previews = " ".join(p for _, p in results)
+    assert "border collie" in previews
+    assert "You're welcome" not in previews
+    assert "Curiosity Q" not in previews
+    assert len(results) == 1
+
+
+def test_aboutness_does_not_filter_when_no_referenced_subject(monkeypatch) -> None:
+    """KNOW-not-guess: no extracted subject → do not invent an aboutness cut."""
+    courtesy = SimpleNamespace(
+        type="conversation",
+        payload={"response": "You're welcome, David. I'm here to help."},
+        weight=0.5,
+        identity_subject="david",
+        identity_subject_type="person",
+        identity_owner_type="person",
+        tags=("conversation",),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [(0.4, courtesy)],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    results = _semantic_search("thanks", limit=5, speaker="David", referenced_entities=None)
+    assert len(results) == 1
+    assert "You're welcome" in results[0][1]
