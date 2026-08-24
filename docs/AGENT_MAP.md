@@ -127,6 +127,7 @@ stay in the store (never discard) and must not be recalled as fact.
 
 ## Symptom → existing path (do not invent)
 
+| Inner thoughts, never asks you | Spark would-have → `GroundingQueue` (operator-pull, no TTS). Advisory TTS only after 20 external answers | Flip `GroundingDrivePromotion`; nag TTS in shadow |
 | She sounds / does | Existing path | Do not |
 |---|---|---|
 | Spec sheet on “what can you do” | P1 capabilities floor; mouth is `revoice` / `native_voice` | New register, shorter fake articulator as “source of truth” |

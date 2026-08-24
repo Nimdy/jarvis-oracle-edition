@@ -2426,26 +2426,19 @@ class AutonomyOrchestrator:
             except Exception:
                 pass
 
-        # Operator-PULL grounding queue (SPARK §6 — the "single biggest efficiency
-        # win"). Amendment to the strict P2 "enqueue nothing": the async PULL queue
-        # is operator-gated review (answered at /v2/grounding at leisure), NOT a TTS
-        # interrupt and NOT a belief mutation — those stay gated to P4/P5. Real
-        # operator answers feed the promotion gates (external-only), so the ring
-        # earns its way to advisory honestly instead of starving in shadow. The
-        # queue self-caps + dedups by belief_id, so frequent selection can't flood.
-        if belief_id:
-            try:
-                from autonomy.grounding_queue import GroundingQueue, route_channel
-                GroundingQueue.get_instance().enqueue(
-                    belief_id=belief_id,
-                    question_text=(action.question or ""),
-                    facet=facet,
-                    channel=route_channel(facet),
-                    grounding_tension=float(getattr(action, "urgency", 0.0) or 0.0),
-                    asked_synchronously=False,  # operator-pull only — never auto-fired
-                )
-            except Exception:
-                logger.debug("shadow grounding-queue (pull) enqueue failed", exc_info=True)
+        # Operator-PULL grounding queue (SPARK §6). Not TTS. Not a gate flip.
+        # Lived 2026-08-24: `if belief_id` dropped would-haves with no target tag,
+        # so 36 shadow selections left pending=0 and the ring starved at 11/20.
+        # Queue the winning action whenever it has question text (queue hashes
+        # belief-less prompts). Also dump the current top tensions as a batch
+        # for leisure review — that is the async tray SPARK named.
+        self._enqueue_shadow_grounding_pull(
+            belief_id=belief_id,
+            question_text=(action.question or ""),
+            facet=facet,
+            tension=float(getattr(action, "urgency", 0.0) or 0.0),
+        )
+        self._enqueue_shadow_grounding_batch()
 
         # P5b SHADOW EXECUTE (default-OFF via ENABLE_P5B_SHADOW): for a factual belief-tension question,
         # also auto-fire academic_search IN SHADOW (governor + dedup honored inside shadow_research) →
@@ -2473,6 +2466,71 @@ class AutonomyOrchestrator:
             action.urgency, (action.question or "")[:120],
         )
         return True
+
+    def _enqueue_shadow_grounding_pull(
+        self,
+        *,
+        belief_id: str,
+        question_text: str,
+        facet: str,
+        tension: float,
+        graph_leverage: float = 0.0,
+        rendered_claim: str = "",
+        provenance: str = "",
+        base_confidence: float = 0.0,
+        effective_confidence: float = 0.0,
+    ) -> None:
+        """Operator-pull only. Never TTS. Never auto-answers."""
+        q = (question_text or "").strip()
+        if not q:
+            return
+        try:
+            from autonomy.grounding_queue import GroundingQueue, route_channel
+            GroundingQueue.get_instance().enqueue(
+                belief_id=(belief_id or "").strip(),
+                question_text=q,
+                facet=facet or "factual",
+                channel=route_channel(facet or "factual"),
+                rendered_claim=rendered_claim,
+                provenance=provenance,
+                grounding_tension=float(tension or 0.0),
+                graph_leverage=float(graph_leverage or 0.0),
+                base_confidence=float(base_confidence or 0.0),
+                effective_confidence=float(effective_confidence or 0.0),
+                asked_synchronously=False,
+            )
+        except Exception:
+            logger.debug("shadow grounding-queue (pull) enqueue failed", exc_info=True)
+
+    def _enqueue_shadow_grounding_batch(self) -> None:
+        """Put the current top tensions on the pull tray (SPARK §6 batch review)."""
+        report = getattr(self, "_last_grounding_report", None)
+        tops = getattr(report, "top_tensions", None) or []
+        if not tops:
+            return
+        try:
+            from autonomy.drives import DriveSignals, _grounding_question
+        except Exception:
+            return
+        for item in tops[:10]:
+            bid = str(getattr(item, "belief_id", "") or "")
+            facet = str(getattr(item, "facet", "") or "factual")
+            claim = str(getattr(item, "rendered_claim", "") or "")
+            q = _grounding_question(DriveSignals(
+                grounding_target_claim=claim,
+                grounding_facet=facet,
+            ))
+            self._enqueue_shadow_grounding_pull(
+                belief_id=bid,
+                question_text=q,
+                facet=facet,
+                tension=float(getattr(item, "grounding_tension", 0.0) or 0.0),
+                graph_leverage=0.0,
+                rendered_claim=claim,
+                provenance=str(getattr(item, "provenance", "") or ""),
+                base_confidence=float(getattr(item, "base_confidence", 0.0) or 0.0),
+                effective_confidence=float(getattr(item, "effective_confidence", 0.0) or 0.0),
+            )
 
     def refresh_starvation(self, pi_signal_available: bool | None = None) -> None:
         """Recompute the input-starvation readout from the live environment.

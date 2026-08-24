@@ -347,9 +347,15 @@ class GroundingQueue:
             bid = (belief_id or "").strip()
             if not bid:
                 # Allow belief-less prompts but key them on the question text so
-                # they still dedup and persist.
-                bid = "q:" + str(abs(hash(question_text)) % (10 ** 10))
+                # they still dedup and persist. sha1 — not Python hash() — so
+                # the key is stable across process restarts.
+                import hashlib
+                digest = hashlib.sha1((question_text or "").encode("utf-8")).hexdigest()[:16]
+                bid = "q:" + digest
             existing = self._pending.get(bid)
+            if existing is not None and existing.answered:
+                # SPARK: a settled belief stops re-surfacing. Do not nag.
+                return existing
             if existing is not None and not existing.answered:
                 # Refresh the live tension/leverage so ranking stays current; do
                 # not reset created_at (staleness must keep accruing).

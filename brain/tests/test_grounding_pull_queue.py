@@ -78,3 +78,82 @@ def test_being_corrected_still_counts_as_grounded():
     res = q.answer(qid, "No, that's wrong.")
     assert res["record"]["external_validation"] == "refuted"
     assert res["record"]["grounded"] is True  # moved from inferred -> externally-anchored
+
+
+def test_belief_less_would_have_still_lands_on_pull_queue():
+    """Lived 2026-08-24: shadow skipped enqueue when belief_id was empty."""
+    q = _q()
+    rec = q.enqueue(
+        belief_id="",
+        question_text="Which currently-held belief is inferred and unsupported?",
+        facet="factual",
+        channel="web",
+        asked_synchronously=False,
+    )
+    assert rec is not None
+    assert rec.belief_id.startswith("q:")
+    assert rec.asked_synchronously is False
+    assert q.pending_count() == 1
+    rec2 = q.enqueue(
+        belief_id="",
+        question_text="Which currently-held belief is inferred and unsupported?",
+        facet="factual",
+        channel="web",
+    )
+    assert rec2.belief_id == rec.belief_id
+    assert q.pending_count() == 1
+
+
+def test_answered_belief_does_not_resurface():
+    q = _q()
+    q.enqueue(belief_id="b1", question_text="Is X true?", facet="factual", channel="web")
+    qid = next(iter(q._pending.values())).question_id
+    q.answer(qid, "yes")
+    assert q.pending_count() == 0
+    again = q.enqueue(belief_id="b1", question_text="Is X true again?", facet="factual", channel="web")
+    assert again.answered is True
+    assert q.pending_count() == 0
+
+
+def test_shadow_handler_queues_without_belief_tag_and_never_tts(monkeypatch):
+    from types import SimpleNamespace
+    from autonomy.orchestrator import AutonomyOrchestrator
+    from autonomy.drives import DriveAction
+    from autonomy.grounding_queue import GroundingQueue
+
+    q = _q()
+    monkeypatch.setattr(GroundingQueue, "get_instance", classmethod(lambda cls: q))
+
+    orch = object.__new__(AutonomyOrchestrator)
+    orch._last_grounding_report = SimpleNamespace(top_tensions=[])
+    gate = SimpleNamespace(
+        is_active=lambda: False,
+        is_advisory=lambda: False,
+        note_shadow_selection=lambda **k: None,
+    )
+
+    class FakePromo:
+        @staticmethod
+        def get_instance():
+            return gate
+
+    monkeypatch.setattr("autonomy.drives.GroundingDrivePromotion", FakePromo)
+
+    action = DriveAction(
+        drive_type="grounding",
+        action_type="research",
+        urgency=0.55,
+        question=(
+            "Which currently-held belief is inferred and structurally "
+            "unsupported, and what external evidence would ground it?"
+        ),
+        tool_hint="web",
+        scope="external_ok",
+        tags=("drive:grounding", "action:research", "grounding:facet:factual"),
+    )
+    handled = AutonomyOrchestrator._handle_grounding_action_shadow(orch, action)
+    assert handled is True
+    assert q.pending_count() == 1
+    rec = next(iter(q._pending.values()))
+    assert rec.asked_synchronously is False
+    assert "unsupported" in rec.question_text.lower()
