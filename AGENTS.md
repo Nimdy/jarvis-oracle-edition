@@ -2,6 +2,39 @@
 
 This file provides guidance to AI coding agents when working with this repository.
 
+## STOP. Gated is not missing. Do not build a parallel.
+
+Agents keep damaging this platform the same way: something sounds wrong, too long, too technical, or "not routing," so they add a regex, a new `kind`, a new register, a new preference key, or a second renderer. That is almost always wrong.
+
+**Default assumption:** the subsystem already exists and is shadow, gated, `PRE-MATURE`, or `not_born`. A spec-sheet on TTS is often the **deterministic floor waiting for a gated mouth**, not a missing feature.
+
+### Mandatory search — fail the change if you skipped it
+
+Before adding a classifier, route override, `kind`, register, preference key, or parallel articulator:
+
+1. Search the repo for the behavior (`rg` verbosity, briefing, gist, revoice, response_style, native_voice, theory_of_mind, think_before_speak).
+2. Open `brain/nn_fleet_registry.json` and `docs/MATURITY_GATES_REFERENCE.md` for that name.
+3. If the file says shadow / teacher-only / `not_born` / default-OFF, **stop**. Tell the operator the gate. Do not bypass it with keywords.
+4. If user preferences already store it (`response_style`, `Relationship.preferences`, ToM `verbosity_pref`), **use that store**. Do not invent `briefing_register`.
+5. If P1 self-view is "too much like a dashboard," the mouth is already `brain/cognition/self_view/revoice.py` + `voice_seed.py` (`native_voice`, **not_born**). P1 **must** speak the grounded articulator until that student is born. Do not add exec/tech/ops mouths to `articulate.py`.
+
+### Lived miss 2026-08-24 — do not repeat
+
+Operator asked for exec-suite vs tech vs ops articulation, stored on user preferences. The stack was already wired:
+
+- OSV articulator = full grounded facts (source of truth)
+- `revoice.py` = lead with the gist, offer to go deeper, not a spec sheet
+- `voice_seed` teacher pairs; live speech stays deterministic **on purpose** (LLM must not author self-facts)
+- `response_style` concise/detailed, `_policy_response_length`, ToM `verbosity_pref`, TBS-0 `lean_concise`
+
+An agent added `classify_register` + three articulator mouths + `Relationship.preferences["briefing_register"]`. Reverted in `69d7819`. That hack would also have poisoned the native_voice teacher (gist trained as grounded).
+
+### What No-Verb-Hacking forbids here
+
+Not only CapabilityGate phrase lists. Also: a second copy of a gated path; a keyword overlay that pretends a shadow NN is live; shrinking the source of truth so the dump "sounds like JARVIS."
+
+Do not silently flip `OSV_P2_ACTIVE`, revoice-live, voice-intent, or native_voice. Promote a gate only when the operator asks.
+
 ## Project Overview
 
 **Jarvis** is a two-device AI consciousness system:
@@ -659,7 +692,7 @@ cd brain && ./setup.sh
 
 **Ambiguous Intent Policy (learning-first)**: Do not hard-map ambiguous user wording to a different strict intent class just to improve hit rate. Keep strict truth semantics in deterministic routes; treat these misses as shadow-learning opportunities that require correction evidence and promotion gates before behavior changes.
 
-**No Verb-Hacking Rule (routing AND CapabilityGate)**: Do not patch routing or CapabilityGate with one-off phrase/verb regexes just to make a single prompt pass. Routing changes must be intent-class and data-lane based (route semantics + provenance), not wording hacks. CapabilityGate changes must be evaluation-strategy or route-awareness based (changing the default policy for a route class), not expanding `_CONVERSATIONAL_SAFE_PHRASES` with more verbs. If phrasing misses, log it as training/friction evidence for the claim classifier hemisphere specialist to learn from. Fix coverage at the class level with regression tests that validate behavior families, not single "golden" utterances.
+**No Verb-Hacking Rule (routing, CapabilityGate, AND parallel mouths)**: Do not patch routing or CapabilityGate with one-off phrase/verb regexes just to make a single prompt pass. Do not add a second articulator/register/preference key because a gated mouth (revoice / native_voice / ToM verbosity) is still shadow. See the STOP section at the top of this file. Routing changes must be intent-class and data-lane based (route semantics + provenance), not wording hacks. CapabilityGate changes must be evaluation-strategy or route-awareness based (changing the default policy for a route class), not expanding `_CONVERSATIONAL_SAFE_PHRASES` with more verbs. If phrasing misses, log it as training/friction evidence for the claim classifier hemisphere specialist to learn from. Fix coverage at the class level with regression tests that validate behavior families, not single "golden" utterances.
 
 **NONE Route LLM Boundary**: General `ToolType.NONE` conversation may use LLM articulation for ordinary chat and stable general knowledge ("what is a dog?", "explain quantum computing") after prompt context and output gates. It must not claim retrieval, research, tool execution, background follow-up, job/task creation, or future work unless the turn has a real backing tool/job/intention. The LLM can phrase an answer; it cannot create JARVIS state, start work by implication, or tell the operator that JARVIS did work no subsystem actually performed.
 

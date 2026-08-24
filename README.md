@@ -343,7 +343,7 @@ Non-negotiable:
 - Strong epistemic integrity
 - Budget-aware consciousness
 - Governed self-modification
-- No verb-hacking
+- No verb-hacking (includes: do not build a parallel mouth/register for a gated path — see AGENTS.md STOP)
 - Honest maturity signaling
 
 ---

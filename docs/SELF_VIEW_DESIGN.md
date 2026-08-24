@@ -176,6 +176,12 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
   + provenance + gaps), not a symbol dump; explicit code/source questions still route to
   CODEBASE; dormant/gated render as such; gaps → "I don't know / can't measure yet"; the
   language guard holds; deterministic answer path needs no LLM; tests pin routing + content.
+- **Mouth (do not invent a second one).** Live P1 speech is the deterministic articulator.
+  Warm gist ("lead with the gist; offer to go deeper") is `cognition/self_view/revoice.py`,
+  teacher-only via `voice_seed.py` until `native_voice` is born (`not_born` in
+  `nn_fleet_registry.json`). Verbosity/detail already live in `response_style`,
+  `_policy_response_length`, and ToM `verbosity_pref`. Do not add a briefing register
+  or exec/tech/ops articulators. Lived miss 2026-08-24 reverted `69d7819`.
 
 ### P2 — Voice Grounding / Bounding  *(SHIPPED shadow-first — detect+log live; active gated behind `OSV_P2_ACTIVE`)*
 

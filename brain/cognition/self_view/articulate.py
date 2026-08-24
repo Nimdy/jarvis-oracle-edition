@@ -2,7 +2,14 @@
 
 Turns the OSV model dict (from ``build_self_view``) into a boring, honest, user-facing
 answer — WITHOUT an LLM. The LLM never authors a self-fact; this module only renders the
-deterministic model. Strict in claims, provenance-preserving:
+deterministic model. This IS the grounded source of truth, not the warm mouth.
+
+Do not add briefing registers or exec/tech/ops mouths here. The mouth is
+``revoice.py`` / ``voice_seed.py`` (native_voice, not_born). Verbosity already
+lives in response_style / policy_response_length / ToM. Lived miss 2026-08-24
+(``69d7819``). See AGENTS.md STOP section.
+
+Strict in claims, provenance-preserving:
 
   - summarize the OSV only; never infer beyond it
   - dormant/gated/shadow render as dormant/gated/shadow; gaps render as "I can't measure

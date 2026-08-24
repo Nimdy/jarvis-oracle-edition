@@ -6,6 +6,10 @@ always the fallback. The model only RE-VOICES it (tone/phrasing) — it never in
 a fact. Mirrors the proven vision-grounding firewall ("you are the mouth, not the eyes") for the
 self-view ("you are the voice, not the author").
 
+Live P1 still speaks the grounded articulator until native_voice is born.
+Do not add exec/tech/ops mouths in articulate.py to fake this (lived miss
+2026-08-24, reverted 69d7819). See AGENTS.md STOP section.
+
 The re-voiced text is REJECTED → fall back to the grounded text if it:
   * introduces any number absent from the grounded text (the main confabulation vector),
   * trips the unqualified-claim guard (consciousness / soul / sentience / alive / becoming),

@@ -3426,6 +3426,9 @@ async def handle_transcription(
         # OSV P1: deterministic self-introspection from the Operational Self-View.
         # No LLM authors the self-facts; we render the persisted self-model (kept fresh by
         # the dashboard cache timer). Sanitized by the capability gate as a final firewall.
+        # This path SPEAKS THE GROUNDED FLOOR ON PURPOSE. Warm gist is revoice/voice_seed
+        # (native_voice not_born). Do not add classify_register / exec-tech-ops / briefing_register
+        # here — that was lived miss 2026-08-24, reverted 69d7819. See AGENTS.md STOP section.
         from cognition.self_view import load_self_view
         from cognition.self_view.articulate import articulate_self_view
         from skills.capability_gate import capability_gate as _sv_gate

@@ -182,6 +182,7 @@ python -m brain.scripts.dashboard_truth_probe
 - **Don't promote autonomy manually.** The refusal is a feature.
 - **Don't run the synthetic exercise before Stage 2.** It contaminates the baseline.
 - **Don't treat a `PRE-MATURE` marker as a bug.** Check the maturity-gates page first.
+- **Don't build a parallel mouth or preference key** because P1 sounds like a spec sheet. That is `revoice.py` / `native_voice` still `not_born`. See AGENTS.md STOP section. Lived miss 2026-08-24 (`69d7819`).
 - **Don't edit prose pages to reword claims.** If a claim is wrong, the fix is almost certainly in `/api/meta/status-markers` or in the underlying subsystem — not in the HTML.
 - **Don't reach for the LLM.** Almost everything interesting happens in structured subsystems. If you find yourself routing through the LLM to "understand" a cache field, you are probably about to introduce a verb-hack.
 
