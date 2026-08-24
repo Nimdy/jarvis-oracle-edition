@@ -1,5 +1,7 @@
 # JARVIS Architecture
 
+> **Agents start here:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) (one spoken turn, authority, do-not-invent). This essay is the long architecture. Line numbers drift; the map is the contract.
+>
 > **Validated 2026-06-09** by a multi-agent investigation of the live code (18 subsystem deep-readers + adversarial verifiers). Each section was re-checked against the source; maturity is labeled honestly — **SHIPPED** (live), **SHADOW** (computes, zero authority by design), **GATED** (earned-not-yet), **DESIGNED** (not built). *Gate-blocked ≠ broken.* Supersedes the April data-flow reference.
 >
 > **Post-snapshot deltas (since 2026-06-09) — read alongside the sections below:**

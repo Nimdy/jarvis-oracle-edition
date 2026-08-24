@@ -2,6 +2,8 @@
 
 This file provides guidance to AI coding agents when working with this repository.
 
+**Mandatory first read:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) — what this is, one spoken turn, who has authority, what not to invent. The rest of this file is the field manual. If you skip the map and edit conversation / OSV / memory / routing / TTS / preferences, you will ship a parallel.
+
 ## STOP. Gated is not missing. Do not build a parallel.
 
 Agents keep damaging this platform the same way: something sounds wrong, too long, too technical, or "not routing," so they add a regex, a new `kind`, a new register, a new preference key, or a second renderer. That is almost always wrong.
@@ -35,41 +37,35 @@ Not only CapabilityGate phrase lists. Also: a second copy of a gated path; a key
 
 Do not silently flip `OSV_P2_ACTIVE`, revoice-live, voice-intent, or native_voice. Promote a gate only when the operator asks.
 
+Turn flow (match this before adding a route or mouth):
+
+```mermaid
+flowchart TD
+  stt[STT + speaker fusion]
+  router[tool_router]
+  p1{P1 self-view kind?}
+  about{about-X and not P1?}
+  osv[articulate_self_view speaks — LLM does not author]
+  mem[MEMORY search]
+  llm[LLM as voice under L0]
+  tts[TTS]
+  seed[revoice teacher AFTER speech]
+  stt --> router --> p1
+  p1 -->|yes| osv --> tts --> seed
+  p1 -->|no| about
+  about -->|yes| mem --> tts
+  about -->|no| llm --> tts
+```
+
+Full diagrams, memory write/recall, and the symptom table: [docs/AGENT_MAP.md](docs/AGENT_MAP.md).
+
 ## Project Overview
 
 **Jarvis** is a two-device AI consciousness system:
 - **Pi 5** (with Hailo-10H AI HAT+) = the **senses** — vision (Hailo AI HAT+), raw audio streaming, audio playback, cyberpunk particle display
 - **Desktop/Laptop** (with NVIDIA GPU) = the **brain** — self-evolving consciousness engine, neural policy layer, self-improvement loop, Ollama LLM, GPU STT (faster-whisper), wake word detection (openWakeWord), VAD (Silero), TTS (Kokoro), personality, memory
 
-The brain is **hardware-adaptive**: on startup it auto-detects GPU VRAM and CPU capabilities, then selects model sizes, compute types, device assignments, and VRAM management strategy. See `brain/hardware_profile.py` for the full tier system.
-
-**GPU VRAM Tiers** (7 tiers): minimal (<4GB), low (4-6GB), medium (6-8GB), high (8-12GB), premium (12-16.5GB), ultra (16.5-24.5GB), extreme (24.5GB+). Models can be kept always-loaded in VRAM on premium+ tiers, eliminating cold-start latency.
-
-**CPU Tiers** (4 tiers based on threads + RAM): weak (<4 threads), standard (4-7 threads), strong (8-15 threads, 8GB+), beast (16+ threads, 16GB+). On strong/beast CPUs, `_apply_cpu_overlay()` offloads ancillary ML models (emotion, speaker ID, embeddings, hemisphere) from GPU to CPU, freeing ~1-1.5 GB VRAM.
-
-**VRAM Budget (premium tier, ~16GB GPU, standard CPU — all ML on GPU)**:
-
-| Model | VRAM | Residency | Device |
-|---|---|---|---|
-| Ollama qwen3:8b (primary=fast) | ~5,000 MB | Always (warmup, 30m keep) | GPU (Ollama-managed) |
-| faster-whisper large-v3 (int8_float16) | ~2,000 MB | Always | GPU (CTranslate2) |
-| wav2vec2 emotion | ~500 MB | Always | GPU or CPU (tier-dependent) |
-| ECAPA-TDNN speaker ID | ~300 MB | Always | GPU or CPU (tier-dependent) |
-| Kokoro TTS (ONNX) | ~250 MB | Always | GPU or CPU (tier-dependent) |
-| all-MiniLM-L6-v2 embeddings | ~120 MB | Always | GPU or CPU (tier-dependent) |
-| MobileFaceNet face ID (ONNX) | ~20 MB | Always | GPU or CPU (follows speaker_id device) |
-| Hemisphere NNs (PyTorch, tiny) | ~1 MB | Always | GPU or CPU (tier-dependent) |
-| PyTorch/CUDA framework overhead | ~400 MB | Static | GPU |
-| **TOTAL RESIDENT** | **~8,600 MB** | | |
-| qwen3-vl:8b (vision) | ~5,000 MB | On-demand | GPU (Ollama-managed) |
-
-**CPU-only models (all tiers)**: Policy NN (<1 MB), Memory Cortex NNs (<0.1 MB), openWakeWord (~30 MB ONNX), Silero VAD (~10 MB), Coding LLM qwen2.5-coder:7b (~5 GB RAM, separate Ollama on port 11435 with `CUDA_VISIBLE_DEVICES=""`), CoderServer Qwen3-Coder-Next (25-48 GB RAM, on-demand llama-server, spawned and killed per generation, `CODER_GPU_LAYERS=0`).
-
-**Critical VRAM constraint**: At premium tier, primary and fast LLM are both qwen3:8b (~5 GB). You CANNOT simply "use a bigger model" — loading qwen3:14b (~8.5 GB) alongside STT (~2 GB), TTS (~250 MB), emotion (~500 MB), speaker ID (~300 MB), embeddings (~120 MB), and framework overhead (~400 MB) exceeds 12 GB and risks OOM during concurrent STT+LLM operations. The fast/standard model being the same is by design — the token cap (150 for simple, 1536 for complex) is the differentiation lever, not model size. Do not recommend model size changes without first computing the full VRAM budget from `hardware_profile.py`.
-
-**VRAM contention management**: `PerceptionOrchestrator` has `_ensure_vram_for_stt()` and `_release_vram_after_stt()`. On premium+, only non-essential Ollama models (vision) are unloaded before STT. Below premium, ALL Ollama models are unloaded before STT and reloaded after. The `OllamaClient` has `unload_non_essential()` and `unload_all()` for this.
-
-Communication is over WebSocket on the local network. The Pi is a sensor node; the brain PC is the source of truth for all consciousness state. All self-evolution, meta-cognition, and neural policy runs **only** on the brain.
+The Pi is a sensor node; the brain is the source of truth. All self-evolution, meta-cognition, and neural policy run **only** on the brain (WebSocket on the LAN). The LLM is voice, not the brain. Hardware-adaptive VRAM/CPU tiering: `brain/hardware_profile.py` — full budget tables are under **Hardware / VRAM** (before Quick Start). Do not recommend a bigger LLM without computing that budget.
 
 ## Scope and Capability Framing
 
@@ -593,6 +589,36 @@ brain/                           # Runs on desktop/laptop with NVIDIA GPU
     event_harness.py             # EventRecorder + EventReplayer (JSONL record/replay)
     soak_test.py                 # Automated 50+ interaction stability test
 ```
+
+## Hardware / VRAM
+
+The brain is **hardware-adaptive**: on startup it auto-detects GPU VRAM and CPU capabilities, then selects model sizes, compute types, device assignments, and VRAM management strategy. See `brain/hardware_profile.py` for the full tier system.
+
+**GPU VRAM Tiers** (7 tiers): minimal (<4GB), low (4-6GB), medium (6-8GB), high (8-12GB), premium (12-16.5GB), ultra (16.5-24.5GB), extreme (24.5GB+). Models can be kept always-loaded in VRAM on premium+ tiers, eliminating cold-start latency.
+
+**CPU Tiers** (4 tiers based on threads + RAM): weak (<4 threads), standard (4-7 threads), strong (8-15 threads, 8GB+), beast (16+ threads, 16GB+). On strong/beast CPUs, `_apply_cpu_overlay()` offloads ancillary ML models (emotion, speaker ID, embeddings, hemisphere) from GPU to CPU, freeing ~1-1.5 GB VRAM.
+
+**VRAM Budget (premium tier, ~16GB GPU, standard CPU — all ML on GPU)**:
+
+| Model | VRAM | Residency | Device |
+|---|---|---|---|
+| Ollama qwen3:8b (primary=fast) | ~5,000 MB | Always (warmup, 30m keep) | GPU (Ollama-managed) |
+| faster-whisper large-v3 (int8_float16) | ~2,000 MB | Always | GPU (CTranslate2) |
+| wav2vec2 emotion | ~500 MB | Always | GPU or CPU (tier-dependent) |
+| ECAPA-TDNN speaker ID | ~300 MB | Always | GPU or CPU (tier-dependent) |
+| Kokoro TTS (ONNX) | ~250 MB | Always | GPU or CPU (tier-dependent) |
+| all-MiniLM-L6-v2 embeddings | ~120 MB | Always | GPU or CPU (tier-dependent) |
+| MobileFaceNet face ID (ONNX) | ~20 MB | Always | GPU or CPU (follows speaker_id device) |
+| Hemisphere NNs (PyTorch, tiny) | ~1 MB | Always | GPU or CPU (tier-dependent) |
+| PyTorch/CUDA framework overhead | ~400 MB | Static | GPU |
+| **TOTAL RESIDENT** | **~8,600 MB** | | |
+| qwen3-vl:8b (vision) | ~5,000 MB | On-demand | GPU (Ollama-managed) |
+
+**CPU-only models (all tiers)**: Policy NN (<1 MB), Memory Cortex NNs (<0.1 MB), openWakeWord (~30 MB ONNX), Silero VAD (~10 MB), Coding LLM qwen2.5-coder:7b (~5 GB RAM, separate Ollama on port 11435 with `CUDA_VISIBLE_DEVICES=""`), CoderServer Qwen3-Coder-Next (25-48 GB RAM, on-demand llama-server, spawned and killed per generation, `CODER_GPU_LAYERS=0`).
+
+**Critical VRAM constraint**: At premium tier, primary and fast LLM are both qwen3:8b (~5 GB). You CANNOT simply "use a bigger model" — loading qwen3:14b (~8.5 GB) alongside STT (~2 GB), TTS (~250 MB), emotion (~500 MB), speaker ID (~300 MB), embeddings (~120 MB), and framework overhead (~400 MB) exceeds 12 GB and risks OOM during concurrent STT+LLM operations. The fast/standard model being the same is by design — the token cap (150 for simple, 1536 for complex) is the differentiation lever, not model size. Do not recommend model size changes without first computing the full VRAM budget from `hardware_profile.py`.
+
+**VRAM contention management**: `PerceptionOrchestrator` has `_ensure_vram_for_stt()` and `_release_vram_after_stt()`. On premium+, only non-essential Ollama models (vision) are unloaded before STT. Below premium, ALL Ollama models are unloaded before STT and reloaded after. The `OllamaClient` has `unload_non_essential()` and `unload_all()` for this.
 
 ## Quick Start
 

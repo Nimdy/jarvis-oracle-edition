@@ -13,6 +13,8 @@ It runs on hardware you already own, using a Raspberry Pi 5 and a desktop GPU. I
 **Not a cloud LLM wrapper.**  
 **Not a benchmark-chasing model.**
 
+**Agents:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) is mandatory before you edit conversation, OSV, memory, routing, TTS, or preferences. Do not skip it.
+
 This is a raw prototype workshop for building toward higher forms of artificial intelligence, designed from first principles with strong epistemic governance, governed recursive self-improvement, and honest maturity labeling.
 
 ---
@@ -432,7 +434,8 @@ JARVIS only works if we stay grounded.
 | [GitHub Issues](https://github.com/Nimdy/jarvis-oracle-edition/issues) + [Releases](https://github.com/Nimdy/jarvis-oracle-edition/releases) | Forward roadmap + shipped changelog (single source of truth) |
 | `docs/BUILD_HISTORY.md` | Local changelog mirror (read by the self-view) |
 | `docs/SyntheticSoul.md` | Design principles paper |
-| `AGENTS.md` | AI agent guidance (architecture, patterns, constraints) |
+| `docs/AGENT_MAP.md` | **Mandatory** agent turn-flow / authority map (read before conversation/OSV/memory/routing edits) |
+| `AGENTS.md` | AI agent field manual (architecture, patterns, constraints) |
 | `CONTRIBUTING.md` | Contribution guidelines |
 
 ---

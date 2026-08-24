@@ -8,7 +8,9 @@ We welcome contributions that preserve and strengthen that north star.
 
 ---
 
-## Before You Contribute: The Two Rules
+**Agents: read [docs/AGENT_MAP.md](docs/AGENT_MAP.md) before any conversation / OSV / memory / routing change.** That file is the turn-flow contract. This page is how to contribute.
+
+## Before You Contribute: The Three Rules
 
 Read these twice. Most rejected PRs violate one of these.
 

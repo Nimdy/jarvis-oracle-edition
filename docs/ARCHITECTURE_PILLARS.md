@@ -6,10 +6,10 @@ This file defines the non-negotiable architecture contracts for Jarvis and how t
 trace/validate each contract in runtime. Use this as the canonical "what must
 remain true" document for open-source docs, onboarding, reviews, and audits.
 
+For the agent turn-flow contract (mandatory before conversation/OSV/memory/routing edits), see [AGENT_MAP.md](AGENT_MAP.md).
 For implementation detail and full dataflow diagrams, see the **System Reference** (`/docs` on `:9200`, source: `brain/dashboard/static/docs.html`).
 For scientific specifications (NN architectures, RL math, scoring functions), see the **Scientific Reference** (`/science`).
-For engineering-grade wiring diagrams and runtime trace evidence, see `docs/ENGINEERING_ARCHITECTURE_TRACE.md`.
-For visual orientation, see `docs/SYSTEM_OVERVIEW.md`.
+For visual orientation, see `docs/SYSTEM_OVERVIEW.md`. The old `ENGINEERING_ARCHITECTURE_TRACE.md` pointer is stale — use AGENT_MAP + ARCHITECTURE.md.
 
 ---
 

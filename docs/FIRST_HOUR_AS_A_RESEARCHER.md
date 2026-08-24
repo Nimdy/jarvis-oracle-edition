@@ -190,6 +190,7 @@ python -m brain.scripts.dashboard_truth_probe
 
 ## 9. Where to go next
 
+- [AGENT_MAP.md](AGENT_MAP.md) — **mandatory** turn-flow / authority map. Read before editing conversation, OSV, memory, or routing.
 - [AGENTS.md](../AGENTS.md) — the field-manual for agents working in this codebase.
 - [docs/MASTER_ROADMAP.md](MASTER_ROADMAP.md) — what is SHIPPED, PARTIAL, PRE-MATURE, and DEFERRED, with pointers to the evidence.
 - [docs/ARCHITECTURE_PILLARS.md](ARCHITECTURE_PILLARS.md) — the ten non-negotiables.
