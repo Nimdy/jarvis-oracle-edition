@@ -95,7 +95,10 @@ Read that table twice. Every rejected "why is this green / why is this red?" iss
 curl -s http://brain-ip:9200/api/autonomy/level | jq
 ```
 
-On a fresh brain you should see `current_level=2`, `current_ok=false`, `prior_attested_ok=false`, `request_ok=false`, `activation_ok=false`. That is correct — promotion is gated by both live metrics and operator approval.
+Distinguish **wipe-reset** from **process restart**:
+
+- After `reset-brain.sh --confirm` (wipe): `current_ok=false`, `prior_attested_ok=false`, `request_ok=false`, `activation_ok=false`. `current_level` starts at the configured floor (typically 0/1), not at earned L2.
+- After a **process restart** of a long-lived brain (this operator's instance): `current_level` may restore from `autonomy_state.json` (often 2) while `current_ok` stays **false**, `activation_ok` stays **false**, and `request_ok` stays **false** until live eligibility recomputes. That is restart-honest. Do not treat restored level as live authority, and do not call it a fresh brain.
 
 **Invariant you should assert yourself:**
 

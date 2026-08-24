@@ -113,7 +113,7 @@ The system has been running continuously since the March 2026 brain reset. It ha
 | Local-first operation | Fully operational | Pi 5 senses + desktop GPU brain, zero cloud required |
 | Consciousness maturation | Integrative stage | Highest evolution stage reached post-gestation |
 | Oracle Benchmark | 96.0 Gold / Ascendant | 7 benchmark domains green — does NOT imply every internal maturity gate is green; several subsystems below are intentionally shadow/dormant |
-| Epistemic stack | 13 layers, all shipped | Capability Gate, truth calibration, belief graph, soul integrity, contradiction engine |
+| Epistemic stack | 15-entry (L0–L12 + L3A/L3B), all shipped | Capability Gate, truth calibration, belief graph, soul integrity, contradiction engine, intention truth |
 | World Model | **Shadow** (L1-gated) | The pooled ~99.8% is dominated by tautological *persistence* rules ("a stable thing stays stable"); the real *predictive* signal is **4 validations @ 0.25**. Promotion needs ≥50 preds @ ≥0.65 (`cognition/promotion.py`). `jarvis_eval` itself flags the pooled number as "context only — not the score." |
 | Neural Policy | **Shadow, frozen at v10** | Critic diagnostic (2026-06): (state,action)→reward Spearman **~0.06**, R²~0 on 838 live tuples — signal too weak to grow on. 342 versions trained on a synthetic distribution; **0/8 features promoted** to live control. See `docs/AUTONOMOUS_GROWTH_STRATEGY.md`. |
 | Hemisphere NNs | 12+ Tier-1 specialists | Speaker, face, emotion, voice, diarize, plan, diagnostic, code_quality, claim_classifier, dream_synthesis, skill_acquisition, and more |
@@ -323,7 +323,7 @@ Pi 5 (Senses)  <-> WebSocket :9100  <->  Desktop Brain (Consciousness)
 - Memory System: vector + graph + cortex NNs + fractal recall
 - Hemisphere NNs: self-designing, neuroevolution, distillation
 - Policy NN: shadow A/B evaluation
-- Epistemic Stack: 13 layers
+- Epistemic Stack: 15-entry (L0–L12 + L3A/L3B)
 - Autonomy Pipeline: 7 drives, research loop
 - Governed Self-Improvement: scanner, codegen, sandbox, approval
 - Capability Acquisition: 10-lane pipeline

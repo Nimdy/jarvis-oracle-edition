@@ -22,7 +22,7 @@ Three hard rules:
 
 ## The Epistemic Integrity Stack (the keystone — 15 layers, NOT 6/11/13)
 
-The no-confabulation floor is the spine of the whole system. It is **15 canonical layers** — `L0, L1, L2, L3, L3A, L3B, L4, L5, L6, L7, L8, L9, L10, L11, L12` — defined literally at **`brain/scripts/docs_truth_audit.py:425`** in this exact order. Stale narratives undercount it (notably `AGENTS.md:595` says "11 layers (0–11 + 3A + 3B)" and **omits L12**; `AGENTS.md:850` correctly says "0-12 + 3A + 3B"). The literal list is authoritative.
+The no-confabulation floor is the spine of the whole system. It is **15 canonical layers** — `L0, L1, L2, L3, L3A, L3B, L4, L5, L6, L7, L8, L9, L10, L11, L12` — defined literally at **`brain/scripts/docs_truth_audit.py`** (`_CANONICAL_STACK`) in this exact order. `AGENTS.md` and `README.md` must use this 15-entry count. Older "11-layer" / "13-layer" prose is stale. The literal list is authoritative.
 
 | Layer | Name | Home | Status | What it protects |
 |---|---|---|---|---|

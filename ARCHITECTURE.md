@@ -6,6 +6,7 @@
 > - **Policy NN reframed from "gated-not-broken" to a measurement/SIGNAL FAILURE.** An offline critic diagnostic on 838 live experience tuples found (state,action)→reward Spearman **~0.06 / R²~0**; the trained 342 versions were competence on a synthetic distribution that does not predict reality, and the shadow-A/B win-signal was non-causal (`nn_reward=kernel_reward=actual_reward`). **Part A** shipped (commit `ee0caa7`): flat health rewards no longer flood the A/B — only varied interaction outcomes score it. Full analysis: `docs/AUTONOMOUS_GROWTH_STRATEGY.md`.
 > - **Vision grounding firewall shipped** (v1.3.0, commit `63c3eca`): "what do you see" is grounded in the real camera frame or honestly withheld — no cold-load confabulation.
 > - **Line numbers below have drifted ~10–15 lines** from later edits; every cited symbol still exists. A mechanical refresh is pending.
+> - **2026-08-24 doc catch-up (do not treat the June body as the count source):** integrity stack is **15 entries (L0–L12 + L3A/L3B)** locked in `brain/subsystem_registry.json` + `docs_truth_audit.py`. Brain API inventory is **170** routes (`/api-reference`). Vision model in `hardware_profile.py` is **qwen3-vl:8b**, not qwen2.5vl. A process restart is **not** a wipe — Matrix Tier-2 *authority* resets to probationary; weights/memories/promotion JSON persist; `current_ok` stays live-sourced. Policy NN remains a **measurement failure** (shadow, untrained). `python -m brain.scripts.docs_truth_audit` is PASS (170/170, PVL 114).
 
 
 ---

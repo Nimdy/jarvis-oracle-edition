@@ -181,7 +181,15 @@ Gaps fire when EMA drops below per-dimension threshold for 5 consecutive
 ### Tier-2 Matrix Specialists (P3.6 → P3.10, shipped 2026-04-25)
 
 Five Tier-2 Matrix Protocol specialists shipped on 2026-04-25 as the
-template set. **All five enter `CANDIDATE_BIRTH` only — no live promotion**:
+template set. The **lifecycle is proven** (autonomous birth → self-supervised
+train → `PROMOTED` on real signal, advisory only, via the matrix-vs-matrix
+broadcast lane). **Authority does not survive reboot:**
+`_restore_persisted_specialists` reloads weights but resets every Tier-2
+specialist to `PROBATIONARY_TRAINING` with impact/verification/accuracy → 0
+(asymmetric firewall). Seeing `promoted_count = 0` after a process restart is
+correct, not a regression. Promotion must be re-earned on lived signal.
+
+Lane-specific guardrails (unchanged):
 
 | Focus | Encoder | Lane-specific guardrail |
 |-------|---------|--------------------------|
@@ -501,8 +509,11 @@ Any failure sets credible=False regardless of score:
 
 **File**: `brain/jarvis_eval/process_contracts.py`
 
-95 contracts across 21 groups. Contracts have mode prerequisites — if the
-current mode doesn't match, the contract is `not_applicable` (not fail).
+114 contracts across 23 groups (`brain/jarvis_eval/process_contracts.py`,
+locked by `brain/scripts/docs_truth_audit.py`). Contracts have mode
+prerequisites — if the current mode doesn't match, the contract is
+`not_applicable` (not fail). Do not "fix" a blocked validation pack after a
+long off-period by lowering these floors.
 
 ### Mode Aliases
 
@@ -527,7 +538,7 @@ current mode doesn't match, the contract is `not_applicable` (not fail).
 | 6 | memory_pipeline |
 | 7 | autonomy_pipeline, epistemic_system |
 
-### All 21 Contract Groups (95 total)
+### Contract Groups (114 total — count is source-locked; group table may lag)
 
 | Group | Count | Mode Requirement | Notes |
 |-------|-------|-----------------|-------|
@@ -551,7 +562,9 @@ current mode doesn't match, the contract is `not_applicable` (not fail).
 | quality_baselines | 7 | _ALL_MODES / _LEARNING | soul integrity, debt, pressure, audit, weight, dreams, library |
 | nn_quality | 4 | _BACKGROUND / _LEARNING | hemisphere loss, policy reward, ranker enabled, win rate |
 | matrix_protocol | 4 | _POST_GESTATION | DL requested, expansion triggered, jobs, specialists |
-| language_eval | 4 | _POST_GESTATION | corpus >= 30, native >= 70%, fail-closed <= 25%, provenance >= 90% |
+| language_eval | 9 | _POST_GESTATION | corpus volume, native usage, fail-closed, provenance, plus later Phase-D gates |
+| system_upgrades | 10 | _ALL_MODES | self-improve truth lane: started, sandbox, reports, dir ready |
+| intention_truth | 4 | _POST_GESTATION | Stage-0 registry loaded + commitment/backing contracts |
 
 ### Roadmap Maturity Gates (progressive milestones)
 

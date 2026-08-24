@@ -286,7 +286,7 @@ class PerceptionOrchestrator:
         self._object_memory: dict[str, dict] = {}
         self._last_scene_description: str = ""
         self._last_edge_caption_ts: float = 0.0  # when the Pi edge VLM last supplied a caption
-        self._last_scene_source: str = ""        # "edge_vlm" (Pi Hailo) | "desktop_gpu" (qwen2.5vl)
+        self._last_scene_source: str = ""        # "edge_vlm" (Pi Hailo) | "desktop_gpu" (qwen3-vl)
         self._last_scene_ts: float = 0.0         # when _last_scene_description was last set (either path)
         self._scene_analysis_in_progress: bool = False
         self._gestation_active: bool = False
@@ -2556,7 +2556,7 @@ class PerceptionOrchestrator:
             return
         # Defer to the Pi's edge VLM when it's actively supplying captions: if a fresh
         # edge caption arrived recently, skip the desktop-GPU round-trip entirely (no
-        # frame fetch, no qwen2.5vl load/unload). The edge path captions idle scenes;
+        # frame fetch, no qwen3-vl load/unload). The edge path captions idle scenes;
         # the GPU path resumes if the edge stream goes quiet (>150s stale).
         if self._last_edge_caption_ts and (time.time() - self._last_edge_caption_ts) < 150.0:
             logger.debug("Scene analysis: deferring to fresh edge VLM caption (skipping GPU path)")

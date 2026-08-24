@@ -6,10 +6,10 @@ P3.6 (``positive_memory``) and P3.7 (``negative_memory``):
   * It writes nothing — no memories, beliefs, identity, autonomy, policy
     authority, HRR/P5 state, Soul Integrity, or events. It is pure feature
     engineering.
-  * It enters CANDIDATE_BIRTH only. Promotion is gated by the standard
-    Matrix Protocol lifecycle in
-    ``HemisphereOrchestrator._check_specialist_promotions``; this module
-    does not bypass any of it.
+  * Birth is CANDIDATE_BIRTH. Promotion is gated by the Matrix Protocol
+    lifecycle in ``HemisphereOrchestrator._check_specialist_promotions``
+    (advisory only). Process restart reloads weights but resets authority
+    to PROBATIONARY_TRAINING. This module does not self-promote.
   * It produces a real-time inferable scalar in ``[0, 1]`` from the
     current identity-fusion state, addressee context, and speaker
     registry. It does NOT fall back to accuracy-as-proxy.

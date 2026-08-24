@@ -28,7 +28,7 @@ The brain is **hardware-adaptive**: on startup it auto-detects GPU VRAM and CPU 
 | Hemisphere NNs (PyTorch, tiny) | ~1 MB | Always | GPU or CPU (tier-dependent) |
 | PyTorch/CUDA framework overhead | ~400 MB | Static | GPU |
 | **TOTAL RESIDENT** | **~8,600 MB** | | |
-| qwen2.5vl:7b (vision) | ~5,000 MB | On-demand | GPU (Ollama-managed) |
+| qwen3-vl:8b (vision) | ~5,000 MB | On-demand | GPU (Ollama-managed) |
 
 **CPU-only models (all tiers)**: Policy NN (<1 MB), Memory Cortex NNs (<0.1 MB), openWakeWord (~30 MB ONNX), Silero VAD (~10 MB), Coding LLM qwen2.5-coder:7b (~5 GB RAM, separate Ollama on port 11435 with `CUDA_VISIBLE_DEVICES=""`), CoderServer Qwen3-Coder-Next (25-48 GB RAM, on-demand llama-server, spawned and killed per generation, `CODER_GPU_LAYERS=0`).
 
@@ -47,7 +47,7 @@ This section exists so AI agents reading AGENTS.md stop mis-framing what Jarvis 
 A locally-hostable, fully-governed cognitive substrate with:
 - self-directed skill acquisition (`acquisition/` + `skills/` + `tools/plugins/`)
 - self-modifying code under quorum (`self_improve/` stage 0/1/2, human-approval gate, sandbox + kernel tick sim, atomic rollback)
-- an 11-layer epistemic immune system (capability gate → attribution ledger → provenance → identity boundary → scene model → delayed attribution → typed contradictions → truth calibration → belief graph → quarantine → reflective audit → soul integrity → epistemic compaction)
+- a 15-entry epistemic immune system (L0–L12 + L3A/L3B: capability gate → attribution ledger → provenance → identity boundary → identity persistence → scene model → delayed attribution → typed contradictions → truth calibration → belief graph → quarantine → reflective audit → soul integrity → epistemic compaction → intention truth)
 - internal multi-agent neural dialog via the hemisphere system + global broadcast slots + meta-cognitive thought cycles + philosophical dialogue + reflective audit
 - restart-honest continuity (persistence, maturity high-water, gated auto-restore, supervisor crash backoff)
 - truth-boundary-preserving synthetic growth lanes (synthetic perception + synthetic claim exercise, fidelity capped, never contaminates lived history)
@@ -592,7 +592,7 @@ cd brain && ./setup.sh
 
 3. **Budget-Aware Consciousness**: The kernel ticks at 100ms base / cadence_multiplier (0.5×–2.0× depending on mode). Three priority queues (REALTIME, INTERACTIVE, BACKGROUND) ensure phase transitions never wait for evolution or existential reasoning. Over-budget background ops are deferred to the next tick with spare budget.
 
-4. **Epistemic Integrity Stack**: 11 layers (0–11 + 3A + 3B) protect cognitive integrity — from capability gate honesty (L0) through attribution ledger (L1), provenance (L2), identity boundary (L3/3A), scene model (L3B), delayed attribution (L4), typed contradictions (L5), truth calibration (L6), belief graph (L7), quarantine (L8), reflective audit (L9), soul integrity index (L10), and epistemic compaction (L11).
+4. **Epistemic Integrity Stack**: 15 entries (L0–L12 + L3A/L3B) protect cognitive integrity — from capability gate honesty (L0) through attribution ledger (L1), provenance (L2), identity boundary (L3), identity persistence (L3A), scene model (L3B), delayed attribution (L4), typed contradictions (L5), truth calibration (L6), belief graph (L7), quarantine (L8), reflective audit (L9), soul integrity index (L10), epistemic compaction (L11), and intention truth (L12). Do not write "11-layer" or "13-layer" in new text; the locked count is 15 entries in `brain/subsystem_registry.json`.
 
 5. **Self-Knowledge Before Self-Reflection**: Every LLM prompt ends with honesty directives. `ConsciousnessCommunicator` outputs only verified metrics. `CapabilityGate` scans all outgoing text with 7 sequential enforcement layers, 15 claim patterns (including action confabulation detection), and a pre-LLM deterministic creation-request catch. Unverified claims are rewritten, never passed through.
 
@@ -615,16 +615,16 @@ cd brain && ./setup.sh
 5. **Mode check** — Is the current mode correct for this operation? CueGate blocks observation writes during dreaming/sleep/reflective/deep_learning. Sleep mode only allows 14 of 27 background cycles.
 6. **Quarantine check** — Is quarantine pressure affecting thresholds? At elevated (>0.3): raised promotion thresholds. At high (>0.6): policy promotion blocked, mutation cap halved, WM max level capped.
 7. **Baseline check** — Is the "failure" actually a yellow/progress state? Check quality baselines (e.g., soul integrity yellow >= 0.50, contradiction debt yellow <= 0.15).
-8. **Reset check** — Did the metric recently reset due to a brain restart? All accumulation counters restart at zero.
+8. **Restart vs wipe-reset check** — A *process restart* is not a wipe. Memories, beliefs, promotion JSON, critic logs, and NN weights persist. `current_ok` must recompute from live RAM and stay false until this session re-earns it. Matrix Tier-2 *authority* resets to probationary (asymmetric firewall) even though weights reload. A *wipe-reset* (`reset-brain.sh --confirm`) is the only path that zeros accumulation. Do not treat a cold start after a month off as a fresh brain.
 
 ### Common False Positives (NOT bugs)
 
 | What You See | Why It's Expected |
 |-------------|------------------|
 | Policy NN: 0 decisions, 0% win rate | Needs ~100 shadow A/B decisions from real conversations to start evaluating |
-| World Model: Level 0 (shadow) | Needs 50 validated predictions + 4 hours of runtime to promote |
-| Mental Simulator: 0 traces | Needs 100 validated simulations + 48 hours of shadow runtime |
-| Autonomy: Level 0 | 30-min warmup, then needs 10 positive deltas at 40% win rate for L2 |
+| World Model: Level 0 (shadow) | Only after a **wipe-reset**. A long-lived brain persists `world_model_promotion.json` (this operator's instance is L2). Process restart does not drop the level. The L2 rolling-accuracy number can still be persistence-dominated — treat the *estimand*, not the badge. |
+| Mental Simulator: 0 traces | Wipe-reset only. Needs 100 validated simulations + 48 hours of shadow runtime to *promote*. Persisted level can already be advisory. |
+| Autonomy: Level 0 | Wipe-reset only. After process restart, `current_level` may restore from disk while `current_ok=false` and `activation_ok=false`. That is restart-honest. |
 | Dashboard maturity bars all red | Every gate starts locked/zero on a fresh brain — they mature over hours/days |
 | PVL: 14 failing contracts | Many contracts require accumulated data (cortex training, associations, research episodes) |
 | Hemisphere: 0 broadcast slots | Specialists must progress through lifecycle ladder (candidate → probationary → verified → eligible → promoted) |

@@ -155,7 +155,7 @@ On **strong/beast CPUs** (8+ cores, 8GB+ RAM), ancillary ML models (emotion, spe
 | Hemisphere NNs (PyTorch) | ~1 MB | Always (GPU or CPU) |
 | PyTorch/CUDA overhead | ~400 MB | Static |
 | **Total Resident** | **~8,600 MB** | |
-| qwen2.5vl:7b (vision, on-demand) | ~5,000 MB | Loaded when needed |
+| qwen3-vl:8b (vision, on-demand) | ~5,000 MB | Loaded when needed |
 
 ---
 
