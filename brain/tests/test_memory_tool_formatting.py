@@ -410,6 +410,8 @@ def test_extract_about_subject_from_query_without_known_names() -> None:
     assert _extract_about_subjects("what do you remember about that") == set()
     assert _extract_about_subjects("what do you remember about me") == set()
     assert _extract_about_subjects("what do you remember about it") == set()
+    assert _extract_about_subjects("What do you remember about me?", speaker="David") == {"David"}
+    assert _extract_about_subjects("What do you remember about myself?", speaker="David") == {"David"}
 
 
 def test_search_memory_about_skyler_does_not_use_identity_names(monkeypatch) -> None:
@@ -478,3 +480,59 @@ def test_search_memory_about_skyler_does_not_use_identity_names(monkeypatch) -> 
     assert "Curiosity Q" not in out
     boundary_refs = captured.get("referenced_entities") or set()
     assert "skyler" not in {str(x).lower() for x in boundary_refs}
+
+
+def test_search_memory_about_me_does_not_declare_other_subjects_or_library(monkeypatch) -> None:
+    """Lived 13:26: 'remember about me' mixed Skyler + a study_claim library
+    definition. Those memories are not polluted and must stay in the store.
+    About-me means the speaker; a competing proper name in the first sentence
+    is another subject; external/library provenance is not autobiography.
+    """
+    self_fact = SimpleNamespace(
+        type="conversation",
+        payload={"response": "You are David, the primary user of this system."},
+        weight=0.70,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    skyler = SimpleNamespace(
+        type="conversation",
+        payload={
+            "response": "Ah, Skyler — your border collie. You mentioned she's clever."
+        },
+        weight=0.53,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:David"),
+    )
+    library = SimpleNamespace(
+        type="factual_knowledge",
+        payload={"response": "Concept: Episodic memory structure"},
+        weight=0.80,
+        provenance="external_source",
+        identity_subject="external",
+        identity_subject_type="library",
+        identity_owner_type="system",
+        tags=("study_claim", "episodic_memory"),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [
+            (0.55, skyler),
+            (0.50, library),
+            (0.40, self_fact),
+        ],
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+
+    out = search_memory("What do you remember about me?", speaker="David")
+    assert "primary user" in out
+    assert "border collie" not in out
+    assert "Episodic memory structure" not in out
+    assert "Skyler" not in out

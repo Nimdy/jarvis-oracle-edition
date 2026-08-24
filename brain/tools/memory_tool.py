@@ -87,22 +87,35 @@ _ABOUT_STOP = _STOP_WORDS | frozenset({
     "something", "anything", "everything", "stuff", "things",
     "myself", "yourself", "himself", "herself", "itself",
 })
+_SPEAKER_ABOUT = frozenset({"me", "myself"})
+_NONPERSONAL_PROVENANCE = frozenset({"external_source", "web_scrap", "library"})
+_NONPERSONAL_SUBJECT_TYPES = frozenset({"library", "environment"})
+_NAME_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z'-]*")
 
 
-def _extract_about_subjects(query: str) -> set[str]:
+def _extract_about_subjects(query: str, speaker: str = "") -> set[str]:
     """Subject tokens after 'about' in a recall query.
 
-    Pronouns and empty fillers are dropped (KNOW-not-guess). Does not write
+    'me'/'myself' resolve to the speaker when known — they are not identity
+    enrollments. Other pronouns stay empty (KNOW-not-guess). Does not write
     names into identity. Matching later is case-insensitive.
     """
     if not query:
         return set()
+    speaker_name = (speaker or "").strip()
+    if speaker_name.lower() in ("", "unknown"):
+        speaker_name = ""
     out: set[str] = set()
     for match in _ABOUT_SUBJECT_RE.finditer(query):
         token = (match.group(1) or "").strip()
         if len(token) < 2:
             continue
-        if token.lower() in _ABOUT_STOP:
+        low = token.lower()
+        if low in _SPEAKER_ABOUT:
+            if speaker_name:
+                out.add(speaker_name)
+            continue
+        if low in _ABOUT_STOP:
             continue
         out.add(token)
     return out
@@ -217,6 +230,63 @@ def _leads_with_referenced_subject(memory_obj, referenced_entities: set[str] | N
     return any(str(ent).lower() in low for ent in referenced_entities if ent)
 
 
+def _is_self_aboutness(aboutness: set[str] | None, speaker: str) -> bool:
+    sp = (speaker or "").strip().lower()
+    if sp in ("", "unknown") or not aboutness:
+        return False
+    return any(str(a).lower() == sp for a in aboutness)
+
+
+def _competing_proper_names(first_sentence: str, speaker: str) -> set[str]:
+    """Proper-name tokens in the first sentence after the opener, excluding speaker.
+
+    Used only for about-me. Does not delete memories. 'Ah, Skyler — your
+    border collie' is about Skyler even though the owner is David.
+    """
+    words = _NAME_TOKEN_RE.findall(first_sentence or "")
+    if len(words) < 2:
+        return set()
+    speaker_l = (speaker or "").strip().lower()
+    skip = _ABOUT_STOP | {speaker_l, "jarvis", "user"}
+    out: set[str] = set()
+    for w in words[1:]:
+        if len(w) < 3:
+            continue
+        if w.lower() in skip:
+            continue
+        if not w[0].isupper():
+            continue
+        out.add(w)
+    return out
+
+
+def _is_nonpersonal_knowledge(memory_obj) -> bool:
+    """Library / external study is not autobiography of the speaker."""
+    prov = str(getattr(memory_obj, "provenance", "") or "").strip().lower()
+    if prov in _NONPERSONAL_PROVENANCE:
+        return True
+    st = str(getattr(memory_obj, "identity_subject_type", "") or "").strip().lower()
+    return st in _NONPERSONAL_SUBJECT_TYPES
+
+
+def _matches_aboutness(
+    memory_obj,
+    aboutness: set[str] | None,
+    speaker: str = "",
+) -> bool:
+    """Recall-time aboutness, including about-me scope. Never mutates the store."""
+    if not _leads_with_referenced_subject(memory_obj, aboutness):
+        return False
+    if not _is_self_aboutness(aboutness, speaker):
+        return True
+    lead = _first_sentence(_payload_lead_text(memory_obj))
+    if _competing_proper_names(lead, speaker):
+        return False
+    if _is_nonpersonal_knowledge(memory_obj):
+        return False
+    return True
+
+
 def _is_contradicted_wipe_memory(memory_obj, model: dict | None = None) -> bool:
     """True when a conversation memory's stored reply asserts a wipe the OSV refutes.
 
@@ -313,7 +383,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
     query_lower = query.lower()
     identity_context = _build_identity_context(speaker)
     referenced_entities = _extract_referenced_entities(query)
-    aboutness_entities = _extract_about_subjects(query)
+    aboutness_entities = _extract_about_subjects(query, speaker=speaker)
 
     if _EPISODE_PATTERNS.search(query):
         ep_results = _search_episodes(query_lower, limit)
@@ -429,7 +499,7 @@ def _semantic_search(
             if _is_contradicted_wipe_memory(m, osv):
                 continue
             aboutness = aboutness_entities if aboutness_entities is not None else referenced_entities
-            if not _leads_with_referenced_subject(m, aboutness):
+            if not _matches_aboutness(m, aboutness, speaker=speaker):
                 continue
             payload_str = _format_payload_preview(m)
             results.append((float(sim), f"[{m.type}] {payload_str[:200]}"))
@@ -484,7 +554,7 @@ def _keyword_search(
         if _is_contradicted_wipe_memory(m, osv):
             continue
         aboutness = aboutness_entities if aboutness_entities is not None else referenced_entities
-        if not _leads_with_referenced_subject(m, aboutness):
+        if not _matches_aboutness(m, aboutness, speaker=speaker):
             continue
         payload_str = _format_payload_preview(m)
         tag_str = " ".join(m.tags)
