@@ -536,3 +536,58 @@ def test_search_memory_about_me_does_not_declare_other_subjects_or_library(monke
     assert "border collie" not in out
     assert "Episodic memory structure" not in out
     assert "Skyler" not in out
+
+
+def test_search_memory_about_me_does_not_declare_curiosity_asks(monkeypatch) -> None:
+    """Lived 13:43: after about-me scope, the only remaining spoken line was
+    a curiosity identity question. That record is the spark (ask/explore),
+    not autobiography. COMPANION_COGNITION: ask-path vs knowledge-recall
+    are different lanes. Do not delete the memory; do not declare it as
+    'I remember you'.
+    """
+    self_fact = SimpleNamespace(
+        type="conversation",
+        payload={"response": "You are David, the primary user of this system."},
+        weight=0.40,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    curiosity_ask = SimpleNamespace(
+        type="conversation",
+        payload={
+            "response": (
+                "Curiosity Q (identity): I heard someone speaking that I don't "
+                "recognize — it wasn't you, David. Who was that? I'd like to know them. "
+                "User answer: Walk me through how you reach an answer."
+            )
+        },
+        weight=0.675,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=(
+            "curiosity_answer",
+            "curiosity_identity",
+            "interactive",
+            "outcome:engaged",
+            "curiosity_topic:unknown_voice",
+        ),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [
+            (0.60, curiosity_ask),
+            (0.40, self_fact),
+        ],
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+
+    out = search_memory("What do you remember about me?", speaker="David")
+    assert "primary user" in out
+    assert "Curiosity Q" not in out
+    assert "don't recognize" not in out

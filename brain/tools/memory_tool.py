@@ -269,6 +269,22 @@ def _is_nonpersonal_knowledge(memory_obj) -> bool:
     return st in _NONPERSONAL_SUBJECT_TYPES
 
 
+def _is_curiosity_ask_record(memory_obj) -> bool:
+    """Spark ask-record (CuriosityQuestionBuffer outcome), not user autobiography.
+
+    COMPANION_COGNITION_DESIGN: ask-path vs knowledge-recall are different lanes.
+    The memory stays in the store; the ask path (buffer → ProactiveGovernor) is
+    untouched. Only the tag class `curiosity_answer` is excluded from
+    'here's what I remember about X' — not the curiosity drive.
+    """
+    tags = {
+        str(tag).strip().lower()
+        for tag in getattr(memory_obj, "tags", ())
+        if str(tag).strip()
+    }
+    return "curiosity_answer" in tags
+
+
 def _matches_aboutness(
     memory_obj,
     aboutness: set[str] | None,
@@ -276,6 +292,8 @@ def _matches_aboutness(
 ) -> bool:
     """Recall-time aboutness, including about-me scope. Never mutates the store."""
     if not _leads_with_referenced_subject(memory_obj, aboutness):
+        return False
+    if aboutness and _is_curiosity_ask_record(memory_obj):
         return False
     if not _is_self_aboutness(aboutness, speaker):
         return True
