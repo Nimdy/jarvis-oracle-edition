@@ -14,6 +14,7 @@ See ``docs/SELF_VIEW_DESIGN.md`` §6 ("never declare, never discard").
 """
 from __future__ import annotations
 
+import datetime
 import re
 from typing import Any
 
@@ -21,13 +22,26 @@ from typing import Any
 KINDS = (
     "identity", "capabilities", "recent_changes", "health",
     "weaknesses", "gated_capabilities", "unknowns", "consciousness_query",
+    "continuity",
 )
 
 # Keyword → kind routing for self-referential questions (order matters: specific first).
 # Widened from the flight-recorder transcript (questions that should reach the OSV but
 # fell through to the INTROSPECTION catch-all). Patterns require self-reference
 # (you / your / yourself) so non-self questions still return None and route normally.
-_KIND_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+_KIND_PATTERNS: list[tuple[re.Pattern[str], str | None]] = [
+    # restart / continuity — process-off vs wipe. Must not steal MEMORY recall
+    # ("what do you remember about X"). Lived miss 2026-08-24: LLM authored a
+    # false wipe; this kind answers from the OSV, no LLM.
+    (re.compile(
+        r"\bremember about\b",
+        re.I,
+    ), None),  # force MEMORY-recall questions off the self-view override
+    (re.compile(
+        r"\b(powered off|been off|offline for|shut down|wipe-?reset|memory (is |was )?(reset|wiped|gone|empty)|starting fresh|"
+        r"last (recorded )?memory|last thing you remember|when was your last)\b",
+        re.I,
+    ), "continuity"),
     # consciousness / inner-state (specific, first)
     (re.compile(r"\b(are you|do you become|becoming|you'?re)\b.{0,12}\b(conscious|self[- ]aware|sentient|alive)\b", re.I), "consciousness_query"),
     (re.compile(r"\b(conscious|sentien|self[- ]aware)\b|\bdo you have (a soul|feelings|emotions|desires|fears|hopes|consciousness|awareness)\b|\bdo you feel\b", re.I), "consciousness_query"),
@@ -251,7 +265,13 @@ def _recent_changes(model: dict[str, Any]) -> str:
     if skills:
         parts.append(f"recently earned skill(s): {_fmt([str(s) for s in skills])}")
     if code:
-        parts.append(f"latest code changes: {code[0]}")
+        title = str(code[0])
+        if contains_unqualified_claim(title):
+            # BUILD_HISTORY titles can contain guarded words ("Soul"). Don't speak them
+            # as self-claims; the record still exists.
+            parts.append("latest code changeset is on record (title omitted — guarded word)")
+        else:
+            parts.append(f"latest code changes: {title}")
     if not parts:
         return "I don't have a readable record of recent changes right now."
     return "What's new — " + "; ".join(parts) + "."
@@ -314,6 +334,55 @@ def _unknowns(model: dict[str, Any]) -> str:
     )
 
 
+def _fact_value(entry: Any) -> Any:
+    if isinstance(entry, dict) and "value" in entry:
+        return entry.get("value")
+    return None
+
+
+def _iso_utc(ts: Any) -> str | None:
+    try:
+        t = float(ts)
+    except (TypeError, ValueError):
+        return None
+    if t <= 0:
+        return None
+    return datetime.datetime.fromtimestamp(t, tz=datetime.timezone.utc).strftime("%Y-%m-%d")
+
+
+def _continuity(model: dict[str, Any]) -> str:
+    """Process-restart vs wipe. Answers from measured memory extrema only. No LLM.
+
+    Lived miss 2026-08-24: the LLM claimed the store was reset after a month off.
+    This kind reports the store's measured span or an honest gap — never a wipe.
+    """
+    mem = (model.get("subsystems") or {}).get("memory") or {}
+    total = _fact_value(mem.get("total_memories"))
+    oldest = _iso_utc(_fact_value(mem.get("oldest_timestamp")))
+    newest = _iso_utc(_fact_value(mem.get("newest_timestamp")))
+    try:
+        n = int(total) if total is not None else None
+    except (TypeError, ValueError):
+        n = None
+    if n is None or n <= 0:
+        return (
+            "I can't measure memory continuity from my self-view right now. "
+            "I will not invent a blank slate."
+        )
+    parts = [
+        f"This was a process restart, not a wipe. I still hold {n} stored memories.",
+    ]
+    if oldest and newest:
+        parts.append(f"Those records span {oldest} to {newest} (UTC, from the store, not a reconstructed diary).")
+    elif newest:
+        parts.append(f"The newest stored record is dated {newest} UTC.")
+    parts.append(
+        "I am not a blank slate. I will not invent a timeline I cannot measure. "
+        "Ask what I remember about a topic if you want content recall."
+    )
+    return " ".join(parts)
+
+
 def _consciousness_query(model: dict[str, Any]) -> str:
     # The §6 balanced template: no claim, no denial.
     cov = model.get("coverage", {})
@@ -336,6 +405,7 @@ _ARTICULATORS = {
     "gated_capabilities": _gated_capabilities,
     "unknowns": _unknowns,
     "consciousness_query": _consciousness_query,
+    "continuity": _continuity,
 }
 
 

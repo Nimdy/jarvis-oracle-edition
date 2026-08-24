@@ -156,7 +156,9 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
 - Deterministic articulation first (like `bounded_response` self_status/self_introspection),
   drawing capabilities + honest performance + recent changes + known gaps. Answer `kind`s:
   identity / capabilities / recent_changes / health / weaknesses / gated_capabilities /
-  unknowns / consciousness_query.
+  unknowns / consciousness_query / **continuity** (process-restart vs wipe: measured
+  memory count + store span; never a blank-slate claim; does **not** steal
+  `what do you remember about X` from MEMORY retrieval).
 - **Strict in claims, rich in capture** (see §6): user-facing answers are conservative and
   non-suppressing; the language guard is regression-tested; "Are you conscious?" uses the §6
   balanced template; P1 may *record* a self-referential anomaly via `observer.observe_emergence`

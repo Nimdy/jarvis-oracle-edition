@@ -279,6 +279,14 @@ def read_memory(blob: dict[str, Any]) -> dict[str, Fact]:
     }
     if blob.get("core_count") is not None:
         out["core_count"] = Fact(blob.get("core_count"), Provenance.MEASURED, source=src)
+    oldest = blob.get("oldest_timestamp")
+    newest = blob.get("newest_timestamp")
+    if oldest is not None:
+        out["oldest_timestamp"] = Fact(oldest, Provenance.MEASURED,
+                                       note="min stored memory timestamp", source=src)
+    if newest is not None:
+        out["newest_timestamp"] = Fact(newest, Provenance.MEASURED,
+                                       note="max stored memory timestamp", source=src)
     return out
 
 

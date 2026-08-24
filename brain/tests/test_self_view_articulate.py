@@ -31,9 +31,9 @@ def _snapshot():
     }
 
 
-def _model(eval_snapshot=None, skills=None):
+def _model(eval_snapshot=None, skills=None, snapshot=None):
     return sv.build_self_view(engine=None, eval_snapshot=eval_snapshot or {},
-                              skills_summary=skills or {}, snapshot=_snapshot(), now=1.0)
+                              skills_summary=skills or {}, snapshot=snapshot or _snapshot(), now=1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +78,19 @@ class TestClassify:
                   "Give me a status report, please.",
                   "What do you remember the first time you heard my voice?"):
             assert classify_self_question(q) is None, q
+
+    def test_continuity_questions_route_to_self_view(self):
+        """Lived miss: last-memory-after-power-off must not fall through to the LLM."""
+        live = (
+            "what was the last thing you remember because you've been powered off "
+            "for a long time when was your last um recorded memory because today is august 24th"
+        )
+        assert classify_self_question(live) == "continuity"
+        assert classify_self_question("when was your last recorded memory?") == "continuity"
+        assert classify_self_question("have you been offline — is your memory reset?") == "continuity"
+        # MEMORY recall of *content* must still not be stolen
+        assert classify_self_question("What do you remember about Skylar?") is None
+        assert classify_self_question("what do you remember about the meeting") is None
 
 
 # ---------------------------------------------------------------------------
@@ -155,3 +168,43 @@ class TestDangerGuard:
             out = articulate_self_view({}, kind)
             assert isinstance(out, str)
             assert not contains_unqualified_claim(out)
+
+
+# ---------------------------------------------------------------------------
+# Continuity (process restart vs wipe) — lived miss 2026-08-24
+# ---------------------------------------------------------------------------
+
+class TestContinuityArticulation:
+    def _mem_model(self, total=734, oldest=1782235435.0, newest=1787578126.0):
+        snap = _snapshot()
+        snap["memory"] = {
+            "total": total,
+            "core_count": 4,
+            "oldest_timestamp": oldest,
+            "newest_timestamp": newest,
+        }
+        return _model(snapshot=snap)
+
+    def test_does_not_claim_wipe_when_memories_exist(self):
+        out = articulate_self_view(self._mem_model(), "continuity")
+        low = out.lower()
+        assert "734" in out
+        assert "reset" not in low
+        assert "starting fresh" not in low
+        assert "wipe" in low  # "not a wipe" / process restart
+        assert contains_unqualified_claim(out) is False
+
+    def test_reports_measured_span_not_invented_date(self):
+        import datetime
+        oldest, newest = 1782235435.0, 1787578126.0
+        out = articulate_self_view(self._mem_model(oldest=oldest, newest=newest), "continuity")
+        def _day(ts: float) -> str:
+            return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).strftime("%Y-%m-%d")
+        assert _day(oldest) in out
+        assert _day(newest) in out
+
+    def test_unknown_memory_does_not_invent_a_wipe(self):
+        out = articulate_self_view(_model(), "continuity").lower()
+        assert "reset" not in out
+        assert "starting fresh" not in out
+        assert "can't measure" in out or "cannot measure" in out or "not readable" in out

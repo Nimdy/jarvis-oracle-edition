@@ -602,6 +602,12 @@ class MemoryStorage:
                 elif m.weight < 0.2:
                     weak_count += 1
             total = len(self._memories)
+            oldest_ts = 0.0
+            newest_ts = 0.0
+            if self._memories:
+                ts_vals = [float(getattr(m, "timestamp", 0.0) or 0.0) for m in self._memories]
+                oldest_ts = min(ts_vals)
+                newest_ts = max(ts_vals)
 
             weight_bins = [0] * 10
             for w in weights:
@@ -621,6 +627,8 @@ class MemoryStorage:
             "weight_bins": weight_bins,
             "by_type": by_type,
             "by_provenance": by_provenance,
+            "oldest_timestamp": oldest_ts,
+            "newest_timestamp": newest_ts,
         }
 
     def get_recent_with_provenance(self, count: int = 20) -> list[dict[str, Any]]:
