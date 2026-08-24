@@ -68,6 +68,8 @@ class TestClassify:
             "Jarvis, tell me about your architecture.": "capabilities",
             "Describe your own architecture.": "capabilities",
             "Walk me through how you get an answer.": "capabilities",
+            "Walk me through how you reach an answer.": "capabilities",
+            "walk me through how you reach an answer": "capabilities",
             "Do you know what you are?": "identity",
             "Tell me something about yourself that I don't know.": "identity",
             "do you have feelings?": "consciousness_query",
@@ -93,6 +95,7 @@ class TestClassify:
         # MEMORY recall of *content* must still not be stolen
         assert classify_self_question("What do you remember about Skylar?") is None
         assert classify_self_question("what do you remember about the meeting") is None
+        assert classify_self_question("What do you know about Skyler from before?") is None
 
 
 # ---------------------------------------------------------------------------
