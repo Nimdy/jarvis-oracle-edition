@@ -97,6 +97,26 @@ class IdentityResolver:
                 resolved_by="actor",
             )
 
+        # This-turn voice (handler speaker) beats sticky face persist.
+        # Lived 2026-08-24: guest "about me" bound to last-seen David.
+        speaker_s = (speaker or "").lower().strip()
+        speaker_known = bool(speaker_s) and speaker_s != "unknown"
+        if speaker_known:
+            self._refresh_known_names()
+            id_type: IdentityType = (
+                "primary_user" if speaker_s in self._known_names else "guest"
+            )
+            return IdentityContext(
+                identity_id=speaker_s,
+                identity_type=id_type,
+                confidence=0.6,
+                signals=(IdentitySignal(
+                    source="speaker", name=speaker_s, confidence=0.6,
+                    is_known=speaker_s in self._known_names,
+                ),),
+                resolved_by="speaker_tag",
+            )
+
         if self._fusion is not None:
             resolved = getattr(self._fusion, "current", None)
             if resolved and getattr(resolved, "name", "unknown") != "unknown":

@@ -61,6 +61,34 @@ NEVER_ALLOWED_IMPORTS = frozenset({
     "socket", "ctypes", "importlib",
 })
 
+
+def _import_is_never(mod: str) -> bool:
+    if not mod:
+        return False
+    if mod in NEVER_ALLOWED_IMPORTS:
+        return True
+    top = mod.split(".")[0]
+    return top in NEVER_ALLOWED_IMPORTS
+
+
+def _import_is_allowed(mod: str, allowed: set[str]) -> bool:
+    """Match exact modules and dotted allowlist entries (os.path, urllib.parse).
+
+    Lived audit: split('.')[0] made `from os.path import join` look like `os`,
+    which is not in ALWAYS_ALLOWED even though `os.path` is.
+    """
+    if not mod:
+        return False
+    if mod in allowed:
+        return True
+    top = mod.split(".")[0]
+    if top in allowed:
+        return True
+    for item in allowed:
+        if "." in item and (mod == item or mod.startswith(item + ".")):
+            return True
+    return False
+
 PluginState = str  # "quarantined" | "shadow" | "supervised" | "active" | "disabled"
 
 
@@ -420,19 +448,19 @@ class PluginRegistry:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    mod = alias.name.split(".")[0]
-                    if mod in NEVER_ALLOWED_IMPORTS:
+                    mod = alias.name
+                    if _import_is_never(mod):
                         errors.append(f"Forbidden import in {filename}: {alias.name}")
-                    elif mod not in all_allowed and mod not in declared:
+                    elif not _import_is_allowed(mod, all_allowed | declared):
                         errors.append(f"Undeclared import in {filename}: {alias.name}")
             elif isinstance(node, ast.ImportFrom):
                 if node.level and node.level > 0:
                     continue  # intra-package relative import -- always allowed
                 if node.module:
-                    mod = node.module.split(".")[0]
-                    if mod in NEVER_ALLOWED_IMPORTS:
+                    mod = node.module
+                    if _import_is_never(mod):
                         errors.append(f"Forbidden import in {filename}: from {node.module}")
-                    elif mod not in all_allowed and mod not in declared:
+                    elif not _import_is_allowed(mod, all_allowed | declared):
                         errors.append(f"Undeclared import in {filename}: from {node.module}")
 
         return errors

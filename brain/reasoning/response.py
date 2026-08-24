@@ -638,6 +638,13 @@ class ResponseGenerator:
             except Exception:
                 logger.debug("continuity persist guard skipped", exc_info=True)
         if persist_response:
+            try:
+                from skills.capability_gate import capability_gate
+                gated = capability_gate.check_text(response_text)
+                if gated:
+                    response_text = gated
+            except Exception:
+                logger.debug("persist L0 gate skipped", exc_info=True)
             context_builder.add_assistant_message(response_text, conversation_id=conversation_id)
             context_builder.save()
         tags = self._extract_tags(user_message, response_text)

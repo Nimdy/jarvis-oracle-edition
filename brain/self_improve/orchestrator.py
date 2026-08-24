@@ -27,6 +27,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal
 
 from consciousness.events import (
@@ -137,6 +138,29 @@ class ImprovementWinRate:
 
 
 # ---------------------------------------------------------------------------
+def _perf_field(perf: Any, key: str, default: float = 0.0) -> float:
+    """Read a performance field from a dataclass or a dict (tests use both)."""
+    if perf is None:
+        return default
+    if isinstance(perf, dict):
+        try:
+            return float(perf.get(key, default) or default)
+        except (TypeError, ValueError):
+            return default
+    val = getattr(perf, key, None)
+    if val is None:
+        getter = getattr(perf, "get", None)
+        if callable(getter):
+            try:
+                val = getter(key, default)
+            except Exception:
+                val = default
+    try:
+        return float(val if val is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
 # Records
 # ---------------------------------------------------------------------------
 
@@ -1001,7 +1025,7 @@ class SelfImprovementOrchestrator:
                 return False
 
             try:
-                pre_p95 = kernel.get_performance().get("p95_tick_ms", 0.0)
+                pre_p95 = _perf_field(kernel.get_performance(), "p95_tick_ms")
             except Exception:
                 pre_p95 = 0.0
 
@@ -1015,7 +1039,7 @@ class SelfImprovementOrchestrator:
             for _ in range(HEALTH_MONITOR_TICKS):
                 await asyncio.sleep(0.15)
                 try:
-                    tick_ms = kernel.get_performance().get("last_tick_ms", 0.0)
+                    tick_ms = _perf_field(kernel.get_performance(), "last_tick_ms")
                     if tick_ms > 0:
                         tick_times.append(tick_ms)
                 except Exception:
@@ -1169,8 +1193,11 @@ class SelfImprovementOrchestrator:
 
                 restart_verify = False
                 if self._engine and self._restart_callback:
+                    conv = SimpleNamespace(
+                        id=record.conversation_id or record.request.id,
+                    )
                     restart_verify = self._prepare_restart_verify(
-                        record.patch, snapshot_path, record, None,
+                        record.patch, snapshot_path, record, conv,
                     )
 
                 if not self._atomic_apply(record.patch):

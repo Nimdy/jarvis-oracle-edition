@@ -2459,6 +2459,10 @@ async def handle_transcription(
     _backing_job_ids: list[str] = []
     _intention_registered_turn: dict[str, bool] = {"done": False}
     speaker = (speaker_state or {}).get("name", "unknown")
+    try:
+        engine._current_speaker = speaker if speaker and speaker != "unknown" else ""
+    except Exception:
+        pass
     _emo = emotion_state or {}
     emotion = _emo.get("emotion", "neutral") if _emo.get("trusted", False) else "neutral"
     conv_tag = f" [conv:{conversation_id[:8]}]" if conversation_id else ""
@@ -2920,14 +2924,24 @@ async def handle_transcription(
         try:
             import datetime as _dt
             _session_ts = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-            engine.remember(
-                f"{speaker} started a conversation at {_session_ts}. "
-                f"First words this session: \"{text[:100]}\"",
-                memory_type="interaction",
-                tags=["session_start", f"speaker:{speaker.lower()}", "conversation_milestone"],
+            engine.remember(CreateMemoryData(
+                type="conversation",
+                payload={
+                    "user_message": text[:100],
+                    "response": (
+                        f"{speaker} started a conversation at {_session_ts}. "
+                        f"First words this session: \"{text[:100]}\""
+                    ),
+                    "speaker": speaker,
+                },
                 weight=0.45,
+                tags=["session_start", f"speaker:{speaker.lower()}", "conversation_milestone"],
                 provenance="observed",
-            )
+                identity_owner=speaker.lower(),
+                identity_owner_type="person",
+                identity_subject=speaker.lower(),
+                identity_subject_type="person",
+            ))
         except Exception:
             pass
 
@@ -3098,10 +3112,20 @@ async def handle_transcription(
             # clearly ABOUT a learned domain, answer from that domain's ISOLATED store
             # ("I know about X"), grounded — never confabulated, never "I can do X".
             # Only fires on a clear topic match; otherwise normal routing continues.
+            # Lived 2026-08-24: must not steal about-X MEMORY (pet/person recall).
             try:
+                _sv_kind = bool(
+                    routing.extracted_args
+                    and routing.extracted_args.get("self_view_kind")
+                )
+                _about_x = bool(
+                    routing.extracted_args
+                    and routing.extracted_args.get("about_subjects")
+                )
                 if (not routing.golden_context
-                        and not (routing.extracted_args
-                                 and routing.extracted_args.get("self_view_kind"))):
+                        and not _sv_kind
+                        and not _about_x
+                        and routing.tool != ToolType.MEMORY):
                     from cognition.capability_domains import (
                         get_capability_domain_registry, recall_answer,
                     )
@@ -3643,6 +3667,8 @@ async def handle_transcription(
             logger.exception("Memory route error: %s", exc)
             await _broadcast_chunk_sync(reply, engine.get_state()["tone"])
             _broadcast({"type": "response_end", "text": "", "tone": engine.get_state()["tone"], "phase": "LISTENING"})
+        if _memory_native_used and reply:
+            _persist_spoken_turn(text, reply)
         if routing.extracted_args.get("action") != "store":
             _memory_payload = {
                 "mode": memory_mode,
@@ -4809,16 +4835,24 @@ async def handle_transcription(
                         if face_ok:
                             _modalities.append("face")
                         _mod_str = " and ".join(_modalities) if _modalities else "identity"
-                        engine.remember(
-                            f"First met {enroll_name} on {_now}. "
-                            f"Enrolled their {_mod_str} profile during a live conversation. "
-                            f"This was the first time I heard {enroll_name}'s voice and learned their name.",
-                            memory_type="milestone",
-                            tags=["identity_enrollment", "first_contact", f"speaker:{enroll_name.lower()}",
-                                  "milestone", "voice_recognition", "memorable_moment"],
+                        engine.remember(CreateMemoryData(
+                            type="observation",
+                            payload=(
+                                f"First met {enroll_name} on {_now}. "
+                                f"Enrolled their {_mod_str} profile during a live conversation. "
+                                f"This was the first time I heard {enroll_name}'s voice "
+                                f"and learned their name."
+                            ),
                             weight=0.80,
+                            tags=["identity_enrollment", "first_contact",
+                                  f"speaker:{enroll_name.lower()}",
+                                  "milestone", "voice_recognition", "memorable_moment"],
                             provenance="observed",
-                        )
+                            identity_owner=enroll_name.lower(),
+                            identity_owner_type="person",
+                            identity_subject=enroll_name.lower(),
+                            identity_subject_type="person",
+                        ))
                     except Exception:
                         logger.debug("Enrollment memory creation failed", exc_info=True)
 

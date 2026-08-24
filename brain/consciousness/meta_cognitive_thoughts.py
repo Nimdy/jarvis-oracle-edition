@@ -826,6 +826,8 @@ class MetaCognitiveThoughtGenerator:
         event_bus.emit(KERNEL_THOUGHT,
                        thought_type=thought.thought_type,
                        depth=thought.depth,
-                       text=thought.text[:100])
+                       text=thought.text[:100],
+                       belief_id=thought.belief_id or "",
+                       validation_target=thought.validation_target or "")
 
         logger.debug("Meta-thought [%s/%s]: %s", thought.thought_type, thought.depth, thought.text[:80])

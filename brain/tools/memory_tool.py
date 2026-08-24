@@ -214,6 +214,59 @@ def _load_osv_for_continuity() -> dict | None:
 
 
 _LEAD_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+_COURTESY_LEAD_RE = re.compile(
+    r"^(?:you(?:'re| are) welcome|thanks?(?:\s+you)?|no problem|anytime)\b",
+    re.I,
+)
+
+
+def _edit_distance_le1(a: str, b: str) -> bool:
+    """True when two short tokens differ by at most one edit (Skyler/Skylar)."""
+    if a == b:
+        return True
+    la, lb = len(a), len(b)
+    if abs(la - lb) > 1:
+        return False
+    if la > 16 or lb > 16:
+        return False
+    if la == lb:
+        diffs = sum(1 for x, y in zip(a, b) if x != y)
+        return diffs <= 1
+    if la > lb:
+        a, b, la, lb = b, a, lb, la
+    i = j = 0
+    skipped = 0
+    while i < la and j < lb:
+        if a[i] == b[j]:
+            i += 1
+            j += 1
+            continue
+        skipped += 1
+        if skipped > 1:
+            return False
+        j += 1
+    return True
+
+
+def _subject_mentioned(ent: str, text_low: str) -> bool:
+    e = str(ent or "").lower().strip()
+    if not e:
+        return False
+    if e in text_low:
+        return True
+    if len(e) < 5:
+        return False
+    for tok in _NAME_TOKEN_RE.findall(text_low):
+        t = tok.lower()
+        if len(t) < 5:
+            continue
+        if _edit_distance_le1(e, t):
+            return True
+    return False
+
+
+def _is_courtesy_lead(lead: str) -> bool:
+    return bool(_COURTESY_LEAD_RE.search((lead or "").strip()))
 
 
 def _payload_lead_text(memory_obj) -> str:
@@ -249,7 +302,7 @@ def _leads_with_referenced_subject(memory_obj, referenced_entities: set[str] | N
     if not lead:
         return False
     low = lead.lower()
-    return any(str(ent).lower() in low for ent in referenced_entities if ent)
+    return any(_subject_mentioned(ent, low) for ent in referenced_entities if ent)
 
 
 def _is_self_aboutness(aboutness: set[str] | None, speaker: str) -> bool:
@@ -320,6 +373,8 @@ def _matches_aboutness(
     if not _is_self_aboutness(aboutness, speaker):
         return True
     lead = _first_sentence(_payload_lead_text(memory_obj))
+    if _is_courtesy_lead(lead):
+        return False
     if _competing_proper_names(lead, speaker):
         return False
     if _is_nonpersonal_knowledge(memory_obj):

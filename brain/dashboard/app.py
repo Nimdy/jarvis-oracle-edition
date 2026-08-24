@@ -530,10 +530,10 @@ def _create_app() -> FastAPI:
 
         Records the operator's answer as an external-validation outcome (never
         self-scored): a "no/wrong" still counts as grounded=True (being corrected
-        is success). View-only on the belief graph — the belief mutation is the
-        P5 active closure; here we only record the external touch on the durable
-        queue + the external-only promotion gates. Never auto-fired: this runs
-        only on an explicit operator POST with the api_key.
+        is success). Closure re-stamps the belief provenance to user_claim and
+        nudges confidence — intended, not a silent extra writer. Also records
+        the durable queue + the external-only promotion gates. Never auto-fired:
+        this runs only on an explicit operator POST with the api_key.
 
         Body JSON: {"question_id": str, "answer": str}
         """

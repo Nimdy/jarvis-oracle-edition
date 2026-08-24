@@ -125,6 +125,7 @@ class PerformanceMetrics:
     avg_tick_ms: float = 0.0
     p95_tick_ms: float = 0.0
     max_tick_ms: float = 0.0
+    last_tick_ms: float = 0.0
     deferred_backlog: int = 0
 
 
@@ -168,6 +169,7 @@ class PerformanceMonitor:
             avg_tick_ms=self.get_avg(),
             p95_tick_ms=self.get_p95(),
             max_tick_ms=max(self._tick_times) if self._tick_times else 0.0,
+            last_tick_ms=self._tick_times[-1] if self._tick_times else 0.0,
             deferred_backlog=deferred_backlog,
         )
 

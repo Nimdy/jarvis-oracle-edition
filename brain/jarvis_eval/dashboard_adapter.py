@@ -859,8 +859,9 @@ def _build_maturity_tracker(
                   auto_completed, 20),
             _gate("auto_wins_l2", "Positive Deltas (L2 gate: 10)",
                   auto_wins, 10),
-            _gate("auto_wins_l3", "Positive Deltas (L3 gate: 25)",
-                  auto_wins, 25),
+            _gate("auto_wins_l3", "Positive Deltas (L3 count floor: 25, not authority)",
+                  auto_wins, 25,
+                  detail="Count only. L3 still needs WR≥50%, 0 regressions, evidence_path."),
             _gate("auto_win_rate", "Win Rate (L2: 40%)",
                   auto_win_rate, 0.40, fmt="pct"),
         ],
@@ -896,7 +897,8 @@ def _build_maturity_tracker(
         samples = min(totals) if totals else 0
         specialist_gates.append(
             _gate(f"dist_{name}", f"{name.replace('_', ' ').title()} Samples",
-                  samples, min_s)
+                  samples, min_s,
+                  detail="Sample floor, not spoken authority" if name == "voice_intent" else "")
         )
 
     categories.append({

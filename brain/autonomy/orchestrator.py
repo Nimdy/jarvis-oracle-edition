@@ -2363,7 +2363,8 @@ class AutonomyOrchestrator:
 
         SHADOW (level 0, default): log "would have asked/researched" with the
         cited belief + facet-routed channel, note the would-have selection for
-        telemetry, and enqueue NOTHING. No operator is reached. Zero authority.
+        telemetry, and copy the question onto the operator-PULL GroundingQueue
+        (no TTS, no auto-answer). Zero spoken authority.
 
         ADVISORY (level 1, SPARK §8 P4): may enqueue ≤1 external-validation intent
         per governor window into the durable async Grounding Queue (operator-gated,

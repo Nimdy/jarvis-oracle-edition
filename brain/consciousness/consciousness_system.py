@@ -725,6 +725,36 @@ class ConsciousnessSystem:
         except Exception as exc:
             logger.debug("Mutation history read failed: %s", exc)
 
+        grounding_tension = 0.0
+        grounding_target_id = ""
+        grounding_target_claim = ""
+        grounding_provenance = "model_inference"
+        grounding_confidence = 0.0
+        grounding_channel = "external source"
+        grounding_validation_target = ""
+        try:
+            orch = getattr(self, "_autonomy_orchestrator", None)
+            report = getattr(orch, "_last_grounding_report", None) if orch else None
+            if report is None:
+                from epistemic.provenance_scorer import ProvenanceScorer
+                report = ProvenanceScorer().compute(top_n=3)
+            grounding_tension = float(getattr(report, "aggregate_tension", 0.0) or 0.0)
+            tops = getattr(report, "top_tensions", None) or []
+            if tops:
+                top = tops[0]
+                grounding_target_id = str(getattr(top, "belief_id", "") or "")
+                grounding_target_claim = str(getattr(top, "rendered_claim", "") or "")[:200]
+                grounding_provenance = str(getattr(top, "provenance", "") or "model_inference")
+                grounding_confidence = float(
+                    getattr(top, "effective_confidence", 0.0) or 0.0
+                )
+                grounding_channel = str(getattr(top, "channel", "") or getattr(top, "facet", "") or "external source")
+                grounding_validation_target = grounding_target_claim or grounding_target_id
+                if not grounding_tension:
+                    grounding_tension = float(getattr(top, "grounding_tension", 0.0) or 0.0)
+        except Exception:
+            logger.debug("grounding tension context unavailable", exc_info=True)
+
         context = {
             "observation_count": observer_state.observation_count,
             "awareness_level": observer_state.awareness_level,
@@ -741,6 +771,13 @@ class ConsciousnessSystem:
             "dominant_tag": dominant_tag,
             "last_mutation_desc": last_mutation_desc,
             "evolution_stage": evolution_stage,
+            "grounding_tension": grounding_tension,
+            "grounding_target_id": grounding_target_id,
+            "grounding_target_claim": grounding_target_claim,
+            "grounding_provenance": grounding_provenance,
+            "grounding_confidence": grounding_confidence,
+            "grounding_channel": grounding_channel,
+            "grounding_validation_target": grounding_validation_target,
         }
 
         thought = self.meta_thoughts.check_and_generate(context)
@@ -752,7 +789,9 @@ class ConsciousnessSystem:
             event_bus.emit(META_THOUGHT_GENERATED,
                           thought_id=thought.id,
                           thought_type=thought.thought_type,
-                          depth=thought.depth, text=thought.text[:120])
+                          depth=thought.depth, text=thought.text[:120],
+                          belief_id=getattr(thought, "belief_id", "") or "",
+                          validation_target=getattr(thought, "validation_target", "") or "")
             if thought.thought_type == "pattern_recognition" and thought.confidence > 0.5:
                 self.observer.observe_pattern(
                     thought.text[:80], evidence_ids=[], confidence=thought.confidence,
@@ -2580,6 +2619,24 @@ class ConsciousnessSystem:
                                 source_ids = summary_mem.payload.get("source_ids", [])
                             if source_ids:
                                 memory_storage.tag_consolidated(source_ids, summary_mem.id)
+                            try:
+                                from memory.index import memory_index
+                                memory_index.add_memory(summary_mem)
+                            except Exception:
+                                logger.debug("Consolidation tag index skipped", exc_info=True)
+                            try:
+                                from memory.search import index_memory
+                                index_memory(summary_mem)
+                            except Exception:
+                                logger.debug("Consolidation vector index skipped", exc_info=True)
+                            try:
+                                event_bus.emit(
+                                    MEMORY_WRITE,
+                                    memory=summary_mem,
+                                    memory_id=getattr(summary_mem, "id", ""),
+                                )
+                            except Exception:
+                                logger.debug("Consolidation MEMORY_WRITE emit skipped", exc_info=True)
                             consol_count += 1
                     if consol_count:
                         actions.append(f"consolidated {consol_count} memory cluster(s)")
