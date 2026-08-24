@@ -10,9 +10,12 @@ from cognition.self_view.articulate import (
     KINDS,
     articulate_self_view,
     asserts_memory_wipe,
+    classify_register,
     classify_self_question,
     contains_unqualified_claim,
     contradicts_measured_continuity,
+    register_from_preference_payload,
+    resolve_stored_register,
 )
 
 
@@ -105,13 +108,21 @@ class TestClassify:
 
 class TestArticulation:
     def test_identity_from_osv_not_grep(self):
-        out = articulate_self_view(_model(), "identity")
+        out = articulate_self_view(_model(), "identity", register="tech")
         assert "JARVIS Oracle Edition" in out
         assert "symbol" not in out.lower()  # not a code grep
         assert "subsystems" in out.lower()
 
+    def test_identity_exec_is_brief(self):
+        out = articulate_self_view(_model(), "identity")
+        low = out.lower()
+        assert "JARVIS Oracle Edition" in out
+        assert "98" not in out
+        assert "l0-l12" not in low
+        assert "ask if you want" in low
+
     def test_capabilities_separates_buckets(self):
-        out = articulate_self_view(_model(), "capabilities").lower()
+        out = articulate_self_view(_model(), "capabilities", register="tech").lower()
         assert "active" in out and "shadow" in out and "self-reported" in out
         assert "policy" in out  # shadow subsystem named
         assert "world_model" in out  # measured subsystem named
@@ -134,7 +145,7 @@ class TestArticulation:
         assert "gap" in out or "memory" in out  # real gaps surfaced
 
     def test_gated_renders_shadow_dormant(self):
-        out = articulate_self_view(_model(), "gated_capabilities").lower()
+        out = articulate_self_view(_model(), "gated_capabilities", register="tech").lower()
         assert "shadow" in out
         assert "earned" in out  # earned-not-declared framing
 
@@ -160,10 +171,24 @@ class TestArticulation:
         assert "designed-status" not in low
         assert out.count(".") <= 6
 
-    def test_what_can_you_do_stays_capabilities_inventory(self):
+    def test_what_can_you_do_is_exec_brief(self):
         assert classify_self_question("What can you do?") == "capabilities"
+        assert classify_register("What can you do?") == "exec"
         out = articulate_self_view(_model(), "capabilities").lower()
+        assert "shadow" in out or "gated" in out
+        assert "world_model" not in out
+        assert "policy" not in out
+        assert "98" not in out
+        assert "designed-status" not in out
+        assert "ask if you want the numbers" in out
+
+    def test_what_can_you_do_in_detail_is_tech_inventory(self):
+        q = "What can you do in detail?"
+        assert classify_self_question(q) == "capabilities"
+        assert classify_register(q) == "tech"
+        out = articulate_self_view(_model(), "capabilities", register="tech").lower()
         assert "active" in out and "shadow" in out
+        assert "world_model" in out
 
     def test_consciousness_is_balanced(self):
         out = articulate_self_view(_model(), "consciousness_query").lower()
@@ -272,3 +297,66 @@ class TestContinuityArticulation:
         assert contradicts_measured_continuity(
             "You went to the mall with your kids.", self._mem_model()
         ) is False
+
+
+class TestRegister:
+    """Exec / tech / ops mouth. Full OSV always; register is this-turn speaker."""
+
+    def test_turn_overrides_and_stored_default(self):
+        assert classify_register("What can you do?") == "exec"
+        assert classify_register("What can you do in detail?") == "tech"
+        assert classify_register("give me the numbers") == "tech"
+        assert classify_register("Walk me through how you reach an answer.") == "exec"
+        assert classify_register(
+            "Walk me through how you reach an answer, with the numbers."
+        ) == "tech"
+        assert classify_register("what's running") == "ops"
+        assert classify_register("what can you do, keep it high level", stored="tech") == "exec"
+        assert classify_register("what can you do", stored="tech") == "tech"
+        assert classify_register("what can you do", stored="nope") == "exec"
+
+    def test_preference_payload_map(self):
+        assert register_from_preference_payload("User prefers concise responses") == "exec"
+        assert register_from_preference_payload("User prefers detailed responses") == "tech"
+        assert register_from_preference_payload("User prefers exec briefing") == "exec"
+        assert register_from_preference_payload("User prefers tech briefing") == "tech"
+        assert register_from_preference_payload("User prefers ops briefing") == "ops"
+        assert register_from_preference_payload("User enjoys pizza") is None
+
+    def test_stored_register_is_this_turn_speaker_not_another_person(self, monkeypatch):
+        class Rel:
+            def __init__(self, prefs):
+                self.preferences = prefs
+
+        class DummySoul:
+            identity = type("I", (), {
+                "relationships": {
+                    "david": Rel({"briefing_register": "tech"}),
+                }
+            })()
+
+        class DummyMem:
+            def get_by_tag(self, tag):
+                return []
+
+        import consciousness.soul as soul_mod
+        import memory.storage as mem_mod
+        monkeypatch.setattr(soul_mod, "soul_service", DummySoul())
+        monkeypatch.setattr(mem_mod, "memory_storage", DummyMem())
+
+        assert resolve_stored_register("unknown") is None
+        assert resolve_stored_register("") is None
+        assert resolve_stored_register("david") == "tech"
+        assert resolve_stored_register("sarah") is None
+
+    def test_answer_path_tech_uses_numbers_not_speech_in(self):
+        out = articulate_self_view(_model(), "answer_path", register="tech").lower()
+        assert "designed-status" in out
+        assert "speech in:" not in out
+        assert "understand" not in out
+
+    def test_capabilities_ops_is_counts_not_names(self):
+        out = articulate_self_view(_model(), "capabilities", register="ops").lower()
+        assert "live and measured" in out
+        assert "world_model" not in out
+        assert "ask if you want the names" in out

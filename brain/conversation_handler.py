@@ -1414,7 +1414,19 @@ def _build_preference_instruction_ack(text: str, stored_count: int) -> str:
             "Understood. Preference already stored. DOI is omitted in research "
             "answers unless explicitly requested."
         )
-    if stored_count > 0:
+    low = (text or "").lower()
+    saved = stored_count > 0
+    prefix = "Understood. Preference saved. " if saved else "Understood. Preference already stored. "
+    if re.search(r"\b(ops|admin|operational)\s+(view|briefing|register)\b", low):
+        return prefix + "I'll use the ops view unless you ask otherwise."
+    if re.search(
+        r"\b(numbers|stats|technical|tech (view|briefing|detail)|detailed|verbose|inventory)\b",
+        low,
+    ):
+        return prefix + "I'll include the numbers by default. Ask me to keep it high level for the brief."
+    if re.search(r"\b(exec|high[- ]level|concise|keep it (short|brief))\b", low):
+        return prefix + "I'll keep the executive brief unless you ask for details."
+    if saved:
         return "Understood. Preference saved and active for future responses."
     return "Understood. Preference already stored and still active."
 
@@ -1471,6 +1483,25 @@ _PREFERENCE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
      "User prefers concise responses", "response_style"),
     (re.compile(r"\b(?:be )?more (detailed|thorough|verbose)\b", re.I),
      "User prefers detailed responses", "response_style"),
+    (re.compile(
+        r"\b(?:keep it |talk to me like (?:an? )?|i prefer (?:the )?|always |by default )"
+        r"(?:exec(?:utive)?(?: briefing| view)?|high[- ]level)\b",
+        re.I,
+    ),
+     "User prefers exec briefing", "response_style"),
+    (re.compile(
+        r"\b(?:always |by default |i prefer (?:the )?|from now on.{0,24})"
+        r"(?:give me )?(?:the )?(?:numbers|stats|technical detail|"
+        r"tech (?:view|briefing|detail))\b",
+        re.I,
+    ),
+     "User prefers tech briefing", "response_style"),
+    (re.compile(
+        r"\b(?:always |by default |i prefer (?:the )?|talk to me (?:in |like )?(?:the |an? )?|keep )"
+        r"(?:ops|admin|operational) (?:view|briefing|register)\b",
+        re.I,
+    ),
+     "User prefers ops briefing", "response_style"),
     (re.compile(
         r"\b(?:don'?t|do not)\s+(?:use|say|do|include)\s+"
         r"(.{0,80}?\b(?:doi|dois|citation|citations|url|urls|link|links|response|responses|answer|answers)\b.{0,40}?)"
@@ -1953,6 +1984,15 @@ def _update_relationship(speaker: str, payload: str, category: str) -> None:
         rel.preferences[_preference_key(payload)] = payload
     elif category == "personal_preference":
         rel.preferences[_preference_key(payload)] = payload
+    elif category == "response_style":
+        rel.preferences[_preference_key(payload)] = payload
+        try:
+            from cognition.self_view.articulate import register_from_preference_payload
+            mapped = register_from_preference_payload(payload)
+        except Exception:
+            mapped = None
+        if mapped:
+            rel.preferences["briefing_register"] = mapped
 
 
 def _retire_matching_preferences(text: str, speaker: str) -> None:
@@ -3051,15 +3091,29 @@ async def handle_transcription(
             # explicit code questions, so "search your code for X" still routes to CODEBASE.
             try:
                 if not routing.golden_context:
-                    from cognition.self_view.articulate import classify_self_question
+                    from cognition.self_view.articulate import (
+                        classify_register,
+                        classify_self_question,
+                        resolve_stored_register,
+                    )
                     _sv_kind = classify_self_question(text)
                     if _sv_kind:
+                        _sv_reg = classify_register(
+                            text, stored=resolve_stored_register(speaker),
+                        )
                         routing = RoutingResult(
                             tool=ToolType.INTROSPECTION,
                             confidence=0.95,
-                            extracted_args={"self_view_kind": _sv_kind},
+                            extracted_args={
+                                "self_view_kind": _sv_kind,
+                                "self_view_register": _sv_reg,
+                            },
                         )
-                        logger.info("Routing override: self-view introspection (kind=%s)", _sv_kind)
+                        logger.info(
+                            "Routing override: self-view introspection (kind=%s register=%s)",
+                            _sv_kind,
+                            _sv_reg,
+                        )
             except Exception:
                 logger.debug("self-view route probe failed", exc_info=True)
 
@@ -3432,9 +3486,10 @@ async def handle_transcription(
         engine.set_phase("PROCESSING")
         tone = engine.get_state()["tone"]
         _sv_kind = routing.extracted_args.get("self_view_kind")
+        _sv_reg = routing.extracted_args.get("self_view_register") or "exec"
         _sv_model = load_self_view()
         if _sv_model:
-            reply = articulate_self_view(_sv_model, _sv_kind)
+            reply = articulate_self_view(_sv_model, _sv_kind, register=_sv_reg)
         else:
             reply = ("My operational self-view isn't available yet — I can't read that part "
                      "of myself right now.")
