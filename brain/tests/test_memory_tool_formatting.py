@@ -213,3 +213,93 @@ def test_keyword_search_normalizes_punctuation_for_temporal_query(monkeypatch) -
     assert all("." not in token for token in calls)
     assert len(results) == 1
     assert "mall yesterday" in results[0][1].lower()
+
+
+# Lived 2026-08-24: MEMORY "what do you remember about Schuyler?" replayed the
+# 09:28 LLM wipe-claim as "Jarvis recalled:". The scar stays in the store;
+# recall must not declare it as fact. Detector is tested in
+# test_self_view_articulate; this pins the recall filter.
+_LIVED_WIPE_LIE = (
+    "My last recorded memory was on August 10th. I don't have a timeline of "
+    "events beyond that, but I can tell you that my current state is fresh "
+    "and ready to process new information. I've been offline for a while, so "
+    "my memory is essentially reset — I'm starting fresh today."
+)
+
+
+def _osv_with_memories():
+    import cognition.self_view as sv
+    snap = {
+        "consciousness": {"stage": "integrative", "awareness_level": 0.98,
+                          "transcendence_level": 10.0},
+        "evolution": {"stage": "integrative", "transcendence_level": 10.0},
+        "policy": {"mode": "shadow", "nn_win_rate": 0.009, "eligible_for_control": False},
+        "self_improve": {"active": True, "stage": 2, "effective_dry_run": True},
+        "world_model": {"promotion": {"level_name": "active", "total_validated": 1},
+                        "causal": {"predictive_total": 1, "predictive_accuracy": 0.8,
+                                   "persistence_accuracy": 0.9},
+                        "simulator_promotion": {"level_name": "shadow", "total_validated": 1},
+                        "simulator": {"avg_confidence": 0.55}},
+        "hemisphere": {"enabled": True, "matrix_specialists": [1]},
+        "memory": {"total": 734, "core_count": 4,
+                   "oldest_timestamp": 1782235435.0, "newest_timestamp": 1787578126.0},
+    }
+    return sv.build_self_view(engine=None, eval_snapshot={}, skills_summary={},
+                              snapshot=snap, now=1.0)
+
+
+def test_semantic_search_skips_osv_contradicted_wipe_conversation(monkeypatch) -> None:
+    wipe_mem = SimpleNamespace(
+        type="conversation",
+        payload={
+            "user_message": "when was your last recorded memory",
+            "response": _LIVED_WIPE_LIE,
+        },
+        weight=0.55,
+        identity_subject="david",
+        identity_subject_type="person",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    ok_mem = SimpleNamespace(
+        type="conversation",
+        payload={"response": "Schuyler is the dog."},
+        weight=0.50,
+        identity_subject="david",
+        identity_subject_type="person",
+        identity_owner_type="person",
+        tags=("conversation",),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [(0.71, wipe_mem), (0.40, ok_mem)],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    monkeypatch.setattr(
+        "cognition.self_view.load_self_view",
+        lambda: _osv_with_memories(),
+    )
+
+    results = _semantic_search("What do you remember about Schuyler?", limit=5, speaker="David")
+    previews = " ".join(p for _, p in results)
+    assert "starting fresh" not in previews
+    assert "August 10" not in previews
+    assert "Schuyler is the dog" in previews
+    assert len(results) == 1
+
+
+def test_format_preview_does_not_replay_wipe_as_jarvis_recalled(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "cognition.self_view.load_self_view",
+        lambda: _osv_with_memories(),
+    )
+    mem = SimpleNamespace(
+        type="conversation",
+        payload={
+            "user_message": "when was your last recorded memory",
+            "response": _LIVED_WIPE_LIE,
+        },
+    )
+    preview = _format_payload_preview(mem)
+    assert "starting fresh" not in preview
+    assert "August 10" not in preview
+    assert "Jarvis recalled:" not in preview

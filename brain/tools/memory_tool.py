@@ -140,6 +140,36 @@ def _build_keyword_seeds(words: list[str], *, prefer_temporal: bool) -> list[str
     return seeds
 
 
+def _load_osv_for_continuity() -> dict | None:
+    """Read-only OSV snapshot for recall-time continuity checks. None = unreadable."""
+    try:
+        from cognition.self_view import load_self_view
+        return load_self_view()
+    except Exception:
+        return None
+
+
+def _is_contradicted_wipe_memory(memory_obj, model: dict | None = None) -> bool:
+    """True when a conversation memory's stored reply asserts a wipe the OSV refutes.
+
+    The memory stays in the store (never discard). Callers skip injecting it as
+    recalled fact (never declare). KNOW-not-guess if the OSV is unreadable.
+    """
+    payload = getattr(memory_obj, "payload", None)
+    if not isinstance(payload, dict):
+        return False
+    response = str(payload.get("response") or "")
+    if not response:
+        return False
+    try:
+        from cognition.self_view.articulate import contradicts_measured_continuity
+    except Exception:
+        return False
+    if model is None:
+        model = _load_osv_for_continuity()
+    return bool(contradicts_measured_continuity(response, model))
+
+
 def _is_system_self_memory(memory_obj) -> bool:
     memory_type = str(getattr(memory_obj, "type", "") or "").strip().lower()
     subject = str(getattr(memory_obj, "identity_subject", "") or "").strip().lower()
@@ -173,6 +203,10 @@ def _format_payload_preview(memory_obj, max_len: int = 220) -> str:
             # Prefer assistant response for recall summaries so we avoid
             # replaying user first-person phrasing that can trigger
             # capability-claim gates ("I'm going to ...") during speech.
+            # Exception: an OSV-contradicted wipe/blank-slate claim is not
+            # autobiography — do not declare it as "Jarvis recalled".
+            if assistant_msg and _is_contradicted_wipe_memory(memory_obj):
+                assistant_msg = ""
             if assistant_msg:
                 text = f"Jarvis recalled: {assistant_msg}"
             elif user_msg:
@@ -308,6 +342,7 @@ def _semantic_search(
     try:
         from memory.search import semantic_search_scored
         is_personal_activity = _is_personal_activity_query(query)
+        osv = _load_osv_for_continuity()
         hits = semantic_search_scored(
             query,
             top_k=limit,
@@ -318,6 +353,8 @@ def _semantic_search(
         results = []
         for sim, m in hits:
             if is_personal_activity and _is_system_self_memory(m):
+                continue
+            if _is_contradicted_wipe_memory(m, osv):
                 continue
             payload_str = _format_payload_preview(m)
             results.append((float(sim), f"[{m.type}] {payload_str[:200]}"))
@@ -364,8 +401,11 @@ def _keyword_search(
     except Exception:
         hits = []
 
+    osv = _load_osv_for_continuity()
     for m in hits:
         if is_personal_activity and _is_system_self_memory(m):
+            continue
+        if _is_contradicted_wipe_memory(m, osv):
             continue
         payload_str = _format_payload_preview(m)
         tag_str = " ".join(m.tags)
