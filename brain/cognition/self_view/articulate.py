@@ -350,6 +350,61 @@ def _iso_utc(ts: Any) -> str | None:
     return datetime.datetime.fromtimestamp(t, tz=datetime.timezone.utc).strftime("%Y-%m-%d")
 
 
+# Write-path / recall integrity for continuity. Lived miss 2026-08-24: the LLM
+# draft ("memory is essentially reset — I'm starting fresh") was stored as a
+# conversation memory *before* fail-closed speech used the measured dump.
+# These detectors let remember() refuse that draft as autobiography and let
+# MEMORY recall skip it — the scar stays in the store (never discard), it is
+# just not declared as fact. Not a P2 flip; not a wipe.
+_WIPE_ASSERT = re.compile(
+    r"\b("
+    r"memory (is |was )?(essentially )?(reset|wiped|gone|empty)"
+    r"|starting fresh"
+    r"|blank slate"
+    r"|I(?:'m| am) starting fresh"
+    r")\b",
+    re.I,
+)
+_WIPE_DENIAL = re.compile(
+    r"\b("
+    r"not a (wipe|blank slate)"
+    r"|process restart, not a wipe"
+    r"|I still hold \d+"
+    r"|I am not a blank slate"
+    r"|will not invent a blank slate"
+    r")\b",
+    re.I,
+)
+
+
+def asserts_memory_wipe(text: str) -> bool:
+    """True if *text* asserts a memory wipe / blank slate (not a denial of one)."""
+    if not text or not str(text).strip():
+        return False
+    if _WIPE_DENIAL.search(text):
+        return False
+    return bool(_WIPE_ASSERT.search(text))
+
+
+def contradicts_measured_continuity(text: str, model: dict[str, Any] | None) -> bool:
+    """True when *text* asserts a wipe but the OSV measures a non-empty store.
+
+    KNOW-not-guess: if the store cannot be measured, this is False — we do not
+    invent a contradiction we cannot show.
+    """
+    if not asserts_memory_wipe(text):
+        return False
+    mem = ((model or {}).get("subsystems") or {}).get("memory") or {}
+    total = _fact_value(mem.get("total_memories"))
+    try:
+        n = int(total) if total is not None else None
+    except (TypeError, ValueError):
+        n = None
+    if n is None:
+        return False
+    return n > 0
+
+
 def _continuity(model: dict[str, Any]) -> str:
     """Process-restart vs wipe. Answers from measured memory extrema only. No LLM.
 

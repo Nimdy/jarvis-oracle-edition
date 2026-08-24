@@ -9,8 +9,10 @@ import cognition.self_view as sv
 from cognition.self_view.articulate import (
     KINDS,
     articulate_self_view,
+    asserts_memory_wipe,
     classify_self_question,
     contains_unqualified_claim,
+    contradicts_measured_continuity,
 )
 
 
@@ -208,3 +210,34 @@ class TestContinuityArticulation:
         assert "reset" not in out
         assert "starting fresh" not in out
         assert "can't measure" in out or "cannot measure" in out or "not readable" in out
+
+    # Lived 2026-08-24 dual-write: LLM draft stored as conversation memory while
+    # fail-closed speech used the measured dump. These pin the detector the
+    # write-path and MEMORY recall both consult. Never a wipe of the scar —
+    # a contradicted blank-slate claim must not be treated as autobiography.
+    _LIVED_LIE = (
+        "My last recorded memory was on August 10th. I don't have a timeline of "
+        "events beyond that, but I can tell you that my current state is fresh "
+        "and ready to process new information. I've been offline for a while, so "
+        "my memory is essentially reset — I'm starting fresh today."
+    )
+
+    def test_lived_llm_lie_asserts_a_memory_wipe(self):
+        assert asserts_memory_wipe(self._LIVED_LIE) is True
+
+    def test_continuity_answer_does_not_assert_a_wipe(self):
+        out = articulate_self_view(self._mem_model(), "continuity")
+        assert asserts_memory_wipe(out) is False
+
+    def test_lived_lie_contradicts_measured_store(self):
+        assert contradicts_measured_continuity(self._LIVED_LIE, self._mem_model()) is True
+
+    def test_cannot_prove_contradiction_when_store_unreadable(self):
+        # KNOW-not-guess: no measured count → do not treat as contradicted.
+        assert contradicts_measured_continuity(self._LIVED_LIE, _model()) is False
+
+    def test_ordinary_recall_is_not_a_wipe_claim(self):
+        assert asserts_memory_wipe("You went to the mall with your kids.") is False
+        assert contradicts_measured_continuity(
+            "You went to the mall with your kids.", self._mem_model()
+        ) is False
