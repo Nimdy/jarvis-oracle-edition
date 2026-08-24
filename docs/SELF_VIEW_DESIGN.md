@@ -168,12 +168,6 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
   **Recall-path:** MEMORY may not present that contradicted claim as
   "Jarvis recalled" — the scar stays in the store (never discard), it is not
   declared as fact. Not a P2 flip; not a wipe.
-  **Register (lived 2026-08-24):** the OSV always holds the full model; the
-  mouth is leveled. Default is an executive brief. Per-turn "details / numbers
-  / stats" renders the technical inventory; ops register is live-vs-gated
-  counts. Stored on the **this-turn speaker's** `response_style` memories and
-  `Relationship.preferences["briefing_register"]` — never a hardcoded companion.
-  Query override > stored preference > exec default (same shape as DOI policy).
 - **Strict in claims, rich in capture** (see §6): user-facing answers are conservative and
   non-suppressing; the language guard is regression-tested; "Are you conscious?" uses the §6
   balanced template; P1 may *record* a self-referential anomaly via `observer.observe_emergence`

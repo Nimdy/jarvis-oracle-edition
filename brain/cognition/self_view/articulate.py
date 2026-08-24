@@ -101,123 +101,6 @@ def classify_self_question(text: str) -> str | None:
     return None
 
 
-# Briefing register: the OSV always holds the full model; the mouth changes.
-# exec  — suite brief (default). tech — numbers/inventory. ops — live vs gated counts.
-# Per-turn override > this-turn speaker preference > exec. Never a hardcoded companion.
-REGISTERS = ("exec", "tech", "ops")
-DEFAULT_REGISTER = "exec"
-
-_TECH_TURN = re.compile(
-    r"\b("
-    r"in detail|more detail|with (the )?numbers|the (numbers|stats|statistics|inventory)"
-    r"|full (breakdown|inventory|list)|subsystem list|designed[- ]status"
-    r"|give me (the )?(details|numbers|stats|inventory)"
-    r"|technically|tech (view|briefing)"
-    r")\b",
-    re.I,
-)
-_OPS_TURN = re.compile(
-    r"\b(ops view|admin view|operational view|what(?:'s| is) running)\b",
-    re.I,
-)
-_EXEC_TURN = re.compile(
-    r"\b("
-    r"keep it (short|brief|concise|high[- ]level)|be (brief|concise|short)"
-    r"|less detail|high[- ]level|exec(?:utive)? (brief|view|briefing)"
-    r")\b",
-    re.I,
-)
-
-
-def _normalize_register(register: str | None) -> str:
-    r = (register or "").strip().lower()
-    return r if r in REGISTERS else DEFAULT_REGISTER
-
-
-def register_from_preference_payload(payload: str) -> str | None:
-    """Map a stored response_style / relationship payload to a briefing register."""
-    low = (payload or "").lower()
-    if not low:
-        return None
-    if "ops briefing" in low or "admin briefing" in low:
-        return "ops"
-    if "tech briefing" in low or "detailed responses" in low:
-        return "tech"
-    if "exec briefing" in low or "concise responses" in low:
-        return "exec"
-    return None
-
-
-def classify_register(text: str, stored: str | None = None) -> str:
-    """This-turn override, else stored speaker preference, else exec."""
-    if text:
-        if _TECH_TURN.search(text):
-            return "tech"
-        if _OPS_TURN.search(text):
-            return "ops"
-        if _EXEC_TURN.search(text):
-            return "exec"
-    if stored in REGISTERS:
-        return stored
-    return DEFAULT_REGISTER
-
-
-def resolve_stored_register(speaker: str | None) -> str | None:
-    """This-turn speaker's stored briefing register, or None.
-
-    Reads Relationship.preferences then speaker-tagged response_style memories.
-    Unknown/guest/empty speaker → None (system default exec). Never reads
-    another person's preference.
-    """
-    if not speaker:
-        return None
-    key = speaker.strip().lower()
-    if not key or key == "unknown":
-        return None
-
-    try:
-        from consciousness.soul import soul_service
-        rel = getattr(getattr(soul_service, "identity", None), "relationships", {}) or {}
-        rec = rel.get(key)
-        prefs = getattr(rec, "preferences", None) if rec is not None else None
-        if isinstance(prefs, dict):
-            tagged = prefs.get("briefing_register")
-            if tagged in REGISTERS:
-                return tagged
-            mapped = None
-            for value in prefs.values():
-                found = register_from_preference_payload(str(value))
-                if found:
-                    mapped = found
-            if mapped:
-                return mapped
-    except Exception:
-        pass
-
-    try:
-        from memory.storage import memory_storage
-        speaker_tag = f"speaker:{key}"
-        hits: list[tuple[float, str]] = []
-        for mem in memory_storage.get_by_tag("response_style") or []:
-            tags = set(getattr(mem, "tags", ()) or ())
-            if "former" in tags:
-                continue
-            if speaker_tag not in tags:
-                continue
-            payload = getattr(mem, "payload", "")
-            found = register_from_preference_payload(str(payload or ""))
-            if not found:
-                continue
-            ts = float(getattr(mem, "timestamp", 0.0) or 0.0)
-            hits.append((ts, found))
-        if hits:
-            hits.sort(key=lambda item: item[0])
-            return hits[-1][1]
-    except Exception:
-        pass
-    return None
-
-
 def contains_unqualified_claim(text: str) -> bool:
     """True if a danger word appears in a sentence WITHOUT a nearby qualifier."""
     for sentence in re.split(r"(?<=[.!?])\s+", text or ""):
@@ -359,45 +242,21 @@ def _live_activity_line(model: dict[str, Any]) -> str:
     return " What's active in me right now: " + "; ".join(bits) + "."
 
 
-def _join_and(items: list[str]) -> str:
-    if not items:
-        return ""
-    if len(items) == 1:
-        return items[0]
-    if len(items) == 2:
-        return f"{items[0]} and {items[1]}"
-    return ", ".join(items[:-1]) + ", and " + items[-1]
-
-
-def _identity(model: dict[str, Any], register: str = "exec") -> str:
+def _identity(model: dict[str, Any]) -> str:
     cov = model.get("coverage", {})
     bp = cov.get("subsystems_by_provenance", {})
     parts = [
         "I am JARVIS Oracle Edition, a local cognitive system running across a perception "
         "node and a brain node."
     ]
-    if register == "tech":
-        summ = _arch_summary(model)
-        if summ:
-            parts.append(summ)
-        parts.append(
-            f"In real time my self-view reads {cov.get('subsystem_count', 0)} subsystems "
-            f"({bp.get('measured', 0)} measured/active, {bp.get('shadow_only', 0)} shadow-only, "
-            f"{bp.get('self_scored', 0)} self-reported), with some areas I cannot read yet. "
-            "I report from this self-model and do not claim capabilities that are gated or unverified."
-        )
-        return " ".join(parts)
-    if register == "ops":
-        parts.append(
-            f"Self-view coverage: {cov.get('subsystem_count', 0)} subsystems, "
-            f"{bp.get('measured', 0)} measured, {bp.get('shadow_only', 0)} shadow-only, "
-            f"{bp.get('self_scored', 0)} self-reported. "
-            "I do not claim capabilities that are gated or unverified."
-        )
-        return " ".join(parts)
+    summ = _arch_summary(model)
+    if summ:
+        parts.append(summ)
     parts.append(
-        "I report from my operational self-view and do not claim capabilities that are "
-        "gated or unverified. Ask if you want the structural numbers."
+        f"In real time my self-view reads {cov.get('subsystem_count', 0)} subsystems "
+        f"({bp.get('measured', 0)} measured/active, {bp.get('shadow_only', 0)} shadow-only, "
+        f"{bp.get('self_scored', 0)} self-reported), with some areas I cannot read yet. "
+        "I report from this self-model and do not claim capabilities that are gated or unverified."
     )
     return " ".join(parts)
 
@@ -414,64 +273,12 @@ def _authority_is_live(auth: Any) -> bool:
     return str(auth or "").strip().lower() in ("live", "active")
 
 
-def _measured_memory_count(model: dict[str, Any]) -> int | None:
-    total = _fact_value(((model.get("subsystems") or {}).get("memory") or {}).get("total_memories"))
-    try:
-        n = int(total) if total is not None else None
-    except (TypeError, ValueError):
-        n = None
-    if n is None or n <= 0:
-        return None
-    return n
-
-
-def _answer_path_tech(model: dict[str, Any], perc: Any, route: Any, route_auth: Any,
-                      mem: Any, osv: Any, gate: Any) -> str:
-    perc_auth = _arch_entry_value(model, "perception-orchestrator", "authority")
-    osv_auth = _arch_entry_value(model, "self-view-osv", "authority")
-    parts: list[str] = []
-    if perc:
-        parts.append(
-            f"Perception is designed-status {perc}"
-            + (f", authority {perc_auth}" if perc_auth else "")
-            + " — code-grounded, not a live sensor readout."
-        )
-    if route:
-        parts.append(
-            f"The keyword tool-router is designed-status {route}"
-            + (f", authority {route_auth}" if route_auth else "")
-            + ". It is the live chooser. The voice-intent network is shadow/gated "
-            "and does not drive the turn."
-        )
-    if osv:
-        parts.append(
-            f"Self-questions I can classify are answered from my operational self-view "
-            f"(designed-status {osv}"
-            + (f", authority {osv_auth}" if osv_auth else "")
-            + ") with no LLM authoring the self-facts."
-        )
-    if mem:
-        mem_line = f"Topic recall uses the memory stack (designed-status {mem})."
-        n = _measured_memory_count(model)
-        if n is not None:
-            mem_line += f" I currently measure {n} stored memories."
-        mem_line += " Fractal recall is shadow and does not speak."
-        parts.append(mem_line)
-    if gate:
-        parts.append(
-            f"Other routes may use the language model as voice only, under the "
-            f"capability gate (designed-status {gate})."
-        )
-    parts.append("I cannot measure a private inner parse. I will not invent one.")
-    return " ".join(parts)
-
-
-def _answer_path(model: dict[str, Any], register: str = "exec") -> str:
+def _answer_path(model: dict[str, Any]) -> str:
     """How a spoken answer is produced — architecture map + measured memory only.
 
-    Exec: spoken English. Tech: designed-status numbers. Ops: live vs shadow counts.
-    No inner 'understanding', no confidence percents, no pattern-recognition story.
-    Missing inventory → gap, not a fable.
+    Spoken English, not a status dump. No inner 'understanding', no confidence
+    percents, no pattern-recognition story. Missing inventory → gap, not a fable.
+    Designed-maturity tokens stay off the mouth; live vs shadow is the claim.
     """
     perc = _arch_entry_value(model, "perception-orchestrator", "status")
     route = _arch_entry_value(model, "routing-voice", "status")
@@ -489,9 +296,6 @@ def _answer_path(model: dict[str, Any], register: str = "exec") -> str:
             "I can't measure a turn-by-turn answer path from my self-view right now. "
             "I will not invent one."
         )
-
-    if register == "tech":
-        return _answer_path_tech(model, perc, route, route_auth, mem, osv, gate)
 
     sentences: list[str] = [
         "I cannot measure a private inner parse, so I will not invent one."
@@ -517,11 +321,15 @@ def _answer_path(model: dict[str, Any], register: str = "exec") -> str:
             "not by the language model inventing facts."
         )
     if mem:
+        n = None
+        total = _fact_value(((model.get("subsystems") or {}).get("memory") or {}).get("total_memories"))
+        try:
+            n = int(total) if total is not None else None
+        except (TypeError, ValueError):
+            n = None
         mem_line = "Topic recall uses the memory stack"
-        if register == "ops":
-            n = _measured_memory_count(model)
-            if n is not None:
-                mem_line += f", I currently measure {n} stored memories"
+        if n is not None and n > 0:
+            mem_line += f", I currently measure {n} stored memories"
         mem_line += ", and fractal recall is shadow and does not speak."
         sentences.append(mem_line)
     if gate:
@@ -531,7 +339,7 @@ def _answer_path(model: dict[str, Any], register: str = "exec") -> str:
     return " ".join(sentences)
 
 
-def _capabilities_tech(model: dict[str, Any]) -> str:
+def _capabilities(model: dict[str, Any]) -> str:
     g = _group_subsystems(model)
     summ = _arch_summary(model)
     return (
@@ -545,64 +353,7 @@ def _capabilities_tech(model: dict[str, Any]) -> str:
     )
 
 
-def _capabilities_ops(model: dict[str, Any]) -> str:
-    g = _group_subsystems(model)
-    return (
-        f"Live and measured: {len(g['active'])}. "
-        f"Shadow, zero authority: {len(g['shadow'])}. "
-        f"Dormant or gate-blocked: {len(g['dormant'])}. "
-        f"Self-reported, not measurements: {len(g['self_reported'])}. "
-        f"Not currently readable: {len(g['unreadable'])}. "
-        "Ask if you want the names."
-    )
-
-
-def _capabilities_exec(model: dict[str, Any]) -> str:
-    g = _group_subsystems(model)
-    perc = _arch_entry_value(model, "perception-orchestrator", "status")
-    route = _arch_entry_value(model, "routing-voice", "status")
-    mem = _arch_entry_value(model, "memory-stack", "status")
-    osv = _arch_entry_value(model, "self-view-osv", "status")
-    verbs: list[str] = []
-    if perc:
-        verbs.append("listen and speak")
-    if route:
-        verbs.append("route your questions")
-    if mem:
-        verbs.append("recall topics from memory")
-    if osv:
-        verbs.append("answer questions about myself from my operational self-view")
-    if not verbs:
-        if g["active"]:
-            return (
-                "I have live, measured capabilities, and I will not claim the ones that "
-                "are still shadow or gated. Ask if you want the numbers or the inventory."
-            )
-        return (
-            "I can't give a live capability readout from my self-view right now. "
-            "I will not invent one."
-        )
-    lead = f"I can {_join_and(verbs)}."
-    if g["shadow"] or g["dormant"]:
-        lead += (
-            " Some of that is live. Some is still shadow or gated, and I will not "
-            "claim those as working."
-        )
-    else:
-        lead += " I separate what I can actually do from what is only observed in shadow or gated."
-    lead += " Ask if you want the numbers or the inventory."
-    return lead
-
-
-def _capabilities(model: dict[str, Any], register: str = "exec") -> str:
-    if register == "tech":
-        return _capabilities_tech(model)
-    if register == "ops":
-        return _capabilities_ops(model)
-    return _capabilities_exec(model)
-
-
-def _recent_changes(model: dict[str, Any], register: str = "exec") -> str:
+def _recent_changes(model: dict[str, Any]) -> str:
     rec = (model.get("change", {}).get("recent") or {})
     if rec.get("provenance") == "gap" or not rec.get("value"):
         return "I don't have a readable record of recent changes right now."
@@ -625,7 +376,7 @@ def _recent_changes(model: dict[str, Any], register: str = "exec") -> str:
     return "What's new — " + "; ".join(parts) + "."
 
 
-def _health(model: dict[str, Any], register: str = "exec") -> str:
+def _health(model: dict[str, Any]) -> str:
     perf = model.get("performance", {})
     comp = perf.get("scoreboard_composite", {})
     if comp.get("is_measurement") and comp.get("value") is not None:
@@ -640,7 +391,7 @@ def _health(model: dict[str, Any], register: str = "exec") -> str:
     )
 
 
-def _weaknesses(model: dict[str, Any], register: str = "exec") -> str:
+def _weaknesses(model: dict[str, Any]) -> str:
     gaps = model.get("gaps", [])
     if not gaps:
         return "My self-view shows no flagged gaps right now, but absence of a flagged gap is not proof of none."
@@ -649,30 +400,8 @@ def _weaknesses(model: dict[str, Any], register: str = "exec") -> str:
             + "; ".join(lines) + ".")
 
 
-def _gated_capabilities(model: dict[str, Any], register: str = "exec") -> str:
+def _gated_capabilities(model: dict[str, Any]) -> str:
     g = _group_subsystems(model)
-    c = _arch_status_counts(model)
-    n_dormant = c.get("dormant", 0) + c.get("gated", 0)
-    n_shadow = c.get("shadow", 0)
-    n_fail = c.get("signal-failure", 0)
-    total = sum(c.values())
-    if register == "exec":
-        return (
-            "Some capabilities are gated or still in shadow. They are earned, not declared. "
-            "Ask if you want the list or the counts."
-        )
-    if register == "ops":
-        if total:
-            return (
-                f"Dormant or gate-blocked: {n_dormant}. Shadow, zero authority: {n_shadow}. "
-                f"Signal-failure: {n_fail}. Across {total} mapped subsystems. "
-                "These are earned, not declared."
-            )
-        return (
-            f"Dormant or gate-blocked: {len(g['dormant'])}. "
-            f"Shadow, zero authority: {len(g['shadow'])}. "
-            "These are earned, not declared."
-        )
     base = (
         f"Gate-blocked / dormant (not available): {_fmt(g['dormant'])}. "
         f"Running in shadow with zero behavioral authority (not yet allowed to act): {_fmt(g['shadow'])}. "
@@ -680,6 +409,11 @@ def _gated_capabilities(model: dict[str, Any], register: str = "exec") -> str:
     )
     # Counts (not raw names) from the 98-map: names can contain words the unqualified-claim
     # guard flags (e.g. a "Consciousness Kernel" subsystem), and counts are honest + sufficient.
+    c = _arch_status_counts(model)
+    n_dormant = c.get("dormant", 0) + c.get("gated", 0)
+    n_shadow = c.get("shadow", 0)
+    n_fail = c.get("signal-failure", 0)
+    total = sum(c.values())
     if total:
         base += (
             f" Across my full {total}-subsystem architecture, by design: "
@@ -689,7 +423,7 @@ def _gated_capabilities(model: dict[str, Any], register: str = "exec") -> str:
     return base
 
 
-def _unknowns(model: dict[str, Any], register: str = "exec") -> str:
+def _unknowns(model: dict[str, Any]) -> str:
     g = _group_subsystems(model)
     gaps = [x.get("area") for x in model.get("gaps", []) if isinstance(x, dict)]
     return (
@@ -770,7 +504,7 @@ def contradicts_measured_continuity(text: str, model: dict[str, Any] | None) -> 
     return n > 0
 
 
-def _continuity(model: dict[str, Any], register: str = "exec") -> str:
+def _continuity(model: dict[str, Any]) -> str:
     """Process-restart vs wipe. Answers from measured memory extrema only. No LLM.
 
     Lived miss 2026-08-24: the LLM claimed the store was reset after a month off.
@@ -803,7 +537,7 @@ def _continuity(model: dict[str, Any], register: str = "exec") -> str:
     return " ".join(parts)
 
 
-def _consciousness_query(model: dict[str, Any], register: str = "exec") -> str:
+def _consciousness_query(model: dict[str, Any]) -> str:
     # The §6 balanced template: no claim, no denial.
     cov = model.get("coverage", {})
     return (
@@ -830,11 +564,8 @@ _ARTICULATORS = {
 }
 
 
-def articulate_self_view(model: dict[str, Any], kind: str, register: str = "exec") -> str:
+def articulate_self_view(model: dict[str, Any], kind: str) -> str:
     """Deterministically articulate the OSV for *kind*. No LLM, provenance-preserving.
-
-    *register* is exec (default brief), tech (numbers/inventory), or ops (live vs
-    gated counts). The model is always full; only the mouth changes.
 
     Output is guarded: if (defensively) an unqualified self-claim ever appeared, it is
     recorded via the existing emergence observation lane (observation-only) and a safe
@@ -844,7 +575,7 @@ def articulate_self_view(model: dict[str, Any], kind: str, register: str = "exec
     if fn is None:
         return ""
     try:
-        text = fn(model or {}, register=_normalize_register(register))
+        text = fn(model or {})
     except Exception:
         return "I can't render that part of my self-view right now."
     if contains_unqualified_claim(text):

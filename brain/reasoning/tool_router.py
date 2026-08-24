@@ -1002,8 +1002,7 @@ _SELF_RESEARCH_HISTORY_TIME_RE = re.compile(
 
 _RESPONSE_PREFERENCE_OBJECT_RE = re.compile(
     r"\b(?:format|wording|style|tone|doi|dois|citation|citations|url|urls|link|links|"
-    r"short|brief|concise|detailed|verbose|thorough|"
-    r"numbers|stats|inventory|exec|executive|high[- ]level|ops|admin|technical)\b",
+    r"short|brief|concise|detailed|verbose|thorough)\b",
     re.I,
 )
 

@@ -115,39 +115,6 @@ def test_router_does_not_misclassify_non_preference_complaint() -> None:
     assert result.extracted_args.get("tier") != "preference_instruction"
 
 
-def test_briefing_register_always_numbers_is_preference_instruction() -> None:
-    router = ToolRouter()
-    result = router.route("Always give me the numbers.")
-    assert result.tool == ToolType.NONE
-    assert result.extracted_args.get("tier") == "preference_instruction"
-
-
-def test_what_can_you_do_in_detail_is_not_a_preference_instruction() -> None:
-    router = ToolRouter()
-    result = router.route("What can you do in detail?")
-    assert result.extracted_args.get("tier") != "preference_instruction"
-
-
-def test_briefing_preference_extractor_marks_response_style() -> None:
-    keep = _extract_personal_intel("Keep it high level.", speaker="david", suppress_write=True)
-    always = _extract_personal_intel(
-        "Always give me the numbers.", speaker="david", suppress_write=True,
-    )
-    this_turn = _extract_personal_intel(
-        "What can you do in detail?", speaker="david", suppress_write=True,
-    )
-    assert "response_style" in keep["personal_categories"]
-    assert "response_style" in always["personal_categories"]
-    assert "response_style" not in this_turn["personal_categories"]
-
-
-def test_briefing_preference_ack_names_the_register() -> None:
-    exec_ack = _build_preference_instruction_ack("Keep it high level.", stored_count=1)
-    tech_ack = _build_preference_instruction_ack("Always give me the numbers.", stored_count=1)
-    assert "executive brief" in exec_ack.lower()
-    assert "numbers" in tech_ack.lower()
-
-
 def test_stage4_routine_priority_phrases_are_personal_intel_not_tool_routes() -> None:
     router = ToolRouter()
     samples = [
