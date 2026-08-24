@@ -83,6 +83,7 @@ def _extract_referenced_entities(query: str) -> set[str]:
 # not Layer 3 boundary. Lived 2026-08-24 12:50: Skyler is a remembered dog,
 # so get_known_names() was {david} and the first-sentence cut never ran.
 _ABOUT_SUBJECT_RE = re.compile(r"\babout\s+([A-Za-z][A-Za-z'-]*)\b", re.I)
+_WHO_IS_RE = re.compile(r"\bwho(?:'s|\s+is)\s+([A-Za-z][A-Za-z'-]*)\b", re.I)
 _ABOUT_STOP = _STOP_WORDS | frozenset({
     "something", "anything", "everything", "stuff", "things",
     "myself", "yourself", "himself", "herself", "itself",
@@ -106,7 +107,7 @@ def _extract_about_subjects(query: str, speaker: str = "") -> set[str]:
     if speaker_name.lower() in ("", "unknown"):
         speaker_name = ""
     out: set[str] = set()
-    for match in _ABOUT_SUBJECT_RE.finditer(query):
+    for match in list(_ABOUT_SUBJECT_RE.finditer(query)) + list(_WHO_IS_RE.finditer(query)):
         token = (match.group(1) or "").strip()
         if len(token) < 2:
             continue

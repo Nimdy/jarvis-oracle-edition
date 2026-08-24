@@ -97,15 +97,52 @@ class IdentityResolver:
                 resolved_by="actor",
             )
 
-        # This-turn voice (handler speaker) beats sticky face persist.
-        # Lived 2026-08-24: guest "about me" bound to last-seen David.
+        # This-turn voice beats sticky face persist only when the names DIFFER.
+        # Lived 2026-08-24 17:40: skipping fusion entirely stamped David as
+        # guest (soul known_names empty) and Layer 3 blocked his Skyler memories.
         speaker_s = (speaker or "").lower().strip()
         speaker_known = bool(speaker_s) and speaker_s != "unknown"
+        _STICKY_FUSION = frozenset({
+            "persisted", "face_only", "face_present_voice_unknown",
+            "face_voice_drop_grace", "tentative_bridge",
+        })
+
+        if self._fusion is not None:
+            resolved = getattr(self._fusion, "current", None)
+            if resolved and getattr(resolved, "name", "unknown") != "unknown":
+                fusion_conf = getattr(resolved, "confidence", 0.0)
+                fusion_name = getattr(resolved, "name", "unknown").lower().strip()
+                is_known = getattr(resolved, "is_known", False)
+                method = str(getattr(resolved, "method", "none") or "none")
+                sticky_other = (
+                    speaker_known
+                    and fusion_name != speaker_s
+                    and method in _STICKY_FUSION
+                )
+                if not sticky_other:
+                    self._refresh_known_names()
+                    id_type: IdentityType = (
+                        "primary_user"
+                        if is_known or fusion_name in self._known_names
+                        else "guest"
+                    )
+                    if fusion_conf < CONFIDENCE_THRESHOLDS["soft"]:
+                        id_type = "guest"
+
+                    return IdentityContext(
+                        identity_id=fusion_name,
+                        identity_type=id_type,
+                        confidence=fusion_conf,
+                        signals=(IdentitySignal(
+                            source="speaker", name=fusion_name,
+                            confidence=fusion_conf, is_known=is_known,
+                        ),),
+                        resolved_by=f"fusion:{method}",
+                    )
+
         if speaker_known:
             self._refresh_known_names()
-            id_type: IdentityType = (
-                "primary_user" if speaker_s in self._known_names else "guest"
-            )
+            id_type = "primary_user" if speaker_s in self._known_names else "guest"
             return IdentityContext(
                 identity_id=speaker_s,
                 identity_type=id_type,
@@ -114,39 +151,6 @@ class IdentityResolver:
                     source="speaker", name=speaker_s, confidence=0.6,
                     is_known=speaker_s in self._known_names,
                 ),),
-                resolved_by="speaker_tag",
-            )
-
-        if self._fusion is not None:
-            resolved = getattr(self._fusion, "current", None)
-            if resolved and getattr(resolved, "name", "unknown") != "unknown":
-                fusion_conf = getattr(resolved, "confidence", 0.0)
-                fusion_name = getattr(resolved, "name", "unknown").lower().strip()
-                is_known = getattr(resolved, "is_known", False)
-                method = getattr(resolved, "method", "none")
-
-                self._refresh_known_names()
-                id_type: IdentityType = "primary_user" if is_known or fusion_name in self._known_names else "guest"
-                if fusion_conf < CONFIDENCE_THRESHOLDS["soft"]:
-                    id_type = "guest"
-
-                return IdentityContext(
-                    identity_id=fusion_name,
-                    identity_type=id_type,
-                    confidence=fusion_conf,
-                    signals=(IdentitySignal(source="speaker", name=fusion_name, confidence=fusion_conf, is_known=is_known),),
-                    resolved_by=f"fusion:{method}",
-                )
-
-        if speaker and speaker.lower().strip() != "unknown":
-            s = speaker.lower().strip()
-            self._refresh_known_names()
-            id_type = "primary_user" if s in self._known_names else "guest"
-            return IdentityContext(
-                identity_id=s,
-                identity_type=id_type,
-                confidence=0.6,
-                signals=(IdentitySignal(source="speaker", name=s, confidence=0.6, is_known=s in self._known_names),),
                 resolved_by="speaker_tag",
             )
 

@@ -132,6 +132,30 @@ def test_search_memory_about_skylar_returns_skyler(monkeypatch) -> None:
     assert "border collie" in out
 
 
+def test_who_is_extracts_about_subject() -> None:
+    from tools.memory_tool import _extract_about_subjects
+    assert "Skyler" in _extract_about_subjects("Who is Skyler?")
+    assert "Skylar" in _extract_about_subjects("Who's Skylar?")
+
+
+def test_resolver_same_speaker_keeps_fusion_known() -> None:
+    """Lived 17:40: David + persisted David must stay primary_user, not guest."""
+    r = IdentityResolver()
+    r._known_names = set()
+    fusion = MagicMock()
+    fusion.current = SimpleNamespace(
+        name="David",
+        confidence=0.9,
+        is_known=True,
+        method="persisted",
+    )
+    r.set_fusion(fusion)
+    ctx = r.resolve_for_memory(speaker="David")
+    assert ctx.identity_id == "david"
+    assert ctx.identity_type == "primary_user"
+    assert ctx.resolved_by.startswith("fusion:")
+
+
 def test_resolver_this_turn_speaker_beats_persisted_face() -> None:
     r = IdentityResolver()
     r._known_names = {"david"}
