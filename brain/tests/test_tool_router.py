@@ -359,6 +359,18 @@ def test_golden_prefix_normalization():
     assert result.extracted_args.get("golden_status") == "executed"
 
 
+def test_golden_hey_jarvis_prefix_still_exact_body():
+    """Lived 2026-08-25: STT 'Hey Jarvis, golden command vision status' missed ^jarvis."""
+    result = router.route("Hey Jarvis, golden command vision status.")
+    assert result.extracted_args.get("tier") == "golden"
+    assert result.tool == ToolType.VISION
+    assert result.extracted_args.get("golden_command_id") == "GW_VISION_STATUS"
+    assert result.extracted_args.get("golden_operation") == "vision_status"
+    # Address fluff is prefix-only — body stays exact.
+    miss = router.route("Hey Jarvis, do a golden command vision status")
+    assert miss.extracted_args.get("tier") != "golden"
+
+
 def test_golden_bare_prefix_is_not_global_default():
     result = router.route("GOLDEN COMMAND STATUS")
     assert result.extracted_args.get("tier") != "golden"

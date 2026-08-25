@@ -24,7 +24,8 @@ _BOUNDARY_PUNCT = " \t\r\n.,;:!?\"'`~*_()[]{}<>-–—"
 _MULTI_WS_RE = re.compile(r"\s+")
 _INNER_SEPARATOR_RE = re.compile(r"[.,;:!?]+")
 _PREFIX_RE = re.compile(
-    r"^\s*(?:jarvis)\s*[,.;:!?-]*\s*golden\s+command\b",
+    r"^\s*(?:(?:hey|hi|hello|ok|okay|alright)\s+[,.;:!?-]*)?\s*"
+    r"(?:jarvis)\s*[,.;:!?-]*\s*golden\s+command\b",
     re.IGNORECASE,
 )
 _PREFIX_BARE_RE = re.compile(

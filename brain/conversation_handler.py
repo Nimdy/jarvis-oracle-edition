@@ -3436,6 +3436,33 @@ async def handle_transcription(
             await _broadcast_chunk_sync(reply, tone)
             _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
             _golden_short_circuit = True
+        elif golden_op == "vision_status":
+            # Informational floor: speak the live frame, never LLM theater
+            # ("running the golden command vision protocol").
+            if ollama and pi_snapshot_url:
+                try:
+                    scene_desc = await describe_scene(pi_snapshot_url, ollama, claude)
+                except Exception:
+                    logger.exception("Golden VISION STATUS snapshot failed")
+                    scene_desc = ""
+                if scene_desc and "aren't available" not in scene_desc and "can't see" not in scene_desc.lower():
+                    if scene_ingest_callback:
+                        try:
+                            scene_ingest_callback(scene_desc)
+                        except Exception:
+                            logger.debug("golden vision ingest failed", exc_info=True)
+                    _set_golden_outcome("executed")
+                    reply = scene_desc
+                else:
+                    _set_golden_outcome("blocked", "camera_unavailable")
+                    reply = "Golden VISION STATUS: I can't see the camera right now."
+            else:
+                _set_golden_outcome("blocked", "perception_unavailable")
+                reply = "Golden VISION STATUS: camera path unavailable."
+            await _broadcast_chunk_sync(reply, tone)
+            _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+            _persist_spoken_turn(text, reply)
+            _golden_short_circuit = True
         elif golden_op == "self_improve_execute" and golden_requires_confirmation:
             _set_golden_outcome("unauthorized", "confirmation_required")
             reply = (
