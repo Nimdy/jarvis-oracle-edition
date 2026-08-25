@@ -49,3 +49,5 @@ def test_vision_skips_memory_and_history() -> None:
     )
     assert "vision_reply_confabulates(scene_desc, sentence)" in handler
     assert "speaking caption" in handler
+    assert "persist_response=False" in handler
+    assert "_persist_spoken_turn(text, reply)" in handler

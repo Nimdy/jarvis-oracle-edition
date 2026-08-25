@@ -3799,6 +3799,7 @@ async def handle_transcription(
                         conversation_id=conversation_id,
                         tool_hint="vision",
                         style_instruction=_style_instruction,
+                        persist_response=False,
                     ):
                         if _cancelled():
                             break
@@ -3834,6 +3835,8 @@ async def handle_transcription(
                         await _flush_tts()
                         _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                     reply = full_reply
+                    if reply:
+                        _persist_spoken_turn(text, reply)
                     print("  [Vision→LLM] Scene-aware response complete")
                 else:
                     reply = scene_desc

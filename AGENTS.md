@@ -44,15 +44,19 @@ flowchart TD
   stt[STT + speaker fusion]
   router[tool_router]
   p1{P1 self-view kind?}
+  vis{VISION look / what do you see?}
   about{about-X and not P1?}
   osv[articulate_self_view speaks — LLM does not author]
+  eyes[Pi JPEG + brain VLM caption — LLM does not author the room]
   mem[MEMORY search]
   llm[LLM as voice under L0]
   tts[TTS]
   seed[revoice teacher AFTER speech]
   stt --> router --> p1
   p1 -->|yes| osv --> tts --> seed
-  p1 -->|no| about
+  p1 -->|no| vis
+  vis -->|yes| eyes --> tts
+  vis -->|no| about
   about -->|yes| mem --> tts
   about -->|no| llm --> tts
 ```

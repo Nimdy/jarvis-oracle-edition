@@ -520,7 +520,9 @@ Oracle: Silver, Adept, integrative, composite 88.0, `is_measurement=False`, rest
 
 **Locked pass 2:** turn floor + P1 kinds, memory canonical path **and** named bypasses, persist split, domain-recall steal, identity last-seen, spark promotion **and** tray empty causes, inner SPARK dead context, policy honesty lock, WM vs simulator, hemisphere 8/8 meaning, L0–L12 fire map + formulas, connectome pulse identity, SI stage-0 vs broken approve, plugin ladder, acquisition vs skill-learning dual pipeline, Golden skip-P1, TBS-0, synthetic-vs-lived fences, dashboard reconstructability classes, live probe battery, pack math, Oracle vs PVL, restart auto-restore L2.
 
-**Still not locked:** isolated full pytest, live SI apply, live plugin promotion, live Golden, live compact, browser pixel tour, every EventBus retry, Pi Hailo process beyond `/api/pi5`.
+**Overnight addendum 2026-08-24 (pid 5680, branch `3541336`):** Pi=senses / brain=VLM room inventory closed. VISION kitchen-lie traced to dinner-chat memory+history, not the camera. See `docs/OVERNIGHT_WIRE_AUDIT-2026-08-24.md`.
+
+**Still not locked:** isolated full pytest, live SI apply, live plugin promotion, live Golden, live compact, browser pixel tour, every EventBus retry, #24 VQA targeting (user question still not the VLM prompt).
 
 That is ground truth for this workshop **as of pid 19147**, not a claim that every line executed.
 

@@ -16,8 +16,8 @@ Two devices. One mind. The LLM is **voice**, not the brain.
 
 | Device | Role | Must not |
 |---|---|---|
-| **Pi 5** (`pi/`) | Senses + speakers: camera, Hailo, mic, playback, kiosk | Decide, remember, route, claim |
-| **Brain** (`brain/`, desktop GPU) | Perception finish, route, memory, OSV, policy, TTS | Be replaced by “just ask the LLM” |
+| **Pi 5** (`pi/`) | Senses + speakers: camera, Hailo **person+pose**, JPEG `/snapshot`, mic, playback, kiosk | Decide, remember, route, claim, **CPU YOLO room objects** (not the object path; operator takes the Pi on WiFi) |
+| **Brain** (`brain/`, desktop GPU) | Perception finish, **VLM room caption** of the Pi JPEG, Layer 3B tracker, route, memory, OSV, policy, TTS | Be replaced by “just ask the LLM” |
 
 A process restart is **not a wipe**. Weights, memories, and promotion JSON persist.
 Tier-2 *authority* re-earns. `current_ok` is live-sourced. Do not “fix” restart
@@ -57,8 +57,11 @@ flowchart TD
   tbs["TBS-0 ToM read — SHADOW, injects nothing"]
   router[tool_router.route]
   p1{classify_self_question?}
+  vis{VISION look / what do you see?}
   about{about-X subject and not a P1 kind?}
   osv[P1: articulate_self_view — grounded floor speaks]
+  eyes["Pi JPEG snapshot + brain VLM caption"]
+  visSpeak[Mouth reports caption; history/memory do not locate the room]
   mem[MEMORY: search_memory]
   llm[LLM path: prefs + length hint in prompt]
   gate[CapabilityGate + output release]
@@ -67,10 +70,13 @@ flowchart TD
 
   stt --> intel --> tbs --> router --> p1
   p1 -->|yes: identity capabilities continuity answer_path ...| osv
-  p1 -->|no| about
+  p1 -->|no| vis
+  vis -->|yes| eyes --> visSpeak
+  vis -->|no| about
   about -->|yes| mem
   about -->|no| llm
   osv --> gate --> speak --> seed
+  visSpeak --> gate --> speak
   mem --> gate --> speak
   llm --> gate --> speak
 ```
@@ -78,6 +84,7 @@ flowchart TD
 | Lane | When | What speaks | LLM authors facts? |
 |---|---|---|---|
 | **P1 OSV** | Self-question classified (`articulate.py` kinds) | Deterministic articulator | **No.** Revoice is teacher-only until `native_voice` is born |
+| **VISION** | Look / what do you see (heuristic router) | Live Pi snapshot + brain VLM caption | **No scene.** Dinner-chat must not name the room. Fail-close kitchen/stove/… if caption lacks them. Lived miss 2026-08-24. |
 | **MEMORY** | About a person/pet/topic, not a P1 kind | Recalled payloads, first-sentence aboutness | No self-facts from OSV dump |
 | **LLM** | Everything else | Ollama as voice, under L0 | Must not invent tools, jobs, or self-metrics |
 
