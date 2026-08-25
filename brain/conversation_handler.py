@@ -3084,7 +3084,7 @@ async def handle_transcription(
             # (deterministic), never the codebase symbol search. classify returns None for
             # explicit code questions, so "search your code for X" still routes to CODEBASE.
             try:
-                if not routing.golden_context:
+                if not routing.golden_context and routing.tool != ToolType.VISION:
                     from cognition.self_view.articulate import classify_self_question
                     _sv_kind = classify_self_question(text)
                     if _sv_kind:

@@ -950,6 +950,30 @@ _SELF_REF_QUESTIONS = re.compile(
     r"\b(you |your |yourself)\b",
     re.I,
 )
+# Present-tense visual field (camera now). Not "how do you see yourself".
+# Lived 2026-08-25: "Can you tell me what you currently see?" hit Tier 3
+# INTROSPECTION via "tell me what you" and dumped OSV stats. Adding
+# "camera" made VISION and the caption was solid. Class, not a one-off.
+_VISUAL_PRESENT_RE = re.compile(
+    r"\b(?:can you |could you |please )?(?:tell me )?"
+    r"what (?:do )?you (?:currently |right now |now )?(?:see|view)\b"
+    r"|\bwhat (?:are you|you'?re) (?:seeing|viewing|looking at)\b",
+    re.I,
+)
+_VISUAL_PRESENT_SELF_RE = re.compile(
+    r"\b(?:see|view) yourself\b"
+    r"|\bhow do you (?:see|view) yourself\b"
+    r"|\bsee your (?:code|architecture|status|self|soul|system|memory)\b",
+    re.I,
+)
+
+
+def _is_visual_present_query(text: str) -> bool:
+    if not text or _VISUAL_PRESENT_SELF_RE.search(text):
+        return False
+    return bool(_VISUAL_PRESENT_RE.search(text))
+
+
 # Exclusion: the user is asking Jarvis to do something for them, not about itself
 _SELF_REF_EXCLUDE = re.compile(
     r"\b(help me with|assist me with|for me to do|my homework|my code|my project|my file|"
@@ -1169,6 +1193,8 @@ def _is_self_referential(lower: str) -> bool:
     Exclusion patterns always veto (user-directed requests).
     """
     if _SELF_REF_EXCLUDE.search(lower):
+        return False
+    if _is_visual_present_query(lower):
         return False
     hits = 0
     if _SELF_REF_VERBS.search(lower):
@@ -1512,6 +1538,17 @@ class ToolRouter:
                                        extracted_args=best_match.extracted_args)
             logger.debug("Intent route: %s (%.0f%%) for: %s", best_match.tool.value, best_conf * 100, lower[:60])
             return self._finalize(user_message, best_match, synthetic=synthetic)
+
+        if _is_visual_present_query(user_message):
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=ToolType.VISION,
+                    confidence=0.86,
+                    extracted_args={"tier": "visual_present"},
+                ),
+                synthetic=synthetic,
+            )
 
         # Tier 3: catch-all for self-referential queries.
         # Strong self-frame ("what was your...", "what did you...") needs only

@@ -64,6 +64,19 @@ def test_vision_routing():
     assert result2.tool == ToolType.VISION
 
 
+def test_visual_present_see_is_vision_not_introspection():
+    """Lived 2026-08-25: 'what you currently see' dumped OSV; 'from the camera' was solid."""
+    for q in (
+        "Can you tell me what you currently see?",
+        "What do you currently see?",
+        "tell me what you see",
+        "what you currently view",
+        "What do you currently see from the camera?",
+    ):
+        assert router.route(q).tool == ToolType.VISION, q
+    assert router.route("how do you see yourself?").tool == ToolType.INTROSPECTION
+
+
 def test_recognition_probes_route_to_identity():
     """Recognition probes about the present speaker must reach IDENTITY (grounded by
     live fusion), not fall to NONE where the LLM confabulated 'I have no camera access'
@@ -307,6 +320,18 @@ def test_runtime_bridge_scope_does_not_change_router_contracts():
     assert introspection.tool == ToolType.INTROSPECTION
     assert status.tool == ToolType.STATUS
     assert general.tool == ToolType.NONE
+
+
+def test_every_canonical_golden_command_routes():
+    """Golden Commands are the pre-NN validation floor. Every body must parse."""
+    from reasoning.golden_words import list_canonical_commands
+
+    for body in list_canonical_commands():
+        result = router.route(f"Jarvis, GOLDEN COMMAND {body}")
+        assert result.extracted_args.get("tier") == "golden", body
+        assert result.golden_context is not None, body
+        assert result.extracted_args.get("golden_status") == "executed", body
+        assert result.extracted_args.get("golden_canonical_body") == body, body
 
 
 def test_golden_status_exact_route():
