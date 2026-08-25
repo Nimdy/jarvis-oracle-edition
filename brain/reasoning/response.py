@@ -431,6 +431,11 @@ class ResponseGenerator:
         from reasoning.context import reset_resolved_chunks
         reset_resolved_chunks(conversation_id or "")
 
+        # Live camera is the only scene authority. Cooking-dinner memories
+        # must not locate the user ("you're still in the kitchen").
+        if tool_hint == "vision":
+            recent_memories = []
+
         _identity_ctx = None
         _ref_entities: set[str] | None = None
         try:
@@ -444,13 +449,23 @@ class ResponseGenerator:
         except Exception:
             pass
 
-        route = route_memory_request(user_message, _ref_entities)
-        logger.info(
-            "Memory route: type=%s scope=%s refs=%s inject_pref=%s inject_third=%s",
-            route.route_type, route.search_scope,
-            sorted(route.referenced_entities) if route.referenced_entities else "[]",
-            route.allow_preference_injection, route.allow_thirdparty_injection,
-        )
+        if tool_hint == "vision":
+            route = MemoryRoute(
+                route_type="no_retrieval",
+                allow_preference_injection=False,
+                allow_thirdparty_injection=False,
+                allow_autonomy_recall=False,
+                search_scope="none",
+            )
+            logger.info("Memory route: skipped (vision live-frame is scene authority)")
+        else:
+            route = route_memory_request(user_message, _ref_entities)
+            logger.info(
+                "Memory route: type=%s scope=%s refs=%s inject_pref=%s inject_third=%s",
+                route.route_type, route.search_scope,
+                sorted(route.referenced_entities) if route.referenced_entities else "[]",
+                route.allow_preference_injection, route.allow_thirdparty_injection,
+            )
 
         sem_memories = None
         if route.search_scope != "none":
@@ -490,7 +505,7 @@ class ResponseGenerator:
         surfaced_chunk_ids = _extract_surfaced_chunk_ids(sem_memories or [])
 
         episodic_context = ""
-        if self._episodes:
+        if tool_hint != "vision" and self._episodes:
             episodic_context = self._episodes.get_conversation_context(max_episodes=3)
             related = self._episodes.find_episodes_semantic(user_message, limit=3)
             seen_summaries = set()
@@ -583,13 +598,17 @@ class ResponseGenerator:
             context_builder.set_conversation_id(conversation_id)
         if persist_conversation:
             context_builder.add_user_message(user_message, conversation_id=conversation_id)
-        if conversation_id:
+        if tool_hint == "vision":
+            # Prior turns (e.g. "about to cook dinner") must not ride the
+            # vision prompt — they overrode the live desk caption.
+            messages = [{"role": "user", "content": user_message}]
+        elif conversation_id:
             messages = context_builder.get_conversation_context(conversation_id)
             if len(messages) <= 1:
                 messages = context_builder.get_recent_context()
         else:
             messages = context_builder.get_recent_context()
-        if not persist_conversation:
+        if not persist_conversation and tool_hint != "vision":
             messages = [*messages, {"role": "user", "content": user_message}]
 
         from personality.traits import trait_modulator

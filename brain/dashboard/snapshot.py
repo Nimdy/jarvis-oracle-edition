@@ -27,6 +27,26 @@ class SnapshotContext:
     health_counters: Any = None
 
 
+def _decorate_scene_payload(scene: dict[str, Any], perc_orch: Any) -> dict[str, Any]:
+    """Attach operator-facing reads that are not tracker entities.
+
+    `/api/scene` is the Layer 3B tracker. The GPU/edge caption and Hailo person
+    boxes are independent senses — the old dashboard showed them; v2 camera
+    was tracker-only and read as empty on a person-only Hailo rig.
+    """
+    out = dict(scene or {})
+    try:
+        out["caption"] = perc_orch.get_scene_caption_state() if perc_orch else {}
+    except Exception:
+        out.setdefault("caption", {})
+    try:
+        boxes = perc_orch.get_person_bboxes() if perc_orch else []
+        out["person_bbox_count"] = len(boxes or [])
+    except Exception:
+        out.setdefault("person_bbox_count", 0)
+    return out
+
+
 def _build_trace_explorer_snapshot(
     entries: list[dict[str, Any]],
     *,
@@ -1454,9 +1474,10 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
             snapshot["scene"] = cs._scene_continuity_module.get_state()
         else:
             snapshot["scene"] = {}
+        snapshot["scene"] = _decorate_scene_payload(snapshot.get("scene") or {}, ctx.perc_orch)
     except Exception:
         logger.warning("Snapshot: scene continuity failed", exc_info=True)
-        snapshot["scene"] = {}
+        snapshot["scene"] = _decorate_scene_payload({}, ctx.perc_orch)
 
     # What JARVIS "sees" — latest scene caption + which path produced it (edge VLM on
     # the Pi Hailo vs desktop GPU). Lets the operator watch the edge-VLM room reads.

@@ -505,8 +505,9 @@ class ContextBuilder:
                     "VISION GROUNDING — you are the mouth, not the eyes. The [Live camera view] "
                     "below is exactly what your vision model reported from the live camera frame. "
                     "Report ONLY what it states. Do NOT invent or assume people, faces, clothing, "
-                    "objects, lighting, or activity that is not in it. If it indicates you cannot "
-                    "see, say you cannot see right now — never guess."
+                    "objects, lighting, activity, or ROOM (kitchen, office, bedroom) that is not in it. "
+                    "Prior chat about cooking or dinner is not visual evidence. "
+                    "If it indicates you cannot see, say you cannot see right now — never guess."
                 )
                 parts.append("")
             parts.append(perception_context)
@@ -533,8 +534,11 @@ class ContextBuilder:
             parts.append("- You are speaking aloud — sound like a person describing their own state, not a log file.")
             parts.append("- Do not reference memories, relationships, or preferences unless the provided data explicitly includes them.")
         else:
-            parts.append("- Reference past conversations naturally when relevant.")
-            parts.append("- If you notice patterns in user behavior, mention them thoughtfully.")
+            if tool_hint == "vision":
+                parts.append("- Do not reference past conversations to name the room or locate the user.")
+            else:
+                parts.append("- Reference past conversations naturally when relevant.")
+                parts.append("- If you notice patterns in user behavior, mention them thoughtfully.")
 
         parts.append("")
         parts.append("CRITICAL — Honesty about YOUR OWN SYSTEM claims:")

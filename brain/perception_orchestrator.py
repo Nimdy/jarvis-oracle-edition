@@ -91,7 +91,12 @@ def _object_present_in_description(obj: str, desc_lower: str) -> bool:
     desc = desc_lower.replace("'", "").replace("’", "")
     for clause in _VLM_CLAUSE_SPLIT_RE.split(desc):
         tokens = re.findall(r"[a-z]+", clause)
-        if obj not in tokens:               # whole-token match (not substring)
+        forms = {obj}
+        if not obj.endswith("s"):
+            forms.add(obj + "s")
+        if obj == "mouse":
+            forms.add("mice")
+        if not forms.intersection(tokens):  # whole-token match (not substring); plurals count
             continue
         if any(tok in _VLM_ABSENCE_MARKERS for tok in tokens):
             continue                        # object is negated in this clause -> absent
@@ -1283,9 +1288,23 @@ class PerceptionOrchestrator:
 
     def _on_scene_summary(self, detections=None, frame_size=None, scene_change_score=0.0, person_bboxes=None, **_):
         """Handle scene_summary events from the Pi aggregator."""
-        if not detections:
-            return
         fw, fh = (frame_size or [640, 480])[:2]
+
+        # Transient occlusion GEOMETRY only, from the Pi (same frame as detections):
+        # where a body blocks the view this frame. Used solely by scene_tracker ->
+        # estimate_region_visibility (occluded-vs-removed). NEVER tracked as an entity,
+        # persisted, or tied to identity — persons are already filtered out of scene_dets.
+        # Record even when the object list is empty: Hailo is person-only on this
+        # rig, so most summaries carry 0 objects + 1 person. Dropping the empty
+        # list used to drop the person boxes too, starving fusion + the dashboard.
+        person_boxes = [tuple(b) for b in (person_bboxes or []) if b and len(b) == 4]
+        self._last_person_bboxes = person_boxes      # transient, read-only, for fusion yaw cal
+
+        if not detections:
+            # Pi sent a frame-summary with no objects (Hailo is person-only).
+            # Room inventory is a BRAIN VLM read of the Pi snapshot, not Pi CPU YOLO.
+            self._maybe_request_first_look()
+            return
 
         scene_dets: list[SceneDetection] = []
         for d in detections:
@@ -1298,13 +1317,6 @@ class PerceptionOrchestrator:
                 source="pi",
                 hit_count=d.get("hit_count", 1),
             ))
-
-        # Transient occlusion GEOMETRY only, from the Pi (same frame as detections):
-        # where a body blocks the view this frame. Used solely by scene_tracker ->
-        # estimate_region_visibility (occluded-vs-removed). NEVER tracked as an entity,
-        # persisted, or tied to identity — persons are already filtered out of scene_dets.
-        person_boxes = [tuple(b) for b in (person_bboxes or []) if b and len(b) == 4]
-        self._last_person_bboxes = person_boxes      # transient, read-only, for fusion yaw cal
 
         snapshot = self._scene_tracker.update(scene_dets, fw, fh, person_boxes)
         self._last_scene_snapshot = snapshot
@@ -1367,14 +1379,10 @@ class PerceptionOrchestrator:
         text = self._strip_person_clauses(text)
         if not text:
             return
-        self._last_scene_description = text
         self._last_edge_caption_ts = time.time()
-        self._last_scene_source = "edge_vlm"
-        self._last_scene_ts = self._last_edge_caption_ts
         logger.info("Edge scene caption (%s, %sms): %s", model, latency_ms, text[:120])
         try:
-            self._update_object_memory(text)
-            self._feed_vlm_to_tracker(text)
+            self.ingest_scene_description(text, source="edge_vlm")
         except Exception:
             logger.debug("edge caption tracker-feed failed", exc_info=True)
 
@@ -2171,6 +2179,7 @@ class PerceptionOrchestrator:
                         follow_up=is_follow_up,
                         enroll_callback=self.enroll_current_user,
                         identity_callback=self.get_identity_status,
+                        scene_ingest_callback=self.ingest_scene_description,
                     ),
                     timeout=_HANDLE_TIMEOUT_S,
                 )
@@ -2537,35 +2546,47 @@ class PerceptionOrchestrator:
     # Scene analysis
     # ------------------------------------------------------------------
 
+    def _scene_analysis_interval(self, user_here: bool) -> float:
+        """Cadence for the GPU room-read.
+
+        The 30-minute present interval is a *refresh* once a caption exists.
+        After bounce the caption is RAM-empty — use the short away interval
+        even if someone is sitting here, or the first look waits half an hour
+        (and a conversation-skip used to burn that slot entirely).
+        """
+        if not self._last_scene_description:
+            return self._scene_interval_away
+        return self._scene_interval_present if user_here else self._scene_interval_away
+
     async def _periodic_scene_analysis(self) -> None:
         await asyncio.sleep(30)
         while True:
             try:
                 now = time.time()
-                user_here = self.engine._is_user_present
-                interval = self._scene_interval_present if user_here else self._scene_interval_away
-                if now - self._last_scene_analysis_time >= interval:
-                    self._last_scene_analysis_time = now
-                    await self._analyze_scene()
+                user_here = bool(getattr(self.engine, "_is_user_present", False))
+                if now - self._last_scene_analysis_time >= self._scene_analysis_interval(user_here):
+                    outcome = await self._analyze_scene()
+                    if outcome in ("ok", "empty", "no_backend"):
+                        self._last_scene_analysis_time = now
             except Exception as exc:
                 logger.debug("Scene analysis error: %s", exc)
             await asyncio.sleep(60)
 
-    async def _analyze_scene(self) -> None:
+    async def _analyze_scene(self) -> str:
         if not self._pi_snapshot_url or not self._ollama:
-            return
+            return "no_backend"
         # Defer to the Pi's edge VLM when it's actively supplying captions: if a fresh
         # edge caption arrived recently, skip the desktop-GPU round-trip entirely (no
         # frame fetch, no qwen3-vl load/unload). The edge path captions idle scenes;
         # the GPU path resumes if the edge stream goes quiet (>150s stale).
         if self._last_edge_caption_ts and (time.time() - self._last_edge_caption_ts) < 150.0:
             logger.debug("Scene analysis: deferring to fresh edge VLM caption (skipping GPU path)")
-            return
+            return "deferred"
         with self._conv_lock:
             conv_active = self._active_conversation.get("id") and not self._active_conversation.get("cancelled")
         if conv_active:
             logger.debug("Skipping scene analysis — active conversation in progress")
-            return
+            return "busy"
 
         self._scene_analysis_in_progress = True
         try:
@@ -2583,20 +2604,50 @@ class PerceptionOrchestrator:
                 pass
 
         if not description or "can't see" in description.lower():
-            return
-        self._last_scene_description = description
-        self._last_scene_source = "desktop_gpu"
-        self._last_scene_ts = time.time()
+            return "empty"
+        self.ingest_scene_description(description, source="desktop_gpu")
         logger.info("Scene analysis: %s", description[:100])
+        return "ok"
 
-        self._update_object_memory(description)
-        self._feed_vlm_to_tracker(description)
+    def ingest_scene_description(self, description: str, source: str = "desktop_gpu") -> None:
+        """Brain-side room inventory from a Pi-captured frame.
 
+        The Pi ships pixels (and Hailo persons). Naming monitors/desk/chair is
+        this GPU VLM parse — not a second detector on the Pi.
+        """
+        text = (description or "").strip()
+        if not text or "can't see" in text.lower() or "aren't available" in text.lower():
+            return
+        self._last_scene_description = text
+        self._last_scene_source = source or "desktop_gpu"
+        self._last_scene_ts = time.time()
+        self._update_object_memory(text)
+        self._feed_vlm_to_tracker(text)
         if self._last_scene_snapshot and self._last_scene_snapshot.display_surfaces:
             content = self._display_classifier.classify_from_description(
-                description, self._last_scene_snapshot.display_surfaces,
+                text, self._last_scene_snapshot.display_surfaces,
             )
             self._last_scene_snapshot.display_content = content
+
+    def _maybe_request_first_look(self) -> None:
+        """When the tracker is empty, pull one Pi snapshot on the brain GPU."""
+        if self._last_scene_description or self._scene_analysis_in_progress:
+            return
+        now = time.time()
+        if now - self._last_scene_analysis_time < 20.0:
+            return
+        loop = getattr(self, "_loop", None)
+        if loop is None:
+            return
+        try:
+            loop.create_task(self._first_look())
+        except Exception:
+            logger.debug("first-look schedule failed", exc_info=True)
+
+    async def _first_look(self) -> None:
+        outcome = await self._analyze_scene()
+        if outcome in ("ok", "empty", "no_backend"):
+            self._last_scene_analysis_time = time.time()
 
     def _update_object_memory(self, description: str) -> None:
         common_objects = [
@@ -2630,14 +2681,17 @@ class PerceptionOrchestrator:
                 enrichments.append(SceneDetection(
                     label=obj, confidence=0.5, bbox=None, source="vlm",
                 ))
-        if enrichments and self._last_scene_snapshot:
-            fw = 640
-            fh = 480
+        if not enrichments:
+            return
+        # VLM captions are an independent seed from Pi object detections. Requiring
+        # an existing snapshot was a chicken-egg: empty Hailo object lists never
+        # created one, so GPU room-reads never reached the tracker.
+        fw, fh = 640, 480
+        if self._last_scene_snapshot is not None:
             fs = self._last_scene_snapshot.to_dict().get("region_visibility")
             if fs:
-                fw = 1920
-                fh = 1080
-            self._scene_tracker.update(enrichments, fw, fh)
+                fw, fh = 1920, 1080
+        self._last_scene_snapshot = self._scene_tracker.update(enrichments, fw, fh)
 
     # --- Camera control ---
 
@@ -2722,7 +2776,8 @@ class PerceptionOrchestrator:
         snap = self._last_scene_snapshot
         if snap is not None:
             physical = [e for e in snap.entities
-                        if not e.is_display_surface and e.state in ("visible", "occluded")]
+                        if not e.is_display_surface
+                        and e.state in ("visible", "occluded", "candidate")]
             if physical:
                 labels = sorted({e.label for e in physical})
                 parts.append(f"Physical: {', '.join(labels)}")
@@ -2740,7 +2795,7 @@ class PerceptionOrchestrator:
                                  for dc in activities]
                     parts.append(f"Display content: {', '.join(act_parts)}")
 
-        if not parts and self._last_scene_description:
+        if self._last_scene_description:
             parts.append(f"Visual: {self._last_scene_description[:150]}")
 
         if not parts and self._object_memory:

@@ -918,6 +918,11 @@ class SensesService:
             self._force_audio_recovery()
         else:
             logger.info("Brain disconnected (no active playback)")
+        # Rising-edge person_detected is latched on the Pi. A brain bounce
+        # while someone is already in-frame never re-fires, so identity
+        # stays user_present=false until they leave and return. Drop the
+        # latch so the next frame re-announces.
+        self._was_person_present = False
 
     # --- UI state ---
 

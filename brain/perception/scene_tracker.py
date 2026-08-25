@@ -398,6 +398,10 @@ class SceneTracker:
                 dist = abs(ecx - dcx) + abs(ecy - dcy)
                 if dist < 150:
                     return sid
+            elif labels_compatible:
+                # VLM enrichments have no bbox — match by kind so repeats
+                # don't mint a new surface every caption.
+                return sid
         return None
 
     def _decay_display_surfaces(self, matched_ids: set[str]) -> None:

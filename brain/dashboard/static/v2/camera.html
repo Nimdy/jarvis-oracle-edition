@@ -36,6 +36,8 @@
     .idleblock{font-size:11px;color:var(--dim);font-style:italic;padding:14px 4px;text-align:center;border:1px dashed var(--line);border-radius:5px;}
     .crossnote{font-size:9.5px;color:var(--dim);border-top:1px dashed var(--line);padding-top:8px;margin-top:10px;line-height:1.5;}
     .crossnote b{color:var(--muted);}
+    .caption{border:1px solid var(--line);border-radius:5px;padding:9px 11px;margin:4px 0 12px;background:rgba(3,8,14,.5);font-size:11px;color:var(--text);line-height:1.55;}
+    .caption .csrc{font-size:9px;color:var(--dim);letter-spacing:.04em;margin-top:6px;}
     /* --- operator camera controls: 5x5 PTZ grid + focus --- */
     .gridov{position:absolute;inset:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,1fr);z-index:5;pointer-events:none;opacity:0;transition:opacity .15s;}
     .gridov.on{pointer-events:auto;opacity:1;}
@@ -87,8 +89,9 @@
 
     <section class="card col7">
       <h2>What JARVIS Sees <span class="asof" id="scene-asof">/api/scene · —</span></h2>
-      <div class="note">The scene tracker's resolution of the same frames — independent of whether the preview above is shown. Counts on a fresh boot read <b>accumulating</b>, never broken: persistence and stability re-earn over cycles.</div>
+      <div class="note">Three independent reads of the same camera: Hailo <b>person</b> boxes (identity/presence, not tracked as room objects), the GPU/edge <b>caption</b> (what the brain named in the frame), and the Layer 3B <b>object tracker</b> (monitors, cups, chairs — persistence re-earns over cycles). Zero tracked entities with a person in-frame is the person/object split, not a dead feed.</div>
       <div class="countline" id="scene-counts"></div>
+      <div id="caption"></div>
 
       <h2 style="margin-top:6px">Display Surfaces &amp; On-Screen Activity</h2>
       <div id="surfaces"></div>
@@ -237,11 +240,26 @@
   function renderCounts(){
     var s=SCENE||{};
     var vis=num(s.visible_count), act=num(s.active_entity_count), stab=num(s.stable_count), upd=num(s.update_count);
+    var persons=num(s.person_bbox_count);
+    if(act===null) act=num(s.entity_count);
     el('scene-counts').innerHTML=
-      '<span><div class="k">visible now</div><span class="bigstat" style="color:'+(vis===null?'var(--dim)':(vis>0?'var(--green)':'var(--amber)'))+'">'+(vis===null?'—':vis)+'</span></span>'+
+      '<span><div class="k">persons in frame</div><span class="bigstat" style="color:'+(persons===null?'var(--dim)':(persons>0?'var(--green)':'var(--amber)'))+'">'+(persons===null?'—':persons)+'</span></span>'+
+      '<span><div class="k">visible objects</div><span class="bigstat" style="color:'+(vis===null?'var(--dim)':(vis>0?'var(--green)':'var(--amber)'))+'">'+(vis===null?'—':vis)+'</span></span>'+
       '<span><div class="k">tracked entities</div><span class="bigstat">'+(act===null?'—':act)+'</span></span>'+
       '<span><div class="k">stable</div><span class="bigstat">'+(stab===null?'—':stab)+'</span></span>'+
       '<span><div class="k">scene updates</div><span class="bigstat">'+(upd===null?'—':upd)+'</span></span>';
+  }
+
+  function renderCaption(){
+    var box=el('caption'); if(!box) return;
+    var c=(SCENE&&SCENE.caption)||{};
+    var text=c.text||'';
+    if(!text){
+      box.innerHTML='<div class="idleblock">No VLM room caption this boot yet — GPU/edge caption is a different path from the object tracker; it lands on the next scene-analysis cycle.</div>';
+      return;
+    }
+    box.innerHTML='<div class="caption">'+esc(text)+
+      '<div class="csrc">'+esc(c.source||'caption')+(c.age_s==null?'':' · '+ago(Date.now()/1000-Number(c.age_s)))+'</div></div>';
   }
 
   function renderSurfaces(){
@@ -249,7 +267,7 @@
     var s=SCENE||{};
     var surfaces=s.display_surfaces||[];
     var content=s.display_content||[];
-    if(!surfaces.length){ box.innerHTML='<div class="idleblock">No display surfaces resolved yet — accumulating as the scene tracker soaks.</div>'; return; }
+    if(!surfaces.length){ box.innerHTML='<div class="idleblock">No display surfaces on the object tracker this cycle (Hailo is person-only; monitors arrive from YOLO objects or VLM caption seed).</div>'; return; }
     // index content by surface_id (the API keys both on surface_id) so we can pair activity to surface.
     var byId={}; content.forEach(function(c){ if(c&&c.surface_id) byId[c.surface_id]=c; });
     box.innerHTML=surfaces.map(function(sf){
@@ -274,7 +292,7 @@
     var box=el('entities'); if(!box) return;
     var s=SCENE||{};
     var ents=s.entities||[];
-    if(!ents.length){ box.innerHTML='<div class="idleblock">No entities tracked yet — armed and accumulating on this fresh boot.</div>'; return; }
+    if(!ents.length){ box.innerHTML='<div class="idleblock">No room objects on the tracker — persons stay on identity/presence; objects need Pi YOLO or a VLM caption seed.</div>'; return; }
     box.innerHTML=ents.map(function(e){
       var conf=num(e.confidence), perm=num(e.permanence_confidence);
       var src=e.source||'?';
@@ -308,10 +326,14 @@
   function renderCrossnote(){
     var s=SCENE||{};
     var vis=num(s.visible_count);
+    var persons=num(s.person_bbox_count);
+    var cap=((s.caption)||{}).text;
     el('crossnote').innerHTML=
-      'The feed is <b>Pi-served</b> and the scene above is the brain\'s own resolution of it — two independent reads. '+
-      (vis===0?'<b>0 visible now</b> with tracked entities present = nothing in-frame this instant or the Pi detector is between cycles; permanence keeps remembered objects on the list (state <em>missing/occluded</em>) — recovery/accumulation, not a fault. ':'')+
-      'Confidence and permanence are the tracker\'s own scores; this view is <b>read-only</b> — no capture, trigger or action is fired from here.';
+      'The feed is <b>Pi-served</b>. Hailo persons, VLM caption, and the object tracker are three independent reads — HRR is a downstream shadow of the tracker, not the scene authority. '+
+      (persons>0&&vis===0?'<b>Person in-frame, 0 visible objects</b> is the Hailo person/object split (or YOLO/VLM objects have not seeded yet), not a dead camera. ':'')+
+      (vis===0&&(num(s.active_entity_count)||num(s.entity_count)||0)>0?'<b>0 visible objects</b> with tracked entities present = nothing in-frame this instant or the Pi detector is between cycles; permanence keeps remembered objects (state <em>missing/occluded</em>). ':'')+
+      (cap?'Caption is the brain\'s last room-read; it does not fire capture or actions. ':'')+
+      'Confidence and permanence are the tracker\'s own scores; this view is <b>read-only</b>.';
   }
 
   function renderBanner(){
@@ -319,7 +341,7 @@
   }
 
   function renderScene(){
-    renderCounts(); renderSurfaces(); renderEntities(); renderRegions(); renderCrossnote();
+    renderCounts(); renderCaption(); renderSurfaces(); renderEntities(); renderRegions(); renderCrossnote();
     el('scene-asof').textContent='/api/scene · '+(lastSceneTs?ago(SCENE&&SCENE.timestamp?SCENE.timestamp:lastSceneTs/1000):'—');
   }
 

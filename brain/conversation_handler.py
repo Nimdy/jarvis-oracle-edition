@@ -67,6 +67,25 @@ from reasoning.search_route_guard import guard_search_tool_reply
 
 logger = logging.getLogger("jarvis.conversation")
 
+# Lived miss 2026-08-24: VISION asked "what do you see in the room?" while the
+# live caption was desk/monitors; the mouth said kitchen/stove/dinner from
+# earlier cooking-chat memories. These claims are visual location — they may
+# be spoken only if the live caption actually contains them.
+_VISION_UNGROUNDED_CLAIMS = (
+    "kitchen", "stove", "oven", "fridge", "refrigerator",
+    "bedroom", "bathroom", "garage", "basement",
+    "cutting board", "pot on the stove",
+)
+
+
+def vision_reply_confabulates(caption: str, spoken: str) -> bool:
+    """True when the mouth names a place/object the live frame did not."""
+    cap = (caption or "").lower()
+    sp = (spoken or "").lower()
+    if not sp:
+        return False
+    return any(term in sp and term not in cap for term in _VISION_UNGROUNDED_CLAIMS)
+
 _BRIEF_SIGNALS = re.compile(
     r"\b(keep it (short|brief|concise)|be (brief|concise|short)|shorter|less detail)\b", re.IGNORECASE)
 _DETAIL_SIGNALS = re.compile(
@@ -2442,6 +2461,7 @@ async def handle_transcription(
     follow_up: bool = False,
     enroll_callback=None,
     identity_callback=None,
+    scene_ingest_callback=None,
 ) -> None:
     import time as _time
     import re as _re_tts_est
@@ -3757,6 +3777,11 @@ async def handle_transcription(
                 # Do NOT force-unload: keep_alive (5m) keeps the eyes warm for follow-up looks;
                 # Ollama manages the VRAM swap with the chat model on demand (fewer cold-loads).
                 if scene_desc and "aren't available" not in scene_desc and "can't see" not in scene_desc:
+                    if scene_ingest_callback:
+                        try:
+                            scene_ingest_callback(scene_desc)
+                        except Exception:
+                            logger.debug("scene ingest from live look failed", exc_info=True)
                     # The FRESH frame caption is the SOLE authority for "what do you see".
                     # Deliberately do NOT prepend the ambient/cached scene_context: its
                     # "Physical: person / user present" claims can contradict the live frame
@@ -3764,6 +3789,7 @@ async def handle_transcription(
                     vision_ctx = f"[Live camera view]\n{scene_desc}"
                     full_reply = ""
                     chunks_sent = 0
+                    left_frame = False
                     async for sentence, is_final in response_gen.respond_stream(
                         text,
                         perception_context=vision_ctx,
@@ -3777,14 +3803,36 @@ async def handle_transcription(
                         if _cancelled():
                             break
                         if is_final:
-                            full_reply = sentence
-                            if chunks_sent == 0 and sentence:
-                                await _send_sentence(sentence, tone)
+                            if left_frame:
+                                full_reply = scene_desc
+                            else:
+                                full_reply = sentence
+                                if chunks_sent == 0 and sentence:
+                                    if vision_reply_confabulates(scene_desc, sentence):
+                                        logger.warning(
+                                            "Vision mouth left the live frame; speaking caption"
+                                        )
+                                        full_reply = scene_desc
+                                        await _send_sentence(scene_desc, tone)
+                                    else:
+                                        await _send_sentence(sentence, tone)
                             await _flush_tts()
                             _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                             continue
+                        if vision_reply_confabulates(scene_desc, sentence):
+                            logger.warning(
+                                "Vision mouth left the live frame; speaking caption"
+                            )
+                            left_frame = True
+                            await _send_sentence(scene_desc, tone)
+                            chunks_sent += 1
+                            break
                         await _send_sentence(sentence, tone)
                         chunks_sent += 1
+                    if left_frame:
+                        full_reply = scene_desc
+                        await _flush_tts()
+                        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                     reply = full_reply
                     print("  [Vision→LLM] Scene-aware response complete")
                 else:

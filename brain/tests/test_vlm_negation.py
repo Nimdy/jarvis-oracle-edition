@@ -24,6 +24,10 @@ from perception_orchestrator import _object_present_in_description as present
     ("cup", "a cup of coffee", True),
     ("laptop", "it is not a laptop but a tablet", False),  # 'but' clause
     ("dog", "an empty room", False),
+    ("monitor", "facing three computer monitors", True),   # plural of a tracked noun
+    ("keyboard", "the desk holds a keyboard, mouse", True),
+    ("mouse", "the desk holds a keyboard, mouse, and other peripherals", True),
+    ("monitor", "no monitors visible", False),             # plural still respects negation
 ])
 def test_object_presence(obj, desc, expected):
     assert present(obj, desc) is expected
