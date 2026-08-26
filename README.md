@@ -13,7 +13,7 @@ It runs on hardware you already own, using a Raspberry Pi 5 and a desktop GPU. I
 **Not a cloud LLM wrapper.**  
 **Not a benchmark-chasing model.**
 
-**Agents:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) is mandatory before you edit conversation, OSV, memory, routing, TTS, or preferences. Do not skip it.
+**Agents:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) is mandatory before you edit conversation, OSV, memory, routing, TTS, or preferences. Do not skip it. Taking over JARVIS dev: [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md).
 
 This is a raw prototype workshop for building toward higher forms of artificial intelligence, designed from first principles with strong epistemic governance, governed recursive self-improvement, and honest maturity labeling.
 
