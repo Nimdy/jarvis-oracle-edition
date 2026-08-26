@@ -70,11 +70,11 @@ Legend: **R** read-only · **W** operator POSTs (key-gated) · **live** = GET 20
 
 | Page | Mode | APIs | Live | Notes |
 |---|---|---|---|---|
-| identity.html | **W** | identity, candidates, speakers, faces, sensor-health, scene | yes | Enroll / forget. Scene `entity_count` 0 is **object-tracker**, not “nobody here.” Hailo persons are identity/presence. |
+| identity.html | **W** | identity, candidates, speakers, faces, sensor-health, scene | yes | Enroll / forget. Scene `entity_count` 0 is **object-tracker**, not “nobody here.” Foot now shows Hailo `person_bbox_count` + VLM `caption`. |
 | voice.html | R | full-snapshot, `/api/intent-shadow` | yes | Intent-shadow: observations exist; **level is not primary.** |
 | camera.html | **W** | `/api/config`, `/api/scene`, POST `/api/camera/control` | yes | Steers camera only. `/api/scene` now also carries `caption` (brain VLM of Pi JPEG) and `person_bbox_count` (Hailo persons, not tracked entities). Zero tracked objects with a person in-frame is the person/object split, not a dead feed. HRR is not this page. |
 | pi5.html | R | `/api/pi5` | yes | Body / lidar / fusion |
-| spatial.html | **W** | hrr + scene + spatial diagnostics / calibration | yes | Shadow spatial. HRR stage is labeled on `/api/hrr/status`. |
+| spatial.html | **W** | hrr + scene + spatial diagnostics / calibration | yes | Shadow spatial — HRR is **not** canonical live scene. Perception card is Hailo persons + brain VLM caption (this rig is not RealSense). HRR stage is labeled on `/api/hrr/status`. |
 | spatial-core.html | **W** | `/api/pi5`, `/api/spatial/camera-calib` | yes | Calib write |
 
 ### Ops

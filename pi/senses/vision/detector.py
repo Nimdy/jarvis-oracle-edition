@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -89,6 +90,9 @@ class Detector:
         self._configured = None
         self._running = False
         self._last_detections: list[Detection] = []
+        self._last_frame: np.ndarray | None = None
+        self._last_frame_ts: float = 0.0
+        self._frame_lock = threading.Lock()
         self._zoom_level: float = 1.0
         self._zoom_center: tuple[float, float] = (0.5, 0.5)
         self._has_autofocus: bool = False
@@ -271,11 +275,9 @@ class Detector:
         if not self._running:
             return []
 
-        frame = self._capture_frame()
+        frame = self.capture_frame()
         if frame is None:
             return []
-
-        self._last_frame = frame
         detections = self._run_inference(frame)
         self._last_detections = detections
         return detections
@@ -284,18 +286,39 @@ class Detector:
         """Run detection on a pre-captured frame (avoids re-capture)."""
         if not self._running:
             return []
-        self._last_frame = frame
+        self._keep_frame(frame)
         detections = self._run_inference(frame)
         self._last_detections = detections
         return detections
 
     def capture_frame(self) -> np.ndarray | None:
-        """Capture a single frame. Use with detect() for single-capture-per-tick."""
-        return self._capture_frame()
+        """Capture a single frame. Use with detect() for single-capture-per-tick.
+
+        Copies out of the camera DMA slot. Holding the Picamera2 array as
+        last_frame froze /snapshot (identical JPEGs seconds apart) so VQA
+        answered a desk pose after the operator had already raised hands.
+        """
+        with self._frame_lock:
+            frame = self._capture_frame()
+            if frame is None:
+                return None
+            return self._keep_frame(frame)
+
+    def _keep_frame(self, frame: np.ndarray) -> np.ndarray:
+        copied = np.ascontiguousarray(frame.copy())
+        self._last_frame = copied
+        self._last_frame_ts = time.time()
+        return copied
 
     @property
     def last_frame(self) -> np.ndarray | None:
-        return getattr(self, "_last_frame", None)
+        return self._last_frame
+
+    @property
+    def last_frame_age_s(self) -> float:
+        if not self._last_frame_ts:
+            return -1.0
+        return max(0.0, time.time() - self._last_frame_ts)
 
     def get_persons(self) -> list[Detection]:
         return [d for d in self._last_detections if d.label in self.PERSON_LABELS]

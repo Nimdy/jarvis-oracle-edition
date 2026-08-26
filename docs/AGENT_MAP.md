@@ -16,8 +16,8 @@ Two devices. One mind. The LLM is **voice**, not the brain.
 
 | Device | Role | Must not |
 |---|---|---|
-| **Pi 5** (`pi/`) | Senses + speakers: camera, Hailo **person+pose**, JPEG `/snapshot`, mic, playback, kiosk | Decide, remember, route, claim, **CPU YOLO room objects** (not the object path; operator takes the Pi on WiFi) |
-| **Brain** (`brain/`, desktop GPU) | Perception finish, **VLM room caption** of the Pi JPEG, Layer 3B tracker, route, memory, OSV, policy, TTS | Be replaced by “just ask the LLM” |
+| **Pi 5** (`pi/`) | Senses + speakers: camera, Hailo **person+pose**, JPEG `/snapshot`, mic, playback, kiosk. Cheap on-device so the body can go mobile later. | Decide, remember, route, claim, **CPU YOLO room objects** (not the object path; operator takes the Pi on WiFi) |
+| **Brain** (`brain/`, desktop GPU) | Perception finish, **VLM room caption** of the Pi JPEG, Layer 3B tracker (VLM objects + Hailo person occlusion), route, memory, OSV, policy, TTS. HRR mental-world is the later minds-eye (lost-phone / path-block / house-wear) and stays **PRE-MATURE / zero authority** until earned. | Be replaced by “just ask the LLM”. Do not put room inventory on the Pi. |
 
 A process restart is **not a wipe**. Weights, memories, and promotion JSON persist.
 Tier-2 *authority* re-earns. `current_ok` is live-sourced. Do not “fix” restart
@@ -57,7 +57,7 @@ flowchart TD
   tbs["TBS-0 ToM read — SHADOW, injects nothing"]
   router[tool_router.route]
   p1{classify_self_question?}
-  vis{VISION look / what do you see?}
+  vis{VISION look / VQA / retry after wrong?}
   about{about-X subject and not a P1 kind?}
   osv[P1: articulate_self_view — grounded floor speaks]
   eyes["Pi JPEG snapshot + brain VLM caption"]
@@ -84,7 +84,7 @@ flowchart TD
 | Lane | When | What speaks | LLM authors facts? |
 |---|---|---|---|
 | **P1 OSV** | Self-question classified (`articulate.py` kinds) | Deterministic articulator | **No.** Revoice is teacher-only until `native_voice` is born |
-| **VISION** | Look / what do you see (heuristic router) | Live Pi snapshot + brain VLM caption | **No scene.** Dinner-chat must not name the room. Fail-close kitchen/stove/… if caption lacks them. Lived miss 2026-08-24. |
+| **VISION** | Look / what do you see, or a targeted visual question (how many / what color / holding / on-off in the current frame). **Retry after wrong:** “that is/that's wrong”, “check again”, “try again”, “look again” when the prior look is still in-window. | Live Pi JPEG + brain VLM. Generic look speaks the caption. Targeted VQA passes the user's question into `describe_scene` and speaks the VLM answer (or declines). Finger-counts are not room inventory. Retry takes a **new** grab with the original question plus the correction; it does not let the text LLM agree without looking. Teacher label for the retry is VISION (`follow_up_retry`). | **No scene.** Dinner-chat must not name the room. Fail-close kitchen/stove/… if caption lacks them. Lived miss 2026-08-24. Lived miss 2026-08-25: “check again” after a finger count routed NONE. Do not add a Golden command per question. Do not steal MEMORY “remember when … that was a lie”. |
 | **MEMORY** | About a person/pet/topic, not a P1 kind | Recalled payloads, first-sentence aboutness | No self-facts from OSV dump |
 | **LLM** | Everything else | Ollama as voice, under L0 | Must not invent tools, jobs, or self-metrics |
 

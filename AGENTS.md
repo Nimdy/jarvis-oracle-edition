@@ -44,7 +44,7 @@ flowchart TD
   stt[STT + speaker fusion]
   router[tool_router]
   p1{P1 self-view kind?}
-  vis{VISION look / what do you see?}
+  vis{VISION look / what do you see / targeted VQA?}
   about{about-X and not P1?}
   osv[articulate_self_view speaks — LLM does not author]
   eyes[Pi JPEG + brain VLM caption — LLM does not author the room]

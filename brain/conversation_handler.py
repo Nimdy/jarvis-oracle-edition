@@ -25,7 +25,10 @@ from reasoning.golden_words import (
     GoldenCommandContext, list_canonical_commands, with_golden_outcome,
     parse_golden_command,
 )
-from reasoning.tool_router import tool_router, ToolType, RoutingResult
+from reasoning.tool_router import (
+    tool_router, ToolType, RoutingResult, is_targeted_visual_question,
+    vision_retry_followup, record_voice_intent_teacher_signal,
+)
 from reasoning.context import context_builder
 from reasoning.bounded_response import articulate_meaning_frame, build_meaning_frame
 from reasoning.language_runtime_bridge import (
@@ -35,7 +38,10 @@ from reasoning.language_runtime_bridge import (
 from tools.time_tool import get_current_time
 from tools.system_tool import get_system_status
 from tools.memory_tool import search_memory, get_memory_summary
-from tools.vision_tool import describe_scene, describe_scene_stream
+from tools.vision_tool import (
+    describe_scene, describe_scene_stream, describe_jpeg, fetch_snapshot,
+    GENERIC_SCENE_PROMPT, vqa_prompt,
+)
 from tools.introspection_tool import (
     get_grounded_learning_job_status_answer,
     get_grounded_learning_job_status_record,
@@ -3171,6 +3177,34 @@ async def handle_transcription(
             _prev_tool_route = str((_flight_recorder[-1] or {}).get("tool_route", "")) if _flight_recorder else ""
         except Exception:
             _prev_tool_route = ""
+        _prev_tool_route = str(getattr(engine, "_last_tool", "") or _prev_tool_route or "")
+        _last_vision_query = str(getattr(engine, "_last_vision_query", "") or "")
+        _last_vision_ts = float(getattr(engine, "_last_vision_ts", 0.0) or 0.0)
+        _vision_age = (_time.time() - _last_vision_ts) if _last_vision_ts else None
+        _vr = vision_retry_followup(
+            text,
+            current_tool=routing.tool,
+            prev_tool=_prev_tool_route,
+            last_vision_query=_last_vision_query,
+            last_vision_age_s=_vision_age,
+            last_user_text=_prev_user_text,
+        )
+        if _vr:
+            routing = RoutingResult(
+                tool=ToolType.VISION,
+                confidence=0.92,
+                extracted_args=_vr,
+            )
+            try:
+                record_voice_intent_teacher_signal(
+                    text, routing, origin="follow_up_retry",
+                )
+            except Exception:
+                logger.debug("vision-retry teacher signal failed", exc_info=True)
+            logger.info(
+                "Follow-up override: vision retry → VISION (prev=%s query=%s)",
+                _prev_tool_route, (_vr.get("vision_retry_query") or "")[:80],
+            )
         if (
             follow_up
             and _prev_tool_route == ToolType.ACADEMIC_SEARCH.value
@@ -3441,7 +3475,9 @@ async def handle_transcription(
             # ("running the golden command vision protocol").
             if ollama and pi_snapshot_url:
                 try:
-                    scene_desc = await describe_scene(pi_snapshot_url, ollama, claude)
+                    scene_desc = await describe_scene(
+                        pi_snapshot_url, ollama, claude, fresh=True,
+                    )
                 except Exception:
                     logger.exception("Golden VISION STATUS snapshot failed")
                     scene_desc = ""
@@ -3453,6 +3489,11 @@ async def handle_transcription(
                             logger.debug("golden vision ingest failed", exc_info=True)
                     _set_golden_outcome("executed")
                     reply = scene_desc
+                    try:
+                        engine._last_vision_query = "What do you currently see?"
+                        engine._last_vision_ts = _time.time()
+                    except Exception:
+                        pass
                 else:
                     _set_golden_outcome("blocked", "camera_unavailable")
                     reply = "Golden VISION STATUS: I can't see the camera right now."
@@ -3794,77 +3835,111 @@ async def handle_transcription(
     elif routing.tool == ToolType.VISION:
         engine.set_phase("PROCESSING")
         tone = engine.get_state()["tone"]
+        _vision_args = routing.extracted_args or {}
+        retry_q = str(_vision_args.get("vision_retry_query") or "").strip()
+        retry_corr = str(_vision_args.get("vision_retry_correction") or "").strip()
+        look_text = retry_q or text
+        targeted = is_targeted_visual_question(look_text) or bool(retry_q)
+        look_prompt = (
+            vqa_prompt(look_text, correction=retry_corr or None)
+            if targeted
+            else GENERIC_SCENE_PROMPT
+        )
+        try:
+            engine._last_vision_query = look_text
+            engine._last_vision_ts = _time.time()
+        except Exception:
+            pass
         if ollama and pi_snapshot_url:
             try:
                 # Honest "warming up" while the VLM cold-loads: the vision model shares VRAM
                 # with the chat model, so the first look after a chat turn swaps it in (~seconds).
                 # Say what's actually happening — never a guessed scene while the eyes load.
+                # Grab the frame at end-of-speech BEFORE warming TTS. Lived
+                # 2026-08-25: snapshot ran ~3s after STT (hands already down)
+                # and /snapshot was a frozen last_frame (identical JPEG md5).
+                jpeg_bytes = await fetch_snapshot(pi_snapshot_url, fresh=True)
                 await _broadcast_chunk_sync("One moment — focusing my vision.", tone)
-                scene_desc = await describe_scene(pi_snapshot_url, ollama, claude)
+                if jpeg_bytes is None:
+                    scene_desc = "I can't see anything right now — the camera isn't reachable."
+                else:
+                    scene_desc = await describe_jpeg(
+                        jpeg_bytes, ollama, claude, prompt=look_prompt,
+                    )
                 # Do NOT force-unload: keep_alive (5m) keeps the eyes warm for follow-up looks;
                 # Ollama manages the VRAM swap with the chat model on demand (fewer cold-loads).
                 if scene_desc and "aren't available" not in scene_desc and "can't see" not in scene_desc:
-                    if scene_ingest_callback:
+                    # Targeted VQA answers are not room inventory (a finger-count
+                    # must not become a scene entity). Generic looks still ingest.
+                    if (not targeted) and scene_ingest_callback:
                         try:
                             scene_ingest_callback(scene_desc)
                         except Exception:
                             logger.debug("scene ingest from live look failed", exc_info=True)
-                    # The FRESH frame caption is the SOLE authority for "what do you see".
-                    # Deliberately do NOT prepend the ambient/cached scene_context: its
-                    # "Physical: person / user present" claims can contradict the live frame
-                    # and are exactly the stale material that drove the original confab.
-                    vision_ctx = f"[Live camera view]\n{scene_desc}"
-                    full_reply = ""
-                    chunks_sent = 0
-                    left_frame = False
-                    async for sentence, is_final in response_gen.respond_stream(
-                        text,
-                        perception_context=vision_ctx,
-                        cancel_check=_cancelled,
-                        speaker_name=speaker,
-                        user_emotion=emotion,
-                        conversation_id=conversation_id,
-                        tool_hint="vision",
-                        style_instruction=_style_instruction,
-                        persist_response=False,
-                    ):
-                        if _cancelled():
-                            break
-                        if is_final:
-                            if left_frame:
-                                full_reply = scene_desc
-                            else:
-                                full_reply = sentence
-                                if chunks_sent == 0 and sentence:
-                                    if vision_reply_confabulates(scene_desc, sentence):
-                                        logger.warning(
-                                            "Vision mouth left the live frame; speaking caption"
-                                        )
-                                        full_reply = scene_desc
-                                        await _send_sentence(scene_desc, tone)
-                                    else:
-                                        await _send_sentence(sentence, tone)
+                    if targeted:
+                        # VLM answer is the mouth. Text LLM does not count fingers.
+                        logger.info("VISION VQA: speaking VLM answer (no text-LLM scene)")
+                        reply = scene_desc
+                        await _broadcast_chunk_sync(reply, tone)
+                        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                        _persist_spoken_turn(text, reply)
+                    else:
+                        # The FRESH frame caption is the SOLE authority for "what do you see".
+                        # Deliberately do NOT prepend the ambient/cached scene_context: its
+                        # "Physical: person / user present" claims can contradict the live frame
+                        # and are exactly the stale material that drove the original confab.
+                        vision_ctx = f"[Live camera view]\n{scene_desc}"
+                        full_reply = ""
+                        chunks_sent = 0
+                        left_frame = False
+                        async for sentence, is_final in response_gen.respond_stream(
+                            text,
+                            perception_context=vision_ctx,
+                            cancel_check=_cancelled,
+                            speaker_name=speaker,
+                            user_emotion=emotion,
+                            conversation_id=conversation_id,
+                            tool_hint="vision",
+                            style_instruction=_style_instruction,
+                            persist_response=False,
+                        ):
+                            if _cancelled():
+                                break
+                            if is_final:
+                                if left_frame:
+                                    full_reply = scene_desc
+                                else:
+                                    full_reply = sentence
+                                    if chunks_sent == 0 and sentence:
+                                        if vision_reply_confabulates(scene_desc, sentence):
+                                            logger.warning(
+                                                "Vision mouth left the live frame; speaking caption"
+                                            )
+                                            full_reply = scene_desc
+                                            await _send_sentence(scene_desc, tone)
+                                        else:
+                                            await _send_sentence(sentence, tone)
+                                await _flush_tts()
+                                _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                                continue
+                            if vision_reply_confabulates(scene_desc, sentence):
+                                logger.warning(
+                                    "Vision mouth left the live frame; speaking caption"
+                                )
+                                left_frame = True
+                                await _send_sentence(scene_desc, tone)
+                                chunks_sent += 1
+                                break
+                            await _send_sentence(sentence, tone)
+                            chunks_sent += 1
+                        if left_frame:
+                            full_reply = scene_desc
                             await _flush_tts()
                             _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
-                            continue
-                        if vision_reply_confabulates(scene_desc, sentence):
-                            logger.warning(
-                                "Vision mouth left the live frame; speaking caption"
-                            )
-                            left_frame = True
-                            await _send_sentence(scene_desc, tone)
-                            chunks_sent += 1
-                            break
-                        await _send_sentence(sentence, tone)
-                        chunks_sent += 1
-                    if left_frame:
-                        full_reply = scene_desc
-                        await _flush_tts()
-                        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
-                    reply = full_reply
-                    if reply:
-                        _persist_spoken_turn(text, reply)
-                    print("  [Vision→LLM] Scene-aware response complete")
+                        reply = full_reply
+                        if reply:
+                            _persist_spoken_turn(text, reply)
+                        print("  [Vision→LLM] Scene-aware response complete")
                 else:
                     reply = scene_desc
                     await _broadcast_chunk_sync(reply, tone)
@@ -3875,7 +3950,9 @@ async def handle_transcription(
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
         else:
-            reply = await describe_scene(pi_snapshot_url, ollama, claude)
+            reply = await describe_scene(
+                pi_snapshot_url, ollama, claude, prompt=look_prompt, fresh=True,
+            )
             await _broadcast_chunk_sync(reply, engine.get_state()["tone"])
             _broadcast({"type": "response_end", "text": "", "tone": engine.get_state()["tone"], "phase": "LISTENING"})
     elif routing.tool == ToolType.CAMERA_CONTROL:
@@ -6171,6 +6248,11 @@ async def handle_transcription(
         _save_flight_recorder()
     except Exception:
         logger.debug("Flight recorder episode failed", exc_info=True)
+
+    try:
+        engine._last_tool = routing.tool.value if routing else ""
+    except Exception:
+        pass
 
     engine.record_interaction_outcome(
         completed=not was_cancelled and not had_error,

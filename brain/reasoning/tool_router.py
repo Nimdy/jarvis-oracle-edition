@@ -259,6 +259,7 @@ def _record_voice_intent_teacher_signal(
     result: RoutingResult,
     *,
     synthetic: bool = False,
+    origin: str | None = None,
 ) -> None:
     """Persist tool-router intent labels AND text embeddings for voice_intent student.
 
@@ -268,10 +269,12 @@ def _record_voice_intent_teacher_signal(
     try:
         from hemisphere.distillation import distillation_collector
 
-        origin = "synthetic" if synthetic else "router"
+        origin = origin or ("synthetic" if synthetic else "router")
         fidelity = max(0.3, min(1.0, result.confidence))
         if synthetic:
             fidelity = min(fidelity, 0.7)
+        if origin == "follow_up_retry":
+            fidelity = 1.0
         bucket = _VOICE_INTENT_TOOL_BUCKET.get(result.tool, "general_chat")
         meta = {
             "tool": result.tool.value,
@@ -301,6 +304,9 @@ def _record_voice_intent_teacher_signal(
             pass
     except Exception:
         logger.debug("Voice-intent teacher signal capture skipped", exc_info=True)
+
+
+record_voice_intent_teacher_signal = _record_voice_intent_teacher_signal
 
 
 _KEYWORD_PATTERNS: list[tuple[list[str], ToolType]] = [
@@ -974,6 +980,123 @@ def _is_visual_present_query(text: str) -> bool:
     return bool(_VISUAL_PRESENT_RE.search(text))
 
 
+# Targeted VQA (#24): a question about the CURRENT FRAME (count/color/holding/
+# on-off), not a generic "what do you see" and not about-X memory.
+# Class, not a per-utterance phrase hack. Golden VISION STATUS stays a caption.
+_VQA_PAST_RE = re.compile(
+    r"\b(?:remember when|do you remember|yesterday|last (?:time|night)|"
+    r"did i|was i|were we|used to)\b",
+    re.I,
+)
+_VQA_ATTR_RE = re.compile(
+    r"\b(?:how many|what colo(?:u)?r|what am i holding|what am i wearing|"
+    r"am i (?:holding|wearing)|what(?:'s| is) (?:this|that)|"
+    r"is (?:this|that) |"
+    r"is the \w[\w-]{0,20} (?:on|off|open|closed|lit))\b",
+    re.I,
+)
+_VQA_FIELD_RE = re.compile(
+    r"\b(?:this|that|these|those|here|in front|"
+    r"holding(?: up)?|wearing|"
+    r"my (?:shirt|hand|hands|finger|fingers|face|head|headphones?|glasses)|"
+    r"fingers?|monitors?|screens?|headphones?|stove|camera)\b",
+    re.I,
+)
+_VQA_NOT_FRAME_RE = re.compile(
+    r"\b(?:skyler|tanya|kids?|children|family|wife|husband|"
+    r"meeting|project|schedule|appointment)\b",
+    re.I,
+)
+
+
+def is_targeted_visual_question(text: str) -> bool:
+    """True when the utterance asks the camera a specific question.
+
+    Requires an attribute question (how many / what color / holding / on-off)
+    AND a present-field marker (deixis, body-in-frame, or in-room object).
+    Enrollment, self-view, past-tense memory, and about-X names stay out.
+    """
+    if not text:
+        return False
+    if _VISUAL_PRESENT_SELF_RE.search(text):
+        return False
+    lower = text.lower()
+    if any(sig in lower for sig in _IDENTITY_ENROLLMENT_SIGNALS):
+        return False
+    if _VQA_PAST_RE.search(text) or _VQA_NOT_FRAME_RE.search(text):
+        return False
+    if not _VQA_ATTR_RE.search(text):
+        return False
+    return bool(_VQA_FIELD_RE.search(text))
+
+
+# Lived 2026-08-25: after a VISION miss, "that is wrong … check again" routed
+# NONE and the text LLM agreed without a new JPEG. Retry/correction after a
+# look is the same class as the existing camera-offer follow-up override.
+_LOOK_RETRY_RE = re.compile(
+    r"\b(?:check|try|look)\s+again\b"
+    r"|\blook\s+(?:once\s+more|one\s+more\s+time)\b"
+    r"|\bdo\s+(?:it|that)\s+again\b",
+    re.I,
+)
+_TURN_CORRECTION_RE = re.compile(
+    r"\bthat(?:'s|\s+is|\s+was)\s+(?:wrong|incorrect|not\s+(?:right|correct|true|accurate))\b"
+    r"|\byou\s+(?:miscounted|counted\s+wrong|got\s+(?:it|that)\s+wrong|are\s+wrong)\b",
+    re.I,
+)
+_VISION_RETRY_WINDOW_S = 300.0
+
+
+def is_look_retry_followup(text: str) -> bool:
+    return bool(text and _LOOK_RETRY_RE.search(text))
+
+
+def is_turn_correction(text: str) -> bool:
+    return bool(text and _TURN_CORRECTION_RE.search(text))
+
+
+def vision_retry_followup(
+    text: str,
+    *,
+    current_tool: ToolType,
+    prev_tool: str = "",
+    last_vision_query: str = "",
+    last_vision_age_s: float | None = None,
+    last_user_text: str = "",
+) -> dict[str, Any] | None:
+    """If this turn is a correction/retry after a look, re-fire VISION.
+
+    Does not steal MEMORY ("remember when … that was a lie").
+    """
+    if current_tool != ToolType.NONE or not (text or "").strip():
+        return None
+    retry = is_look_retry_followup(text)
+    correction = is_turn_correction(text)
+    if not retry and not correction:
+        return None
+    prev = (prev_tool or "").upper()
+    look_q = (last_vision_query or "").strip()
+    vision_fresh = bool(
+        look_q
+        and last_vision_age_s is not None
+        and 0 <= float(last_vision_age_s) <= _VISION_RETRY_WINDOW_S
+    )
+    if prev == ToolType.VISION.value:
+        if not look_q:
+            look_q = (last_user_text or "").strip()
+        if not look_q:
+            return None
+    elif retry and vision_fresh:
+        pass
+    else:
+        return None
+    return {
+        "tier": "visual_retry",
+        "vision_retry_query": look_q,
+        "vision_retry_correction": " ".join(text.split()),
+    }
+
+
 # Exclusion: the user is asking Jarvis to do something for them, not about itself
 _SELF_REF_EXCLUDE = re.compile(
     r"\b(help me with|assist me with|for me to do|my homework|my code|my project|my file|"
@@ -1195,6 +1318,8 @@ def _is_self_referential(lower: str) -> bool:
     if _SELF_REF_EXCLUDE.search(lower):
         return False
     if _is_visual_present_query(lower):
+        return False
+    if is_targeted_visual_question(lower):
         return False
     hits = 0
     if _SELF_REF_VERBS.search(lower):
@@ -1546,6 +1671,18 @@ class ToolRouter:
                     tool=ToolType.VISION,
                     confidence=0.86,
                     extracted_args={"tier": "visual_present"},
+                ),
+                synthetic=synthetic,
+            )
+
+        if is_targeted_visual_question(user_message):
+            resolved = _disambiguate_vision_vs_identity(lower, ToolType.VISION)
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=resolved,
+                    confidence=0.86,
+                    extracted_args={"tier": "visual_question"},
                 ),
                 synthetic=synthetic,
             )

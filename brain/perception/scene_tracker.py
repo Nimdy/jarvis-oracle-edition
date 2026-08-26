@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from dataclasses import replace
 from typing import Any
 
 from perception.scene_types import (
@@ -113,6 +114,31 @@ class SceneTracker:
         )
         self._last_snapshot = snapshot
         return snapshot
+
+    def refresh_person_occlusion(
+        self,
+        person_bboxes: list[BBox] | None,
+        frame_w: int,
+        frame_h: int,
+    ) -> SceneSnapshot:
+        """Update region visibility from Hailo person boxes without decaying objects.
+
+        This rig's Hailo is person-only. Empty object lists are expected — room
+        inventory is a brain VLM read, not Pi CPU YOLO. Treating "no objects"
+        as "everything vanished" would wipe VLM-seeded desks/monitors every
+        person-only summary. Occlusion geometry still has to land so the
+        minds-eye / later HRR can see where a body blocks the view.
+        """
+        if self._last_snapshot is None:
+            return self.update([], frame_w, frame_h, person_bboxes)
+        vis = estimate_region_visibility(person_bboxes or [], frame_w, frame_h)
+        snap = replace(
+            self._last_snapshot,
+            region_visibility=vis,
+            timestamp=time.time(),
+        )
+        self._last_snapshot = snap
+        return snap
 
     def get_state(self) -> dict[str, Any]:
         """Return dashboard-friendly state dict."""

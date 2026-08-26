@@ -66,6 +66,10 @@ class FrictionEvent:
 # ---------------------------------------------------------------------------
 
 _CORRECTION_PHRASES = [
+    re.compile(
+        r"\bthat(?:'s|\s+is|\s+was)\s+(?:not\s+(?:right|correct|true|accurate)|wrong|incorrect)\b",
+        re.I,
+    ),
     re.compile(r"\bthat'?s?\s+(?:not\s+(?:right|correct|true|accurate)|wrong|incorrect)\b", re.I),
     re.compile(r"\bno[,.]?\s+(?:it'?s?\s+(?:actually|not)|that'?s?\s+not|i\s+(?:said|meant))\b", re.I),
     re.compile(r"\byou\s+(?:misunderstood|got\s+(?:it|that)\s+wrong|are\s+wrong)\b", re.I),

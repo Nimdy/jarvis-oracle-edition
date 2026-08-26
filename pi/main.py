@@ -1002,11 +1002,26 @@ async def start_ui_server(service: SensesService, host: str, port: int):
 
     async def snapshot_handler(request):
         import cv2
-        frame = service.last_frame
+        grab = str(request.query.get("grab", "")).lower() in {"1", "true", "yes"}
+        frame = None
+        if grab and service._detector:
+            loop = asyncio.get_running_loop()
+            frame = await loop.run_in_executor(None, service._detector.capture_frame)
+        if frame is None:
+            frame = service.last_frame
         if frame is None:
             return web.Response(status=503, text="No camera frame available")
         _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        return web.Response(body=jpeg.tobytes(), content_type="image/jpeg")
+        headers = {
+            "Content-Type": "image/jpeg",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        }
+        det = service._detector
+        age = det.last_frame_age_s if det else -1.0
+        if age >= 0:
+            headers["X-Frame-Age-Ms"] = str(int(age * 1000))
+        return web.Response(body=jpeg.tobytes(), headers=headers)
 
     async def broadcast_state():
         last_phase = ""

@@ -50,8 +50,11 @@ def test_empty_scene_summary_still_records_person_bboxes() -> None:
         person_bboxes=[[80, 40, 400, 470]],
     )
     assert orch.get_person_bboxes() == [(80, 40, 400, 470)]
-    assert orch._scene_tracker._update_count == 0
-    assert orch._last_scene_snapshot is None
+    snap = orch._last_scene_snapshot
+    assert snap is not None
+    assert snap.entities == []
+    assert snap.region_visibility
+    assert any(v < 1.0 for v in snap.region_visibility.values())
 
 
 def test_vlm_feed_seeds_tracker_without_prior_snapshot() -> None:
@@ -125,6 +128,24 @@ def test_ingest_scene_description_is_brain_side_room_inventory() -> None:
     assert "chair" not in orch._object_memory  # caption does not name a chair
 
 
+def test_empty_hailo_summary_does_not_decay_vlm_objects() -> None:
+    """Pi stays person-only. Empty object lists must not wipe brain VLM inventory."""
+    orch = _stub_orch()
+    orch._feed_vlm_to_tracker(_NAVY_CAPTION)
+    labels_before = {e.label for e in orch.get_scene_snapshot().entities}
+    orch._on_scene_summary(
+        detections=[],
+        frame_size=[640, 480],
+        scene_change_score=0.0,
+        person_bboxes=[[80, 40, 400, 470]],
+    )
+    snap = orch.get_scene_snapshot()
+    labels_after = {e.label for e in snap.entities}
+    assert labels_before <= labels_after
+    assert snap.region_visibility
+    assert any(v < 1.0 for v in snap.region_visibility.values())
+
+
 def test_empty_summary_schedules_brain_first_look_not_pi_yolo() -> None:
     orch = _stub_orch()
     orch._scene_analysis_in_progress = False
@@ -135,3 +156,23 @@ def test_empty_summary_schedules_brain_first_look_not_pi_yolo() -> None:
     text = src.read_text(encoding="utf-8")
     assert "Room inventory is a BRAIN VLM read" in text
     assert "_maybe_request_first_look" in text
+    assert "refresh_person_occlusion" in text
+    assert "asyncio.wait_for" in text
+    assert "_scene_analyze_timeout_s" in text
+    assert '"timeout"' in text
+
+
+def test_pi_snapshot_copies_frame_and_supports_fresh_grab() -> None:
+    """Lived 2026-08-25: /snapshot served identical JPEGs while Hailo still ran."""
+    root = Path(__file__).resolve().parents[2]
+    snap = (root / "pi" / "main.py").read_text(encoding="utf-8")
+    start = snap.index("async def snapshot_handler")
+    end = snap.index("\n    async def ", start + 1)
+    body = snap[start:end]
+    assert "grab" in body
+    assert "capture_frame" in body
+    assert "X-Frame-Age-Ms" in body
+    assert "no-store" in body
+    det = (root / "pi" / "senses" / "vision" / "detector.py").read_text(encoding="utf-8")
+    assert "frame.copy()" in det
+    assert "def _keep_frame" in det

@@ -12,7 +12,10 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from reasoning.tool_router import ToolRouter, ToolType
+from reasoning.tool_router import (
+    ToolRouter, ToolType, is_targeted_visual_question,
+    is_look_retry_followup, is_turn_correction, vision_retry_followup,
+)
 
 
 router = ToolRouter()
@@ -75,6 +78,86 @@ def test_visual_present_see_is_vision_not_introspection():
     ):
         assert router.route(q).tool == ToolType.VISION, q
     assert router.route("how do you see yourself?").tool == ToolType.INTROSPECTION
+
+
+def test_targeted_visual_question_is_vision_class_not_phrase_hack():
+    """#24: count/color/holding/on-off about the current frame → VISION.
+
+    Generic look stays visual_present. About-X, enroll, and self-view stay out.
+    """
+    for q in (
+        "How many fingers am I holding up?",
+        "What color is my shirt?",
+        "Am I wearing headphones?",
+        "How many monitors are in front of me?",
+        "What am I holding?",
+        "Is the stove on?",
+        "what color is this",
+    ):
+        assert is_targeted_visual_question(q) is True, q
+        assert router.route(q).tool == ToolType.VISION, q
+    assert is_targeted_visual_question("What do you currently see?") is False
+    assert is_targeted_visual_question("how many children do I have") is False
+    assert is_targeted_visual_question("what color is Skyler's collar") is False
+    assert is_targeted_visual_question("how do you see yourself?") is False
+    assert is_targeted_visual_question("look at my face") is False
+    assert is_targeted_visual_question(
+        "Remember when I asked you for a vision check and you told me I was sitting in the kitchen"
+    ) is False
+    assert router.route("how many children do I have").tool != ToolType.VISION
+    assert router.route("what color is Skyler's collar").tool != ToolType.VISION
+    assert router.route("look at my face").tool == ToolType.IDENTITY
+    assert router.route(
+        "Remember when I asked you for a vision check"
+    ).tool == ToolType.MEMORY
+
+
+def test_vision_retry_followup_after_wrong_look():
+    """Lived 2026-08-25: 'that is wrong … check again' after VISION went NONE."""
+    spoken = (
+        "Jarvis that is wrong. I have my thumbs tucked in and I only have four "
+        "fingers on each hand. Check again"
+    )
+    assert is_turn_correction(spoken) is True
+    assert is_look_retry_followup(spoken) is True
+    assert is_turn_correction("that's wrong") is True
+    assert is_look_retry_followup("try again") is True
+    hit = vision_retry_followup(
+        spoken,
+        current_tool=ToolType.NONE,
+        prev_tool="VISION",
+        last_vision_query="How many fingers am I holding up?",
+        last_vision_age_s=20.0,
+    )
+    assert hit is not None
+    assert hit["tier"] == "visual_retry"
+    assert hit["vision_retry_query"] == "How many fingers am I holding up?"
+    assert "Check again" in hit["vision_retry_correction"]
+    # After a thanks (NONE) but the look is still in the window.
+    late = vision_retry_followup(
+        "check again",
+        current_tool=ToolType.NONE,
+        prev_tool="NONE",
+        last_vision_query="How many fingers am I holding up?",
+        last_vision_age_s=25.0,
+    )
+    assert late is not None
+    # MEMORY "remember when that was a lie" must not steal to VISION.
+    assert vision_retry_followup(
+        "Remember when I asked you for a vision check and that was wrong",
+        current_tool=ToolType.MEMORY,
+        prev_tool="MEMORY",
+        last_vision_query="What do you see in the room?",
+        last_vision_age_s=10.0,
+    ) is None
+    assert vision_retry_followup(
+        "check again",
+        current_tool=ToolType.NONE,
+        prev_tool="NONE",
+        last_vision_query="How many fingers am I holding up?",
+        last_vision_age_s=900.0,
+    ) is None
+    assert router.route(spoken).tool == ToolType.NONE
 
 
 def test_recognition_probes_route_to_identity():

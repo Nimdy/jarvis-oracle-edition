@@ -57,7 +57,7 @@
 
     <section class="card col7">
       <h2>Live Mental World Scene Graph</h2>
-      <div class="note">The current canonical scene from the HRR mental-world shadow (lane <code>spatial_hrr_mental_world</code>). Positions are 3D room-meters and are only valid for <b style="color:var(--green)">visible</b> entities — candidate/occluded/removed positions are stale or null. Relations recover only when encoded.</div>
+      <div class="note">HRR mental-world <b>shadow</b> (lane <code>spatial_hrr_mental_world</code>) — <b>not</b> the live scene authority. Live looks are Hailo persons + brain VLM caption of the Pi JPEG. HRR stays PRE-MATURE, zero influence. Positions here are 3D room-meters and are only valid for <b style="color:var(--green)">visible</b> entities.</div>
       <div class="kv" id="hrr-scene-kv"></div>
       <div id="hrr-entities"></div>
       <div class="contrast" id="hrr-scene-contrast"></div>
@@ -65,8 +65,9 @@
 
     <section class="card col7">
       <h2>Perception Fusion Layer</h2>
-      <div class="note">What JARVIS currently <em>perceives</em> — RealSense (<b>pi</b>) depth fused with VLM inference. A <em>different</em> data model from the HRR scene above: per-detection confidence + permanence belief + 2D bbox (pi only). VLM-only entities carry low permanence and no bbox.</div>
+      <div class="note">What the <b>brain</b> currently perceives from the Pi: Hailo person boxes + GPU/edge VLM caption of the JPEG + Layer 3B object tracker (VLM-seeded; Hailo is person-only — no Pi CPU YOLO). A different data model from the HRR shadow above. Tracker visible=0 with a person in-frame is that split, not a dead feed.</div>
       <div class="kv" id="scene-kv"></div>
+      <div id="scene-caption"></div>
       <div id="scene-entities"></div>
       <div id="scene-displays"></div>
       <div class="reg" id="scene-regions"></div>
@@ -182,14 +183,21 @@
   }
 
   function renderScene(){
-    if(!SCENE){ el('scene-kv').innerHTML='<span class="offline">perception scene offline (fail-closed)</span>'; el('scene-entities').innerHTML=''; el('scene-displays').innerHTML=''; el('scene-regions').innerHTML=''; return; }
+    if(!SCENE){ el('scene-kv').innerHTML='<span class="offline">perception scene offline (fail-closed)</span>'; el('scene-entities').innerHTML=''; el('scene-displays').innerHTML=''; el('scene-regions').innerHTML=''; if(el('scene-caption')) el('scene-caption').innerHTML=''; return; }
     var d=SCENE;
+    var persons=num(d.person_bbox_count);
+    var capText=(((d.caption)||{}).text||'').trim();
     el('scene-kv').innerHTML=
+      '<span>Hailo persons <b style="color:'+(persons>0?'var(--green)':'var(--amber)')+'">'+(persons===null?'—':persons)+'</b></span>'+
       '<span>tracked <b>'+(num(d.entity_count)||0)+'</b></span>'+
       '<span>visible <b style="color:'+((num(d.visible_count)||0)>0?'var(--green)':'var(--amber)')+'">'+(num(d.visible_count)||0)+'</b></span>'+
       '<span>stable <b>'+(num(d.stable_count)||0)+'</b></span>'+
       '<span>updates <b>'+(num(d.update_count)||0)+'</b></span>'+
       '<span class="asof">scene '+ago(d.timestamp)+'</span>';
+    var capEl=el('scene-caption');
+    if(capEl) capEl.innerHTML = capText
+      ? '<div class="contrast" style="margin-top:6px">Caption: <b>'+String(capText).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</b></div>'
+      : '<div class="contrast" style="margin-top:6px">No VLM caption yet — objects are brain-side, not Pi YOLO.</div>';
     var ents=(d.entities||[]).slice().sort(function(a,b){ return (ST_ORDER[a.state]||9)-(ST_ORDER[b.state]||9); });
     el('scene-entities').innerHTML = ents.length ? ents.map(function(e){
       var unseen=num(e.unseen_cycles)||0, stale=unseen>0&&e.state!=='visible';

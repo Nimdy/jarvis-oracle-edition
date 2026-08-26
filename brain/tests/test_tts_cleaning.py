@@ -73,3 +73,19 @@ def test_clean_mixed_markdown_response():
     assert "-" not in cleaned or cleaned.count("-") == 0
     assert "What makes you Jarvis" in cleaned
     assert "Memory search" in cleaned
+
+
+def test_clean_vlm_answer_markdown_and_latex():
+    """Lived 2026-08-25: VISION VQA spoke bold + \\(4+4=8\\) as markup."""
+    text = (
+        "In the frame, **four fingers are visible per hand**.\n"
+        "Thus, \\(4 + 4 = 8\\) fingers are held up.\n\n"
+        "**Answer: 8**"
+    )
+    cleaned = BrainTTS._clean_for_speech(text)
+    assert "**" not in cleaned
+    assert "\\" not in cleaned
+    assert "(" not in cleaned
+    assert "four fingers are visible per hand" in cleaned
+    assert "4 + 4 = 8" in cleaned
+    assert "Answer" in cleaned and "8" in cleaned

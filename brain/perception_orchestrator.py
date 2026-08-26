@@ -288,6 +288,8 @@ class PerceptionOrchestrator:
         self._last_scene_analysis_time: float = 0.0
         self._scene_interval_away: float = 300.0
         self._scene_interval_present: float = 1800.0
+        # Watchdog: a hung Ollama describe used to freeze this loop overnight.
+        self._scene_analyze_timeout_s: float = 90.0
         self._object_memory: dict[str, dict] = {}
         self._last_scene_description: str = ""
         self._last_edge_caption_ts: float = 0.0  # when the Pi edge VLM last supplied a caption
@@ -1303,6 +1305,11 @@ class PerceptionOrchestrator:
         if not detections:
             # Pi sent a frame-summary with no objects (Hailo is person-only).
             # Room inventory is a BRAIN VLM read of the Pi snapshot, not Pi CPU YOLO.
+            # Still refresh person-occlusion so region vis / later HRR see the body,
+            # without decaying VLM-seeded objects as "gone".
+            self._last_scene_snapshot = self._scene_tracker.refresh_person_occlusion(
+                person_boxes, fw, fh,
+            )
             self._maybe_request_first_look()
             return
 
@@ -2566,7 +2573,7 @@ class PerceptionOrchestrator:
                 user_here = bool(getattr(self.engine, "_is_user_present", False))
                 if now - self._last_scene_analysis_time >= self._scene_analysis_interval(user_here):
                     outcome = await self._analyze_scene()
-                    if outcome in ("ok", "empty", "no_backend"):
+                    if outcome in ("ok", "empty", "no_backend", "timeout"):
                         self._last_scene_analysis_time = now
             except Exception as exc:
                 logger.debug("Scene analysis error: %s", exc)
@@ -2591,11 +2598,20 @@ class PerceptionOrchestrator:
         self._scene_analysis_in_progress = True
         try:
             from tools.vision_tool import describe_scene
-            description = await describe_scene(
-                self._pi_snapshot_url,
-                ollama_client=self._ollama,
-                prompt="Describe what you see briefly. List any people, objects, or activities. Be factual.",
+            description = await asyncio.wait_for(
+                describe_scene(
+                    self._pi_snapshot_url,
+                    ollama_client=self._ollama,
+                    prompt="Describe what you see briefly. List any people, objects, or activities. Be factual.",
+                ),
+                timeout=getattr(self, "_scene_analyze_timeout_s", 90.0),
             )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Scene analysis timed out after %.0fs — GPU look will retry on cadence",
+                getattr(self, "_scene_analyze_timeout_s", 90.0),
+            )
+            return "timeout"
         finally:
             self._scene_analysis_in_progress = False
             try:
@@ -2646,7 +2662,7 @@ class PerceptionOrchestrator:
 
     async def _first_look(self) -> None:
         outcome = await self._analyze_scene()
-        if outcome in ("ok", "empty", "no_backend"):
+        if outcome in ("ok", "empty", "no_backend", "timeout"):
             self._last_scene_analysis_time = time.time()
 
     def _update_object_memory(self, description: str) -> None:
