@@ -181,18 +181,21 @@ class CodebaseIndex:
             except OSError:
                 pass
 
-        self._resolve_import_graph()
-        self._last_indexed = time.time()
-
-        project_root = self._root.parent
-        for doc_rel in ("AGENTS.md", "ARCHITECTURE.md", "docs/SYSTEM_OVERVIEW.md"):
-            doc_path = project_root / doc_rel
-            if doc_path.exists():
+        pi_root = self._root.parent / "pi"
+        if pi_root.is_dir():
+            for fpath in sorted(pi_root.rglob("*.py")):
+                rel = Path("pi") / fpath.relative_to(pi_root)
+                if any(p.startswith(".") or p == "__pycache__" or p == ".venv" for p in rel.parts):
+                    continue
+                self._index_file(fpath, rel)
                 try:
-                    content = doc_path.read_bytes()
-                    new_hashes[doc_rel] = hashlib.sha256(content).hexdigest()[:32]
+                    content = fpath.read_bytes()
+                    new_hashes[str(rel)] = hashlib.sha256(content).hexdigest()[:32]
                 except OSError:
                     pass
+
+        self._resolve_import_graph()
+        self._last_indexed = time.time()
 
         self._changed_files = self._compute_changes(old_hashes, new_hashes)
         self._file_hashes = new_hashes
@@ -207,9 +210,20 @@ class CodebaseIndex:
         logger.info("Codebase indexed: %d modules, %d symbols in %.0fms%s",
                      total_modules, total_symbols, elapsed, change_note)
 
+    def _resolve_source(self, rel_path: str) -> Path:
+        """Map an index-relative path to a file on disk.
+
+        Brain modules are stored as ``consciousness/engine.py`` (under brain/).
+        Pi modules are stored as ``pi/main.py`` (sibling of brain/).
+        """
+        rel = Path(rel_path)
+        if rel.parts and rel.parts[0] == "pi":
+            return self._root.parent / rel
+        return self._root / rel_path
+
     def rebuild_file(self, rel_path: str) -> None:
         """Re-index a single file after a patch is applied."""
-        fpath = self._root / rel_path
+        fpath = self._resolve_source(rel_path)
         if not fpath.exists():
             # file was deleted
             mod_fqn = self._path_to_module(Path(rel_path))
@@ -386,7 +400,7 @@ class CodebaseIndex:
 
     def read_file(self, rel_path: str) -> str | None:
         """Read a source file and return contents with line numbers."""
-        fpath = self._root / rel_path
+        fpath = self._resolve_source(rel_path)
         if not fpath.exists():
             return None
         try:
@@ -416,7 +430,7 @@ class CodebaseIndex:
 
     def read_span(self, rel_path: str, start: int, end: int) -> str | None:
         """Read specific line range from a file."""
-        fpath = self._root / rel_path
+        fpath = self._resolve_source(rel_path)
         if not fpath.exists():
             return None
         try:
