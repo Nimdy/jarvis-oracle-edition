@@ -32,12 +32,15 @@ SSH brain `duafoo@192.168.1.222` with `~/.ssh/id_jarvis_desktop`.
 
 Workspace is WSL `/home/nimda/projects/jarvis-oracle-edition`. Sync is not bounce.
 
-## Classify
+## Classify (one class per finding)
 
-- **REAL** — contract broken and the gate is already met
-- **GATED / EXPECTED** — shadow, PRE-MATURE, `not_born`, sample floor
+- **LIVE / WIRED** — lane fired as drawn; not a bug. Do **not** call this REAL.
+- **REAL** — contract broken **and** the gate is already earned. Defect only.
+- **GATED / EXPECTED** — shadow, PRE-MATURE, `not_born`, sample floor, leftover cadence
 - **THEATER** — LLM authored a fact no lane had
 - **DOC DRIFT** — book ≠ live
+
+If VISION VQA took a fresh grab and spoke the frame: **LIVE / WIRED**. Sit-down story with no sit-down event: **THEATER**. Sparse `fresh=False` captions: **GATED / EXPECTED**.
 
 ## Hard no
 

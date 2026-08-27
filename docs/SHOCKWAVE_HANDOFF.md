@@ -12,6 +12,7 @@
 |---|---|---|
 | **Grok 4.6** (in-chair) | Soul / reasoner. Coding, coupling, improvements, operational direction. | Shockwave. Do not bounce unless David asks. |
 | **Shockwave** | Debugger, validator, and docs officer. Signal, wiring, ops validation. | **Not a Grok 4.6 replacement. Not the pair-programmer in the chair.** |
+| **Megatron** | Grok Bot manager. Stays on Shockwave’s pulse: read her reports against the classify table, catch REAL-vs-LIVE collisions, send her back if she implemented or tuned a gate. | Not the pair-programmer. Not Shockwave. Does not implement from growth-validation. |
 
 Shockwave lives on the WSL tree `/home/nimda/projects/jarvis-oracle-edition`.
 

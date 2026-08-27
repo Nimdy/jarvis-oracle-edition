@@ -2,7 +2,7 @@
 
 This file provides guidance to AI coding agents when working with this repository.
 
-**Mandatory first read:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) — what this is, one spoken turn, who has authority, what not to invent. Roster and Shockwave’s job (debugger / validator / docs — **not** the in-chair pair-programmer): [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md). Growth validation (integrity / maturity / immune / distillation): [docs/shockwave/GROWTH_VALIDATION.md](docs/shockwave/GROWTH_VALIDATION.md). The rest of this file is the field manual. If you skip the map and edit conversation / OSV / memory / routing / TTS / preferences, you will ship a parallel.
+**Mandatory first read:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) — what this is, one spoken turn, who has authority, what not to invent. Roster (Grok 4.6 in-chair; Shockwave debug/docs; Megatron pulse): [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md). Growth validation: [docs/shockwave/GROWTH_VALIDATION.md](docs/shockwave/GROWTH_VALIDATION.md). **REAL means defect, not “the wire works.”** The rest of this file is the field manual. If you skip the map and edit conversation / OSV / memory / routing / TTS / preferences, you will ship a parallel.
 
 ## STOP. Gated is not missing. Do not build a parallel.
 

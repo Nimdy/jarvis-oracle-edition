@@ -5,9 +5,9 @@ This file is what the system *is*, how one spoken turn actually flows, and
 what you must not invent. If a change is conversation, OSV, memory, routing,
 TTS, or preferences: match a box on these diagrams first.
 
-Roster / Shockwave (debugger, validator, docs officer — not the pair-programmer):
+Roster: Grok 4.6 in-chair; Shockwave debug/docs; Megatron on Shockwave’s pulse.
 [SHOCKWAVE_HANDOFF.md](SHOCKWAVE_HANDOFF.md). Do not skip it for a fresh
-“the dashboard looks wrong” pass.
+“the dashboard looks wrong” pass. **REAL ≠ live.**
 
 Lived miss 2026-08-24 (`69d7819`): an agent added `briefing_register` /
 exec-tech-ops mouths instead of using the path already drawn here.

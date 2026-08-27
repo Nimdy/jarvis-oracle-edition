@@ -155,13 +155,23 @@ After bounce or after David talks:
          dream_stats.json; calibration watchdog
 ```
 
-Classify each finding:
+Classify **each finding** with exactly one class. **REAL does not mean “it works.”**
 
-| Class | Meaning |
-|---|---|
-| **REAL** | Code violates a documented contract **and** the gate is already met |
-| **GATED / EXPECTED** | Zero or shadow because the floor is not earned |
-| **THEATER** | LLM authored a fact no sensor/lane had |
-| **DOC DRIFT** | Book disagrees with the log — fix the book, or flag for Grok 4.6 |
+| Class | Meaning | Example |
+|---|---|---|
+| **LIVE / WIRED** | Lane fired as drawn. Contract held. Not a bug. | VISION VQA `route=VISION`, `fresh=True`, spoken from the frame |
+| **REAL** | Documented contract **broken** *and* the maturity gate is **already earned**. Fix-class only. | After P1 is live, OSV invents a job that is not in the model |
+| **GATED / EXPECTED** | Zero, shadow, PRE-MATURE, `not_born`, or leftover cadence because the floor is not earned | Sparse `fresh=False` periodic captions; Spark pending=0 |
+| **THEATER** | LLM authored a fact no sensor/lane had | “I tracked you to your chair” with no sit-down event |
+| **DOC DRIFT** | Book disagrees with the log | Audit text still saying `/api/scene` is tracker-only |
+
+Worked example (do not file these as REAL):
+
+- VISION VQA live after bounce → **LIVE / WIRED**
+- Sit-down path-tracking with no sit-down event → **THEATER**
+- Stale audit copy vs current AGENT_MAP → **DOC DRIFT**
+- Periodic captions still `fresh=False` / hours apart → **GATED / EXPECTED** leftover
+
+Megatron: if Shockwave stamps REAL on a working wire, send it back. REAL is a defect class, not a compliment.
 
 Do not commit, bounce, or wipe unless David says so.
