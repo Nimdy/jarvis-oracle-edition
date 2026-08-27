@@ -383,6 +383,10 @@ class ProactiveBehavior:
     def get_pending_question(self) -> str | None:
         return self._pending_question
 
+    def mark_greeting_today(self) -> None:
+        """Arrival hello already ran — do not also fire the calendar greeting."""
+        self._last_greeting_date = time.strftime("%Y-%m-%d")
+
     def _check_greeting(self, strength: float) -> ProactiveSuggestion | None:
         today = time.strftime("%Y-%m-%d")
         if self._last_greeting_date == today:

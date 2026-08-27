@@ -2486,6 +2486,7 @@ class PerceptionOrchestrator:
             else:
                 msg = f"{time_greeting}!"
 
+        proactive_behavior.mark_greeting_today()
         logger.info("Proactive arrival greeting (absent %.0fs): %s", absence_duration_s, msg)
         self._speak_proactive(msg)
 
