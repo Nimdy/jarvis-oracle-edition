@@ -32,10 +32,13 @@ Shockwave does **not** bounce, does **not** wipe `~/.jarvis`, and does **not** c
 Canon for everyone (Shockwave reads; Grok 4.6 / Cursor edit against):
 
 1. This file (roster, where we are, leftovers).
-2. [AGENT_MAP.md](AGENT_MAP.md) — what the system *is*, one spoken turn, who has authority.
-3. [AGENTS.md](../AGENTS.md) — field manual.
-4. [MATURITY_GATES_REFERENCE.md](MATURITY_GATES_REFERENCE.md) + `brain/nn_fleet_registry.json` — before anyone touches an NN.
-5. GitHub **#83** — couple what exists, stop opening organs.
+2. [shockwave/GROWTH_VALIDATION.md](shockwave/GROWTH_VALIDATION.md) — integrity, maturity, immune, distillation (how she is supposed to grow).
+3. [AGENT_MAP.md](AGENT_MAP.md) — what the system *is*, one spoken turn, who has authority.
+4. [AGENTS.md](../AGENTS.md) — field manual.
+5. [MATURITY_GATES_REFERENCE.md](MATURITY_GATES_REFERENCE.md) + `brain/nn_fleet_registry.json` — before anyone touches an NN.
+6. GitHub **#83** — couple what exists, stop opening organs.
+
+Grok Bot / Shockwave skill: `.grok/skills/jarvis-shockwave/SKILL.md`.
 
 If a change is conversation, OSV, memory, routing, TTS, or preferences: match a box on AGENT_MAP first. Shockwave does not author that change; she checks it.
 
