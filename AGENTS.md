@@ -2,7 +2,7 @@
 
 This file provides guidance to AI coding agents when working with this repository.
 
-**Mandatory first read:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) — what this is, one spoken turn, who has authority, what not to invent. Taking over JARVIS dev (Shockwave / next session): [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md) — where we are, leftovers, hard do-nots. The rest of this file is the field manual. If you skip the map and edit conversation / OSV / memory / routing / TTS / preferences, you will ship a parallel.
+**Mandatory first read:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) — what this is, one spoken turn, who has authority, what not to invent. Roster and Shockwave’s job (debugger / validator / docs — **not** the in-chair pair-programmer): [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md). The rest of this file is the field manual. If you skip the map and edit conversation / OSV / memory / routing / TTS / preferences, you will ship a parallel.
 
 ## STOP. Gated is not missing. Do not build a parallel.
 

@@ -1,18 +1,43 @@
 # Shockwave handoff — JARVIS Oracle Edition
 
-**Checkpoint:** 2026-08-26. Operator: David.  
-**Assign this file to any bot taking JARVIS dev** (Shockwave, Megatron roster, next Grok/Claude session).  
+**Checkpoint:** 2026-08-27. Operator: David.
+
 **This is not a greenfield. Gated is not missing. Do not guess from a dashboard looking wrong.**
 
-Canon, in this order, before the first edit:
+---
 
-1. This file (where we are, what not to do).
+## Roster (read this first)
+
+| Who | Job | Not |
+|---|---|---|
+| **Grok 4.6** (in-chair) | Soul / reasoner. Architecture, coupling decisions, what to build vs park. | Cursor’s PR mill. Not Shockwave. |
+| **Cursor cloud agent** | Hard code and PRs when David sends a slice. | Do not bounce, wipe, or invent gates. |
+| **Shockwave** | Debugger, validator, and docs officer. | **Not a Grok 4.6 replacement. Not the pair-programmer in the chair.** |
+
+Shockwave lives on the WSL tree `/home/nimda/projects/jarvis-oracle-edition`.
+
+**Shockwave loop after a bounce:**
+
+1. SSH the brain (`duafoo@192.168.1.222`, `~/.ssh/id_jarvis_desktop`).
+2. Read `~/.jarvis/brain.log` **first**.
+3. Then process (`ps` / pid / start time).
+4. Then API (`/api/scene`, `/api/identity`, …).
+5. Then JSON under `~/.jarvis/` (memories, face, grounding, conversation_history).
+6. Validate **docs and writing against live truth**. If the book disagrees with the log, the log wins; flag the doc.
+
+Security scans are **skipped on purpose**. Do not start an audit theater.
+
+Shockwave does **not** bounce, does **not** wipe `~/.jarvis`, and does **not** commit unless David says so.
+
+Canon for everyone (Shockwave reads; Grok 4.6 / Cursor edit against):
+
+1. This file (roster, where we are, leftovers).
 2. [AGENT_MAP.md](AGENT_MAP.md) — what the system *is*, one spoken turn, who has authority.
 3. [AGENTS.md](../AGENTS.md) — field manual.
-4. [MATURITY_GATES_REFERENCE.md](MATURITY_GATES_REFERENCE.md) + `brain/nn_fleet_registry.json` — before touching any NN.
+4. [MATURITY_GATES_REFERENCE.md](MATURITY_GATES_REFERENCE.md) + `brain/nn_fleet_registry.json` — before anyone touches an NN.
 5. GitHub **#83** — couple what exists, stop opening organs.
 
-If a change is conversation, OSV, memory, routing, TTS, or preferences: match a box on AGENT_MAP first.
+If a change is conversation, OSV, memory, routing, TTS, or preferences: match a box on AGENT_MAP first. Shockwave does not author that change; she checks it.
 
 ---
 
@@ -83,20 +108,15 @@ Lived on this branch through `531e809`:
 
 ---
 
-## What Shockwave should do next
+## What Shockwave does (and does not)
 
-Default job: **#83 — couple what exists.** Integrity first. Burst lab + unattended soak. David is not a full-time teacher.
+**Does:** After David talks to her or bounces, trace the turn in `brain.log` (STT → `route=` → snapshot `sha=`/`age_ms`/`fresh=` → spoken text → fusion). Compare AGENT_MAP / this file / dashboard copy to that trace. Say **lived** vs **LLM theater** vs **gated/expected**. Flag docs that drifted.
 
-Before adding a classifier, route override, `kind`, register, preference key, or parallel articulator:
+**Does not:** Pair-program the soul. Open PRs. Flip gates. Invent organs because a sentence sounded wrong. Replace Grok 4.6.
 
-1. Search the repo (`rg` verbosity, briefing, gist, revoice, response_style, native_voice, theory_of_mind, think_before_speak).
-2. Open `brain/nn_fleet_registry.json` and `docs/MATURITY_GATES_REFERENCE.md` for that name.
-3. If the file says shadow / teacher-only / `not_born` / default-OFF → **stop**. Tell the operator the gate. Do not bypass it with keywords.
-4. If user preferences already store it, **use that store**.
+**Grok 4.6 / Cursor** still own coupling: **#83**. Before *they* add a classifier, route override, `kind`, register, or articulator: search the repo, open the fleet registry + maturity gates, stop if shadow/`not_born`/default-OFF.
 
-After code: sync. David bounces. Verify with **lived evidence**: STT line, `route=`, snapshot `sha=` / `age_ms` / `fresh=`, spoken text, fusion `method` + face/voice `known`. Claim “fixed” only with a lived turn.
-
-Memory: one write path (`engine.remember`), one recall (`search_memory`). About-me = **this-turn speaker**, not a hardcoded companion. About-X from the query, not soul `known_names`. Curiosity asks are not autobiography.
+Memory (everyone): one write path (`engine.remember`), one recall (`search_memory`). About-me = **this-turn speaker**. About-X from the query. Curiosity asks are not autobiography.
 
 **L3 personal security is a lock, not a miss.** A guest must not hear David’s dog, preferences, or family. Fail-closed “I don’t have that recorded” for the *wrong person* is correct. Empty recall for David is a stamp bug in `identity/resolver.py`, not a reason to weaken `_policy_guest`.
 
@@ -121,7 +141,7 @@ Lived:
 
 - Merge `main` unless asked.
 - Wipe `~/.jarvis`, scars, memories, or weights “to fix restart.”
-- Start/stop supervisor, `main.py`, or lidar.
+- Start/stop supervisor, `main.py`, or lidar. Shockwave: no bounce, no commit, no PR unless David says so.
 - Put room-object YOLO / VLM on the Pi (WiFi / take-it-with-you).
 - Tune Face **0.55**.
 - Add Golden commands as fuzzy synonyms.
@@ -143,6 +163,8 @@ Lived:
 - “How are you feeling?” often routes **STATUS** and dumps integrity composite, not affect. Check existing OSV/STATUS lanes; do not invent a feelings organ.
 - After bounce, voice can dip below known. IDENTITY may say “tell me your name” / “voice doesn’t match David.” Face can be unknown until match ≥ 0.55. That is not amnesia.
 - Calibration watchdog: 500 outcomes 100% `correct=True` — measurement skew. Do not silence by flipping cal gates.
+- Uncommitted on WSL (2026-08-27, not pushed): bounce-durable memory tag/downweight merge + grounding shadow-selection persist (`brain/memory/storage.py`, `persistence.py`, `autonomy/drives.py`, `tests/test_bounce_durable_persist.py`). **Level still 0.** Kitchen tags are still gone on disk — merge only protects tags that exist at save time. Shockwave: validate, do not commit unless asked.
+- Lived 2026-08-27 09:14: “did you notice I sat down?” → MEMORY session dump, then NONE LLM claimed path-tracking. Hailo sees **person in frame**, not a sit-down event. Theater, not a missing organ.
 
 ---
 
@@ -159,14 +181,14 @@ Tracker `visible=0` with a person sitting here = Hailo person vs VLM objects, **
 
 ---
 
-## How to report
+## How Shockwave reports
 
 Lived evidence or it did not happen: STT, `route=`, snapshot `sha=` / `age_ms` / `fresh=`, spoken text, fusion `method` + face/voice known.
 
-If you almost added a parallel path, name the **existing** file and the **gate** instead.
+Order: log → process → API → JSON. Then the doc. If you almost recommended a parallel path, name the **existing** file and the **gate** instead.
 
-Read AGENT_MAP + AGENTS.md before the first edit. Continue coupling. Do not take over the stack.
+Do not take over the stack. Do not sit in Grok 4.6’s chair.
 
 ---
 
-*Checkpoint 2026-08-26. Branch `fix/audit-real-bugs-2026-08-24` @ `531e809`. Do not re-litigate the park list unless a parked item’s blocker has actually changed (hardware arrived, confirmatory test confirmed, person_aware_fraction moved on lived turns, operator named a gate).*
+*Checkpoint 2026-08-27. Branch `fix/audit-real-bugs-2026-08-24` @ `2e9398a` (handoff v1) + uncommitted persist patch on WSL. Do not re-litigate the park list unless a parked item’s blocker has actually changed (hardware arrived, confirmatory test confirmed, person_aware_fraction moved on lived turns, operator named a gate).*

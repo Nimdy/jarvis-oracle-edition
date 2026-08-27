@@ -5,9 +5,9 @@ This file is what the system *is*, how one spoken turn actually flows, and
 what you must not invent. If a change is conversation, OSV, memory, routing,
 TTS, or preferences: match a box on these diagrams first.
 
-Taking over JARVIS dev: [SHOCKWAVE_HANDOFF.md](SHOCKWAVE_HANDOFF.md) — branch,
-closed campaign, leftovers, maturity-gate do-nots. Do not skip it for a
-fresh “the dashboard looks wrong” pass.
+Roster / Shockwave (debugger, validator, docs officer — not the pair-programmer):
+[SHOCKWAVE_HANDOFF.md](SHOCKWAVE_HANDOFF.md). Do not skip it for a fresh
+“the dashboard looks wrong” pass.
 
 Lived miss 2026-08-24 (`69d7819`): an agent added `briefing_register` /
 exec-tech-ops mouths instead of using the path already drawn here.
