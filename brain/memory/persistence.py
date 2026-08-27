@@ -60,9 +60,56 @@ class MemoryPersistence:
             logger.exception("Failed to load memories from %s", self._path)
             return 0
 
+    @staticmethod
+    def _merge_disk_corrections(ram: list, disk: list) -> list:
+        """Keep disk tags/downweight that stale RAM would otherwise clobber.
+
+        Lived 2026-08-24: kitchen-lie tags/downweight died on bounce because
+        the 60s auto-save wrote an untagged in-memory copy over a tagged file.
+        Union tags (never drop a correction). If disk has tags RAM lost, keep
+        the lower weight and faster decay. Do not delete payloads.
+        """
+        by_disk = {str(item.get("id", "")): item for item in disk if isinstance(item, dict)}
+        merged = []
+        for item in ram:
+            if not isinstance(item, dict):
+                merged.append(item)
+                continue
+            d = by_disk.get(str(item.get("id", "")))
+            if not d:
+                merged.append(item)
+                continue
+            ram_tags = [str(t) for t in (item.get("tags") or [])]
+            disk_tags = [str(t) for t in (d.get("tags") or [])]
+            item = dict(item)
+            item["tags"] = sorted(set(ram_tags) | set(disk_tags))
+            extra = set(disk_tags) - set(ram_tags)
+            if extra:
+                try:
+                    item["weight"] = min(float(item.get("weight", 1.0)), float(d.get("weight", 1.0)))
+                except (TypeError, ValueError):
+                    pass
+                try:
+                    item["decay_rate"] = max(
+                        float(item.get("decay_rate", 0.0) or 0.0),
+                        float(d.get("decay_rate", 0.0) or 0.0),
+                    )
+                except (TypeError, ValueError):
+                    pass
+            merged.append(item)
+        return merged
+
     def save(self) -> bool:
         try:
             data = memory_storage.to_json()
+            if os.path.exists(self._path):
+                try:
+                    with open(self._path) as f:
+                        disk = json.load(f)
+                    if isinstance(disk, list):
+                        data = self._merge_disk_corrections(data, disk)
+                except Exception:
+                    logger.debug("Memory save: disk merge skipped", exc_info=True)
             atomic_write_json(self._path, data, default=str)
             logger.debug("Saved %d memories to %s", len(data), self._path)
             return True

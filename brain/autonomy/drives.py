@@ -208,10 +208,9 @@ class GroundingDrivePromotion:
 
     def __init__(self) -> None:
         self._state = _GroundingPromotionState()
-        # In-memory observability ring (NOT persisted): the most recent would-have
-        # grounding questions the drive selected in shadow, so the operator can see
-        # WHAT it would ask — never enqueued, never reaches anyone. SPARK §8 P1
-        # logged-shadow. Resets on restart (the durable count is selections_shadowed).
+        # Would-have ring. Persisted with the shadow clocks so a bounce does
+        # not empty "what it would ask". Never enqueued. Level is not flipped
+        # by this path (SPARK §8 P1 logged-shadow).
         self._recent_selections: list[dict[str, Any]] = []
         self._load()
 
@@ -292,6 +291,8 @@ class GroundingDrivePromotion:
             })
             if len(self._recent_selections) > 25:
                 self._recent_selections = self._recent_selections[-25:]
+        # Clock + would-have ring must survive bounce. Do not flip level.
+        self.save()
 
     def get_recent_selections(self, limit: int = 15) -> list[dict[str, Any]]:
         """Read-only view of the most recent would-have grounding questions
@@ -347,6 +348,7 @@ class GroundingDrivePromotion:
             "last_advisory_enqueue_ts": self._state.last_advisory_enqueue_ts,
             "last_promoted_at": self._state.last_promoted_at,
             "last_demoted_at": self._state.last_demoted_at,
+            "recent_selections": list(self._recent_selections[-25:]),
         }
         try:
             GROUNDING_PROMOTION_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -377,6 +379,13 @@ class GroundingDrivePromotion:
             )
             self._state.last_promoted_at = data.get("last_promoted_at", 0.0)
             self._state.last_demoted_at = data.get("last_demoted_at", 0.0)
+            raw_sel = data.get("recent_selections") or []
+            restored: list[dict[str, Any]] = []
+            if isinstance(raw_sel, list):
+                for item in raw_sel[-25:]:
+                    if isinstance(item, dict):
+                        restored.append(item)
+            self._recent_selections = restored
         except Exception:
             logger.debug("Failed to load grounding drive promotion state", exc_info=True)
 

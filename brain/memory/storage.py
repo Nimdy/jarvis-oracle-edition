@@ -51,6 +51,17 @@ class MemoryStorage:
             cls._instance = MemoryStorage()
         return cls._instance
 
+    def _flush_to_disk(self) -> None:
+        """Immediate memories.json write so a bounce cannot drop tags/downweight.
+
+        Auto-save is 60s. Supervisor bounce before that interval is the lived miss.
+        """
+        try:
+            from memory.persistence import memory_persistence
+            memory_persistence.save()
+        except Exception:
+            pass
+
     # -- CRUD ---------------------------------------------------------------
 
     def set_reinforcement_multiplier(self, multiplier: float) -> None:
@@ -303,6 +314,8 @@ class MemoryStorage:
                         **{**asdict(m), "tags": new_tags, "weight": new_weight}
                     )
                     tagged += 1
+        if tagged:
+            self._flush_to_disk()
         return tagged
 
     def downweight(
@@ -311,7 +324,9 @@ class MemoryStorage:
         """Reduce a memory's weight and accelerate its decay (for superseded knowledge).
 
         Creates a replacement frozen Memory with updated fields.
+        Flushes to disk so a bounce cannot restore the old weight.
         """
+        changed = False
         with self._lock:
             for i, m in enumerate(self._memories):
                 if m.id == memory_id:
@@ -330,8 +345,11 @@ class MemoryStorage:
                         identity_needs_resolution=m.identity_needs_resolution,
                         access_count=m.access_count, last_accessed=m.last_accessed,
                     )
-                    return True
-        return False
+                    changed = True
+                    break
+        if changed:
+            self._flush_to_disk()
+        return changed
 
     def get_related(self, memory_id: str, depth: int = 2) -> list[Memory]:
         """Depth-first traversal of the association graph, capped at 50 results."""
@@ -708,6 +726,24 @@ class MemoryStorage:
                         item["associations"] = tuple(item["associations"])
                     mem = Memory(**item)
                     if mem.id in existing_ids:
+                        # Disk may hold tags/downweight RAM lost. Union tags;
+                        # keep the lower weight / faster decay. Never drop payload.
+                        for i, existing in enumerate(self._memories):
+                            if existing.id != mem.id:
+                                continue
+                            merged_tags = tuple(sorted(set(existing.tags) | set(mem.tags)))
+                            extra = set(mem.tags) - set(existing.tags)
+                            new_weight = min(existing.weight, mem.weight) if extra else existing.weight
+                            new_decay = max(existing.decay_rate, mem.decay_rate) if extra else existing.decay_rate
+                            if merged_tags != existing.tags or new_weight != existing.weight or new_decay != existing.decay_rate:
+                                self._memories[i] = Memory(**{
+                                    **asdict(existing),
+                                    "tags": merged_tags,
+                                    "weight": new_weight,
+                                    "decay_rate": new_decay,
+                                })
+                                loaded += 1
+                            break
                         continue
                     if memory_core.validate_memory(mem):
                         self._memories.append(mem)
