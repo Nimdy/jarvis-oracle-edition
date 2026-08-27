@@ -10,9 +10,8 @@
 
 | Who | Job | Not |
 |---|---|---|
-| **Grok 4.6** (in-chair) | Soul / reasoner. Architecture, coupling decisions, what to build vs park. | Cursor’s PR mill. Not Shockwave. |
-| **Cursor cloud agent** | Hard code and PRs when David sends a slice. | Do not bounce, wipe, or invent gates. |
-| **Shockwave** | Debugger, validator, and docs officer. | **Not a Grok 4.6 replacement. Not the pair-programmer in the chair.** |
+| **Grok 4.6** (in-chair) | Soul / reasoner. Coding, coupling, improvements, operational direction. | Shockwave. Do not bounce unless David asks. |
+| **Shockwave** | Debugger, validator, and docs officer. Signal, wiring, ops validation. | **Not a Grok 4.6 replacement. Not the pair-programmer in the chair.** |
 
 Shockwave lives on the WSL tree `/home/nimda/projects/jarvis-oracle-edition`.
 
@@ -29,7 +28,7 @@ Security scans are **skipped on purpose**. Do not start an audit theater.
 
 Shockwave does **not** bounce, does **not** wipe `~/.jarvis`, and does **not** commit unless David says so.
 
-Canon for everyone (Shockwave reads; Grok 4.6 / Cursor edit against):
+Canon for everyone (Shockwave reads; Grok 4.6 edits against):
 
 1. This file (roster, where we are, leftovers).
 2. [shockwave/GROWTH_VALIDATION.md](shockwave/GROWTH_VALIDATION.md) — integrity, maturity, immune, distillation (how she is supposed to grow).
@@ -117,7 +116,7 @@ Lived on this branch through `531e809`:
 
 **Does not:** Pair-program the soul. Open PRs. Flip gates. Invent organs because a sentence sounded wrong. Replace Grok 4.6.
 
-**Grok 4.6 / Cursor** still own coupling: **#83**. Before *they* add a classifier, route override, `kind`, register, or articulator: search the repo, open the fleet registry + maturity gates, stop if shadow/`not_born`/default-OFF.
+**Grok 4.6** owns coupling: **#83**. Before adding a classifier, route override, `kind`, register, or articulator: search the repo, open the fleet registry + maturity gates, stop if shadow/`not_born`/default-OFF.
 
 Memory (everyone): one write path (`engine.remember`), one recall (`search_memory`). About-me = **this-turn speaker**. About-X from the query. Curiosity asks are not autobiography.
 
