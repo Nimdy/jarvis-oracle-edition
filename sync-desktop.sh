@@ -61,7 +61,8 @@ rsync -avz $DRY_RUN $EXCLUDE_ARGS \
 echo "=== Syncing root files ==="
 for f in AGENTS.md ARCHITECTURE.md PROCESS_ARCHITECTURE.md \
          README.md CONTRIBUTING.md LICENSE.md NOTICE.md THIRD_PARTY_LICENSES.md \
-         About_JARVIS_ORACLE_EDITION_SCIENTIFIC_PAPER.md requirements.txt; do
+         About_JARVIS_ORACLE_EDITION_SCIENTIFIC_PAPER.md requirements.txt \
+         reset-brain.sh; do
     if [[ -f "$SCRIPT_DIR/$f" ]]; then
         rsync -avz $DRY_RUN \
             -e "ssh $SSH_OPTS" \
