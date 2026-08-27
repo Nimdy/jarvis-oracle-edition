@@ -4003,6 +4003,15 @@ def _create_app() -> FastAPI:
     async def api_onboarding_start():
         """Start the 7-stage companion training playbook."""
         try:
+            gest = _cache.get("gestation") or {}
+            if gest.get("active"):
+                return JSONResponse(
+                    {
+                        "error": "gestation_active",
+                        "detail": "Wait for GESTATION_COMPLETE. Do not start onboarding while wake is disarmed.",
+                    },
+                    status_code=409,
+                )
             from personality.onboarding import get_onboarding_manager
             mgr = get_onboarding_manager()
             if mgr.graduated:

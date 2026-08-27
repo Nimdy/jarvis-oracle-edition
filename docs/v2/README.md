@@ -11,7 +11,7 @@ parallel organ.
 
 | Page | When |
 |---|---|
-| [01-first-contact.md](01-first-contact.md) | After `GESTATION_COMPLETE`. Follow exactly. |
+| [01-first-contact.md](01-first-contact.md) | After `GESTATION_COMPLETE`. Follow exactly. Live UI: `/static/v2/training.html` (phase-aware). |
 | `00-gestation.md` | After gestation **2** (wipe + AST self-study) matches snapshot |
 | `02-wiring.md` | After lived `route=` turns |
 | `03-companion-training.md` | After Stage 0 exit boxes pass on **wipe 2** |
