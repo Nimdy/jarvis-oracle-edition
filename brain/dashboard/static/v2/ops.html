@@ -270,9 +270,17 @@
       var stale=FRESH.is_stale, scanOk=FRESH.scan_ok;
       // is_stale TRUE => amber (newer code on disk); FALSE => green
       var fState = scanOk===false?'unk':(stale===true?'fail':(stale===false?'ok':'unk'));
+      var nStale=num(FRESH.stale_count);
       html+=gate(stale===true?'fail':(stale===false?'ok':'unk'),'code freshness',
-        stale===true?'STALE':(stale===false?'IN SYNC':'UNKNOWN'),
-        (num(FRESH.file_count)!==null?FRESH.file_count+' files · ':'')+'newest: '+(FRESH.newest_file||'—'));
+        stale===true?'STALE ('+(nStale===null?'?':nStale)+')':(stale===false?'IN SYNC':'UNKNOWN'),
+        (num(FRESH.file_count)!==null?FRESH.file_count+' .py scanned · ':'')+'newest: '+(FRESH.newest_file||'—'));
+      var files=FRESH.stale_files||[];
+      if(stale===true && files.length){
+        html+='<div class="bc-files" style="margin-top:8px;flex-basis:100%">'+
+          files.slice(0,20).map(function(f){ return '<code>'+esc((f&&f.path)||f)+'</code>'; }).join('<br>')+
+          (files.length>20?'<br>+'+(files.length-20)+' more':'')+
+          '</div>';
+      }
     }
     if(BUILD){
       html+=gate(BUILD.static_pages_restart_required===true?'fail':(BUILD.static_pages_restart_required===false?'ok':'unk'),

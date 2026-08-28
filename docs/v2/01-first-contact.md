@@ -41,11 +41,28 @@ If gating is still `active` or mode is still `gestation`, **wait**. Do not yell 
 
 **Pi body:** lidar-only is not enough. Camera + mic must be up (`./start.sh` on the Pi) **before** enrollment. Snapshot `link` / `sensors` should show the senses connection, not only `pi-lidar`. `audio.chunks` should start moving once you talk.
 
+**This office (lived, do not assume a laptop webcam):** Camera sits in the
+corner. Operator works at the desk looking at the browser, **not** the lens.
+Pose can run ~16 Hz with **no face crop** until you stand, turn, and look at
+her. Pi `FaceCropExtractor` interval is 2 s **only if** eyes are visible and
+interocular ≥ 12 px; desk-back / far / looking-at-browser frames send nothing.
+Live `link.types.face_crop` this sit was ~1/min for that reason. Dashboard
+scene is the same slow cadence — **do not watch the browser while facing the
+camera.** Grok watches `brain.log`. You look at the **lens**.
+
+From the desk, `voice_only` is expected. After the solo-wake keep (branch
+`feat/gestation-period`), saying Jarvis with no live face should log
+`keeping persisted identity … (solo occupant, no conflicting face)` when
+one person is present. Two people still clear. Do not chase face from the
+chair. Do not lower Face 0.55. Needs bounce to live.
+
 ---
 
 ## 1. Sit down — let her see you (no words yet)
 
 Stay in frame ~2–5 s. Hailo should rising-edge `person_detected`.
+Desk presence is enough for hello; you do not need to be looking at the lens
+for `PRESENCE_USER_ARRIVED`.
 
 **Expect (log):**
 
@@ -63,9 +80,12 @@ If she stays silent: check Pi camera, Hailo person, `PRESENCE_USER_ARRIVED`. Tha
 
 ---
 
-## 2. Enroll — say this, five times
+## 2. Enroll — voice at the desk, face at the lens
 
-Face the camera. Different angles/expressions. Quiet room. One speaker.
+Quiet room. One speaker. Voice and face are **different stations** in this office.
+
+**Voice (desk is fine).** Five times is enough; stop when `speakers.json` has
+David and `Speaker ID: David known=True`. Do not keep stacking clips.
 
 **Exact (wire-matched IDENTITY + name extract):**
 
@@ -73,9 +93,16 @@ Face the camera. Different angles/expressions. Quiet room. One speaker.
 Jarvis, my name is David. Learn my face and voice.
 ```
 
-Replace `David` with the real given name, **capitalized in the transcript**. Weak enroll (`I'm david`) is fragile. Do not say `I'm new` / `I'm ready` (name validator blocks those words).
+Replace `David` with the real given name, **capitalized in the transcript**. Weak enroll (`I'm david`) is fragile. Do not say `I'm new` / `I'm ready` (name validator blocks those words). Do **not** say `This is David` (that is the household introducer).
 
-Repeat **5** times. If she offers a clip / “yes” confirm, answer **yes**.
+**Face (dedicated soak — not the desk):** Walk to her. Look at the **lens**,
+not the browser. Hold still 5–10 s so one crop can land. Then **one** enroll
+line while still looking at her. Walk back. Grok reports whether
+`Face ID: David` locked (`known=True`, **this crop** cosine ≥ **0.55**).
+EMA cannot veto a passing crop. Repeat the walk only if it did not lock.
+Re-enroll **blends** into the gallery (junk crops sim<0.25 are skipped).
+
+If she offers a clip / “yes” confirm, answer **yes**.
 
 **Must see in the log (Shockwave):**
 
@@ -84,7 +111,7 @@ Repeat **5** times. If she offers a clip / “yes” confirm, answer **yes**.
 | STT | `STT result … my name is David` |
 | Route | `route=IDENTITY` |
 | Voice | `Speaker ID: David` and/or enroll write |
-| Face | `Face ID:` crop path (may lag; 0.55 = known) |
+| Face | `Face ID: David … known=True` — 0.55 is the **crop** floor, not smoothed |
 | Files | `~/.jarvis/speakers.json` and `face_profiles.json` grow |
 
 **Snapshot exit for this step (not the whole hour):** at least one voice profile. Face may still be `unknown` until soak ≥ **0.55**. Stage 0 **operator** exit wants face **≥ 0.60 sustained** — that is your bar, not a reason to lower 0.55.

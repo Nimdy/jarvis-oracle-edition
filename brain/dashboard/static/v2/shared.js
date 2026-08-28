@@ -71,6 +71,7 @@ window.V2 = (function(){
     }).join('');
     html+='<span class="navsep">act</span><a href="#" onclick="window.V2&&V2.palette();return false;" title="⌘K / Ctrl-K">⌘K jump</a><a href="#" onclick="window.V2&&V2.chat();return false;">💬 chat</a><a href="#" onclick="window.V2&&V2.legend();return false;">honesty</a><span class="navsep">ext</span><a href="/mind">/mind ↗</a><a href="/">← v1</a>';
     nav.innerHTML=html;
+    watchCodeFreshness();
   }
   // legacy: highlight an already-rendered nav by href match.
   function markNav(route){ var as=document.querySelectorAll('nav a'); for(var i=0;i<as.length;i++){ if(as[i].getAttribute('href')===route) as[i].className='on'; } }
@@ -229,8 +230,66 @@ window.V2 = (function(){
   });
 
   loadKey();  // warm the api_key so operator clicks are ready
+
+  // ---- running PID vs on-disk .py (sync-desktop then Restart) ----
+  var _codeFreshTimer=0;
+  function watchCodeFreshness(){
+    _ensureCodeBanner();
+    if(_codeFreshTimer) return;
+    _pollCodeFreshness();
+    _codeFreshTimer=setInterval(_pollCodeFreshness, 12000);
+  }
+  function _ensureCodeBanner(){
+    if(document.getElementById('v2-code-banner')) return;
+    var b=document.createElement('div');
+    b.id='v2-code-banner';
+    b.className='banner-code';
+    b.style.display='none';
+    var nav=document.getElementById('v2nav');
+    if(nav&&nav.parentNode) nav.parentNode.insertBefore(b, nav.nextSibling);
+    else document.body.insertBefore(b, document.body.firstChild);
+  }
+  function _escCode(s){
+    return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function _pollCodeFreshness(){
+    fetchJSON('/api/system/code-freshness').then(_renderCodeBanner).catch(function(){});
+  }
+  function _renderCodeBanner(d){
+    var b=document.getElementById('v2-code-banner'); if(!b) return;
+    if(!d||d.scan_ok===false){ b.style.display='none'; return; }
+    if(d.is_stale!==true){ b.style.display='none'; b.innerHTML=''; return; }
+    var files=d.stale_files||[];
+    var n=num(d.stale_count);
+    if(n===null) n=files.length;
+    if((!n) && d.newest_file){ n=1; if(!files.length) files=[{path:d.newest_file}]; }
+    files=files.slice(0,12).map(function(f){
+      var p=(typeof f==='string')?f:(f&&f.path)||'';
+      var a=(f&&f.age_s!=null)?(' +'+Math.round(f.age_s)+'s'):'';
+      return '<code>'+_escCode(p)+'</code>'+a;
+    }).join(' · ');
+    var extra=n>12?(' · +'+(n-12)+' more'):'';
+    b.innerHTML=
+      '<div class="bc-hd"><b>NEWER CODE ON DISK</b>'+
+      '<span>'+(n||'?')+' .py file(s) newer than this PID. Restart to load them. HTML/CSS is live without restart.</span></div>'+
+      (files?'<div class="bc-files">'+files+extra+'</div>':'')+
+      '<div class="bc-act">'+
+      '<button class="btn-danger" id="v2-code-restart">Restart brain</button>'+
+      '<button class="btn-act" id="v2-code-ops">Ops page</button></div>';
+    b.style.display='';
+    var rb=document.getElementById('v2-code-restart');
+    if(rb) rb.onclick=function(){
+      confirm('Restart to load new code',
+        'This PID started before <b>'+_escCode(String(n))+'</b> on-disk .py file(s). Safe exit-10 restart — supervisor brings the brain back in seconds. Active talk is interrupted.',
+        function(){ act(post('/api/system/restart'), 'restart requested — back in seconds'); },
+        {typed:'RESTART', yesLabel:'Restart'});
+    };
+    var ob=document.getElementById('v2-code-ops');
+    if(ob) ob.onclick=function(){ location.href='/static/v2/ops.html'; };
+  }
+
   // =======================================================
 
   return { fetchJSON, num, pct1, f2, f3, el, gateState, ago, bandColor, tag, fmtUptime, cap, renderNav, markNav, barRow,
-           loadKey, post, del, modal, closeModal, confirm, toast, act, chat, palette, closePalette, legend };
+           loadKey, post, del, modal, closeModal, confirm, toast, act, chat, palette, closePalette, legend, watchCodeFreshness };
 })();

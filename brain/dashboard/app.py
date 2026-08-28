@@ -198,49 +198,22 @@ _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 _PROCESS_STARTED_TS: float = time.time()
 _BRAIN_ROOT: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CODE_FRESHNESS_CACHE: dict[str, Any] = {"ts": 0.0, "data": {}}
-_CODE_FRESHNESS_TTL_S: float = 30.0
-_CODE_SCAN_SKIP_DIRS: frozenset[str] = frozenset({
-    "__pycache__", ".git", ".venv", "venv", "env", "node_modules",
-    ".pytest_cache", ".mypy_cache", ".ruff_cache",
-    "improvement_snapshots", "kernel_snapshots", "hemispheres",
-    "policy_models", "synthetic_exercise",
-})
-_CODE_SCAN_EXTENSIONS: tuple[str, ...] = (".py",)
+_CODE_FRESHNESS_TTL_S: float = 8.0
 
 
 def _scan_code_freshness() -> dict[str, Any]:
     """Walk the brain source tree, return newest-mtime metadata.
 
-    Cached for _CODE_FRESHNESS_TTL_S to keep cost bounded; the banner is a
-    low-stakes "you just synced, consider restarting" nudge, not a control
-    surface, so stale-within-30s is acceptable.
-
-    Never raises — on any error returns a safe "unknown" dict.
+    Cached for _CODE_FRESHNESS_TTL_S. Lists every .py newer than this PID
+    so the operator can Restart after sync-desktop.
     """
     now = time.time()
     cache = _CODE_FRESHNESS_CACHE
     if cache["data"] and (now - cache["ts"]) < _CODE_FRESHNESS_TTL_S:
         return cache["data"]
-
-    newest_mtime = 0.0
-    newest_file = ""
-    file_count = 0
     try:
-        for dirpath, dirnames, filenames in os.walk(_BRAIN_ROOT, followlinks=False):
-            dirnames[:] = [d for d in dirnames if not d.startswith(".") or d in (".jarvis",)]
-            dirnames[:] = [d for d in dirnames if d not in _CODE_SCAN_SKIP_DIRS]
-            for fname in filenames:
-                if not fname.endswith(_CODE_SCAN_EXTENSIONS):
-                    continue
-                full = os.path.join(dirpath, fname)
-                try:
-                    mtime = os.path.getmtime(full)
-                except OSError:
-                    continue
-                file_count += 1
-                if mtime > newest_mtime:
-                    newest_mtime = mtime
-                    newest_file = os.path.relpath(full, _BRAIN_ROOT)
+        from dashboard.code_freshness import scan_code_freshness
+        data = scan_code_freshness(_BRAIN_ROOT, _PROCESS_STARTED_TS)
     except Exception:
         logger.debug("code freshness scan failed", exc_info=True)
         data = {
@@ -248,25 +221,12 @@ def _scan_code_freshness() -> dict[str, Any]:
             "newest_mtime": 0.0,
             "newest_file": "",
             "file_count": 0,
+            "stale_count": 0,
+            "stale_files": [],
             "is_stale": False,
             "stale_age_s": 0.0,
             "scan_ok": False,
         }
-        cache["ts"] = now
-        cache["data"] = data
-        return data
-
-    is_stale = newest_mtime > _PROCESS_STARTED_TS
-    stale_age_s = max(0.0, newest_mtime - _PROCESS_STARTED_TS) if is_stale else 0.0
-    data = {
-        "process_started_ts": _PROCESS_STARTED_TS,
-        "newest_mtime": newest_mtime,
-        "newest_file": newest_file,
-        "file_count": file_count,
-        "is_stale": is_stale,
-        "stale_age_s": stale_age_s,
-        "scan_ok": True,
-    }
     cache["ts"] = now
     cache["data"] = data
     return data

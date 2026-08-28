@@ -752,12 +752,16 @@ function _renderStaleCodeBanner(data) {
   }
   var file = data.newest_file ? String(data.newest_file) : '';
   var age = _fmtStaleAge(data.stale_age_s);
+  var n = (data.stale_count != null) ? data.stale_count : ((data.stale_files || []).length || 1);
+  var extra = (data.stale_files || []).slice(0, 8).map(function(f) {
+    return (typeof f === 'string') ? f : (f && f.path) || '';
+  }).filter(Boolean).join(', ');
   banner.innerHTML =
     '<div class="j-stale-msg">' +
       '<span>\u26A0</span>' +
-      '<span><strong>Newer code on disk</strong> \u2014 edited ' + esc(age) +
+      '<span><strong>Newer code on disk</strong> \u2014 ' + n + ' .py file(s) edited ' + esc(age) +
       ', after this process started. Restart to load the new code.</span>' +
-      (file ? '<span class="j-stale-file" title="' + esc(file) + '">' + esc(file) + '</span>' : '') +
+      (extra ? '<span class="j-stale-file" title="' + esc(file) + '">' + esc(extra) + '</span>' : (file ? '<span class="j-stale-file" title="' + esc(file) + '">' + esc(file) + '</span>' : '')) +
     '</div>' +
     '<div class="j-stale-actions">' +
       '<button class="j-stale-restart" onclick="window._staleRestart && window._staleRestart()">Restart</button>' +
@@ -787,7 +791,7 @@ function _pollStaleCode() {
 
 // First check shortly after load, then every 60s.
 setTimeout(_pollStaleCode, 3000);
-setInterval(_pollStaleCode, 60000);
+setInterval(_pollStaleCode, 12000);
 
 
 // ═══════════════════════════════════════════════════════════════════════════
