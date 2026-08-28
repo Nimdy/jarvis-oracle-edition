@@ -63,6 +63,20 @@ def test_router_keeps_recent_research_query_on_introspection() -> None:
     assert result.tool == ToolType.INTROSPECTION
 
 
+def test_stage2_spoken_lines_extract() -> None:
+    """Lived Stage 2: music/like stored; 'do not bring up' and 'when I say brief' missed."""
+    music, _ = _collect_personal_intel_matches("I really like electronic dance music.")
+    assert any("electronic dance music" in p.lower() for p, _ in music), music
+    call, _ = _collect_personal_intel_matches("I prefer you call me David.")
+    assert any("call me david" in p.lower() for p, _ in call), call
+    brief, _ = _collect_personal_intel_matches("When I say brief, I mean one short paragraph.")
+    assert any("short paragraph" in p.lower() for p, _ in brief), brief
+    priv, _ = _collect_personal_intel_matches(
+        "Jarvis, do not bring up medical conditions proactively."
+    )
+    assert any("medical" in p.lower() for p, _ in priv), priv
+
+
 def test_long_work_as_and_prefer_extract() -> None:
     """Lived: 40/60 char captures dropped job and detailed-system preference."""
     job, _ = _collect_personal_intel_matches(

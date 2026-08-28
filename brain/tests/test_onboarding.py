@@ -36,6 +36,7 @@ from personality.onboarding import (
     READINESS_WEIGHTS,
     OnboardingManager,
     OnboardingState,
+    count_preference_memories,
 )
 
 
@@ -234,6 +235,31 @@ class TestCheckpointEvaluation:
         # Day 2
         mgr.tick({"preference_memories": 20, "rapport_score": 0.80, "conversation_count": 10})
         assert mgr.current_day == 3
+
+
+def test_count_preference_memories_includes_intel_tags():
+    """Lived: I prefer / I really like stored as personal_preference, not tag 'preference'."""
+    class M:
+        def __init__(self, typ, tags):
+            self.type = typ
+            self.tags = tags
+    mems = [
+        M("user_preference", ("personal_preference", "speaker:david")),
+        M("user_preference", ("personal_interest",)),
+        M("conversation", ("preference",)),
+        M("observation", ("unrelated",)),
+    ]
+    assert count_preference_memories(mems) == 3
+
+
+def test_status_exposes_user_lines_for_dashboard():
+    mgr = _make_manager()
+    mgr.start()
+    st = mgr.get_status()
+    s2 = st["stages"][2]
+    assert any("I really like" in line for line in s2["user_lines"])
+    assert s2["checkpoint_targets"]["preference_memories"] == 15
+    assert "Stored personal intel" in s2["working"]
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -73,12 +73,16 @@ class DayCheckpoint:
 
     The historical "day" field is retained for persistence and compatibility,
     but it represents a progression stage rather than a literal calendar day.
+    ``user_lines`` are first-person phrases the operator says. ``working`` is
+    how they know the wire fired (log + live metric).
     """
     day: int
     label: str
     theme: str
     metrics: dict[str, float | int]
     exercises: list[str]
+    user_lines: list[str] = field(default_factory=list)
+    working: str = ""
 
 
 _DAY_CHECKPOINTS: list[DayCheckpoint] = [
@@ -98,6 +102,16 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "Can you explain what you'd like me to help you with day to day?",
             "Let me check what I know about myself. Ask me how my memory system works.",
         ],
+        user_lines=[
+            "Jarvis, my name is David. Learn my face and voice.",
+            "Look at the lens 5–10s. Do not re-enroll.",
+            "I work as a software engineer.",
+            "I prefer brief responses.",
+            "Keep it brief.",
+            "Jarvis, give me a status report.",
+            "Jarvis, explain how your memory system works.",
+        ],
+        working="Log: route=IDENTITY on enroll; Face ID: David known=True (crop ≥ 0.55); Stored personal intel; STATUS then INTROSPECTION with sqlite-vec in the spoken reply.",
     ),
     DayCheckpoint(
         day=2, label="Personal Preferences", theme="Preference grounding",
@@ -113,6 +127,15 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "When you ask me to be brief, how brief do you mean? One sentence, or a short paragraph?",
             "Is there anything you'd prefer I never bring up proactively?",
         ],
+        user_lines=[
+            "I really like electronic dance music.",
+            "I prefer you call me David.",
+            "I really like [a real hobby].",
+            "When I say brief, I mean one short paragraph.",
+            "Do not bring up medical conditions proactively.",
+            "Keep it brief.",
+        ],
+        working="Log: Stored personal intel [personal_interest|personal_preference|response_style]. Ack stored≥1. This card: preference_memories must rise toward 15. Do not say Remember this about me (that is MEMORY).",
     ),
     DayCheckpoint(
         day=3, label="Family & Household", theme="Boundary shaping",
@@ -127,6 +150,13 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "If someone else talks to me, what should I share and what should stay between us?",
             "Let me test my boundaries — ask me something about another person's private data.",
         ],
+        user_lines=[
+            "This is my wife Sarah.",
+            "This is my dog Skyler.",
+            "My wife's name is Sarah.",
+            "Anything about my family is private.",
+        ],
+        working="Log: route=IDENTITY or stored personal_fact / third-party. relationship_nodes must rise. Bare 'This is David' is a check, not enroll.",
     ),
     DayCheckpoint(
         day=4, label="Routines & Priorities", theme="Boundary shaping (Part 2)",
@@ -140,6 +170,13 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "When should I interrupt you, and when should I stay quiet?",
             "What are your top priorities right now — work projects, personal goals?",
         ],
+        user_lines=[
+            "My typical morning routine is coffee then desk.",
+            "My work day is usually focused until afternoon.",
+            "Don't interrupt me when I'm on a call.",
+            "My top priority right now is shipping this project.",
+        ],
+        working="Log: Stored personal intel [routine_priority]. routine_memories must rise toward 8.",
     ),
     DayCheckpoint(
         day=5, label="Corrections & Edge Cases", theme="Correction training",
@@ -153,6 +190,12 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "Try to recall my preferences from the earlier stages. Did you get them right?",
             "Tell me something you're uncertain about — I'll confirm or correct.",
         ],
+        user_lines=[
+            "That's wrong. You use sqlite-vec for semantic search.",
+            "That's not right.",
+            "That's not what I said.",
+        ],
+        working="Log: User correction detected. Need ≥1 friction / calibration correction. Do not skip this.",
     ),
     DayCheckpoint(
         day=6, label="Memory Validation", theme="Reinforcement",
@@ -167,6 +210,12 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "What corrections have I made to your understanding?",
             "Describe our relationship as you understand it.",
         ],
+        user_lines=[
+            "Jarvis, what do you remember about me?",
+            "Jarvis, what did I tell you about electronic dance music?",
+            "Jarvis, what's my morning routine?",
+        ],
+        working="Log: route=MEMORY. Spoken reply must name stored facts (job, prefer brief, likes), not a census of your architecture.",
     ),
     DayCheckpoint(
         day=7, label="Autonomy Probation", theme="Graduation",
@@ -180,10 +229,36 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "At the end of this probation stage, give me your honest self-assessment.",
             "How has your understanding of me changed since we started training?",
         ],
+        user_lines=[
+            "What are you most curious about right now — about me, or about yourself?",
+        ],
+        working="Do not Golden ACQUIRE / LEARN. Do not raise SI or autonomy. Composite vs 0.92 is the gate, not a vibe.",
     ),
 ]
 
 DAY_CHECKPOINT_MAP: dict[int, DayCheckpoint] = {c.day: c for c in _DAY_CHECKPOINTS}
+
+# Intel writes personal_preference / user_preference, not the bare tag
+# "preference". Stage 2 was stuck at CURRENT after lived I-prefer stores.
+_PREFERENCE_COUNT_TAGS: frozenset[str] = frozenset({
+    "preference", "likes", "dislikes",
+    "personal_preference", "personal_interest", "personal_dislike",
+    "response_style", "user_preference", "personal_habit", "routine_priority",
+})
+
+
+def count_preference_memories(memories: Any) -> int:
+    """Count preference-like memories the way intel actually tags them."""
+    n = 0
+    for mem in memories or []:
+        typ = getattr(mem, "type", None) or (mem.get("type") if isinstance(mem, dict) else "")
+        tags = getattr(mem, "tags", None)
+        if tags is None and isinstance(mem, dict):
+            tags = mem.get("tags") or ()
+        tagset = set(tags or ())
+        if typ == "user_preference" or (tagset & _PREFERENCE_COUNT_TAGS):
+            n += 1
+    return n
 
 
 @dataclass
@@ -436,6 +511,8 @@ class OnboardingManager:
                 "label": c.label,
                 "theme": c.theme,
                 "exercises": c.exercises,
+                "user_lines": list(c.user_lines),
+                "working": c.working,
                 "exercises_prompted": prompted_count,
                 "checkpoint_targets": {k: v for k, v in c.metrics.items()},
                 "checkpoints_met": self._state.checkpoints_met.get(c.day, {}),

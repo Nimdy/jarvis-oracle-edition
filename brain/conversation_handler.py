@@ -1510,6 +1510,16 @@ _PREFERENCE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
      "User's favorite {0} is {1}", "personal_preference"),
     (re.compile(r"\bkeep it (short|brief|concise)\b", re.I),
      "User prefers concise responses", "response_style"),
+    (re.compile(
+        r"\bwhen i say (?:brief|short|concise)\b[, ]*(?:i mean\s+)?(.{3,80}?)(?:\.|,|!|$)",
+        re.I,
+    ),
+     "User brief means {0}", "response_style"),
+    (re.compile(
+        r"\b(?:don'?t|do not)\s+bring up\s+(.{3,80}?)(?:\s+proactively)?(?:\.|,|!|$)",
+        re.I,
+    ),
+     "User prefers not to discuss {0} proactively", "personal_preference"),
     (re.compile(r"\b(?:be )?more (detailed|thorough|verbose)\b", re.I),
      "User prefers detailed responses", "response_style"),
     (re.compile(

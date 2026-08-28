@@ -109,7 +109,7 @@
 
     <section class="card col8 late" id="stagescard">
       <h2>Curriculum · Stages 1–7</h2>
-      <div class="note">Begins after birth (Stage 0 awakening → <a href="/static/v2/awakening.html">/awakening</a>). Each card: live checkpoint state (met/missing) + exercises prompted. Static theme text from the companion playbook.</div>
+      <div class="note">Begins after birth (Stage 0 awakening → <a href="/static/v2/awakening.html">/awakening</a>). Each card: live current vs target, first-person <b>you say</b> lines (wire-matched), and how to know it stored. Native-voice grinding is the late cards below — not Stage 2.</div>
       <div id="stage0" class="stage0" style="margin-bottom:8px;"></div>
       <div id="stages"></div>
     </section>
@@ -322,26 +322,51 @@
     }).join('');
   }
 
+  function stageRec(n){
+    var S=(OB&&OB.stages)||(OB&&OB.days)||{};
+    return S[n]||S[String(n)]||{};
+  }
+  function fmtTarget(v){
+    if(v===null||v===undefined) return '—';
+    if(typeof v==='number' && v>0 && v<=1 && String(v).indexOf('.')>=0) return Number(v).toFixed(2);
+    return String(v);
+  }
   function renderStages(){
     var completed=(OB&&OB.stages_completed)||[], cur=num(OB&&OB.current_stage);
     var labels=(OB&&OB.stage_labels)||{}, themes=(OB&&OB.stage_themes)||{}, cks=(OB&&OB.checkpoints_met)||{}, ex=(OB&&OB.exercises_prompted)||{};
-    el('stage0').innerHTML='<b style="color:var(--cyan)">Stage 0 · Awakening</b> — enroll (say your name, vary lighting/expression), share stable facts, ask for a status report and <b>correct any confabulation</b>, one reflective question. Live birth gate on the <a href="/static/v2/awakening.html">awakening</a> page.';
+    var lm=(OB&&OB.live_metrics)||{};
+    el('stage0').innerHTML='<b style="color:var(--cyan)">Stage 0 · Awakening</b> — <code>Jarvis, my name is David. Learn my face and voice.</code> then look at the lens. Facts: <code>I work as …</code> · <code>I prefer brief responses.</code> · <code>Keep it brief.</code> Then <code>give me a status report</code> and <code>explain how your memory system works</code>. If she lies: <code>That\'s wrong. You use sqlite-vec for semantic search.</code> Working: Face ID known=True, Stored personal intel, sqlite-vec in the spoken reply. Birth gate: <a href="/static/v2/awakening.html">awakening</a>.';
     var html='';
     for(var n=1;n<=7;n++){
       var key=String(n);
+      var rec=stageRec(n);
       var done=completed.indexOf(n)>=0 || completed.indexOf(key)>=0;
       var isCur=(cur===n);
       var badge = done?{t:'COMPLETE',c:'var(--green)'}:(isCur?{t:'CURRENT',c:'var(--cyan)'}:{t:'UPCOMING',c:'var(--dim)'});
-      var theme = themes[key]||themes[n]||STAGE_THEMES_FALLBACK[n]||'';
-      var label = labels[key]||labels[n]||('Stage '+n);
-      var ck = cks[key]||cks[n]||{};
-      var ckhtml=Object.keys(ck).map(function(c){ return '<span class="ck '+(ck[c]?'met':'miss')+'">'+(ck[c]?'✓':'○')+' '+cap(c)+'</span>'; }).join('');
-      var pr = num(ex[key]!=null?ex[key]:ex[n]);
+      var theme = rec.theme||themes[key]||themes[n]||STAGE_THEMES_FALLBACK[n]||'';
+      var label = rec.label||labels[key]||labels[n]||('Stage '+n);
+      var ck = rec.checkpoints_met||cks[key]||cks[n]||{};
+      var targets=rec.checkpoint_targets||{};
+      var tkeys=Object.keys(targets);
+      if(!tkeys.length) tkeys=Object.keys(ck);
+      var ckhtml=tkeys.map(function(c){
+        var met=!!ck[c];
+        var curV=lm[c];
+        var tgt=targets[c];
+        var live=(curV===null||curV===undefined)?'':(' · now '+fmtTarget(curV)+(tgt!=null?(' / '+fmtTarget(tgt)):''));
+        return '<span class="ck '+(met?'met':'miss')+'">'+(met?'✓':'○')+' '+cap(c)+live+'</span>';
+      }).join('');
+      var pr = num(rec.exercises_prompted!=null?rec.exercises_prompted:(ex[key]!=null?ex[key]:ex[n]));
+      var lines=rec.user_lines||[];
+      var say=(!lines.length)?'':('<div class="note" style="margin-top:8px;margin-bottom:4px">You say (first person, exact-ish — the intel regex, not a story):</div>'+
+        lines.map(function(s){ return '<div class="saybox" style="margin-top:4px">'+esc(s)+'</div>'; }).join(''));
+      var work=rec.working?('<div class="gfoot" style="margin-top:8px;color:var(--muted)">Working? '+esc(rec.working)+'</div>'):'';
       html+='<div class="stage" style="border-left:2px solid '+badge.c+'">'+
         '<div class="top"><span class="nm">'+n+' · '+label+'</span>'+
           '<span class="sbadge" style="color:'+badge.c+';border-color:'+badge.c+'">'+badge.t+'</span></div>'+
-        '<div class="th">'+theme+(pr!==null?(' · '+pr+' exercises prompted'):'')+'</div>'+
+        '<div class="th">'+esc(theme)+(pr!==null?(' · '+pr+' exercises prompted'):'')+'</div>'+
         (ckhtml?('<div class="checks">'+ckhtml+'</div>'):'')+
+        say+work+
       '</div>';
     }
     el('stages').innerHTML=html;

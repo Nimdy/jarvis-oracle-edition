@@ -1534,10 +1534,8 @@ class ConsciousnessSystem:
                 1 for mem in all_memories
                 if _IDENTITY_TAGS.intersection(getattr(mem, "tags", ()))
             )
-            m["preference_memories"] = sum(
-                1 for mem in all_memories
-                if any(t in getattr(mem, "tags", ()) for t in ("preference", "likes", "dislikes"))
-            )
+            from personality.onboarding import count_preference_memories
+            m["preference_memories"] = count_preference_memories(all_memories)
             m["routine_memories"] = sum(
                 1 for mem in all_memories
                 if any(
