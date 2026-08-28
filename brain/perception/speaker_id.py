@@ -39,6 +39,8 @@ class SpeakerIdentifier:
 
     SIMILARITY_THRESHOLD = 0.50
     SCORE_EMA_ALPHA = 0.35
+    SCORE_EMA_MIN_RAW = 0.02
+    REENROLL_MIN_SIMILARITY = 0.25
     PROFILES_FILENAME = "speakers.json"
 
     def __init__(
@@ -210,11 +212,14 @@ class SpeakerIdentifier:
                     raw = self._cosine_sim(embedding, stored)
 
                     prev = self._score_ema.get(name)
-                    if prev is None:
+                    if raw < self.SCORE_EMA_MIN_RAW:
+                        smoothed = prev if prev is not None else 0.0
+                    elif prev is None:
                         smoothed = raw
+                        self._score_ema[name] = smoothed
                     else:
                         smoothed = self.SCORE_EMA_ALPHA * raw + (1 - self.SCORE_EMA_ALPHA) * prev
-                    self._score_ema[name] = smoothed
+                        self._score_ema[name] = smoothed
 
                     if smoothed > best_score:
                         best_score = smoothed
@@ -334,8 +339,10 @@ class SpeakerIdentifier:
             centroid = np.mean(embeddings, axis=0).astype(np.float32)
             centroid = centroid / (np.linalg.norm(centroid) + 1e-8)
 
+            existing = None
             for existing_name, profile in self._profiles.items():
                 if existing_name.lower() == name.lower():
+                    existing = profile
                     continue
                 stored = profile["embedding"]
                 if isinstance(stored, list):
@@ -347,6 +354,31 @@ class SpeakerIdentifier:
                         "proceeding but flagging for potential merge",
                         name, sim * 100, existing_name,
                     )
+
+            if existing is not None:
+                stored = existing["embedding"]
+                if isinstance(stored, list):
+                    stored = np.array(stored, dtype=np.float32)
+                sim = self._cosine_sim(centroid, stored)
+                if sim < self.REENROLL_MIN_SIMILARITY:
+                    logger.info(
+                        "Speaker re-enroll skipped for '%s': new clips sim=%.2f to gallery",
+                        name, sim,
+                    )
+                    return True
+                old_n = max(1, int(existing.get("enrollment_clips") or 1))
+                new_n = len(embeddings)
+                blended = (stored * old_n + centroid * new_n) / (old_n + new_n)
+                blended = blended / (np.linalg.norm(blended) + 1e-8)
+                existing["embedding"] = blended.astype(np.float32)
+                existing["last_seen"] = time.time()
+                existing["enrollment_clips"] = old_n + new_n
+                self._save_profiles()
+                logger.info(
+                    "Blended speaker '%s' with %d new clip(s) (gallery=%d, sim=%.2f)",
+                    name, new_n, old_n + new_n, sim,
+                )
+                return True
 
             self._profiles[name] = {
                 "embedding": centroid,

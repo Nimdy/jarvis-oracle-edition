@@ -45,6 +45,11 @@ class FaceIdentifier:
     EMA_MIN_CONFIDENCE = 0.70
     PROFILES_FILENAME = "face_profiles.json"
     SCORE_EMA_ALPHA = 0.35
+    # Skip EMA writes for non-faces. Walk-back is ~0.000; corner-office
+    # desk/profile crops land 0.04–0.40 and were poisoning the smoother
+    # (~1 crop/min). Do not lower 0.55.
+    SCORE_EMA_MIN_RAW = 0.40
+    REENROLL_MIN_SIMILARITY = 0.25
 
     def __init__(
         self,
@@ -179,11 +184,11 @@ class FaceIdentifier:
         Returns dict with keys: name, confidence, is_known, closest_match.
         """
         if not self.available:
-            return {"name": "unknown", "confidence": 0.0, "is_known": False, "closest_match": ""}
+            return {"name": "unknown", "confidence": 0.0, "is_known": False, "closest_match": "", "raw_score": 0.0}
 
         crop = self._decode_crop(crop_b64)
         if crop is None:
-            return {"name": "unknown", "confidence": 0.0, "is_known": False, "closest_match": ""}
+            return {"name": "unknown", "confidence": 0.0, "is_known": False, "closest_match": "", "raw_score": 0.0}
 
         self._recent_crops_b64.append(crop_b64)
         return self.identify(crop)
@@ -205,13 +210,13 @@ class FaceIdentifier:
         "Sequencing" subsection.
         """
         if not self.available or self._session is None:
-            return {"name": "unknown", "confidence": 0.0, "is_known": False, "closest_match": ""}
+            return {"name": "unknown", "confidence": 0.0, "is_known": False, "closest_match": "", "raw_score": 0.0}
 
         with self._lock:
             try:
                 embedding = self._extract_embedding(crop)
                 if embedding is None:
-                    return {"name": "unknown", "confidence": 0.0, "is_known": False, "closest_match": ""}
+                    return {"name": "unknown", "confidence": 0.0, "is_known": False, "closest_match": "", "raw_score": 0.0}
 
                 best_name = "unknown"
                 best_score = 0.0
@@ -224,11 +229,14 @@ class FaceIdentifier:
                     raw = self._cosine_sim(embedding, stored)
 
                     prev = self._score_ema.get(name)
-                    if prev is None:
+                    if raw < self.SCORE_EMA_MIN_RAW:
+                        smoothed = prev if prev is not None else 0.0
+                    elif prev is None:
                         smoothed = raw
+                        self._score_ema[name] = smoothed
                     else:
                         smoothed = self.SCORE_EMA_ALPHA * raw + (1 - self.SCORE_EMA_ALPHA) * prev
-                    self._score_ema[name] = smoothed
+                        self._score_ema[name] = smoothed
 
                     if smoothed > best_score:
                         best_score = smoothed
@@ -236,7 +244,16 @@ class FaceIdentifier:
                         best_name = name
 
                 closest_match = best_name if best_name != "unknown" else ""
-                is_known = best_score >= self.SIMILARITY_THRESHOLD
+                # 0.55 is the crop cosine floor. EMA may keep a lock through a
+                # brief plausible dip; it must not veto a passing crop, and a
+                # desk junk crop must not inherit a stale lock.
+                is_known = (
+                    best_raw >= self.SIMILARITY_THRESHOLD
+                    or (
+                        best_score >= self.SIMILARITY_THRESHOLD
+                        and best_raw >= self.SCORE_EMA_MIN_RAW
+                    )
+                )
                 if is_known:
                     self._profiles[best_name]["last_seen"] = time.time()
                     self._profiles[best_name]["interaction_count"] = (
@@ -273,10 +290,11 @@ class FaceIdentifier:
                     "confidence": best_score,
                     "is_known": is_known,
                     "closest_match": closest_match,
+                    "raw_score": best_raw,
                 }
             except Exception as exc:
                 logger.error("Face identification failed: %s", exc)
-                return {"name": "unknown", "confidence": 0.0, "is_known": False, "closest_match": ""}
+                return {"name": "unknown", "confidence": 0.0, "is_known": False, "closest_match": "", "raw_score": 0.0}
 
     def enroll_face(self, name: str, crops_b64: list[str]) -> bool:
         """Enroll a face from one or more base64 JPEG crops."""
@@ -303,8 +321,10 @@ class FaceIdentifier:
             centroid = np.mean(embeddings, axis=0).astype(np.float32)
             centroid = centroid / (np.linalg.norm(centroid) + 1e-8)
 
+            existing = None
             for existing_name, profile in self._profiles.items():
                 if existing_name.lower() == name.lower():
+                    existing = profile
                     continue
                 stored = profile["embedding"]
                 if isinstance(stored, list):
@@ -316,6 +336,32 @@ class FaceIdentifier:
                         "proceeding but flagging for potential merge",
                         name, sim * 100, existing_name,
                     )
+
+            if existing is not None:
+                stored = existing["embedding"]
+                if isinstance(stored, list):
+                    stored = np.array(stored, dtype=np.float32)
+                sim = self._cosine_sim(centroid, stored)
+                if sim < self.REENROLL_MIN_SIMILARITY:
+                    logger.info(
+                        "Face re-enroll skipped for '%s': new crops sim=%.2f to gallery "
+                        "(desk/walk-back junk)",
+                        name, sim,
+                    )
+                    return True
+                old_n = max(1, int(existing.get("enrollment_crops") or 1))
+                new_n = len(embeddings)
+                blended = (stored * old_n + centroid * new_n) / (old_n + new_n)
+                blended = blended / (np.linalg.norm(blended) + 1e-8)
+                existing["embedding"] = blended.astype(np.float32)
+                existing["last_seen"] = time.time()
+                existing["enrollment_crops"] = old_n + new_n
+                self._save_profiles()
+                logger.info(
+                    "Blended face '%s' with %d new crop(s) (gallery=%d, sim=%.2f)",
+                    name, new_n, old_n + new_n, sim,
+                )
+                return True
 
             self._profiles[name] = {
                 "embedding": centroid,

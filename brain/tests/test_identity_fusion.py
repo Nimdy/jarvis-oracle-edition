@@ -228,7 +228,26 @@ def test_confidence_floor_enforced(fusion):
 
 # ── Test 9: Wake word clears persisted branch immediately ──
 
-def test_wake_word_clears_persistence(fusion):
+def test_wake_word_preserves_solo_after_persist_window(fusion):
+    """Lived 16:05: 3 min at the desk, no face, Jarvis still dumped David."""
+    _inject_voice(fusion, "David", 0.70)
+    fusion._resolve()
+    _inject_voice(fusion, "David", 0.70, age=STALE_VOICE_S + 1)
+    fusion._resolve()
+    assert fusion._last_known is not None
+    fusion._last_known = IdentitySnapshot(
+        name=fusion._last_known.name,
+        confidence=fusion._last_known.confidence,
+        method=fusion._last_known.method,
+        captured_at=time.time() - PERSIST_MAX_S - 30,
+    )
+    fusion._on_wake_word()
+    assert fusion._last_known is not None
+    assert fusion._last_known.name == "David"
+
+
+def test_wake_word_preserves_solo_desk_without_face(fusion):
+    """Lived: corner camera has pose, no face. Wake must not dump last-known."""
     _inject_voice(fusion, "David", 0.70)
     fusion._resolve()
     assert fusion._last_known is not None
@@ -240,9 +259,9 @@ def test_wake_word_clears_persistence(fusion):
 
     fusion._on_wake_word()
 
-    assert fusion._last_known is None
-    assert fusion._last_resolved.method == "no_signal"
-    assert fusion._last_resolved.name == "unknown"
+    assert fusion._last_known is not None
+    assert fusion._last_known.name == "David"
+    assert fusion._last_resolved.name == "David"
 
 
 # ── Test 10: Fresh biometric overrides persisted identity ──
@@ -391,8 +410,8 @@ def test_wake_word_preserves_when_face_live_and_matching(fusion):
     assert fusion._last_known.name == "David"
 
 
-def test_wake_word_clears_when_face_unknown(fusion):
-    """Wake word should clear persistence when face is unknown/absent."""
+def test_wake_word_preserves_when_face_unknown_and_solo(fusion):
+    """Unknown face at the desk is expected. Do not clear last-known."""
     _inject_voice(fusion, "David", 0.70)
     fusion._resolve()
     assert fusion._last_known is not None
@@ -401,7 +420,20 @@ def test_wake_word_clears_when_face_unknown(fusion):
     fusion._resolve()
     assert fusion._last_resolved.method == "persisted"
 
-    # No face signal — only default unknown face
+    fusion._on_wake_word()
+    assert fusion._last_known is not None
+    assert fusion._last_known.name == "David"
+
+
+def test_wake_word_clears_when_two_people_and_no_face(fusion):
+    """Two occupants + no confirming face: still clear. Don't stick David on a guest."""
+    _inject_voice(fusion, "David", 0.70)
+    fusion._resolve()
+    _inject_voice(fusion, "David", 0.70, age=STALE_VOICE_S + 1)
+    fusion._resolve()
+    assert fusion._last_resolved.method == "persisted"
+
+    fusion._visible_person_count = 2
     fusion._on_wake_word()
     assert fusion._last_known is None
 
@@ -428,40 +460,38 @@ def test_wake_word_clears_when_face_mismatches(fusion):
     assert fusion._last_known.name == "Alice", "Alice should now be the active identity"
 
 
-def test_wake_word_clears_when_face_stale(fusion):
-    """Wake word should clear persistence when face signal is stale."""
+def test_wake_word_preserves_when_face_stale_and_solo(fusion):
+    """Stale face is not a different person. Solo desk keeps last-known."""
     _inject_voice(fusion, "David", 0.70)
     fusion._resolve()
     assert fusion._last_known is not None
 
-    # Voice stale → persisted
     _inject_voice(fusion, "David", 0.70, age=STALE_VOICE_S + 1)
     fusion._resolve()
     assert fusion._last_resolved.method == "persisted"
 
-    # Face is David but stale
     _inject_face(fusion, "David", 0.60, age=STALE_FACE_S + 1)
 
     fusion._on_wake_word()
-    assert fusion._last_known is None, "Stale face should not preserve persistence"
+    assert fusion._last_known is not None
+    assert fusion._last_known.name == "David"
 
 
-def test_wake_word_clears_when_face_low_confidence(fusion):
-    """Wake word should clear persistence when face confidence is below soft threshold."""
+def test_wake_word_preserves_when_face_low_confidence_and_solo(fusion):
+    """Sub-threshold face is not a mismatch. Solo occupant keeps last-known."""
     _inject_voice(fusion, "David", 0.70)
     fusion._resolve()
     assert fusion._last_known is not None
 
-    # Voice stale → persisted
     _inject_voice(fusion, "David", 0.70, age=STALE_VOICE_S + 1)
     fusion._resolve()
     assert fusion._last_resolved.method == "persisted"
 
-    # Face matches but confidence too low
     _inject_face(fusion, "David", 0.20)
 
     fusion._on_wake_word()
-    assert fusion._last_known is None, "Low-confidence face should not preserve persistence"
+    assert fusion._last_known is not None
+    assert fusion._last_known.name == "David"
 
 
 def test_floor_above_quarantine_threshold():
