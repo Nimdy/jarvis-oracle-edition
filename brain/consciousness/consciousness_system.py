@@ -1640,7 +1640,11 @@ class ConsciousnessSystem:
                 cd_stats = correction_detector.get_stats()
                 total_checks = cd_stats.get("total_checks", 0)
                 total_corrections = cd_stats.get("total_corrections", 0)
-                if total_checks >= 3:
+                # Vacuous 1.0 with zero corrections let Stage 5 skip. The
+                # drill is: bait a wrong answer, then That's wrong.
+                if total_corrections < 1:
+                    m["correction_accuracy"] = 0.0
+                elif total_checks >= 3:
                     m["correction_accuracy"] = 1.0 - (total_corrections / total_checks)
                 else:
                     m["correction_accuracy"] = 1.0

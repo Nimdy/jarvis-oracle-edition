@@ -358,6 +358,13 @@
       }).join('');
       var pr = num(rec.exercises_prompted!=null?rec.exercises_prompted:(ex[key]!=null?ex[key]:ex[n]));
       var lines=rec.user_lines||[];
+      // Stage 5: live bait even if this PID still has old user_lines.
+      if(n===5){
+        var bait=['Jarvis, what is my favorite color?','Jarvis, who is Sarah to me?',
+          "That's wrong. I never told you my favorite color. There is no Sarah in my household."];
+        var have={}; lines.forEach(function(s){ have[s]=1; });
+        bait.reverse().forEach(function(s){ if(!have[s]) lines.unshift(s); });
+      }
       var say=(!lines.length)?'':('<div class="note" style="margin-top:8px;margin-bottom:4px">You say (first person, exact-ish — the intel regex, not a story):</div>'+
         lines.map(function(s){ return '<div class="saybox" style="margin-top:4px">'+esc(s)+'</div>'; }).join(''));
       var work=rec.working?('<div class="gfoot" style="margin-top:8px;color:var(--muted)">Working? '+esc(rec.working)+'</div>'):'';

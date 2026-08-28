@@ -261,6 +261,9 @@ def test_status_exposes_user_lines_for_dashboard():
     s3 = st["stages"][3]
     assert not any("Sarah" in line for line in s3["user_lines"])
     assert any("[Name] is my wife" in line for line in s3["user_lines"])
+    s5 = st["stages"][5]
+    assert any("favorite color" in line.lower() for line in s5["user_lines"])
+    assert any("who is Sarah" in line for line in s5["user_lines"])
     assert s2["checkpoint_targets"]["preference_memories"] == 15
     assert "Stored personal intel" in s2["working"]
 
