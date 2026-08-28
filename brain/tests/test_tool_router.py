@@ -180,6 +180,11 @@ def test_recognition_probes_route_to_identity():
     # stored biometrics. Self-face look is IDENTITY enroll/refresh.
     assert router.route("Look at me.").tool == ToolType.IDENTITY
     assert router.route("Hey Jarvis, take a fresh look with the camera and see my face.").tool == ToolType.IDENTITY
+    # Lived: "camera" stole enroll to VISION theater ("registered with the camera").
+    assert router.route("Register my face with the camera").tool == ToolType.IDENTITY
+    assert router.route("Jarvis, register my face with the camera.").tool == ToolType.IDENTITY
+    assert router.route("register my voice").tool == ToolType.IDENTITY
+    assert router.route("Look at the camera").tool == ToolType.VISION
     assert router.route("Look around and describe the room").tool == ToolType.VISION
     assert router.route("look at me closer").tool == ToolType.CAMERA_CONTROL
 

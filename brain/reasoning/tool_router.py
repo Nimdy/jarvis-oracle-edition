@@ -513,6 +513,7 @@ _KEYWORD_PATTERNS: list[tuple[list[str], ToolType]] = [
     (["my name is", "call me", "who am i", "do you know who i am",
       "do you recognize me", "remember my voice", "learn my voice",
       "remember my face", "learn my face", "enroll me", "register me",
+      "register my face", "register my voice", "enroll my face", "enroll my voice",
       "save my voice", "record my voice", "record my face",
       "hear my voice", "look at my face", "see my face", "look at me",
       "who is speaking", "who's speaking",
@@ -865,7 +866,16 @@ _IDENTITY_ENROLLMENT_SIGNALS: frozenset[str] = frozenset({
     "remember my voice", "remember my face", "hear my voice",
     "look at my face", "see my face", "look at me",
     "enroll me", "register me",
+    "register my face", "register my voice", "enroll my face", "enroll my voice",
 })
+
+# Lived: "Register my face with the camera" matched VISION via the word
+# "camera" and the caption theater said it was registered. Enroll verbs
+# plus face/voice are IDENTITY even when the office geometry is named.
+_IDENTITY_BIOMETRIC_RE = re.compile(
+    r"\b(?:register|enroll|learn|remember|record|save)\b.{0,40}\b(?:my\s+)?(?:face|voice)\b",
+    re.I,
+)
 
 
 def _disambiguate_vision_vs_identity(lower: str, tier1_tool: ToolType) -> ToolType:
@@ -878,6 +888,8 @@ def _disambiguate_vision_vs_identity(lower: str, tier1_tool: ToolType) -> ToolTy
     )):
         return ToolType.CAMERA_CONTROL
     if any(sig in lower for sig in _IDENTITY_ENROLLMENT_SIGNALS):
+        return ToolType.IDENTITY
+    if _IDENTITY_BIOMETRIC_RE.search(lower):
         return ToolType.IDENTITY
     return ToolType.VISION
 

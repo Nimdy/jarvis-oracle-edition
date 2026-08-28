@@ -2425,13 +2425,45 @@ _ENROLL_NAME_RE = re.compile(
     r"(\b[A-Z]?\w{2,}\b)",
     re.IGNORECASE,
 )
+# Self-enroll only. "This is David" is household/confirmation, not enroll.
 _ENROLL_NAME_WEAK_RE = re.compile(
-    r"(?:[Ii]'m|[Ii] am|[Tt]his is)"
+    r"(?:[Ii]'m|[Ii] am)"
     r"\s+([A-Z][a-z]{1,})\b",
 )
 _ENROLL_NAME_INVERTED_RE = re.compile(
     r"\b([A-Z][a-z]{1,})\s+is\s+my\s+name\b",
 )
+_THIS_IS_NAME_RE = re.compile(
+    r"\b[Tt]his is\s+([A-Z][a-z]{1,})\b",
+)
+_BIOMETRIC_ENROLL_INTENT_RE = re.compile(
+    r"\b(?:my name is|call me|enroll me as|register me as|"
+    r"(?:learn|remember|record|register|enroll|save)\s+my\s+(?:face|voice))\b",
+    re.I,
+)
+
+
+def _identity_name_intent(text: str) -> tuple[str, str]:
+    """Return (enroll_name, check_name). At most one is set.
+
+    `my name is David` / `I'm David` / `This is David. Learn my face` → enroll.
+    Bare `This is David` → identity check (household introducer), not re-enroll.
+    """
+    name_match = _ENROLL_NAME_RE.search(text)
+    if not name_match:
+        name_match = _ENROLL_NAME_WEAK_RE.search(text)
+    if not name_match:
+        name_match = _ENROLL_NAME_INVERTED_RE.search(text)
+    enroll = name_match.group(1).strip().title() if name_match else ""
+    this_is = _THIS_IS_NAME_RE.search(text)
+    this_name = this_is.group(1).strip().title() if this_is else ""
+    if enroll:
+        return enroll, ""
+    if this_name:
+        if _BIOMETRIC_ENROLL_INTENT_RE.search(text):
+            return this_name, ""
+        return "", this_name
+    return "", ""
 
 _IDENTITY_QUERY_RE = re.compile(
     r"\b(who am i|do you (?:know|recognize) (?:me|who)|who(?:'s| is) (?:speaking|talking))\b",
@@ -4899,22 +4931,22 @@ async def handle_transcription(
             logger.info("Identity forget: %s (%s)", _forget_name, _forgotten)
         else:
             is_query = bool(_IDENTITY_QUERY_RE.search(text))
-            name_match = _ENROLL_NAME_RE.search(text)
-            if not name_match:
-                name_match = _ENROLL_NAME_WEAK_RE.search(text)
-            if not name_match:
-                name_match = _ENROLL_NAME_INVERTED_RE.search(text)
-            extracted_name = name_match.group(1).strip().title() if name_match else ""
+            extracted_name, intro_check_name = _identity_name_intent(text)
 
-            if extracted_name:
+            if extracted_name or intro_check_name:
                 from identity.name_validator import is_valid_person_name, rejection_reason
-                if not is_valid_person_name(extracted_name):
+                if extracted_name and not is_valid_person_name(extracted_name):
                     _reason = rejection_reason(extracted_name)
                     logger.info("Rejected enrollment name %r: %s", extracted_name, _reason)
                     extracted_name = ""
+                if intro_check_name and not is_valid_person_name(intro_check_name):
+                    logger.info("Rejected identity-check name %r", intro_check_name)
+                    intro_check_name = ""
 
             check_match = _IDENTITY_CHECK_RE.search(text)
             check_name = check_match.group(1).strip().title() if check_match else ""
+            if not check_name and intro_check_name:
+                check_name = intro_check_name
             is_identity_check = bool(check_name) and not extracted_name
 
             if is_query or is_identity_check:

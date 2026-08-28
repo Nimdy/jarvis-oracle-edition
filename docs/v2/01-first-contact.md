@@ -93,7 +93,7 @@ David and `Speaker ID: David known=True`. Do not keep stacking clips.
 Jarvis, my name is David. Learn my face and voice.
 ```
 
-Replace `David` with the real given name, **capitalized in the transcript**. Weak enroll (`I'm david`) is fragile. Do not say `I'm new` / `I'm ready` (name validator blocks those words). Do **not** say `This is David` (that is the household introducer).
+Replace `David` with the real given name, **capitalized in the transcript**. Weak enroll (`I'm david`) is fragile. Do not say `I'm new` / `I'm ready` (name validator blocks those words). Do **not** say `This is David` (household introducer / identity check — it will **not** re-enroll). `Register my face with the camera` is IDENTITY enroll, not a look.
 
 **Face (dedicated soak — not the desk):** Walk to her. Look at the **lens**,
 not the browser. Hold still 5–10 s so one crop can land. Then **one** enroll
