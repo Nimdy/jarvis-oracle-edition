@@ -2358,6 +2358,60 @@ def _try_identity_enrollment_from_answer(text: str, engine: Any) -> None:
     logger.info("Curiosity answer: detected name '%s', enrollment available via voice command", name)
 
 
+_CONFIRM_SEEK_RE = re.compile(
+    r"(?:\bright\??|\bcorrect\??|\bisn'?t it\??)\s*[.!]?\s*$",
+    re.I,
+)
+
+
+def _is_confirmation_seek(text: str) -> bool:
+    """'I work as a plumber, right?' is a check, not a new biographical write."""
+    return bool(text and _CONFIRM_SEEK_RE.search(text.strip()))
+
+
+def _held_biographical_jobs() -> list[str]:
+    """Existing job/identity-role facts the confirmation should be checked against."""
+    held: list[str] = []
+    try:
+        for m in memory_storage.get_by_tag("fact_kind:biographical"):
+            if float(getattr(m, "weight", 1.0) or 0) < 0.2:
+                continue
+            tags = set(getattr(m, "tags", ()) or ())
+            if tags & {"fact_kind:name", "fact_kind:preferred_name", "fact_kind:birthday"}:
+                continue
+            payload = m.payload if isinstance(m.payload, str) else ""
+            if payload.lower().startswith("user is "):
+                held.append(payload)
+    except Exception:
+        pass
+    return held
+
+
+def _fact_check_conflict(proposed: str, held: list[str]) -> str | None:
+    """Return the held payload if proposed biographical 'User is X' disagrees."""
+    pl = proposed.lower().strip()
+    if not pl.startswith("user is "):
+        return None
+    new = pl[8:].strip()
+    for h in held:
+        old = h.lower().strip()
+        if not old.startswith("user is "):
+            continue
+        old_job = old[8:].strip()
+        if not old_job or new in old_job or old_job in new:
+            continue
+        return h
+    return None
+
+
+def _build_fact_check_conflict_reply(conflicts: list[dict[str, str]]) -> str:
+    if not conflicts:
+        return "That doesn't match what I already have recorded about you."
+    held = conflicts[0].get("held") or "a different fact"
+    job = held[8:].strip() if held.lower().startswith("user is ") else held
+    return f"No. I have you as {job}, not what you just said. I did not overwrite that."
+
+
 def _extract_personal_intel(
     text: str,
     speaker: str = "unknown",
@@ -2377,6 +2431,20 @@ def _extract_personal_intel(
     personal, thirdparty = _collect_personal_intel_matches(text)
     personal_categories = sorted({category for _, category in personal})
     thirdparty_categories = sorted({category for _, category, _ in thirdparty})
+    confirm = _is_confirmation_seek(text)
+    held_jobs = _held_biographical_jobs() if confirm else []
+    conflicts: list[dict[str, str]] = []
+    if confirm:
+        for payload, category in personal:
+            if category != "personal_fact":
+                continue
+            held = _fact_check_conflict(payload, held_jobs)
+            if held:
+                conflicts.append({"proposed": payload, "held": held})
+                logger.info(
+                    "Fact-check conflict: confirmation seek proposed=%r held=%r — not stored",
+                    payload, held,
+                )
     if suppress_write:
         return {
             "personal_matches": len(personal),
@@ -2385,6 +2453,8 @@ def _extract_personal_intel(
             "personal_categories": personal_categories,
             "thirdparty_categories": thirdparty_categories,
             "stored_categories": [],
+            "fact_check_conflicts": conflicts,
+            "confirmation_seek": confirm,
         }
 
     # Banter firewall (David's golden-command authority model): a golden command
@@ -2403,7 +2473,10 @@ def _extract_personal_intel(
 
     stored = 0
     stored_categories: list[str] = []
+    skip_facts = confirm
     for payload, category in personal:
+        if skip_facts and category == "personal_fact":
+            continue
         _prov = _write_prov(category)
         if _store_personal_memory(payload, category, speaker, provenance=_prov):
             if _prov != "casual_conversation":
@@ -2424,6 +2497,8 @@ def _extract_personal_intel(
         "personal_categories": personal_categories,
         "thirdparty_categories": thirdparty_categories,
         "stored_categories": sorted(set(stored_categories)),
+        "fact_check_conflicts": conflicts,
+        "confirmation_seek": confirm,
     }
 
 
@@ -5623,7 +5698,18 @@ async def handle_transcription(
             ops_tracker.advance_stage("reason", "active", "Generating response")
 
             _none_route_handled = False
-            if routing.extracted_args.get("tier") == "preference_instruction":
+            if (_personal_intel_result or {}).get("fact_check_conflicts"):
+                reply = _build_fact_check_conflict_reply(
+                    list((_personal_intel_result or {}).get("fact_check_conflicts") or []),
+                )
+                await _broadcast_chunk_sync(reply, tone)
+                _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                _none_route_handled = True
+                logger.info(
+                    "NONE route: fact-check conflict native reply (TBS-0 stays shadow; "
+                    "confirmation did not overwrite held biographical fact)"
+                )
+            elif routing.extracted_args.get("tier") == "preference_instruction":
                 _stored_count = int((_personal_intel_result or {}).get("stored", 0) or 0)
                 _matched = int((_personal_intel_result or {}).get("personal_matches", 0) or 0) + int(
                     (_personal_intel_result or {}).get("thirdparty_matches", 0) or 0

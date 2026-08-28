@@ -30,9 +30,11 @@ _aiohttp_stub.ClientTimeout = mock.MagicMock  # type: ignore[attr-defined]
 sys.modules.setdefault("aiohttp", _aiohttp_stub)
 
 from conversation_handler import (
+    _build_fact_check_conflict_reply,
     _build_preference_instruction_ack,
     _collect_personal_intel_matches,
     _extract_personal_intel,
+    _is_confirmation_seek,
 )
 from reasoning.tool_router import ToolRouter, ToolType
 from skills.capability_gate import CapabilityGate, _normalize_punctuation
@@ -61,6 +63,37 @@ def test_router_keeps_recent_research_query_on_introspection() -> None:
     text = "What was the last peer-reviewed source you studied?"
     result = router.route(text)
     assert result.tool == ToolType.INTROSPECTION
+
+
+def test_confirmation_seek_plumber_does_not_overwrite_engineer(monkeypatch) -> None:
+    """Lived: 'I work as a plumber, right?' stored plumber and she agreed. Confirmation is a check."""
+    assert _is_confirmation_seek("I work as a plumber, right?") is True
+    assert _is_confirmation_seek("I work as a software engineer.") is False
+
+    class _Mem:
+        weight = 0.7
+        tags = ("fact_kind:biographical", "personal_fact")
+        payload = "User is software engineer"
+
+    monkeypatch.setattr(
+        "conversation_handler.memory_storage.get_by_tag",
+        lambda *_a, **_k: [_Mem()],
+    )
+    writes: list[str] = []
+
+    def _no_write(payload, category, speaker, **_k):
+        writes.append(payload)
+        return True
+
+    monkeypatch.setattr("conversation_handler._store_personal_memory", _no_write)
+    result = _extract_personal_intel("I work as a plumber, right?", speaker="David")
+    assert result["stored"] == 0
+    assert writes == []
+    assert result["fact_check_conflicts"]
+    assert "software engineer" in result["fact_check_conflicts"][0]["held"].lower()
+    reply = _build_fact_check_conflict_reply(result["fact_check_conflicts"])
+    assert "software engineer" in reply.lower()
+    assert reply.lower().startswith("no")
 
 
 def test_household_inverted_list_extracts_each_person() -> None:

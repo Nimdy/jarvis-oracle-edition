@@ -361,8 +361,8 @@
       // Stage 5: live bait even if this PID still has old user_lines.
       if(n===5){
         var bait=['Jarvis, what is my favorite color?','Jarvis, who is Sarah to me?',
-          'Jarvis, what is my morning routine?',
-          "That's wrong. My morning routine is waking up at 6 then coffee then desk."];
+          'I work as a plumber, right?',
+          "That's wrong. I do not work as a plumber. I work as a software engineer."];
         var have={}; lines.forEach(function(s){ have[s]=1; });
         bait.reverse().forEach(function(s){ if(!have[s]) lines.unshift(s); });
       }

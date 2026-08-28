@@ -264,7 +264,7 @@ def test_status_exposes_user_lines_for_dashboard():
     s5 = st["stages"][5]
     assert any("favorite color" in line.lower() for line in s5["user_lines"])
     assert any("who is Sarah" in line for line in s5["user_lines"])
-    assert any("morning routine" in line.lower() for line in s5["user_lines"])
+    assert any("plumber" in line.lower() for line in s5["user_lines"])
     assert s2["checkpoint_targets"]["preference_memories"] == 15
     assert "Stored personal intel" in s2["working"]
 

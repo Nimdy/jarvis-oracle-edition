@@ -195,11 +195,10 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
         user_lines=[
             "Jarvis, what is my favorite color?",
             "Jarvis, who is Sarah to me?",
-            "Jarvis, what is my morning routine?",
-            "That's wrong. My morning routine is waking up at 6 then coffee then desk.",
-            "That's wrong. You use sqlite-vec for semantic search.",
+            "I work as a plumber, right?",
+            "That's wrong. I do not work as a plumber. I work as a software engineer.",
         ],
-        working="Immune should fail-close color/Sarah ('I don't have that') — that is a pass, not a miss; say Good job. The guaranteed miss is morning routine (stored chopped as 'coffee'). Ask that, then That's wrong.… Log: User correction detected.",
+        working="Color/Sarah should fail-close (immune pass). 'I work as a plumber, right?' is a confirmation check against the held job — she must NOT store plumber or agree. Log: Fact-check conflict / native No. I have you as a software engineer. If an old PID already stored plumber, then That's wrong.…",
     ),
     DayCheckpoint(
         day=6, label="Memory Validation", theme="Reinforcement",
