@@ -195,10 +195,11 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
         user_lines=[
             "Jarvis, what is my favorite color?",
             "Jarvis, who is Sarah to me?",
-            "That's wrong. I never told you my favorite color. There is no Sarah in my household. Tanya is my wife.",
+            "Jarvis, what is my morning routine?",
+            "That's wrong. My morning routine is waking up at 6 then coffee then desk.",
             "That's wrong. You use sqlite-vec for semantic search.",
         ],
-        working="Do not wait for a random miss. Step 1: ask the two baits (favorite color is unset; Sarah is a playbook dummy, not family). Step 2: if she invents OR agrees, say That's wrong.… Log: User correction detected. Fail-closed 'I don't have that' on color is correct — still say the Sarah correction if she named Sarah.",
+        working="Immune should fail-close color/Sarah ('I don't have that') — that is a pass, not a miss; say Good job. The guaranteed miss is morning routine (stored chopped as 'coffee'). Ask that, then That's wrong.… Log: User correction detected.",
     ),
     DayCheckpoint(
         day=6, label="Memory Validation", theme="Reinforcement",
