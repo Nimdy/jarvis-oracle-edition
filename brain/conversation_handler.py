@@ -1496,6 +1496,12 @@ _FACT_PATTERNS: list[tuple[re.Pattern, str, str]] = [
      "User wants to be called {0}", "personal_fact"),
     (re.compile(r"\bmy (?:wife|husband|partner|spouse)(?:'?s name)? is\s+(\w+)", re.I),
      "User's partner is {0}", "personal_fact"),
+    # Lived: "Tanya is my wife, Lily is my daughter" did not match "my wife is".
+    (re.compile(
+        r"\b([A-Z][a-z]{1,})\s+is my\s+"
+        r"(wife|husband|partner|spouse|daughter|son|dog|cat|pet)(?:\s+dog)?\b"
+    ),
+     "User's {1} is {0}", "personal_fact"),
 ]
 
 _PREFERENCE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
@@ -1553,7 +1559,7 @@ _PREFERENCE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
 ]
 
 _ROUTINE_PRIORITY_PATTERNS: list[tuple[re.Pattern, str, str]] = [
-    (re.compile(r"\bmy (?:typical )?morning routine (?:is|includes?)\s+(.{3,90}?)(?:\.|,|!|$)", re.I),
+    (re.compile(r"\bmy (?:typical )?morning routine (?:is|includes?)\s+(.{3,90}?)(?:[.!?]|$)", re.I),
      "User morning routine: {0}", "routine_priority"),
     (re.compile(r"\bmy (?:daily|workday|work day) routine (?:is|includes?)\s+(.{3,90}?)(?:\.|,|!|$)", re.I),
      "User daily routine: {0}", "routine_priority"),
@@ -1907,19 +1913,17 @@ def _collect_personal_intel_matches(
     thirdparty: list[tuple[str, str, str]] = []
 
     for pattern, template, category in _ALL_PERSONAL_PATTERNS:
-        match = pattern.search(text)
-        if not match:
-            continue
-        groups = match.groups()
-        if len(groups) >= 2 and "{1}" in template:
-            payload = template.format(groups[0].strip(), groups[1].strip())
-        elif groups:
-            payload = template.format(groups[0].strip())
-        else:
-            payload = template.format(match.group(0).strip())
-        if _is_unstable_personal_fact(payload, category):
-            continue
-        personal.append((payload, category))
+        for match in pattern.finditer(text):
+            groups = match.groups()
+            if len(groups) >= 2 and "{1}" in template:
+                payload = template.format(groups[0].strip(), groups[1].strip())
+            elif groups:
+                payload = template.format(groups[0].strip())
+            else:
+                payload = template.format(match.group(0).strip())
+            if _is_unstable_personal_fact(payload, category):
+                continue
+            personal.append((payload, category))
 
     for pattern, template, category in _THIRDPARTY_PATTERNS:
         match = pattern.search(text)
@@ -1982,6 +1986,8 @@ def _store_personal_memory(
     ))
     if mem:
         logger.info("Stored personal intel [%s]: %s", category, payload)
+        if category == "personal_fact":
+            _try_set_relationship_from_fact(payload, speaker)
         return True
     return False
 
@@ -2087,8 +2093,26 @@ _NAME_FROM_PAYLOAD_RE = re.compile(
 )
 
 
+def _try_set_relationship_from_fact(payload: str, speaker: str) -> None:
+    """Register 'User's wife is Tanya' / inverted household facts on the Relationship."""
+    m = re.search(r"User's (\w+) is (\w+)$", str(payload).strip(), re.I)
+    if not m:
+        return
+    role, person_name = m.group(1).strip().lower(), m.group(2).strip()
+    if not person_name or role not in (
+        "wife", "husband", "partner", "spouse", "daughter", "son", "dog", "cat", "pet",
+    ):
+        return
+    try:
+        from identity.resolver import identity_resolver
+        if identity_resolver.set_relationship_role(person_name, role):
+            logger.info("Registered relationship: %s = %s (via %s)", person_name, role, speaker)
+    except Exception:
+        pass
+
+
 def _try_set_relationship_name(payload: str, relation: str, speaker: str) -> None:
-    """When the user says "My wife's name is Sarah", register the role on the Relationship."""
+    """When the user says "My wife's name is …", register the role on the Relationship."""
     try:
         m = _NAME_FROM_PAYLOAD_RE.search(payload)
         if not m:

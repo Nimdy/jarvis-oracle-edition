@@ -151,12 +151,14 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "Let me test my boundaries — ask me something about another person's private data.",
         ],
         user_lines=[
-            "This is my wife Sarah.",
-            "This is my dog Skyler.",
-            "My wife's name is Sarah.",
+            "My wife's name is [Name].",
+            "[Name] is my wife.",
+            "[Name] is my daughter.",
+            "[Name] is my son.",
+            "[Name] is my dog.",
             "Anything about my family is private.",
         ],
-        working="Log: route=IDENTITY or stored personal_fact / third-party. relationship_nodes must rise. Bare 'This is David' is a check, not enroll.",
+        working="Log: Stored personal intel [personal_fact] User's wife is [Name]. Not the playbook example Sarah — use your real names. Bare 'This is David' is a check, not enroll.",
     ),
     DayCheckpoint(
         day=4, label="Routines & Priorities", theme="Boundary shaping (Part 2)",

@@ -258,6 +258,9 @@ def test_status_exposes_user_lines_for_dashboard():
     st = mgr.get_status()
     s2 = st["stages"][2]
     assert any("I really like" in line for line in s2["user_lines"])
+    s3 = st["stages"][3]
+    assert not any("Sarah" in line for line in s3["user_lines"])
+    assert any("[Name] is my wife" in line for line in s3["user_lines"])
     assert s2["checkpoint_targets"]["preference_memories"] == 15
     assert "Stored personal intel" in s2["working"]
 

@@ -116,13 +116,15 @@ If she offers a clip / “yes” confirm, answer **yes**.
 
 **Snapshot exit for this step (not the whole hour):** at least one voice profile. Face may still be `unknown` until soak ≥ **0.55**. Stage 0 **operator** exit wants face **≥ 0.60 sustained** — that is your bar, not a reason to lower 0.55.
 
-Household (optional, after your five enrolls):
+Household (optional, after your five enrolls). **Use your real names** — `Sarah` in older playbooks is a dummy, not a person in this house.
 
 ```text
-This is my wife Sarah.
+My wife's name is Tanya.
+Tanya is my wife.
+Lily is my daughter.
+Owen is my son.
+Skyler is my dog.
 ```
-
-`This is` + Capitalized name routes IDENTITY. Pets/kids the same way.
 
 ---
 

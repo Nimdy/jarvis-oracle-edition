@@ -63,6 +63,18 @@ def test_router_keeps_recent_research_query_on_introspection() -> None:
     assert result.tool == ToolType.INTROSPECTION
 
 
+def test_household_inverted_list_extracts_each_person() -> None:
+    """Lived: 'Tanya is my wife, Lily is my daughter…' stored nothing."""
+    personal, _ = _collect_personal_intel_matches(
+        "Tanya is my wife, Lily is my daughter, Owen is my son, and Skyler is my pet dog."
+    )
+    blob = " | ".join(p.lower() for p, _ in personal)
+    assert "tanya" in blob and "wife" in blob, personal
+    assert "lily" in blob and "daughter" in blob, personal
+    assert "owen" in blob and "son" in blob, personal
+    assert "skyler" in blob, personal
+
+
 def test_stage2_spoken_lines_extract() -> None:
     """Lived Stage 2: music/like stored; 'do not bring up' and 'when I say brief' missed."""
     music, _ = _collect_personal_intel_matches("I really like electronic dance music.")
