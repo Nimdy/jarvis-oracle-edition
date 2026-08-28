@@ -37,3 +37,18 @@ def test_scan_in_sync_when_all_files_older(tmp_path):
     assert data["is_stale"] is False
     assert data["stale_count"] == 0
     assert data["stale_files"] == []
+
+
+def test_v2_banner_css_does_not_force_hidden():
+    """Lived: .banner-code{display:none} + JS display='' never painted."""
+    from pathlib import Path
+    import re
+    root = Path(__file__).resolve().parents[1] / "dashboard" / "static" / "v2"
+    css = (root / "v2.css").read_text(encoding="utf-8")
+    m = re.search(r"\.banner-code\{[^}]*\}", css)
+    assert m, "missing .banner-code rule"
+    compact = m.group(0).replace(" ", "")
+    assert "display:none" not in compact
+    js = (root / "shared.js").read_text(encoding="utf-8")
+    assert "b.style.display='block'" in js
+    assert "b.style.display='';" not in js

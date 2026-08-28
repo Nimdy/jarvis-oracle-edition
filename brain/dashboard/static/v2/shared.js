@@ -253,7 +253,10 @@ window.V2 = (function(){
     return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
   function _pollCodeFreshness(){
-    fetchJSON('/api/system/code-freshness').then(_renderCodeBanner).catch(function(){});
+    fetch('/api/system/code-freshness', {cache:'no-store'}).then(function(r){
+      if(!r.ok) throw new Error('code-freshness '+r.status);
+      return r.json();
+    }).then(_renderCodeBanner).catch(function(){});
   }
   function _renderCodeBanner(d){
     var b=document.getElementById('v2-code-banner'); if(!b) return;
@@ -276,7 +279,7 @@ window.V2 = (function(){
       '<div class="bc-act">'+
       '<button class="btn-danger" id="v2-code-restart">Restart brain</button>'+
       '<button class="btn-act" id="v2-code-ops">Ops page</button></div>';
-    b.style.display='';
+    b.style.display='block';
     var rb=document.getElementById('v2-code-restart');
     if(rb) rb.onclick=function(){
       confirm('Restart to load new code',

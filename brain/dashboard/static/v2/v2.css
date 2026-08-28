@@ -34,7 +34,7 @@ nav a.stub{color:var(--dim);} nav a.stub::after{content:' ·soon';color:var(--di
 .banner-recovery b{color:#ffd27a;}
 .banner-recovery .why{color:var(--muted);display:block;margin-top:3px;}
 .banner-code{margin:12px 18px 0;padding:9px 12px;border:1px solid var(--amber);border-left-width:3px;
-  background:rgba(255,176,0,.08);border-radius:4px;color:var(--text);font-size:11px;display:none;}
+  background:rgba(255,176,0,.08);border-radius:4px;color:var(--text);font-size:11px;}
 .banner-code .bc-hd{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
 .banner-code .bc-hd b{color:var(--amber);}
 .banner-code .bc-files{margin:6px 0 0;font-size:10px;color:var(--muted);line-height:1.55;font-family:var(--mono);}
