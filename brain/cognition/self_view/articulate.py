@@ -71,6 +71,14 @@ _KIND_PATTERNS: list[tuple[re.Pattern[str], str | None]] = [
         r"|\btell me how you (get|reach|produce|generate|come up with|arrive at) an? answer\b",
         re.I,
     ), "answer_path"),
+    # Memory HOW stays INTROSPECTION (sqlite-vec from introspection_tool).
+    # Lived 2026-08-27: "How does your memory system work?" hit capabilities
+    # because "your … system" matched the architecture census.
+    (re.compile(
+        r"\b(how (?:does|do)|how(?:'?s| is)|explain|tell me|describe)\b.{0,40}\b"
+        r"(your|the)\b.{0,16}\bmemory\b",
+        re.I,
+    ), None),
     # capabilities / architecture / how you're built / how you work
     (re.compile(
         r"\bwhat can you do\b"

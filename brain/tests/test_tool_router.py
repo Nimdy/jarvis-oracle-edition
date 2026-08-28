@@ -263,6 +263,18 @@ def test_non_preference_complaint_does_not_hit_preference_instruction_tier():
     assert result.extracted_args.get("tier") != "preference_instruction"
 
 
+def test_day_to_day_help_does_not_route_to_introspection():
+    text = (
+        "Something that I'd like help with day to day would probably just be "
+        "monitoring the environment and having your curiosity drive make you "
+        "want to ask me questions if you're not sure about something."
+    )
+    result = router.route(text)
+    assert result.tool == ToolType.NONE, (
+        f"{text!r} should stay NONE, got {result.tool.value}"
+    )
+
+
 def test_identity_routing_explicit_phrases():
     assert router.route("Who am I?").tool == ToolType.IDENTITY
     assert router.route("Is this David?").tool == ToolType.IDENTITY

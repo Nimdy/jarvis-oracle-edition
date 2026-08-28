@@ -29,7 +29,11 @@ _aiohttp_stub.ClientSession = mock.MagicMock  # type: ignore[attr-defined]
 _aiohttp_stub.ClientTimeout = mock.MagicMock  # type: ignore[attr-defined]
 sys.modules.setdefault("aiohttp", _aiohttp_stub)
 
-from conversation_handler import _build_preference_instruction_ack, _extract_personal_intel
+from conversation_handler import (
+    _build_preference_instruction_ack,
+    _collect_personal_intel_matches,
+    _extract_personal_intel,
+)
 from reasoning.tool_router import ToolRouter, ToolType
 from skills.capability_gate import CapabilityGate, _normalize_punctuation
 from skills.registry import SkillRegistry, _default_skills
@@ -59,6 +63,19 @@ def test_router_keeps_recent_research_query_on_introspection() -> None:
     assert result.tool == ToolType.INTROSPECTION
 
 
+def test_long_work_as_and_prefer_extract() -> None:
+    """Lived: 40/60 char captures dropped job and detailed-system preference."""
+    job, _ = _collect_personal_intel_matches(
+        "I work as an independent research and development developer."
+    )
+    assert any("independent research" in p.lower() for p, _ in job), job
+    pref, _ = _collect_personal_intel_matches(
+        "I prefer when I am asking you questions about your system "
+        "to give me a detailed response."
+    )
+    assert any("detailed" in p.lower() for p, _ in pref), pref
+
+
 def test_conversation_preference_extractor_marks_response_style_without_writing() -> None:
     text = "When answering last peer-reviewed or research questions, do not include DOI unless I ask."
     result = _extract_personal_intel(text, speaker="david", suppress_write=True)
@@ -69,11 +86,13 @@ def test_conversation_preference_extractor_marks_response_style_without_writing(
 def test_preference_ack_is_deterministic_and_specific_for_doi() -> None:
     text = "Do not include DOI in research answers unless I ask."
     saved = _build_preference_instruction_ack(text, stored_count=1)
-    exists = _build_preference_instruction_ack(text, stored_count=0)
+    exists = _build_preference_instruction_ack(text, stored_count=0, matched=1)
+    missed = _build_preference_instruction_ack(text, stored_count=0, matched=0)
     assert "Preference saved" in saved
     assert "already stored" in exists
     assert "DOI is omitted" in saved
     assert "DOI is omitted" in exists
+    assert "did not store" in missed
 
 
 def test_doi_policy_priority_explicit_query_overrides_stored_omit_preference() -> None:

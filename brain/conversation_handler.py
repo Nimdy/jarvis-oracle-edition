@@ -1427,7 +1427,12 @@ def _apply_inline_preferences(text: str, engine: ConsciousnessEngine) -> None:
 _DOI_PREF_TOKEN_RE = re.compile(r"\bdoi\b", re.I)
 
 
-def _build_preference_instruction_ack(text: str, stored_count: int) -> str:
+def _build_preference_instruction_ack(
+    text: str,
+    stored_count: int,
+    *,
+    matched: int = 0,
+) -> str:
     """Return deterministic acknowledgement text for preference-instruction turns."""
     if _DOI_PREF_TOKEN_RE.search(text):
         if stored_count > 0:
@@ -1435,13 +1440,19 @@ def _build_preference_instruction_ack(text: str, stored_count: int) -> str:
                 "Understood. Preference saved. DOI is omitted in research answers "
                 "unless explicitly requested."
             )
+        if matched > 0:
+            return (
+                "Understood. Preference already stored. DOI is omitted in research "
+                "answers unless explicitly requested."
+            )
         return (
-            "Understood. Preference already stored. DOI is omitted in research "
-            "answers unless explicitly requested."
+            "I heard a response-style request. I did not store a new preference."
         )
     if stored_count > 0:
         return "Understood. Preference saved and active for future responses."
-    return "Understood. Preference already stored and still active."
+    if matched > 0:
+        return "Understood. Preference already stored and still active."
+    return "I heard a response-style request. I did not store a new preference."
 
 
 # ---------------------------------------------------------------------------
@@ -1467,7 +1478,7 @@ _DISLIKE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
 ]
 
 _FACT_PATTERNS: list[tuple[re.Pattern, str, str]] = [
-    (re.compile(r"\bi (?:work as|work in|am) (?:a |an )?(\w[\w\s]{2,40}?)(?:\.|,|!|$)", re.I),
+    (re.compile(r"\bi (?:work as|work in|am) (?:a |an )?(\w[\w\s]{2,80}?)(?:\.|,|!|$)", re.I),
      "User is {0}", "personal_fact"),
     (re.compile(r"\bi'?m from\s+(.{3,40}?)(?:\.|,|!|$)", re.I),
      "User is from {0}", "personal_fact"),
@@ -1488,8 +1499,13 @@ _FACT_PATTERNS: list[tuple[re.Pattern, str, str]] = [
 ]
 
 _PREFERENCE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
-    (re.compile(r"\bi prefer\b(.{5,60}?)(?:\.|,|!|$)", re.I),
+    (re.compile(r"\bi prefer\b(.{5,160}?)(?:\.|,|!|$)", re.I),
      "User prefers {0}", "personal_preference"),
+    (re.compile(
+        r"\bi(?:'d| would) like help with\s+(.{5,200}?)(?:\.|,|!|$)",
+        re.I,
+    ),
+     "User wants help with {0}", "personal_preference"),
     (re.compile(r"\bmy favo(?:u)?rite (.{3,50}?) (?:is|are)\s+(.{3,50}?)(?:\.|,|!|$)", re.I),
      "User's favorite {0} is {1}", "personal_preference"),
     (re.compile(r"\bkeep it (short|brief|concise)\b", re.I),
@@ -4169,7 +4185,7 @@ async def handle_transcription(
                 else:
                     _preferred_fact_categories: list[str] = []
                     _topic_category_order = {
-                        "memory": ["memory", "architecture"],
+                        "memory": ["architecture", "memory"],
                         "architecture": ["architecture", "memory"],
                         "health": ["health", "current_state"],
                         "policy": ["other", "health"],
@@ -5543,7 +5559,12 @@ async def handle_transcription(
             _none_route_handled = False
             if routing.extracted_args.get("tier") == "preference_instruction":
                 _stored_count = int((_personal_intel_result or {}).get("stored", 0) or 0)
-                reply = _build_preference_instruction_ack(text, _stored_count)
+                _matched = int((_personal_intel_result or {}).get("personal_matches", 0) or 0) + int(
+                    (_personal_intel_result or {}).get("thirdparty_matches", 0) or 0
+                )
+                reply = _build_preference_instruction_ack(
+                    text, _stored_count, matched=_matched,
+                )
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                 _none_route_handled = True

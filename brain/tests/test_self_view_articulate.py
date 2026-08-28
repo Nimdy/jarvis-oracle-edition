@@ -99,6 +99,16 @@ class TestClassify:
         assert classify_self_question("What do you know about Skyler from before?") is None
 
 
+    def test_memory_system_how_is_not_capabilities_census(self):
+        """Lived 2026-08-27: 'How does your memory system work?' dumped architecture."""
+        for q in (
+            "How does your memory system work?",
+            "Jarvis, explain how your memory system works.",
+            "Tell me how your memory works.",
+        ):
+            assert classify_self_question(q) is None, q
+
+
 # ---------------------------------------------------------------------------
 # Articulation content
 # ---------------------------------------------------------------------------

@@ -1380,6 +1380,17 @@ def _is_response_preference_instruction(lower: str) -> bool:
     return False
 
 
+_USER_HELP_DAY_TO_DAY_RE = re.compile(
+    r"\b(i(?:'d| would) like help|help with day to day|day to day would)\b",
+    re.I,
+)
+
+
+def _is_user_help_or_day_to_day(lower: str) -> bool:
+    """Operator help-requests must not steal INTROSPECTION via 'your curiosity'."""
+    return bool(lower and _USER_HELP_DAY_TO_DAY_RE.search(lower))
+
+
 _GENERAL_KNOWLEDGE_RE = re.compile(
     r"(?:^|\b)(?:"
     r"who (?:wrote|is|was|invented|discovered|created|founded|directed|composed|painted|designed|built)\b"
@@ -1599,6 +1610,18 @@ class ToolRouter:
                     tool=ToolType.NONE,
                     confidence=0.86,
                     extracted_args={"tier": "preference_instruction"},
+                ),
+                synthetic=synthetic,
+            )
+
+        if _is_user_help_or_day_to_day(lower):
+            logger.info("Tier 0 day-to-day help catch: NONE for: %s", lower[:60])
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=ToolType.NONE,
+                    confidence=0.84,
+                    extracted_args={},
                 ),
                 synthetic=synthetic,
             )

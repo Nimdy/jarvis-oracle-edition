@@ -277,8 +277,29 @@ def _rank_and_select_facts(
             rank_order.append(cat)
 
     selected: list[str] = []
+    # Round-robin preferred cats so a fat memory dump cannot starve sqlite-vec.
+    preferred = [c for c in (preferred_categories or []) if c in by_cat]
+    if preferred:
+        idx = {c: 0 for c in preferred}
+        while len(selected) < max_facts:
+            progressed = False
+            for cat in preferred:
+                lines = by_cat.get(cat, [])
+                i = idx[cat]
+                if i < len(lines):
+                    selected.append(lines[i])
+                    idx[cat] = i + 1
+                    progressed = True
+                    if len(selected) >= max_facts:
+                        return selected
+            if not progressed:
+                break
     for cat in rank_order:
-        for fact in by_cat.get(cat, []):
+        if cat in preferred:
+            start = idx.get(cat, 0)
+        else:
+            start = 0
+        for fact in by_cat.get(cat, [])[start:]:
             if len(selected) >= max_facts:
                 return selected
             selected.append(fact)
