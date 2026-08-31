@@ -17,8 +17,9 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/nn-fleet-consume` (cut from `feat/gestation-period` `f5f0c02`) |
-| **HEAD (committed)** | `f5f0c02` — Stage 6 household MEMORY native + TAP identity law |
-| **vs origin** | `feat/gestation-period` pushed. This cut is nn-fleet `live_state` + consumed. |
+| **HEAD (committed)** | `eb2a69f` — cut note. Stage 6 couple is `f5f0c02` |
+| **vs origin** | Both `feat/gestation-period` and `feat/nn-fleet-consume` pushed. |
+| **Board** | [JARVIS Master Roadmap](https://github.com/users/Nimdy/projects/2) — linked to this repo. North star **#42**. Queue **#83**. |
 | **Merge `main`** | **No**, unless David asks |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Companion **Stage 6 spoken lived**. Gate work is nn-fleet consume, not Stage 7. Playbook “elevate to L2” is **DOC DRIFT**. |
@@ -31,7 +32,7 @@ Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as
 |---|---|
 | Name | David (call him David). Brief. |
 | Job | Software engineer. Not a plumber. |
-| Family | **Tonya**, Lily, Owen. Dog Skyler/Skylar (border collie) is **not** the family list. Store/STT still **Tanya** / Skylar — do not grind. |
+| Family | **Tonya**/Tanya, Lily, Owen. 2026-08-31 David taught Skyler **is** family too. Store/STT still Tanya / Skylar — do not grind names. Do not hardcode the roster. |
 | Food / color | Pizza. Blue. |
 | Hobbies | DJing, drone flying, fishing, camping, beach, family time, tinkering with tech. Also EDM. |
 | Morning | Wake 6, coffee, **walk Skylar**, desk. (Store still has after-work walk leftover.) |
@@ -70,15 +71,19 @@ TAP default is a **new sit** (`follow_up=false`). Continue only if `GET /api/ope
 
 ---
 
-## What this is (one paragraph)
+## True vision (do not stray)
 
-Two devices, one mind. Pi = senses. Brain = source of truth. **The LLM is voice, not the brain.**
-This is a prototype workshop for personal-ASI *foundations* — persistent cognitive structure,
-earned gates, epistemic floor. It is **not** achieved consciousness, AGI, or ASI. Inner-life
-HUD numbers (awareness 0.98, recursive_self_modeling, soul bars) are **not the mouth**.
+North star **#42**: a **living companion you want to be with** — playful, warm, honest, unique, growing. **Integrity is the floor, not the ceiling.** High-stakes truth (memory, identity, golden writes, grounding) stays fail-closed. Banter is free. Charming because she is honestly an AI, never a fake human. Not ASI. Not consciousness. Workshop for personal-ASI *foundations*.
 
-Default: the subsystem already exists and is **shadow / PRE-MATURE / `not_born` / default-OFF**.
-That is success. Do not build a parallel. Do not flip a gate to make a sentence warmer.
+**The LLM is voice, not the brain.** JARVIS thinks (router, OSV, memory, gates). The LLM speaks the assembled turn, and may author **general knowledge** (who made Halo). It must not author David’s family, job, or inner HUD numbers.
+
+**Couple what exists. Stop opening organs (#83).** Shadow / PRE-MATURE / `not_born` / default-OFF is success, not a hole. Do not skip the **ranker**. Do not verb-hack routing so the NN never learns. Do not couple fractal / HRR / dream into the mouth to pass a quiz.
+
+**Plastic brain (years later):** tagging, ranker, dream consolidation, fractal chains, HRR album. If Skylar dies in ten years, that is a new fact with time — not a regex. Those lanes do not speak today. That is success.
+
+Board: [JARVIS Master Roadmap](https://github.com/users/Nimdy/projects/2). Tracker: close on the **mouth**, not on a wire. #25 was closed too early; reopened.
+
+Two devices, one mind. Pi = senses. Brain = source of truth. Inner-life HUD (awareness 0.98, soul bars) is **not the mouth**.
 
 ---
 
@@ -208,11 +213,28 @@ TAP-lived 2026-08-31 (operator-proxy, `follow_up=false` new sits). Do not “fix
 
 1. **About-me** — TAP `tap_d2fb3f28664c` **route=MEMORY** (card wants MEMORY). L3 1/32 blocked, 20 passed. Retrieved 8 (2 observation / 6 conversation). Mouth named **software engineer**, then coffee/desk + camera greeting mash. Did **not** name prefer-brief / pizza / EDM. Ranking leftover.
 2. **EDM** — TAP mouth **named electronic dance music**. L0 same-sentence couple lived. Keep verbs blocked.
-3. **Family TAP theater** — Pi/TAP on NONE let the LLM author cousins / Ethan / Emily-Mike. **Couple (2026-08-31):** household *questions* route **MEMORY** → native formatter. Lived empty-mouth: recaps filled top_k so keyword never ran. Ranker still sees the live question; keyword/fact fill still runs (L3 on); recaps filtered after. No extra verb list. Do **not** skip ranker. Do **not** couple fractal/HRR/dream into speech. Voice-intent stays shadow. Needs **bounce**.
+3. **Family TAP theater** — **COUPLED and lived 2026-08-31 post-bounce.** Kids/family/interrupt MEMORY native spoke store rows (Lily, Owen, Tanya, on-call). Ranker_used=True on retrieval log. David taught Skyler is family (NONE teach). Morning spoke 6am/coffee + after-work walk leftover. Do **not** add more verbs. Voice-intent stays shadow.
 4. **Job TAP** `tap_42d4f124d180` — **software engineer LIVE** (NONE + inject). After-work walk / Skylar padding leftover. Do not grind STT Skylar vs stored Skyler. Same class as Tanya vs Tonya.
-5. **Morning TAP** card line now MEMORY (same household couple). Store may still only have after-work Skylar walk — native will speak payloads, not invent a morning walk. `memory_recall_precision` 0.54 is `1 − orphan`, **not** spoken 9/10.
+5. **Morning** MEMORY native lived: coffee, wake 6, after-work Skylar walk (store leftover, not a missing organ). Do not invent a morning walk in code.
 6. Kitchen vision leftover: drop forever.
-7. Uncommitted WSL teacher/persist (overlap-only correction, bounce-durable restatement, injection sort, episodic vs self-pref). **Lived** for family/job on Pi. That pile is **not** an L0 bypass. Uncommitted ≠ bounced onto the PID.
+7. WSL teacher/persist pile **committed** in `f5f0c02`. Bounce still operator-owned for live PID.
+
+### nn-fleet consume (this branch) — first pass 2026-08-31
+
+Live `/api/nn-fleet`: 36 records. **9** `live-earning` + `inference_consumed=True`. **27** not consumed (shadow/advisory/dormant/training/staged). `orphan_alarm` empty.
+
+| Consumed | What actually eats it | Mouth? |
+|---|---|---|
+| **memory_ranker** | `search.py` `score_batch` reorders injected memories. Lived `ranker_used=True` on sits. Outcome loop after turns. | Via MEMORY search only |
+| hemisphere_engine / distillation / registry / data_feed | Train + infer into policy **state vector** dims 16–19 | **No.** Policy NN is shadow |
+| audio_emotion | TTS profile, mood, attention | Shapes voice, not facts |
+| display_classifier | Scene snapshot → world-model “Display activity” | Not family recall |
+| conflict_classifier | ContradictionEngine on MEMORY_WRITE | Silent |
+| world_model | Claimed prompt inject **if promotion.level≥1**. Live `world_model_promotion.json` is **level 0** → inject **off**. Other consumers (affect/graph) may still tick | **Not the mouth today** |
+
+**intent_shadow** not consumed — heuristic router still picks the turn. **Do not flip.** HRR specialist dormant. Salience dormant. Policy NN shadow. positive_memory **NN** orphaned (heuristic scalar is what broadcasts).
+
+Do not skip ranker. Do not treat 9/36 as “she routes with NNs.”
 
 Park unless the blocker actually changed: Matrix 3–9, #32 domain NN, L7, Thought Maturity P3, policy live, lidar rebase, SpatialMemoryGate→remember, affect-expression, WR `enforces`, Connectome L4, Spark Stage 2, HRR, language bridge, native_voice, voice-intent live.
 
