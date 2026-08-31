@@ -159,7 +159,7 @@ _HOUSEHOLD_MORNING_FACT_RE = re.compile(
 )
 _HOUSEHOLD_INTERRUPT_FACT_RE = re.compile(r"\binterrupt", re.I)
 _HOUSEHOLD_CUES = {
-    "family": "wife husband partner daughter son child family",
+    "family": "wife husband partner daughter son child family dog pet",
     "kids": "daughter son child kids names",
     "morning": "morning routine wake coffee walk desk",
     "interrupt": "do not interrupt on a call",
@@ -186,7 +186,12 @@ def is_household_self_fact_recall(query: str) -> bool:
 
 
 def _preview_matches_household_kind(preview: str, kind: str) -> bool:
-    """Keep stored fact payloads; drop conversation recaps and pets-as-family."""
+    """Keep stored fact payloads; drop conversation recaps.
+
+    Lived 2026-08-31: pets were excluded from family so a dog-walk leftover
+    could not fill the roster. Operator then taught the dog *is* family
+    (plastic). Family class now includes pet facts. No names in the matcher.
+    """
     raw = str(preview or "")
     low = raw.lower()
     type_m = re.match(r"^\[([^\]]+)\]", raw)
@@ -194,9 +199,9 @@ def _preview_matches_household_kind(preview: str, kind: str) -> bool:
     if mem_type and mem_type not in {"user_preference", "personal_fact"}:
         return False
     if kind == "family":
-        if _HOUSEHOLD_PET_FACT_RE.search(low):
-            return False
-        return bool(_HOUSEHOLD_FAMILY_FACT_RE.search(low))
+        return bool(
+            _HOUSEHOLD_FAMILY_FACT_RE.search(low) or _HOUSEHOLD_PET_FACT_RE.search(low)
+        )
     if kind == "kids":
         return bool(_HOUSEHOLD_KIDS_FACT_RE.search(low))
     if kind == "morning":

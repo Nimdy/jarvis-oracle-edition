@@ -55,11 +55,13 @@ def test_who_is_in_my_family_does_not_aboutness_cut_on_in() -> None:
     assert _extract_about_subjects("Jarvis, who is in my family?") == set()
 
 
-def test_household_fact_preview_keeps_relation_facts_not_recaps_or_dog() -> None:
+def test_household_fact_preview_keeps_relation_and_pet_facts_not_recaps() -> None:
     assert _preview_matches_household_kind("[user_preference] User's wife is Tanya", "family")
     assert _preview_matches_household_kind("[user_preference] User's daughter is Lily", "kids")
     assert _preview_matches_household_kind("[user_preference] User's son is Owen", "kids")
-    assert not _preview_matches_household_kind("[user_preference] User's dog is Skylar", "family")
+    # Plastic: operator taught the dog is family. Class = pet, not a name list.
+    assert _preview_matches_household_kind("[user_preference] User's dog is Skylar", "family")
+    assert _preview_matches_household_kind("[user_preference] User's pet is Skyler", "family")
     assert not _preview_matches_household_kind(
         "[conversation] Jarvis, who is in my family? | Your family includes",
         "family",
@@ -68,6 +70,10 @@ def test_household_fact_preview_keeps_relation_facts_not_recaps_or_dog() -> None
     assert _preview_matches_household_kind(
         "[user_preference] User daily routine: a walk with Skylar after work",
         "morning",
+    )
+    assert not _preview_matches_household_kind(
+        "[user_preference] User daily routine: a walk with Skylar after work",
+        "family",
     )
 
 
@@ -102,6 +108,8 @@ def test_household_search_returns_facts_not_conversation_recaps(monkeypatch) -> 
         q = str(query).lower()
         if "wife" in q:
             return [wife]
+        if "dog" in q or "pet" in q:
+            return [dog]
         if "daughter" in q:
             return []
         return [recap] if "family" in q else []
@@ -115,8 +123,8 @@ def test_household_search_returns_facts_not_conversation_recaps(monkeypatch) -> 
 
     out = search_memory("Jarvis, who is in my family?", speaker="David")
     assert "User's wife is Tanya" in out
+    assert "dog is skylar" in out.lower()
     assert "Emily" not in out
-    assert "dog is Skylar" not in out.lower()
 
 
 def test_household_matchers_do_not_hardcode_operator_names() -> None:

@@ -24,7 +24,7 @@ the handoff, the playbook, or a skill.
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Companion **Stage 6 spoken lived**. Gate work is nn-fleet consume, not Stage 7. Playbook “elevate to L2” is **DOC DRIFT**. |
 | **Autonomy** | **L1 research.** Readiness composite live ~0.62 vs Stage 7 target 0.92. Do not grind Stage 7 for the number. |
-| **Operational queue** | **1.** Stage 6 spoken lived. **2.** nn-fleet overlay lived. **3.** API book 172/172. **4. CURRENT:** about-me skip session closers (synced; needs bounce + one re-sit). **Not** Workstream 2 unless David names it. **Not** playbook Stage 7. |
+| **Operational queue** | **1.** Stage 6 spoken lived. **2.** nn-fleet overlay lived. **3.** API book 172/172. **4.** about-me recap skip lived. **5. CURRENT:** family includes pet facts (synced; needs bounce + “who is in my family?”). **Not** Workstream 2 unless David names it. **Not** playbook Stage 7. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
@@ -213,7 +213,7 @@ TAP-lived 2026-08-31 (operator-proxy, `follow_up=false` new sits). Do not “fix
 
 1. **About-me ranking** — Pi sit 2026-08-31 16:57 STT **“Jarvis, what do you remember about me?”** conv=`48687d54` **route=MEMORY**. Greeting recap **gone**. Mouth: same-session closer “everything is indeed going well / feel free to reach out” (from follow-up “Yes, everything's going well”) + 6am coffee + software-engineer career mash. No pizza/brief/EDM. **Coupled (needs bounce):** skip session closers + phatic user-turns from about-me. Ranker still scores. Store keeps the rows. Re-sit after bounce. Do not stack a follow-up smalltalk before the about-me question.
 2. **EDM** — TAP mouth **named electronic dance music**. L0 same-sentence couple lived. Keep verbs blocked.
-3. **Family TAP theater** — **COUPLED and lived 2026-08-31 post-bounce.** Kids/family/interrupt MEMORY native spoke store rows (Lily, Owen, Tanya, on-call). Ranker_used=True on retrieval log. David taught Skyler is family (NONE teach). Morning spoke 6am/coffee + after-work walk leftover. Do **not** add more verbs. Voice-intent stays shadow.
+3. **Family** — MEMORY native lived Tanya/Lily/Owen. Pi sit 2026-08-31 17:50 STT **“Who is in my family?”** route=MEMORY. Mouth omitted Skyler: household family preview **dropped pet facts** (pre-teach). Store has `User's dog is Skylar`. **Coupled (needs bounce):** family class includes pet facts. No names in the matcher. Kids questions stay humans-only. Re-sit after bounce.
 4. **Job TAP** `tap_42d4f124d180` — **software engineer LIVE** (NONE + inject). After-work walk / Skylar padding leftover. Do not grind STT Skylar vs stored Skyler. Same class as Tanya vs Tonya.
 5. **Morning** MEMORY native lived: coffee, wake 6, after-work Skylar walk (store leftover, not a missing organ). Do not invent a morning walk in code.
 6. Kitchen vision leftover: drop forever.
