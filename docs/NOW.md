@@ -24,7 +24,7 @@ the handoff, the playbook, or a skill.
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Companion **Stage 6 spoken lived**. Gate work is nn-fleet consume, not Stage 7. Playbook “elevate to L2” is **DOC DRIFT**. |
 | **Autonomy** | **L1 research.** Readiness composite live ~0.62 vs Stage 7 target 0.92. Do not grind Stage 7 for the number. |
-| **Operational queue** | **1.** Stage 6 spoken lived. **2.** nn-fleet overlay lived. **3.** API book 172/172. **4. CURRENT:** about-me greeting-recap skip (needs bounce + re-sit). **Not** Workstream 2 unless David names it. **Not** playbook Stage 7. |
+| **Operational queue** | **1.** Stage 6 spoken lived. **2.** nn-fleet overlay lived. **3.** API book 172/172. **4. CURRENT:** about-me skip session closers (synced; needs bounce + one re-sit). **Not** Workstream 2 unless David names it. **Not** playbook Stage 7. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
@@ -211,7 +211,7 @@ If fractal did not fire, dream did not speak, HRR is PRE-MATURE — **that is su
 
 TAP-lived 2026-08-31 (operator-proxy, `follow_up=false` new sits). Do not “fix” these by weakening L0 or L3.
 
-1. **About-me ranking** — TAP `tap_cdbaa07c74d3` 2026-08-31 16:48 **route=MEMORY** `operator_proxy` `client_new_sit`. L3 1/32 blocked, 19 passed. Mouth: greeting recap “ready when you are / How's your coffee?” + software-engineer career mash. Did **not** name pizza / brief / EDM (those rows exist as `User's favorite food is pizza`). **Coupled in this slice (not bounced yet):** about-me skips session greetings + prior native-recall recaps; speaker-owned schema prefs (`User's …`) pass aboutness without “David” in the lead. Ranker still scores. Sit again after bounce.
+1. **About-me ranking** — Pi sit 2026-08-31 16:57 STT **“Jarvis, what do you remember about me?”** conv=`48687d54` **route=MEMORY**. Greeting recap **gone**. Mouth: same-session closer “everything is indeed going well / feel free to reach out” (from follow-up “Yes, everything's going well”) + 6am coffee + software-engineer career mash. No pizza/brief/EDM. **Coupled (needs bounce):** skip session closers + phatic user-turns from about-me. Ranker still scores. Store keeps the rows. Re-sit after bounce. Do not stack a follow-up smalltalk before the about-me question.
 2. **EDM** — TAP mouth **named electronic dance music**. L0 same-sentence couple lived. Keep verbs blocked.
 3. **Family TAP theater** — **COUPLED and lived 2026-08-31 post-bounce.** Kids/family/interrupt MEMORY native spoke store rows (Lily, Owen, Tanya, on-call). Ranker_used=True on retrieval log. David taught Skyler is family (NONE teach). Morning spoke 6am/coffee + after-work walk leftover. Do **not** add more verbs. Voice-intent stays shadow.
 4. **Job TAP** `tap_42d4f124d180` — **software engineer LIVE** (NONE + inject). After-work walk / Skylar padding leftover. Do not grind STT Skylar vs stored Skyler. Same class as Tanya vs Tonya.

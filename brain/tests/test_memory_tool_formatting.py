@@ -770,6 +770,57 @@ def test_search_memory_about_me_does_not_declare_session_greetings(monkeypatch) 
     assert not _is_session_bookkeeping_text("User's favorite food is pizza")
 
 
+def test_search_memory_about_me_does_not_declare_session_closer(monkeypatch) -> None:
+    """Lived 2026-08-31 conv=48687d54: follow-up 'Yes, everything's going well'
+    stored a closer; about-me MEMORY then spoke it as autobiography. Ranker
+    still scores. Store keeps the row. Prefs must be what it declares.
+    """
+    pizza = SimpleNamespace(
+        type="user_preference",
+        payload="User's favorite food is pizza",
+        weight=0.67,
+        provenance="user_claim",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("personal_preference", "speaker:david"),
+    )
+    closer = SimpleNamespace(
+        type="conversation",
+        payload={
+            "user_message": "Yes, everything's going well.",
+            "response": (
+                "DavidEverything is indeed going wellTake care, and feel free "
+                "to reach out if you need anything!"
+            ),
+        },
+        weight=0.80,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [
+            (0.95, closer),
+            (0.40, pizza),
+        ],
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+
+    out = search_memory("What do you remember about me?", speaker="David")
+    low = out.lower()
+    assert "pizza" in low
+    assert "indeed going well" not in low
+    assert "feel free to reach out" not in low
+    assert _is_session_bookkeeping_text(
+        "DavidEverything is indeed going wellTake care, and feel free to reach out"
+    )
+
+
 def test_about_me_search_cue_uses_live_speaker_not_hardcoded_companion() -> None:
     """Lived 13:51 vs 13:52: 'about me' embedded as pronoun; 'about David'
     found the name. Cue follows the current speaker (voice/face identity),

@@ -262,6 +262,8 @@ def _household_fact_hits(
 # Lived 2026-08-31 tap_cdbaa07c74d3: greeting recaps ("I'm here, ready when
 # you are. How's your coffee?") beat pizza/brief/EDM. Ranker still scores;
 # about-me must not declare session openers or prior native-recall recaps.
+# Lived 2026-08-31 conv=48687d54: wake follow-up "Yes, everything's going well"
+# stored a closer that about-me then spoke as autobiography.
 _SESSION_BOOKKEEPING_RE = re.compile(
     r"first words this session|"
     r"started a conversation|"
@@ -270,7 +272,20 @@ _SESSION_BOOKKEEPING_RE = re.compile(
     r"i'?m here, ready when you are|"
     r"how'?s your coffee\?|"
     r"here'?s what i remember about that|"
-    r"i noticed you rebooted",
+    r"i noticed you rebooted|"
+    r"feel free to reach out|"
+    r"everything is indeed going well",
+    re.I,
+)
+
+# User turns that are session smalltalk, not autobiography questions.
+_PHATIC_USER_TURN_RE = re.compile(
+    r"^\s*(?:yes[,.]?\s+)*(?:"
+    r"everything'?s going (?:great|well)|"
+    r"i'?m (?:fine|good|ok|okay)|"
+    r"good (?:morning|evening|afternoon|night)(?:[,.]?\s+jarvis)?|"
+    r"thanks?(?:\s+you)?|ok(?:ay)?|yep|yeah"
+    r")\s*[.!]?\s*$",
     re.I,
 )
 
@@ -278,6 +293,15 @@ _SESSION_BOOKKEEPING_RE = re.compile(
 def _is_session_bookkeeping_text(text: str) -> bool:
     """Recall-time skip for session headers / L0 declines. Never deletes."""
     return bool(_SESSION_BOOKKEEPING_RE.search(text or ""))
+
+
+def _is_phatic_user_turn(memory_obj) -> bool:
+    """Conversation whose user line was smalltalk, not a fact. Never deletes."""
+    payload = getattr(memory_obj, "payload", None)
+    if not isinstance(payload, dict):
+        return False
+    um = str(payload.get("user_message") or "").strip()
+    return bool(um) and bool(_PHATIC_USER_TURN_RE.match(um))
 
 
 def _search_cue_for_speaker(query: str, speaker: str) -> str:
@@ -552,6 +576,8 @@ def _matches_aboutness(
     payload_text = _payload_lead_text(memory_obj)
     lead = _first_sentence(payload_text)
     if _is_session_bookkeeping_text(lead) or _is_session_bookkeeping_text(payload_text):
+        return False
+    if _is_phatic_user_turn(memory_obj):
         return False
     if _is_courtesy_lead(lead):
         return False
