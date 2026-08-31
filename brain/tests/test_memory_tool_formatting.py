@@ -662,6 +662,114 @@ def test_search_memory_about_me_does_not_declare_session_bookkeeping(monkeypatch
     assert not _is_session_bookkeeping_text("User is software engineer")
 
 
+def test_search_memory_about_me_does_not_declare_session_greetings(monkeypatch) -> None:
+    """Lived 2026-08-31 tap_cdbaa07c74d3: about-me MEMORY spoke a Good-morning
+    recap (ready when you are / how's your coffee) and a prior native recall
+    recap. Store keeps them. Ranker still runs. Prefs must be what it declares.
+    """
+    pizza = SimpleNamespace(
+        type="user_preference",
+        payload="User's favorite food is pizza",
+        weight=0.67,
+        provenance="user_claim",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("personal_preference", "speaker:david"),
+    )
+    brief = SimpleNamespace(
+        type="user_preference",
+        payload="User prefers brief responses",
+        weight=0.70,
+        provenance="user_claim",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("personal_preference", "speaker:david"),
+    )
+    edm = SimpleNamespace(
+        type="user_preference",
+        payload="User enjoys electronic dance music",
+        weight=0.75,
+        provenance="user_claim",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("personal_interest", "speaker:david"),
+    )
+    greeting = SimpleNamespace(
+        type="conversation",
+        payload={
+            "user_message": "Good morning, Jarvis.",
+            "response": (
+                "Morning, David. I'm here, ready when you are. How's your coffee?"
+            ),
+        },
+        weight=0.63,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    prior_recall = SimpleNamespace(
+        type="conversation",
+        payload={
+            "user_message": "Jarvis, what do you remember about me?",
+            "response": (
+                "Here's what I remember about that. Morning, David. I'm here, "
+                "ready when you are. You work as a software engineer."
+            ),
+        },
+        weight=0.60,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    morning_pref = SimpleNamespace(
+        type="user_preference",
+        payload="David's morning routine is coffee, then desk",
+        weight=0.72,
+        provenance="user_claim",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("personal_preference", "speaker:david"),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [
+            (0.92, greeting),
+            (0.88, prior_recall),
+            (0.41, pizza),
+            (0.40, brief),
+            (0.39, edm),
+            (0.38, morning_pref),
+        ],
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+
+    out = search_memory("What do you remember about me?", speaker="David")
+    low = out.lower()
+    assert "pizza" in low
+    assert "brief" in low
+    assert "electronic dance" in low
+    assert "coffee, then desk" in low
+    assert "ready when you are" not in low
+    assert "how's your coffee" not in low
+    assert "here's what i remember about that" not in low
+    assert _is_session_bookkeeping_text(
+        "Morning, David. I'm here, ready when you are. How's your coffee?"
+    )
+    assert not _is_session_bookkeeping_text(
+        "David's morning routine is coffee, then desk"
+    )
+    assert not _is_session_bookkeeping_text("User's favorite food is pizza")
+
+
 def test_about_me_search_cue_uses_live_speaker_not_hardcoded_companion() -> None:
     """Lived 13:51 vs 13:52: 'about me' embedded as pronoun; 'about David'
     found the name. Cue follows the current speaker (voice/face identity),

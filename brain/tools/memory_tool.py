@@ -259,11 +259,18 @@ def _household_fact_hits(
 # Session bookkeeping is valid store (never discard) and is not autobiography.
 # Lived 2026-08-31: about-me native MEMORY spoke "First words this session"
 # because the first sentence named David.
+# Lived 2026-08-31 tap_cdbaa07c74d3: greeting recaps ("I'm here, ready when
+# you are. How's your coffee?") beat pizza/brief/EDM. Ranker still scores;
+# about-me must not declare session openers or prior native-recall recaps.
 _SESSION_BOOKKEEPING_RE = re.compile(
     r"first words this session|"
     r"started a conversation|"
     r"i don't have that capability yet|"
-    r"i can pull more details if you want",
+    r"i can pull more details if you want|"
+    r"i'?m here, ready when you are|"
+    r"how'?s your coffee\?|"
+    r"here'?s what i remember about that|"
+    r"i noticed you rebooted",
     re.I,
 )
 
@@ -461,6 +468,22 @@ def _is_self_aboutness(aboutness: set[str] | None, speaker: str) -> bool:
     return any(str(a).lower() == sp for a in aboutness)
 
 
+def _memory_owned_by_speaker(memory_obj, speaker: str) -> bool:
+    """This-turn speaker owns the row. No hardcoded companion name."""
+    sp = (speaker or "").strip().lower()
+    if sp in ("", "unknown"):
+        return False
+    subject = str(getattr(memory_obj, "identity_subject", "") or "").strip().lower()
+    if subject == sp:
+        return True
+    tags = {
+        str(tag).strip().lower()
+        for tag in getattr(memory_obj, "tags", ())
+        if str(tag).strip()
+    }
+    return f"speaker:{sp}" in tags
+
+
 def _competing_proper_names(first_sentence: str, speaker: str) -> set[str]:
     """Proper-name tokens in the first sentence after the opener, excluding speaker.
 
@@ -515,11 +538,16 @@ def _matches_aboutness(
     speaker: str = "",
 ) -> bool:
     """Recall-time aboutness, including about-me scope. Never mutates the store."""
+    self_about = _is_self_aboutness(aboutness, speaker)
     if not _leads_with_referenced_subject(memory_obj, aboutness):
-        return False
+        # Schema prefs are "User's favorite food is pizza" — no speaker token
+        # in the lead — so a first-sentence David cut would drop the autobiography
+        # the ranker already scored. Ownership is this-turn speaker, not a name list.
+        if not (self_about and _memory_owned_by_speaker(memory_obj, speaker)):
+            return False
     if aboutness and _is_curiosity_ask_record(memory_obj):
         return False
-    if not _is_self_aboutness(aboutness, speaker):
+    if not self_about:
         return True
     payload_text = _payload_lead_text(memory_obj)
     lead = _first_sentence(payload_text)
