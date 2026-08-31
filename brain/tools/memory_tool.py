@@ -144,22 +144,17 @@ _HOUSEHOLD_INTERRUPT_RE = re.compile(
     r"\bwhen\s+should\s+you\s+not\s+interrupt\b",
     re.I,
 )
-_HOUSEHOLD_FAMILY_FACT_RE = re.compile(
-    r"\b(?:wife|husband|partner|spouse|daughter|son|child|children|kids?)\b",
-    re.I,
-)
 _HOUSEHOLD_KIDS_FACT_RE = re.compile(
     r"\b(?:daughter|son|child|children|kids?)\b",
     re.I,
 )
-_HOUSEHOLD_PET_FACT_RE = re.compile(r"\b(?:dog|pet|pup|cat|collie)\b", re.I)
 _HOUSEHOLD_MORNING_FACT_RE = re.compile(
     r"\b(?:wake|wakes|waking|coffee|morning|walk|desk|routine|6\s*a\.?m)\b",
     re.I,
 )
 _HOUSEHOLD_INTERRUPT_FACT_RE = re.compile(r"\binterrupt", re.I)
 _HOUSEHOLD_CUES = {
-    "family": "wife husband partner daughter son child family dog pet",
+    "family": "family",
     "kids": "daughter son child kids names",
     "morning": "morning routine wake coffee walk desk",
     "interrupt": "do not interrupt on a call",
@@ -188,9 +183,9 @@ def is_household_self_fact_recall(query: str) -> bool:
 def _preview_matches_household_kind(preview: str, kind: str) -> bool:
     """Keep stored fact payloads; drop conversation recaps.
 
-    Lived 2026-08-31: pets were excluded from family so a dog-walk leftover
-    could not fill the roster. Operator then taught the dog *is* family
-    (plastic). Family class now includes pet facts. No names in the matcher.
+    Family is not a kinship ontology. Who counts is whatever was taught
+    (wife, dog, cousin, great-great) — ranker + live question, not a
+    relation-word list. Recaps stay out so the LLM cannot re-author the roster.
     """
     raw = str(preview or "")
     low = raw.lower()
@@ -199,9 +194,7 @@ def _preview_matches_household_kind(preview: str, kind: str) -> bool:
     if mem_type and mem_type not in {"user_preference", "personal_fact"}:
         return False
     if kind == "family":
-        return bool(
-            _HOUSEHOLD_FAMILY_FACT_RE.search(low) or _HOUSEHOLD_PET_FACT_RE.search(low)
-        )
+        return True
     if kind == "kids":
         return bool(_HOUSEHOLD_KIDS_FACT_RE.search(low))
     if kind == "morning":

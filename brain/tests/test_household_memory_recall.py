@@ -55,13 +55,13 @@ def test_who_is_in_my_family_does_not_aboutness_cut_on_in() -> None:
     assert _extract_about_subjects("Jarvis, who is in my family?") == set()
 
 
-def test_household_fact_preview_keeps_relation_and_pet_facts_not_recaps() -> None:
+def test_household_fact_preview_keeps_taught_facts_not_recaps() -> None:
     assert _preview_matches_household_kind("[user_preference] User's wife is Tanya", "family")
     assert _preview_matches_household_kind("[user_preference] User's daughter is Lily", "kids")
     assert _preview_matches_household_kind("[user_preference] User's son is Owen", "kids")
-    # Plastic: operator taught the dog is family. Class = pet, not a name list.
+    # Plastic: a taught dog/cousin/great-great is a pref, not a kinship regex.
     assert _preview_matches_household_kind("[user_preference] User's dog is Skylar", "family")
-    assert _preview_matches_household_kind("[user_preference] User's pet is Skyler", "family")
+    assert _preview_matches_household_kind("[user_preference] User's cousin is family", "family")
     assert not _preview_matches_household_kind(
         "[conversation] Jarvis, who is in my family? | Your family includes",
         "family",
@@ -70,10 +70,6 @@ def test_household_fact_preview_keeps_relation_and_pet_facts_not_recaps() -> Non
     assert _preview_matches_household_kind(
         "[user_preference] User daily routine: a walk with Skylar after work",
         "morning",
-    )
-    assert not _preview_matches_household_kind(
-        "[user_preference] User daily routine: a walk with Skylar after work",
-        "family",
     )
 
 
@@ -106,10 +102,10 @@ def test_household_search_returns_facts_not_conversation_recaps(monkeypatch) -> 
     )
     def fake_keyword(query, limit=20, **kwargs):
         q = str(query).lower()
+        if "family" in q:
+            return [wife, dog]
         if "wife" in q:
             return [wife]
-        if "dog" in q or "pet" in q:
-            return [dog]
         if "daughter" in q:
             return []
         return [recap] if "family" in q else []
