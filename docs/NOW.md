@@ -79,7 +79,9 @@ North star **#42**: a **living companion you want to be with** — playful, warm
 
 **Couple what exists. Stop opening organs (#83).** Shadow / PRE-MATURE / `not_born` / default-OFF is success, not a hole. Do not skip the **ranker**. Do not verb-hack routing so the NN never learns. Do not couple fractal / HRR / dream into the mouth to pass a quiz.
 
-**Plastic brain (years later):** tagging, ranker, dream consolidation, fractal chains, HRR album. If Skylar dies in ten years, that is a new fact with time — not a regex. Those lanes do not speak today. That is success.
+**Plastic brain:** tagging, ranker, dream consolidation, fractal chains, HRR album. A correction is a **new stored fact** the ranker can retrieve next time — not a new matcher. If Skylar dies in ten years, that is a new fact with time — not a regex. Fractal/HRR/dream still do not speak today. That is success.
+
+**Agent failure mode (this is the theater):** mouth missed X → add X to a allowlist (wife/son/dog/cousin, extra verbs, skip L0). The sit goes green. The NN never learns. Next leftover is great-great-grandmother. Do not do that. Integrity floor = LLM must not **invent** family. Plastic = whoever you taught, the ranker ranks. Tests must pin recaps-out and ranker-used, **never who is in the roster**.
 
 Board: [JARVIS Master Roadmap](https://github.com/users/Nimdy/projects/2). Tracker: close on the **mouth**, not on a wire. #25 was closed too early; reopened.
 
@@ -204,6 +206,7 @@ These exist, are wired, and **must not be coupled into the mouth** to “fix” 
 | **HRR / spatial album** | PRE-MATURE, album **OFF** | No | Treat as recall; persist vectors in the album |
 | Pref inject | LLM path only | Yes, on NONE | Steal native MEMORY about-me onto the LLM so it “sounds better” |
 | Native MEMORY formatter | Fail-closed retrieved payloads | Yes | Let LLM narrate over retrieval; emit “I can pull more details if you want” (that is a **tool claim**; L0 is right to kill it) |
+| **Roster ontology** | Ranker + taught prefs | Via MEMORY search | Expand wife/son/dog/cousin/great-great lists so a sit names Skyler. That is theater. A correction writes a fact; the next family question retrieves it. |
 
 If fractal did not fire, dream did not speak, HRR is PRE-MATURE — **that is success**, not a hole.
 

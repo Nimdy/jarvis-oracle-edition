@@ -183,9 +183,9 @@ def is_household_self_fact_recall(query: str) -> bool:
 def _preview_matches_household_kind(preview: str, kind: str) -> bool:
     """Keep stored fact payloads; drop conversation recaps.
 
-    Family is not a kinship ontology. Who counts is whatever was taught
-    (wife, dog, cousin, great-great) — ranker + live question, not a
-    relation-word list. Recaps stay out so the LLM cannot re-author the roster.
+    Family is not a kinship ontology. Who counts is whatever was taught —
+    ranker + live question, not a relation-word list. Recaps stay out so
+    the LLM cannot re-author the roster.
     """
     raw = str(preview or "")
     low = raw.lower()

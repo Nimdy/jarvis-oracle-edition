@@ -138,6 +138,10 @@ def test_household_matchers_do_not_hardcode_operator_names() -> None:
     household_slice = text[start:end].lower()
     for name in ("tanya", "tonya", "lily", "owen", "david", "skylar", "skyler", "sarah"):
         assert name not in household_slice, name
+    # Family recall is not a kinship ontology. Question matchers may say
+    # "my family". Fact-preview must not require wife/son/dog/cousin.
+    for role in ("wife", "husband", "cousin", "dog", "pet", "collie", "grandmother"):
+        assert role not in household_slice, role
     assert "in\\s+my\\s+family" in household_slice or "who is in my family" in joined
 
 
