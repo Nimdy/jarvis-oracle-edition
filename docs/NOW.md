@@ -67,7 +67,7 @@ Every spoken/verbal sit — Grok, Shockwave, or David — enters at `handle_tran
 
 TAP default is a **new sit** (`follow_up=false`). Continue only if `GET /api/operator/tap/status` shows FOLLOW_UP **or** `expects_follow_up` **and** you mean to answer her. Mute the Pi mic when an agent TAPs so office speech does not barge in.
 
-**Do not shotgun TAP.** One sit. Wait idle **and** store (log + memory row if a fact was taught). This is not an app that returns 200 and is done. Canon: [OPERATOR_PROXY_TAP.md](OPERATOR_PROXY_TAP.md).
+**HARD RULE — ASK THEN WAIT.** One TAP. Then stop. Wait `busy=false` **and** `speaking=false` **and** FOLLOW_UP closed **and** the write (log + store). Score the mouth. **Then** you may ask if the next sit is allowed. A loop of six prompts is shotgun. “Bounce around classes / use the rotated line” is still **one at a time**. Idle in the TAP 200 is not stored. Lived 2026-08-31: an agent fired 6 TAPs in ~52s; that is a process break. Canon: [OPERATOR_PROXY_TAP.md](OPERATOR_PROXY_TAP.md).
 
 ---
 
@@ -179,7 +179,7 @@ SI Stage 2, Weight-Room `enforces`, CapabilityGate L0, autonomy L2/L3, Face **0.
 Do not: YOLO on the Pi; Golden fuzzy synonyms; `briefing_register` / extra articulators;
 phrase-hack one prompt; delete memories to “fix” a lie; open Matrix / new specialists /
 new dashboards / new epics; treat Spark pending=0 as a bug; treat Stage 6 orphan chip
-as graduation.
+as graduation; **shotgun TAP** (two sits before the first has stored).
 
 **Memory / L0 — agents keep failing this. Read the next section or you will ship a bypass.**
 

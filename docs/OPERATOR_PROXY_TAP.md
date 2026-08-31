@@ -90,14 +90,14 @@ to `_response_gen.respond` is a process break.
 
 ## How an agent scores a sit
 
-**Do not shotgun.** This is not a CRUD app. After a turn she still writes memory, identity stamp, ranking, teachers, L0, TTS. Stacking the next TAP in 5s races that.
+**HARD RULE: ask, then wait.** Not a CRUD app. After a turn she still writes memory, identity, ranking, teachers, L0, TTS. Two TAPs in one agent turn is shotgun unless the first sit fully stored and you were told to do the next.
 
-1. `GET /api/operator/tap/status` — if `busy` or `speaking`, wait.
-2. TAP the line (`follow_up` omit/false = new sit). One sit.
+1. `GET /api/operator/tap/status` — if `busy` or `speaking` or FOLLOW_UP, **wait**. Do not TAP.
+2. TAP **one** line (`follow_up` omit/false = new sit).
 3. Wait until `busy=false` **and** `speaking=false` **and** the FOLLOW_UP window is over.
-4. Then wait for the **write**: `OPERATOR-PROXY TAP` in `brain.log`, plus the expected `user_preference` / `personal_fact` row in `~/.jarvis/memories.json` if this turn taught a fact. Do not fire the next question on TTS-done alone.
+4. Then wait for the **write**: `OPERATOR-PROXY TAP` in `brain.log`, plus the expected `user_preference` / `personal_fact` row in `~/.jarvis/memories.json` if this turn taught a fact. Do not fire the next question on HTTP 200 or TTS-done alone.
 5. Score the **mouth**. If the TAP log line is missing, the TAP did not happen.
-6. Next sit only after that. Lived 2026-08-31: a 10-pack with 5s gaps invented Ethan and stored the lie as guest before Owen could be consumed.
+6. **Stop.** Next sit only if David asks, after 1–5. Rotating training-page decks is still one prompt per sit. Lived 2026-08-31: a 10-pack with 5s gaps invented Ethan; a 6-pack in ~52s after “bounce around classes” was the same break.
 
 Lived Pi voice remains the only proof of wake/VAD/STT/fusion/Kokoro hardware.
 TAP proves the **mind** after the ear.
