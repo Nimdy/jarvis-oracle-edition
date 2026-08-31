@@ -29,7 +29,7 @@
 <body>
   <header>
     <h1>JARVIS · NN FLEET</h1><span class="v2">dashboardV2</span>
-    <span class="sub">Every NN tracked toward <em>hundreds</em>. The lens that matters: <em>wiring_confirmed</em> — the recurring pathology is "feed wired, <b style="color:var(--red)">inference orphaned</b>" (a trained NN nothing consumes). Audit facts + live distillation telemetry.</span>
+    <span class="sub">Every NN tracked toward <em>hundreds</em>. The lens that matters: <em>consumed_now</em> (is the consumer firing on this host) vs <em>inference_consumed</em> (a wire exists). Design audit is <em>wiring_confirmed</em>. A gated wire is not the mouth.</span>
     <span class="right"><span id="mode">—</span><span id="clock">—</span></span>
   </header>
   <nav id="v2nav"></nav>
@@ -43,16 +43,16 @@
 
     <section class="card col12">
       <h2>⚠ Orphan / broken alarm <span class="tag derived">real NN, inference not consumed</span></h2>
-      <div class="note">Trained/real NNs whose inference output nothing live consumes, or that are concretely broken. These are doing no work despite existing — the priority backlog.</div>
+      <div class="note">ORPHANED/BROKEN design tags only. Empty here does <em>not</em> mean every NN is driving behavior — read <b>consumed_now</b>.</div>
       <div class="alarm" id="alarm"></div>
     </section>
 
     <section class="card col12">
       <h2>The fleet</h2>
-      <div class="note">Sorted worst-wiring first. Live = lived/synthetic training samples from the distillation collector (when the NN is a registered teacher).</div>
+      <div class="note">Sorted worst-wiring first. <em>live_state</em> + <em>consumed_now</em> are this host. Live samp = distillation lived/synthetic when the NN is a registered teacher.</div>
       <div style="overflow:auto;max-height:70vh;">
         <table class="fleet">
-          <thead><tr><th>NN</th><th>family</th><th>wiring</th><th>training</th><th>teacher</th><th>maturity</th><th>live samp</th><th>end-state</th></tr></thead>
+          <thead><tr><th>NN</th><th>family</th><th>design</th><th>live</th><th>consumed now</th><th>live overlay</th><th>end-state</th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </div>
@@ -64,47 +64,53 @@
     function esc(s){return (s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
     function tick(){var c=document.getElementById('clock'); if(c) c.textContent=new Date().toLocaleTimeString();}
     function wcls(w){ w=(w||'').toLowerCase();
-      if(w==='confirmed-live') return 'live';
-      if(w==='confirmed-shadow') return 'shadow';
-      if(w==='confirmed-dormant') return 'dormant';
+      if(w==='confirmed-live'||w==='live-earning'||w==='live') return 'live';
+      if(w==='confirmed-shadow'||w==='shadow'||w==='advisory'||w==='advisory-by-design') return 'shadow';
+      if(w==='confirmed-dormant'||w==='dormant'||w==='gated'||w==='training'||w==='staged') return 'dormant';
       if(w==='orphaned'||w==='broken') return 'orphan';
       return 'unknown'; }
     var ORDER={orphan:0,dormant:1,shadow:2,live:3,unknown:4};
 
     async function refresh(){
       let d; try{ d=await (await fetch('/api/nn-fleet')).json(); }catch(e){ return; }
-      if(!d||d.error){ document.getElementById('rows').innerHTML='<tr><td colspan="8">unavailable: '+esc((d&&d.detail)||'')+'</td></tr>'; return; }
-      document.getElementById('gen').textContent='audited '+(d.generated||'')+' · '+(d.total||0)+' NNs';
+      if(!d||d.error){ document.getElementById('rows').innerHTML='<tr><td colspan="7">unavailable: '+esc((d&&d.detail)||'')+'</td></tr>'; return; }
+      document.getElementById('gen').textContent=(d.generated_live?'live overlay':'audit')+' · '+(d.total||0)+' NNs';
       document.getElementById('note').textContent=d.note||'';
 
-      var bw=d.by_wiring||{};
+      var bl=d.by_live_state||{};
+      var bc=d.by_consumed_now||{};
       var cards=[
-        ['live','confirmed-live','live (earning)'],['shadow','confirmed-shadow','shadow'],
-        ['dormant','confirmed-dormant','dormant'],['orphan','ORPHANED','orphaned'],['orphan','BROKEN','broken'],
-        ['unknown','uncertain','uncertain']];
+        ['live','live-earning','live-earning'],['shadow','shadow','shadow'],
+        ['dormant','gated','gated (wire off)'],['dormant','dormant','dormant'],
+        ['live','now','consumed now']];
       document.getElementById('sum').innerHTML=cards.map(function(c){
-        var n=bw[c[1]]||0; return '<div class="sumbox '+c[0]+'"><div class="v">'+n+'</div><div class="k">'+c[2]+'</div></div>';
+        var n=(c[1]==='now')?(bc['true']||0):(bl[c[1]]||0);
+        return '<div class="sumbox '+c[0]+'"><div class="v">'+n+'</div><div class="k">'+c[2]+'</div></div>';
       }).join('');
 
       var al=d.orphan_alarm||[];
       document.getElementById('alarm').innerHTML = al.length
         ? al.map(function(a){return '<div class="ar"><b>'+esc(a.name)+'</b> <span style="color:var(--dim)">('+esc(a.family||'')+')</span> — <span class="fx">'+esc(a.fix||'')+'</span></div>';}).join('')
-        : '<div style="font-size:11px;color:var(--green)">none — every real NN\'s inference is consumed</div>';
+        : '<div style="font-size:11px;color:var(--muted)">no ORPHANED/BROKEN tags. That is not “every NN drives behavior.” Count consumed_now.</div>';
 
       var rows=(d.records||[]).slice().sort(function(a,b){
-        return (ORDER[wcls(a.wiring_confirmed)]||9)-(ORDER[wcls(b.wiring_confirmed)]||9);
+        var ca=a.consumed_now?1:0, cb=b.consumed_now?1:0;
+        if(ca!==cb) return ca-cb;
+        return (ORDER[wcls(a.live_state)]||9)-(ORDER[wcls(b.live_state)]||9);
       });
       document.getElementById('rows').innerHTML=rows.map(function(r){
-        var cl=wcls(r.wiring_confirmed);
-        var lv=r.live? (r.live.lived+' / '+r.live.synthetic) : '—';
-        var rowcls=(cl==='orphan')?'real-orphan':'';
+        var cl=wcls(r.live_state);
+        var sm=(r.live&&r.live.samples)?( (r.live.samples.lived||0)+' / '+(r.live.samples.synthetic||0) ) : '';
+        var overlay=r.live&&r.live.consume_note? r.live.consume_note : (sm||'—');
+        var now=r.consumed_now?'YES':'no';
+        var nowcls=r.consumed_now?'live':'dormant';
+        var rowcls=(!r.consumed_now && r.inference_consumed)?'real-orphan':'';
         return '<tr class="'+rowcls+'"><td class="nm">'+esc(r.name)+'</td>'+
                '<td>'+esc(r.family||'')+'</td>'+
-               '<td><span class="w '+cl+'">'+esc(r.wiring_confirmed||'?')+'</span></td>'+
-               '<td>'+esc(r.training_method||'')+'</td>'+
-               '<td>'+esc((r.teacher_source||'').slice(0,60))+'</td>'+
-               '<td>'+esc((r.maturity_state||'').slice(0,40))+'</td>'+
-               '<td class="live-n">'+lv+'</td>'+
+               '<td><span class="w '+wcls(r.wiring_confirmed)+'">'+esc(r.wiring_confirmed||'?')+'</span></td>'+
+               '<td><span class="w '+cl+'">'+esc(r.live_state||'?')+'</span></td>'+
+               '<td><span class="w '+nowcls+'">'+now+(r.consumed_now_of?(' · '+esc(r.consumed_now_of)):'')+'</span></td>'+
+               '<td class="live-n">'+esc(String(overlay).slice(0,80))+'</td>'+
                '<td class="end">'+esc((r.end_state||'').slice(0,110))+'</td></tr>';
       }).join('');
     }

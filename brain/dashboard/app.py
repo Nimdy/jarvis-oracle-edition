@@ -698,8 +698,11 @@ def _create_app() -> FastAPI:
                                      "fix": r.get("fix_needed")})
         return {
             "total": view.get("total"),
+            "generated_live": view.get("generated_live"),
+            "note": view.get("note"),
             "by_wiring": dict(by_wiring),
             "by_live_state": view.get("by_state"),
+            "by_consumed_now": view.get("by_consumed_now"),
             "orphan_alarm": orphan_alarm,
             "records": records,
         }

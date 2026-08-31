@@ -17,7 +17,7 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/nn-fleet-consume` (cut from `feat/gestation-period` `f5f0c02`) |
-| **HEAD (committed)** | `eb2a69f` — cut note. Stage 6 couple is `f5f0c02` |
+| **HEAD (committed)** | `721030a` first-pass docs. Stage 6 couple is `f5f0c02`. Consume overlay is this branch. |
 | **vs origin** | Both `feat/gestation-period` and `feat/nn-fleet-consume` pushed. |
 | **Board** | [JARVIS Master Roadmap](https://github.com/users/Nimdy/projects/2) — linked to this repo. North star **#42**. Queue **#83**. |
 | **Merge `main`** | **No**, unless David asks |
@@ -219,22 +219,31 @@ TAP-lived 2026-08-31 (operator-proxy, `follow_up=false` new sits). Do not “fix
 6. Kitchen vision leftover: drop forever.
 7. WSL teacher/persist pile **committed** in `f5f0c02`. Bounce still operator-owned for live PID.
 
-### nn-fleet consume (this branch) — first pass 2026-08-31
+### nn-fleet consume (this branch) — 2026-08-31
 
-Live `/api/nn-fleet`: 36 records. **9** `live-earning` + `inference_consumed=True`. **27** not consumed (shadow/advisory/dormant/training/staged). `orphan_alarm` empty.
+`/api/nn-fleet` now splits **design wire** vs **this-host firing**.
 
-| Consumed | What actually eats it | Mouth? |
-|---|---|---|
-| **memory_ranker** | `search.py` `score_batch` reorders injected memories. Lived `ranker_used=True` on sits. Outcome loop after turns. | Via MEMORY search only |
-| hemisphere_engine / distillation / registry / data_feed | Train + infer into policy **state vector** dims 16–19 | **No.** Policy NN is shadow |
-| audio_emotion | TTS profile, mood, attention | Shapes voice, not facts |
-| display_classifier | Scene snapshot → world-model “Display activity” | Not family recall |
-| conflict_classifier | ContradictionEngine on MEMORY_WRITE | Silent |
-| world_model | Claimed prompt inject **if promotion.level≥1**. Live `world_model_promotion.json` is **level 0** → inject **off**. Other consumers (affect/graph) may still tick | **Not the mouth today** |
+| Field | Meaning |
+|---|---|
+| `wiring_confirmed` / `inference_consumed` | June-30 audit: a consumer *wire* exists |
+| `live_state` + `consumed_now` | This host. Overlay wins over frozen `maturity_state` prose |
 
-**intent_shadow** not consumed — heuristic router still picks the turn. **Do not flip.** HRR specialist dormant. Salience dormant. Policy NN shadow. positive_memory **NN** orphaned (heuristic scalar is what broadcasts).
+Lived 2026-08-31 (brain host, **before** bounce of this overlay):
 
-Do not skip ranker. Do not treat 9/36 as “she routes with NNs.”
+| NN | Design | Live truth | Mouth? |
+|---|---|---|---|
+| **memory_ranker** | consumed | `score_batch` reorders retrieval. `ranker_used=True` on Stage 6 sits | Via MEMORY search only |
+| hemisphere_engine / distillation / registry / data_feed | consumed | Train + infer into policy **state vector** dims 16–19 | **No.** Policy NN is shadow |
+| audio_emotion / display_classifier / conflict_classifier | consumed | TTS/mood; scene display line; ContradictionEngine | Not family recall |
+| **world_model** | `inference_consumed=True` (inject *wire*) | `world_model_promotion.json` **level 0** (demoted). Inject **off**. Overlay: `consumed_now=False`, `live_state=gated` | **Not the mouth** |
+| **intent_shadow** | not consumed | **181 predictions / 209 obs**, rolling ~0.69, still `shadow`, 0 rescues. June-30 “25870/0 preds” is **stale**. Dead-wire was fixed. Heuristic still routes. **Do not flip.** | No |
+| weight_room_gate | not consumed | `enforces=False` (P2 would-block). Overlay keeps `consumed_now=False` | No |
+
+HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipping advisory). Policy NN shadow. positive_memory **NN** orphaned (heuristic scalar broadcasts). Claim-friction teacher feed is already fixed (`cc04f08`); registry prose is stale.
+
+Board: [Project 2](https://github.com/users/Nimdy/projects/2) In Progress is 12 Finish-campaign epics, **not a queue**. Operational queue is **#83**. North star **#42**. #83 body (Aug 18) ranked WS2 conversation multipliers above WS3; **later checkpoints** (Stage 6 spoken + this branch) park WS2 unless David names it. Do not follow #2/#4/#5/#7 as “do now.”
+
+Do not skip ranker. Do not treat 9/36 as “she routes with NNs.” Overlay is in this branch — **live PID will not show it until David bounces.**
 
 Park unless the blocker actually changed: Matrix 3–9, #32 domain NN, L7, Thought Maturity P3, policy live, lidar rebase, SpatialMemoryGate→remember, affect-expression, WR `enforces`, Connectome L4, Spark Stage 2, HRR, language bridge, native_voice, voice-intent live.
 
