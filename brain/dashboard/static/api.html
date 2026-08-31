@@ -75,7 +75,7 @@
 
     <!-- Stats -->
     <div class="a-stats">
-      <div class="a-stat"><span class="a-stat-num">170</span><span class="a-stat-label">Brain API Routes</span></div>
+      <div class="a-stat"><span class="a-stat-num">172</span><span class="a-stat-label">Brain API Routes</span></div>
       <div class="a-stat"><span class="a-stat-num">3</span><span class="a-stat-label">Services</span></div>
       <div class="a-stat"><span class="a-stat-num">Lock-marked</span><span class="a-stat-label">Auth Protected</span></div>
       <div class="a-stat"><span class="a-stat-num">3</span><span class="a-stat-label">WebSockets</span></div>
@@ -1005,7 +1005,7 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <!-- LIVE ROUTE ADDENDUM -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <div class="a-category" id="cat-live-addendum" data-cat-id="live-addendum"><h3>Live Route Addendum <span class="a-category-count">61 endpoints</span></h3></div>
+    <div class="a-category" id="cat-live-addendum" data-cat-id="live-addendum"><h3>Live Route Addendum <span class="a-category-count">62 endpoints</span></h3></div>
 
     <div class="a-protocol">
       <h4>Static reference catch-up</h4>
@@ -1207,9 +1207,9 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
       </div>
     </div>
 
-    <div class="a-endpoint" id="ep-intent-shadow" data-method="GET" data-path="/api/intent-shadow" data-desc="Intention shadow status" data-cat="live-addendum">
-      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/intent-shadow</span><span class="a-ep-desc">Intention resolver shadow telemetry</span></div>
-      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Read-only stage telemetry for backed-commitment learning.</p></div>
+    <div class="a-endpoint" id="ep-intent-shadow" data-method="GET" data-path="/api/intent-shadow" data-desc="Voice-intent shadow runner" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/intent-shadow</span><span class="a-ep-desc">Voice-intent NN vs regex router — shadow only</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Not the intention-resolver. Level stays <code>shadow</code> until gates (samples/dwell/agreement). Predictions ≠ consumed. Heuristic <code>tool_router</code> still picks the turn. Do not flip to advisory/primary without David naming the gate.</p></div>
     </div>
 
     <div class="a-endpoint" id="ep-debug-engine-attrs" data-method="GET" data-path="/api/debug/engine-attrs" data-desc="Debug engine attrs" data-cat="live-addendum">
@@ -1224,7 +1224,28 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
 
     <div class="a-endpoint" id="ep-operator-tap" data-method="POST" data-path="/api/operator/tap" data-desc="Operator-proxy TAP (agent sit)" data-cat="live-addendum">
       <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/operator/tap</span><span class="a-ep-desc">Text into handle_transcription as David / operator_proxy</span><span class="a-ep-lock">🔒</span></div>
-      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Second ear. Refuses if a voice turn is in flight. Does not forge face/voice. Canon: docs/OPERATOR_PROXY_TAP.md</p></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Second ear. Same mind path as Pi STT. Provenance <code>operator_proxy</code>. Does not forge face/voice. Refuses if a voice turn is in flight. Mute the Pi mic. Canon: <code>docs/OPERATOR_PROXY_TAP.md</code>.</p>
+        <table class="a-params"><thead><tr><th>Body</th><th>Type</th><th>Default</th></tr></thead><tbody>
+          <tr><td class="a-param-name">text</td><td class="a-param-type">string</td><td>required (alias: message)</td></tr>
+          <tr><td class="a-param-name">speaker</td><td class="a-param-type">string</td><td>David</td></tr>
+          <tr><td class="a-param-name">follow_up</td><td class="a-param-type">bool</td><td>omit/false = <b>new sit</b>. true only if ear is FOLLOW_UP or last mouth invited</td></tr>
+        </tbody></table>
+        <p style="font-size:0.82rem;color:var(--text-muted)">Do not shotgun TAP. Wait idle. Pytest is a pin, not a sit.</p>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-operator-tap-status" data-method="GET" data-path="/api/operator/tap/status" data-desc="TAP ear status (not a sit)" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/operator/tap/status</span><span class="a-ep-desc">New sit vs continuation — wait if busy</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Read-only. Not a sit. Poll before TAP.</p>
+        <table class="a-params"><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody>
+          <tr><td class="a-param-name">busy / speaking</td><td>TTS or LISTENING capture — do not TAP</td></tr>
+          <tr><td class="a-param-name">ear</td><td>IDLE = new sit. FOLLOW_UP = continue window (~4s after TTS)</td></tr>
+          <tr><td class="a-param-name">follow_up_listening</td><td>true only in the continue window. FOLLOW_UP is not busy</td></tr>
+          <tr><td class="a-param-name">last_spoken_invites_follow_up</td><td>last mouth asked a question</td></tr>
+        </tbody></table>
+      </div>
     </div>
 
     <div class="a-endpoint" id="ep-feedback-api" data-method="POST" data-path="/api/feedback" data-desc="Conversation feedback" data-cat="live-addendum">
@@ -1278,13 +1299,13 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
     </div>
 
     <div class="a-endpoint" id="ep-system-code-freshness" data-method="GET" data-path="/api/system/code-freshness" data-desc="Code freshness" data-cat="live-addendum">
-      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/system/code-freshness</span><span class="a-ep-desc">Runtime code freshness and sync status</span></div>
-      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Helps detect whether static docs and running brain code are from the same sync.</p></div>
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/system/code-freshness</span><span class="a-ep-desc">Brain-disk .py mtime vs this PID</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)"><code>is_stale</code> compares files on <b>192.168.1.222</b> to process start — not GitHub, not WSL. Workflow: edit on WSL → <code>./sync-desktop.sh</code> → banner <b>NEWER CODE ON DISK</b> → David restarts. A git push alone does not light the banner. HTML/CSS is live without restart; <code>.py</code> is not. v2 pages must call <code>V2.renderNav</code> or the banner never paints.</p></div>
     </div>
 
     <div class="a-protocol">
       <h4>2026-08-24 catch-up (wired, previously undocumented)</h4>
-      <p>These routes are live on the brain FastAPI app. Added so the operator book matches <code>app.py</code> (170 registered). Mutating routes are lock-marked; they still require the dashboard API key.</p>
+      <p>These routes are live on the brain FastAPI app. Added so the operator book matches <code>app.py</code> (count locked by <code>docs_truth_audit.py</code>). Mutating routes are lock-marked; they still require the dashboard API key.</p>
     </div>
 
     <div class="a-endpoint" id="ep-connectome" data-method="GET" data-path="/api/connectome" data-desc="Live connectome" data-cat="live-addendum">
@@ -1304,7 +1325,8 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
       <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Does not drive urgency. FAIL on the critic-test = shadow-forever.</p></div>
     </div>
     <div class="a-endpoint" id="ep-nn-fleet" data-method="GET" data-path="/api/nn-fleet" data-desc="NN fleet registry" data-cat="live-addendum">
-      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/nn-fleet</span><span class="a-ep-desc">Every tracked NN: wiring, live state, teacher, concerns</span></div>
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/nn-fleet</span><span class="a-ep-desc">Design wire vs this-host firing</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)"><code>inference_consumed</code> / <code>wiring_confirmed</code> = June-30 audit (a consumer <em>wire</em> exists). <code>live_state</code> + <code>consumed_now</code> = this host. World-model inject is off at promotion level 0 (<code>gated</code>). Intent-shadow predicting ≠ consumed. Samples ≠ control. Source of <code>/v2/nnfleet.html</code>.</p></div>
     </div>
     <div class="a-endpoint" id="ep-nn-universe" data-method="GET" data-path="/api/nn-universe" data-desc="NN universe" data-cat="live-addendum">
       <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/nn-universe</span><span class="a-ep-desc">Universe/connectome companion payload for the NN fleet view</span></div>

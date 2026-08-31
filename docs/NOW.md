@@ -17,14 +17,14 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/nn-fleet-consume` (cut from `feat/gestation-period` `f5f0c02`) |
-| **HEAD (committed)** | `721030a` first-pass docs. Stage 6 couple is `f5f0c02`. Consume overlay is this branch. |
-| **vs origin** | Both `feat/gestation-period` and `feat/nn-fleet-consume` pushed. |
+| **HEAD (committed)** | Overlay lived `2699f91`. Stage 6 couple `f5f0c02`. API-book regen is this slice. |
+| **vs origin** | `feat/nn-fleet-consume` pushed. Overlay bounced into PID **4924** (2026-08-31 15:57). |
 | **Board** | [JARVIS Master Roadmap](https://github.com/users/Nimdy/projects/2) — linked to this repo. North star **#42**. Queue **#83**. |
 | **Merge `main`** | **No**, unless David asks |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Companion **Stage 6 spoken lived**. Gate work is nn-fleet consume, not Stage 7. Playbook “elevate to L2” is **DOC DRIFT**. |
 | **Autonomy** | **L1 research.** Readiness composite live ~0.62 vs Stage 7 target 0.92. Do not grind Stage 7 for the number. |
-| **Operational queue** | **1.** Stage 6 spoken lived (kids/family/interrupt MEMORY native). **2. CURRENT:** manual gate work — nn-fleet `live_state` + **consumed**. **Not** Workstream 2 unless David names it. **Not** playbook Stage 7. |
+| **Operational queue** | **1.** Stage 6 spoken lived. **2.** nn-fleet `consumed_now` overlay **lived** (PID 4924). **3. CURRENT:** `/api-reference` matches FastAPI (172). Sits still score ranking leftovers. **Not** Workstream 2 unless David names it. **Not** playbook Stage 7. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
@@ -217,7 +217,7 @@ TAP-lived 2026-08-31 (operator-proxy, `follow_up=false` new sits). Do not “fix
 4. **Job TAP** `tap_42d4f124d180` — **software engineer LIVE** (NONE + inject). After-work walk / Skylar padding leftover. Do not grind STT Skylar vs stored Skyler. Same class as Tanya vs Tonya.
 5. **Morning** MEMORY native lived: coffee, wake 6, after-work Skylar walk (store leftover, not a missing organ). Do not invent a morning walk in code.
 6. Kitchen vision leftover: drop forever.
-7. WSL teacher/persist pile **committed** in `f5f0c02`. Bounce still operator-owned for live PID.
+7. WSL teacher/persist pile **committed** in `f5f0c02`. Bounce 2026-08-31 15:57 → PID **4924** loaded the overlay. Next code still syncs with `./sync-desktop.sh` before the banner can fire.
 
 ### nn-fleet consume (this branch) — 2026-08-31
 
@@ -228,7 +228,7 @@ TAP-lived 2026-08-31 (operator-proxy, `follow_up=false` new sits). Do not “fix
 | `wiring_confirmed` / `inference_consumed` | June-30 audit: a consumer *wire* exists |
 | `live_state` + `consumed_now` | This host. Overlay wins over frozen `maturity_state` prose |
 
-Lived 2026-08-31 (brain host, **before** bounce of this overlay):
+Lived 2026-08-31 **after bounce** (PID 4924). `/api/nn-fleet`: 8 `consumed_now` / 28 not / 1 `gated`.
 
 | NN | Design | Live truth | Mouth? |
 |---|---|---|---|
@@ -236,14 +236,16 @@ Lived 2026-08-31 (brain host, **before** bounce of this overlay):
 | hemisphere_engine / distillation / registry / data_feed | consumed | Train + infer into policy **state vector** dims 16–19 | **No.** Policy NN is shadow |
 | audio_emotion / display_classifier / conflict_classifier | consumed | TTS/mood; scene display line; ContradictionEngine | Not family recall |
 | **world_model** | `inference_consumed=True` (inject *wire*) | `world_model_promotion.json` **level 0** (demoted). Inject **off**. Overlay: `consumed_now=False`, `live_state=gated` | **Not the mouth** |
-| **intent_shadow** | not consumed | **181 predictions / 209 obs**, rolling ~0.69, still `shadow`, 0 rescues. June-30 “25870/0 preds” is **stale**. Dead-wire was fixed. Heuristic still routes. **Do not flip.** | No |
+| **intent_shadow** | not consumed | **182 predictions / 210 obs**, rolling ~0.69, still `shadow`, 0 rescues. June-30 “25870/0 preds” is **stale**. Dead-wire was fixed. Heuristic still routes. **Do not flip.** | No |
 | weight_room_gate | not consumed | `enforces=False` (P2 would-block). Overlay keeps `consumed_now=False` | No |
 
 HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipping advisory). Policy NN shadow. positive_memory **NN** orphaned (heuristic scalar broadcasts). Claim-friction teacher feed is already fixed (`cc04f08`); registry prose is stale.
 
 Board: [Project 2](https://github.com/users/Nimdy/projects/2) In Progress is 12 Finish-campaign epics, **not a queue**. Operational queue is **#83**. North star **#42**. #83 body (Aug 18) ranked WS2 conversation multipliers above WS3; **later checkpoints** (Stage 6 spoken + this branch) park WS2 unless David names it. Do not follow #2/#4/#5/#7 as “do now.”
 
-Do not skip ranker. Do not treat 9/36 as “she routes with NNs.” Overlay is in this branch — **live PID will not show it until David bounces.**
+Do not skip ranker. Do not treat 9 `confirmed-live` as “she routes with NNs.” Design 9 vs consumed_now 8 is the world-model inject gate.
+
+`/api-reference` FastAPI inventory is **172** (was stamped 170; missing `GET /api/operator/tap/status`). HTML/CSS live after `./sync-desktop.sh`. `.py` needs a bounce. Git push is not a sync.
 
 Park unless the blocker actually changed: Matrix 3–9, #32 domain NN, L7, Thought Maturity P3, policy live, lidar rebase, SpatialMemoryGate→remember, affect-expression, WR `enforces`, Connectome L4, Spark Stage 2, HRR, language bridge, native_voice, voice-intent live.
 
