@@ -64,6 +64,14 @@ from reasoning.voice_policy import OracleVoicePolicy, VoicePolicyConfig
 
 logger = logging.getLogger("jarvis.perception")
 
+# Spoken invite only — not every closer. TAP must not treat "Have a great day"
+# as expecting a follow-on sit.
+_TAP_FOLLOW_UP_INVITE_RE = re.compile(
+    r"\b(?:what(?:'s| is) on your mind|let me know|would you like|"
+    r"want me to|shall i|your thoughts|anything else)\b",
+    re.I,
+)
+
 
 # Negation / absence markers. If one appears in the same CLAUSE as an object, the VLM
 # is reporting that object's ABSENCE — crediting it as present would be a perception
@@ -225,6 +233,8 @@ class PerceptionOrchestrator:
         self._speaking_safety_timer: threading.Timer | None = None
         self._SPEAKING_SAFETY_TIMEOUT_S = 60.0
         self._speaking_conv_id: str = ""
+        self._last_tap_conversation_id: str = ""
+        self._last_spoken_invites_follow_up: bool = False
 
         # Unknown speaker tracking for curiosity system
         self._unknown_speaker_events: deque[dict[str, Any]] = deque(maxlen=10)
@@ -2227,6 +2237,339 @@ class PerceptionOrchestrator:
                 )
 
         asyncio.get_event_loop().create_task(_safe_handle())
+
+    def _voice_turn_busy(self) -> bool:
+        """True while TTS/STT capture is in flight. FOLLOW_UP is not busy —
+        that window is how a continuation reaches her without a wake."""
+        if self._speaking_conv_id:
+            return True
+        if self.audio_stream and getattr(self.audio_stream, "is_speaking", False):
+            return True
+        if self.audio_stream and self.audio_stream.stream_state_name() == "LISTENING":
+            return True
+        return False
+
+    def tap_ear_status(self) -> dict[str, Any]:
+        """What an agent must read before a TAP: new sit vs continuation."""
+        ear = "NONE"
+        remaining = 0.0
+        speaking = bool(self._speaking_conv_id)
+        if self.audio_stream:
+            ear = self.audio_stream.stream_state_name()
+            remaining = self.audio_stream.follow_up_remaining_s()
+            speaking = speaking or bool(self.audio_stream.is_speaking)
+        return {
+            "speaking": speaking,
+            "busy": self._voice_turn_busy(),
+            "ear": ear,
+            "follow_up_listening": ear == "FOLLOW_UP" and remaining > 0,
+            "follow_up_remaining_s": round(remaining, 2),
+            "follow_up_timeout_s": float(
+                getattr(self.audio_stream, "_follow_up_timeout_s", 4.0)
+                if self.audio_stream else 4.0
+            ),
+            "last_conversation_id": getattr(self, "_last_tap_conversation_id", "") or "",
+            "last_spoken_invites_follow_up": bool(
+                getattr(self, "_last_spoken_invites_follow_up", False)
+            ),
+        }
+
+    def _resolve_tap_follow_up(self, explicit: bool | None) -> tuple[bool, str]:
+        """New sit vs continuation. TAP skip-wake is NOT the same as follow_up.
+
+        follow_up=True on handle_transcription enables yes→enroll/camera,
+        research continuation, anaphora. Only when she is actually waiting
+        or the agent asked to continue.
+        """
+        if explicit is True:
+            return True, "client_continue"
+        if explicit is False:
+            return False, "client_new_sit"
+        st = self.tap_ear_status()
+        if st["follow_up_listening"]:
+            return True, "ear_follow_up_window"
+        if st["last_spoken_invites_follow_up"] and st["follow_up_remaining_s"] > 0:
+            return True, "spoken_invite"
+        return False, "new_sit"
+
+    @staticmethod
+    def spoken_invites_follow_up(spoken: str) -> bool:
+        """True only if the mouth asked for a continuation. Most replies do not."""
+        text = (spoken or "").strip()
+        if not text:
+            return False
+        if text.endswith("?"):
+            return True
+        return bool(_TAP_FOLLOW_UP_INVITE_RE.search(text))
+
+    def inject_operator_turn(
+        self,
+        text: str,
+        *,
+        speaker: str = "David",
+        follow_up: bool | None = None,
+    ) -> dict[str, Any]:
+        """Second ear: text TAP into handle_transcription. Not /api/chat.
+
+        David for L3 scope. Provenance operator_proxy. Does not forge fusion.
+        """
+        import json
+        import os
+        import uuid
+        from pathlib import Path
+
+        from consciousness.events import operator_proxy_turn
+
+        cleaned = (text or "").strip()
+        speaker_name = (speaker or "David").strip() or "David"
+        if not cleaned:
+            return {"ok": False, "refused": "empty_text", "spoken": "", "route": ""}
+        try:
+            from memory.gate import memory_gate
+            if memory_gate.synthetic_session_active():
+                return {
+                    "ok": False,
+                    "refused": "synthetic_session_active",
+                    "spoken": "",
+                    "route": "",
+                }
+        except Exception:
+            pass
+        if self._voice_turn_busy():
+            return {
+                "ok": False,
+                "refused": "voice_busy",
+                "spoken": "",
+                "route": "",
+                **self.tap_ear_status(),
+            }
+
+        use_follow_up, follow_reason = self._resolve_tap_follow_up(follow_up)
+        last_id = str(getattr(self, "_last_tap_conversation_id", "") or "")
+        conversation_id = (
+            last_id if (use_follow_up and last_id.startswith("tap_"))
+            else f"tap_{uuid.uuid4().hex[:12]}"
+        )
+        speaker_snapshot = {
+            "name": speaker_name,
+            "method": "operator_proxy",
+            "identity_method": "operator_proxy",
+            "operator_proxy": True,
+            "is_known": True,
+            "confidence": 1.0,
+        }
+        emotion_snapshot = dict(self._current_emotion) if self._current_emotion else {
+            "emotion": "neutral", "trusted": False,
+        }
+        with self._conv_lock:
+            cancel_state = {"id": conversation_id, "cancelled": False}
+            self._active_conversation = cancel_state
+        if self.audio_stream:
+            self.audio_stream.set_speaking(True)
+        self._speaking_conv_id = conversation_id
+        logger.info(
+            "OPERATOR-PROXY TAP speaker=%s conv=%s follow_up=%s (%s) text=%s",
+            speaker_name, conversation_id, use_follow_up, follow_reason, cleaned[:80],
+        )
+        result: dict[str, Any] = {}
+        try:
+            # TAP skip-wake is this inject, not follow_up=True.
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Caller must await inject_operator_turn_async.
+                raise RuntimeError("use inject_operator_turn_async from async callers")
+            result = loop.run_until_complete(handle_transcription(
+                cleaned, self.engine, self.response_gen, self.claude, self.perception,
+                self.episodes, speaker_snapshot, emotion_snapshot,
+                conversation_id=conversation_id,
+                cancel_flag=cancel_state,
+                ollama=self._ollama,
+                pi_snapshot_url=self._pi_snapshot_url,
+                brain_tts=self.brain_tts,
+                scene_context=self.get_scene_context(),
+                follow_up=use_follow_up,
+                enroll_callback=self.enroll_current_user,
+                identity_callback=self.get_identity_status,
+                scene_ingest_callback=self.ingest_scene_description,
+            )) or {}
+        finally:
+            self._cancel_speaking_safety_timer()
+            self._speaking_conv_id = ""
+            if self.audio_stream:
+                self.audio_stream.set_speaking(False)
+            with self._conv_lock:
+                if (self._active_conversation or {}).get("id") == conversation_id:
+                    self._active_conversation = {"id": "", "cancelled": True}
+            try:
+                operator_proxy_turn.set(False)
+            except Exception:
+                pass
+        spoken = result.get("spoken", "") if isinstance(result, dict) else ""
+        invites = self.spoken_invites_follow_up(spoken)
+        self._last_tap_conversation_id = conversation_id
+        self._last_spoken_invites_follow_up = invites
+        payload = {
+            "ok": True,
+            "refused": "",
+            "conversation_id": conversation_id,
+            "route": result.get("route", "") if isinstance(result, dict) else "",
+            "spoken": spoken,
+            "speaker": speaker_name,
+            "provenance": "operator_proxy",
+            "follow_up": use_follow_up,
+            "follow_up_reason": follow_reason,
+            "expects_follow_up": invites,
+            **self.tap_ear_status(),
+        }
+        try:
+            ledger = Path(os.path.expanduser("~/.jarvis/operator_tap.jsonl"))
+            ledger.parent.mkdir(parents=True, exist_ok=True)
+            rec = {
+                "ts": time.time(),
+                "text": cleaned[:500],
+                **payload,
+            }
+            with ledger.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, default=str) + "\n")
+        except Exception:
+            logger.debug("operator tap ledger write skipped", exc_info=True)
+        return payload
+
+    async def inject_operator_turn_async(
+        self,
+        text: str,
+        *,
+        speaker: str = "David",
+        follow_up: bool | None = None,
+    ) -> dict[str, Any]:
+        """Async TAP for the dashboard. Same contract as inject_operator_turn."""
+        import json
+        import os
+        import uuid
+        from pathlib import Path
+
+        from consciousness.events import operator_proxy_turn
+
+        cleaned = (text or "").strip()
+        speaker_name = (speaker or "David").strip() or "David"
+        if not cleaned:
+            return {"ok": False, "refused": "empty_text", "spoken": "", "route": ""}
+        try:
+            from memory.gate import memory_gate
+            if memory_gate.synthetic_session_active():
+                return {
+                    "ok": False,
+                    "refused": "synthetic_session_active",
+                    "spoken": "",
+                    "route": "",
+                }
+        except Exception:
+            pass
+        if self._voice_turn_busy():
+            return {
+                "ok": False,
+                "refused": "voice_busy",
+                "spoken": "",
+                "route": "",
+                **self.tap_ear_status(),
+            }
+
+        use_follow_up, follow_reason = self._resolve_tap_follow_up(follow_up)
+        last_id = str(getattr(self, "_last_tap_conversation_id", "") or "")
+        conversation_id = (
+            last_id if (use_follow_up and last_id.startswith("tap_"))
+            else f"tap_{uuid.uuid4().hex[:12]}"
+        )
+        speaker_snapshot = {
+            "name": speaker_name,
+            "method": "operator_proxy",
+            "identity_method": "operator_proxy",
+            "operator_proxy": True,
+            "is_known": True,
+            "confidence": 1.0,
+        }
+        emotion_snapshot = dict(self._current_emotion) if self._current_emotion else {
+            "emotion": "neutral", "trusted": False,
+        }
+        with self._conv_lock:
+            cancel_state = {"id": conversation_id, "cancelled": False}
+            self._active_conversation = cancel_state
+        if self.audio_stream:
+            self.audio_stream.set_speaking(True)
+        self._speaking_conv_id = conversation_id
+        logger.info(
+            "OPERATOR-PROXY TAP speaker=%s conv=%s follow_up=%s (%s) text=%s",
+            speaker_name, conversation_id, use_follow_up, follow_reason, cleaned[:80],
+        )
+        result: dict[str, Any] = {}
+        try:
+            result = await asyncio.wait_for(
+                handle_transcription(
+                    cleaned, self.engine, self.response_gen, self.claude, self.perception,
+                    self.episodes, speaker_snapshot, emotion_snapshot,
+                    conversation_id=conversation_id,
+                    cancel_flag=cancel_state,
+                    ollama=self._ollama,
+                    pi_snapshot_url=self._pi_snapshot_url,
+                    brain_tts=self.brain_tts,
+                    scene_context=self.get_scene_context(),
+                    follow_up=use_follow_up,
+                    enroll_callback=self.enroll_current_user,
+                    identity_callback=self.get_identity_status,
+                    scene_ingest_callback=self.ingest_scene_description,
+                ),
+                timeout=120.0,
+            ) or {}
+        except asyncio.TimeoutError:
+            result = {"spoken": "", "route": "", "operator_proxy": True}
+            payload = {
+                "ok": False,
+                "refused": "timeout",
+                "conversation_id": conversation_id,
+                "route": "",
+                "spoken": "",
+                "speaker": speaker_name,
+                "provenance": "operator_proxy",
+            }
+            return payload
+        finally:
+            self._cancel_speaking_safety_timer()
+            self._speaking_conv_id = ""
+            if self.audio_stream:
+                self.audio_stream.set_speaking(False)
+            with self._conv_lock:
+                if (self._active_conversation or {}).get("id") == conversation_id:
+                    self._active_conversation = {"id": "", "cancelled": True}
+            try:
+                operator_proxy_turn.set(False)
+            except Exception:
+                pass
+        spoken = result.get("spoken", "") if isinstance(result, dict) else ""
+        invites = self.spoken_invites_follow_up(spoken)
+        self._last_tap_conversation_id = conversation_id
+        self._last_spoken_invites_follow_up = invites
+        payload = {
+            "ok": True,
+            "refused": "",
+            "conversation_id": conversation_id,
+            "route": result.get("route", "") if isinstance(result, dict) else "",
+            "spoken": spoken,
+            "speaker": speaker_name,
+            "provenance": "operator_proxy",
+            "follow_up": use_follow_up,
+            "follow_up_reason": follow_reason,
+            "expects_follow_up": invites,
+            **self.tap_ear_status(),
+        }
+        try:
+            ledger = Path(os.path.expanduser("~/.jarvis/operator_tap.jsonl"))
+            ledger.parent.mkdir(parents=True, exist_ok=True)
+            rec = {"ts": time.time(), "text": cleaned[:500], **payload}
+            with ledger.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, default=str) + "\n")
+        except Exception:
+            logger.debug("operator tap ledger write skipped", exc_info=True)
+        return payload
 
     # ------------------------------------------------------------------
     # Identity enrollment & query

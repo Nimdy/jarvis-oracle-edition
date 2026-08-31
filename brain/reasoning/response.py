@@ -220,6 +220,22 @@ def route_memory_request(
         _last_memory_route = route
         return route
 
+    try:
+        from tools.memory_tool import is_household_self_fact_recall
+        _household_self_fact = is_household_self_fact_recall(text)
+    except Exception:
+        _household_self_fact = False
+    if _household_self_fact:
+        route = MemoryRoute(
+            route_type="self_preference",
+            referenced_entities=refs,
+            allow_preference_injection=True,
+            allow_autonomy_recall=False,
+            search_scope="primary_user_only",
+        )
+        _last_memory_route = route
+        return route
+
     if _BELIEF_RE.search(text):
         route = MemoryRoute(
             route_type="belief_synthesis",

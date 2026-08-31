@@ -42,6 +42,32 @@ def test_merge_disk_corrections_keeps_tags_and_lower_weight():
     assert out[0]["payload"] == "kitchen stove"
 
 
+def test_merge_restatement_does_not_restore_corrected_or_min_weight():
+    """Lived: Tanya restatement 0.70 no-corrected lost to disk 0.07+corrected."""
+    ram = [{
+        "id": "mem_n7M6",
+        "weight": 0.70,
+        "tags": ["personal_fact", "user_preference"],
+        "decay_rate": 0.005,
+        "payload": "User's wife is Tanya",
+        "last_validated": 200.0,
+        "timestamp": 100.0,
+    }]
+    disk = [{
+        "id": "mem_n7M6",
+        "weight": 0.07,
+        "tags": ["corrected", "personal_fact", "user_preference"],
+        "decay_rate": 0.005,
+        "payload": "User's wife is Tanya",
+        "last_validated": 100.0,
+        "timestamp": 100.0,
+    }]
+    out = MemoryPersistence._merge_disk_corrections(ram, disk)
+    assert out[0]["weight"] == 0.70
+    assert "corrected" not in out[0]["tags"]
+    assert "personal_fact" in out[0]["tags"]
+
+
 def test_merge_does_not_drop_payload_or_other_memories():
     ram = [
         {"id": "mem_91hZ", "weight": 0.5, "tags": ["conversation"], "decay_rate": 0.01, "payload": "kitchen stove"},

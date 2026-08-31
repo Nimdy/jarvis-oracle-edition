@@ -541,7 +541,7 @@ _AFFECT_CLAIMS: list[tuple[re.Pattern, str]] = [
     (re.compile(
         r"\bI(?:'m| am) (?:really )?(?:happy|excited|thrilled|delighted|glad) (?:to|about|that)\b",
         re.I,
-    ), "I'm active and listening."),
+    ), ""),
     # ── Interior-experience fabrication: progressive/autobiographical desire ──
     # "I've been hoping/wanting/wishing/thinking/wondering" — the core confabulation
     (re.compile(
@@ -659,7 +659,7 @@ _SELF_STATE_CLAIMS: list[tuple[re.Pattern, str]] = [
         r"\bI(?:'m| am) (?:ready|prepared|available|equipped|standing by) to "
         r"(?:assist|help|support|serve) (?:you|in any way)\b",
         re.I,
-    ), "I'm active and listening"),
+    ), ""),
     (re.compile(
         r"\bbetter (?:understand|serve|support|assist|help)(?: your| you with| your)? needs\b",
         re.I,
@@ -678,12 +678,12 @@ _SELF_STATE_CLAIMS: list[tuple[re.Pattern, str]] = [
         r"(?:(?: you)? with (?:whatever|anything|everything) (?:you )?(?:need|want|require))?"
         r"(?: you)?\b",
         re.I,
-    ), "I'm active and listening"),
+    ), ""),
     # "I'm here for you"
     (re.compile(
         r"\bI(?:'m| am) here for you\b",
         re.I,
-    ), "I'm active and listening"),
+    ), ""),
     # "just like I've been" / "just as I have been" — continuity rhetoric
     (re.compile(
         r",? ?just (?:like|as) I(?:'ve| have) been\b",
@@ -1500,6 +1500,7 @@ class CapabilityGate:
         modified = self._rewrite_ungrounded_affect(modified)
         modified = self._rewrite_ungrounded_self_state(modified)
         modified = self._rewrite_ungrounded_learning(modified)
+        modified = self._strip_active_listening_tic(modified)
 
         for pat_idx, (pattern, is_readiness) in enumerate(_CLAIM_PATTERNS):
             for match in list(pattern.finditer(modified)):
@@ -1530,7 +1531,7 @@ class CapabilityGate:
         modified = self._scan_offer_patterns(modified)
         modified = self._scan_demo_invites(modified)
         modified = self._sweep_blocked_verb_residual(modified)
-        return modified
+        return self._strip_active_listening_tic(modified)
 
     # ── Intention infrastructure Stage 0: backed-commitment evaluation ────
 
@@ -1768,6 +1769,16 @@ class CapabilityGate:
             sentence_lower = text_lower[max(0, sent_start):sent_end + 1]
             if _REFLECTIVE_EXCLUSION_RE.search(sentence_lower):
                 continue
+            # Lived 2026-08-31: "I'm here" in a closer poisoned a later
+            # "you enjoy electronic dance music" sentence. Contract is
+            # blocked-verb + first-person/self-ref IN THE SAME SENTENCE.
+            # Do not drop music/dance from the blocked set.
+            if not (
+                _FIRST_PERSON_RE.search(sentence_lower)
+                or _SELF_NAME_RE.search(sentence_lower)
+                or _SELF_REFERENCE_RE.search(sentence_lower)
+            ):
+                continue
 
             _block_eid = self._record_block(f"sweep:{verb}")
             logger.info("Gate blocked (residual sweep): verb=%s in '%s'", verb, sentence[:80])
@@ -1802,6 +1813,21 @@ class CapabilityGate:
         return "I don't have that capability yet."
 
     @staticmethod
+    def _strip_active_listening_tic(text: str) -> str:
+        """Lived: L0 rewrote 'I'm here to help' into this closer on every turn."""
+        if not text:
+            return text
+        out = re.sub(
+            r"(?:[,;:—–-]\s*)?(?:\band\s+)?I(?:'m| am) active and listening\.?\s*",
+            "",
+            text,
+            flags=re.I,
+        )
+        out = re.sub(r"\s{2,}", " ", out)
+        out = re.sub(r"\s+([.!?])", r"\1", out)
+        return out.strip()
+
+    @staticmethod
     def _rewrite_at_match(text: str, match: re.Match, replacement: str) -> str:
         """Replace matched text, consuming orphaned clause tail through sentence end.
 
@@ -1813,32 +1839,30 @@ class CapabilityGate:
         """
         start, end = match.start(), match.end()
         after = text[end:]
+        if after and after[0] not in '.!?\n' and after.lstrip():
+            starts_new_clause = bool(re.match(
+                r'^[\s,;—–-]*\b(?:but|so|yet|while|because|since|when|if|'
+                r'though|although|which|that|who|I|you|we|they|he|she|it|'
+                r'my|the|this|there|here)\b',
+                after, re.I,
+            ))
+            if not starts_new_clause:
+                sent_end = end
+                for i in range(end, len(text)):
+                    if text[i] in '.!?\n':
+                        sent_end = i + 1
+                        break
+                else:
+                    sent_end = len(text)
+                end = sent_end
 
-        if not after or after[0] in '.!?\n':
-            return text[:start] + replacement + text[end:]
-
-        first_non_space = after.lstrip()
-        if not first_non_space:
-            return text[:start] + replacement + text[end:]
-
-        starts_new_clause = bool(re.match(
-            r'^[\s,;—–-]*\b(?:but|so|yet|while|because|since|when|if|'
-            r'though|although|which|that|who|I|you|we|they|he|she|it|'
-            r'my|the|this|there|here)\b',
-            after, re.I,
-        ))
-
-        if not starts_new_clause:
-            sent_end = end
-            for i in range(end, len(text)):
-                if text[i] in '.!?\n':
-                    sent_end = i + 1
-                    break
-            else:
-                sent_end = len(text)
-            end = sent_end
-
-        return text[:start] + replacement + text[end:]
+        prefix = text[:start]
+        if not (replacement or "").strip():
+            prefix = re.sub(r"[,;]?\s*(?:and\s+)?$", "", prefix)
+        out = prefix + replacement + text[end:]
+        out = re.sub(r"\s{2,}", " ", out)
+        out = re.sub(r"\s+([.!?])", r"\1", out)
+        return out.strip()
 
     def _rewrite_ungrounded_self_state(self, text: str) -> str:
         """Rewrite vague self-assessment rhetoric to telemetry-grounded language.

@@ -93,7 +93,23 @@ def test_recent_with_provenance_preview_widened():
     long = "x" * 300
     s = _store([_tmem(1.0, "a", long)])
     out = MemoryStorage.get_recent_with_provenance(s, 1)
-    assert len(out[0]["payload_preview"]) == 140  # was 60
+    assert out[0]["payload_preview"] == long
+
+
+def test_recent_with_provenance_formats_conversation_dict():
+    payload = {
+        "user_message": "I prefer when you finish your conversations with me to not say, I am active and listening.",
+        "response": "Understood.",
+    }
+    s = _store([SimpleNamespace(
+        timestamp=1.0, id="abcdefghijklmn", type="conversation",
+        provenance="conversation", weight=0.5, payload=payload,
+    )])
+    out = MemoryStorage.get_recent_with_provenance(s, 1)
+    preview = out[0]["payload_preview"]
+    assert "to not say, I am active and listening" in preview
+    assert "You:" in preview and "Jarvis:" in preview
+    assert "{'user_message'" not in preview
 
 
 def test_recent_episodes_by_time_not_list_order():

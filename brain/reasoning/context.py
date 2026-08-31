@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -38,6 +39,47 @@ def get_resolved_chunks(conversation_id: str) -> list[dict[str, str]]:
 
 _PERSIST_PATH = Path.home() / ".jarvis" / "conversation_history.json"
 _HISTORY_TTL_S = 3600.0 * 4  # discard messages older than 4 hours on load
+
+# Injection teacher: do not present rejected/low-weight scars as equal facts.
+# Lived: "what do I work as" spoke plumber (0.07, corrected) over software
+# engineer (0.77) because the first 8 prefs were unsorted and unfiltered.
+_INJECT_MIN_WEIGHT = 0.20
+_INJECT_MAX_SELF = 8
+_INJECT_PAYLOAD_MAX = 200
+_DANGLING_INJECT_TAIL = re.compile(
+    r"(?:\b(?:a|an|the|that is|basically|essentially)\s*)$",
+    re.I,
+)
+
+
+def _self_pref_injection_payloads(
+    memories: list[Any],
+    *,
+    limit: int = _INJECT_MAX_SELF,
+) -> list[str]:
+    """Rank current self-facts for the prompt. Weight in, corrected/low out.
+
+    No name list. No hardcoded job. The student ranker can only learn this
+    if the heuristic teacher does not inject a 0.07 scar beside a 0.77 fact.
+    """
+    eligible: list[Any] = []
+    for m in memories or []:
+        payload = getattr(m, "payload", None)
+        if not isinstance(payload, str) or not payload.strip():
+            continue
+        tags = set(getattr(m, "tags", ()) or ())
+        if tags & {"corrected", "former", "fact_check_rejected"}:
+            continue
+        if float(getattr(m, "weight", 0.0) or 0.0) < _INJECT_MIN_WEIGHT:
+            continue
+        eligible.append(m)
+    eligible.sort(
+        key=lambda m: (
+            1 if _DANGLING_INJECT_TAIL.search(str(m.payload).strip()) else 0,
+            -float(getattr(m, "weight", 0.0) or 0.0),
+        )
+    )
+    return [m.payload[:_INJECT_PAYLOAD_MAX] for m in eligible[:limit]]
 
 
 # ── soul_dims -> voice DIALS (SHADOW) ──────────────────────────────────────
@@ -780,9 +822,10 @@ class ContextBuilder:
             if memory_route is not None:
                 route_refs = {r.lower() for r in getattr(memory_route, "referenced_entities", set())}
 
-            active: list[str] = []
+            active_mems: list[Any] = []
             former: list[str] = []
             thirdparty: list[str] = []
+            inject_len = max(int(pref_max_len or 0), _INJECT_PAYLOAD_MAX)
             for m in all_prefs:
                 if not isinstance(m.payload, str):
                     continue
@@ -802,7 +845,7 @@ class ContextBuilder:
                     elif speaker_key and speaker_key != "unknown":
                         owned_by_speaker = f"speaker:{speaker_key}" in tags
                     if owned_by_speaker or (not speaker_key or speaker_key == "unknown"):
-                        thirdparty.append(m.payload[:pref_max_len])
+                        thirdparty.append(m.payload[:inject_len])
                     continue
 
                 if not inject_self:
@@ -818,9 +861,10 @@ class ContextBuilder:
                     ):
                         continue
                 if "former" in m.tags:
-                    former.append(m.payload[:pref_max_len])
+                    former.append(m.payload[:inject_len])
                 else:
-                    active.append(m.payload[:pref_max_len])
+                    active_mems.append(m)
+            active = _self_pref_injection_payloads(active_mems)
 
             logger.info(
                 "Preference injection: route=%s self=%d third=%d former=%d (inject_self=%s inject_third=%s refs=%s)",

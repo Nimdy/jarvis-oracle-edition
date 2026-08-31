@@ -1,6 +1,10 @@
 # Shockwave handoff — JARVIS Oracle Edition
 
-**Checkpoint:** 2026-08-27. Operator: David.
+**Frozen checkpoint: 2026-08-27.** Operator: David.
+
+**Current branch, life-phase, leftovers: [NOW.md](NOW.md).** That file wins.
+Do not copy git HEAD or stage into this file — it goes stale. Roster, hard nos,
+and the turn contract below still apply.
 
 **This is not a greenfield. Gated is not missing. Do not guess from a dashboard looking wrong.**
 
@@ -16,14 +20,16 @@
 
 Shockwave lives on the WSL tree `/home/nimda/projects/jarvis-oracle-edition`.
 
-**Shockwave loop after a bounce:**
+**Shockwave loop after a bounce or after a verbal sit:**
 
 1. SSH the brain (`duafoo@192.168.1.222`, `~/.ssh/id_jarvis_desktop`).
-2. Read `~/.jarvis/brain.log` **first**.
+2. Read `~/.jarvis/brain.log` **first** (`OPERATOR-PROXY TAP` or STT).
 3. Then process (`ps` / pid / start time).
-4. Then API (`/api/scene`, `/api/identity`, …).
+4. Then API (`/api/operator/tap/status`, `/api/scene`, `/api/identity`, …). Never `POST /api/chat`.
 5. Then JSON under `~/.jarvis/` (memories, face, grounding, conversation_history).
 6. Validate **docs and writing against live truth**. If the book disagrees with the log, the log wins; flag the doc.
+
+Verbal sits: Pi voice or `POST /api/operator/tap`. Pytest is a contract pin, not a sit. [OPERATOR_PROXY_TAP.md](OPERATOR_PROXY_TAP.md).
 
 Security scans are **skipped on purpose**. Do not start an audit theater.
 
@@ -31,12 +37,14 @@ Shockwave does **not** bounce, does **not** wipe `~/.jarvis`, and does **not** c
 
 Canon for everyone (Shockwave reads; Grok 4.6 edits against):
 
-1. This file (roster, where we are, leftovers).
-2. [shockwave/GROWTH_VALIDATION.md](shockwave/GROWTH_VALIDATION.md) — integrity, maturity, immune, distillation (how she is supposed to grow).
-3. [AGENT_MAP.md](AGENT_MAP.md) — what the system *is*, one spoken turn, who has authority.
-4. [AGENTS.md](../AGENTS.md) — field manual.
-5. [MATURITY_GATES_REFERENCE.md](MATURITY_GATES_REFERENCE.md) + `brain/nn_fleet_registry.json` — before anyone touches an NN.
-6. GitHub **#83** — couple what exists, stop opening organs.
+1. [NOW.md](NOW.md) — **current** branch, stage, leftovers, misread table, How we test.
+2. [OPERATOR_PROXY_TAP.md](OPERATOR_PROXY_TAP.md) — agent verbal sits.
+3. [shockwave/GROWTH_VALIDATION.md](shockwave/GROWTH_VALIDATION.md) — integrity, maturity, immune, distillation (how she is supposed to grow).
+4. [AGENT_MAP.md](AGENT_MAP.md) — what the system *is*, one spoken turn, who has authority.
+5. [AGENTS.md](../AGENTS.md) — field manual.
+6. [MATURITY_GATES_REFERENCE.md](MATURITY_GATES_REFERENCE.md) + `brain/nn_fleet_registry.json` — before anyone touches an NN.
+7. GitHub **#83** — couple what exists, stop opening organs.
+8. This file — frozen roster / hard nos only.
 
 Grok Bot / Shockwave skill: `.grok/skills/jarvis-shockwave/SKILL.md`.
 
@@ -61,12 +69,14 @@ North star: a sovereign local companion that cannot lie about high-stakes truth,
 
 ---
 
-## Where we are (git)
+## Where we are (git) — FROZEN 2026-08-27 snapshot
+
+**Do not update this table.** Current branch/HEAD/stage: [NOW.md](NOW.md).
 
 | | |
 |---|---|
-| **Branch** | `fix/audit-real-bugs-2026-08-24` |
-| **HEAD at this checkpoint** | `531e809` — `fix: live VQA, fresh Pi grab, retry-after-wrong, TTS markdown` |
+| **Branch (frozen)** | `fix/audit-real-bugs-2026-08-24` |
+| **HEAD at this checkpoint (frozen)** | `531e809` — `fix: live VQA, fresh Pi grab, retry-after-wrong, TTS markdown` |
 | **Merge `main`** | **No**, unless David asks |
 
 Operator owns start/stop of supervisor, `main.py`, and lidar. Agents **sync** (`./sync-desktop.sh`, `./sync-pi.sh`). They do **not** bounce unless asked.

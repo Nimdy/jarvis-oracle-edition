@@ -269,6 +269,12 @@ def _record_voice_intent_teacher_signal(
     try:
         from hemisphere.distillation import distillation_collector
 
+        try:
+            from consciousness.events import operator_proxy_turn
+            if operator_proxy_turn.get():
+                return
+        except Exception:
+            pass
         origin = origin or ("synthetic" if synthetic else "router")
         fidelity = max(0.3, min(1.0, result.confidence))
         if synthetic:
@@ -335,6 +341,10 @@ _KEYWORD_PATTERNS: list[tuple[list[str], ToolType]] = [
       "what was the first", "first memory", "earliest memory",
       "remember about me", "know about me", "what have i told you",
       "what did i say",
+      "who is in my family", "who's in my family", "tell me about my family",
+      "what are my kids' names", "what are my kids names",
+      "what are my children's names", "what is my morning routine",
+      "what's my morning routine", "when should you not interrupt",
       "about your memory", "about your memories", "your recent memories",
       "one of your memories", "share a memory", "a memory you have",
       "tell me a memory", "your favorite memory", "your oldest memory",
@@ -563,6 +573,14 @@ _INTENT_PATTERNS: list[tuple[re.Pattern, ToolType, float]] = [
     (re.compile(r"\bfirst time you (heard|met|saw|spoke|talked)\b", re.I), ToolType.MEMORY, 0.9),
     (re.compile(r"\b(heard|recognized) my voice\b", re.I), ToolType.MEMORY, 0.85),
     (re.compile(r"\bwhat (do )?you (know|remember) about me\b", re.I), ToolType.MEMORY, 0.9),
+    (re.compile(
+        r"\b(?:who(?:'s|\s+is)\s+in\s+my\s+family|"
+        r"(?:tell\s+me|talk(?:\s+to\s+me)?)\s+about\s+my\s+family|"
+        r"what(?:'s|\s+are|\s+is)\s+my\s+(?:kids?|children)(?:'s?)?\s+names?|"
+        r"what(?:'s|\s+is)\s+my\s+morning\s+routine|"
+        r"when\s+should\s+you\s+not\s+interrupt)\b",
+        re.I,
+    ), ToolType.MEMORY, 0.91),
     (re.compile(r"\b(can you|could you|go ahead and|i want you to|please).{0,20}(modify|change|improve|fix|update|adjust|edit|patch|rewrite|upgrade|enhance|optimize).{0,20}(your |the )?(code|codebase|source|yourself|systems|memory|network|brain|processing|performance)\b", re.I), ToolType.SELF_IMPROVE, 0.9),
     (re.compile(r"\b(improve|upgrade|enhance|optimize|fix|rewrite)\s+your\s+\w+", re.I), ToolType.SELF_IMPROVE, 0.85),
     (re.compile(r"\b(make|suggest|propose).{0,15}(code|improvement|change|modification|suggestion|adjustment).{0,10}(to your|for your|yourself)?\b", re.I), ToolType.SELF_IMPROVE, 0.85),

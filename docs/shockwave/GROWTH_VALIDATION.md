@@ -3,15 +3,39 @@
 **Who this is for:** Shockwave (debugger / validator / docs officer).  
 **Who this is not for:** the in-chair pair-programmer. Do not implement from this file. Validate **signal and wiring** against live truth, then report.
 
-Roster: [SHOCKWAVE_HANDOFF.md](../SHOCKWAVE_HANDOFF.md).  
+Shockwave is the **operational immune system for JARVIS as a process**. If JARVIS does anything — spoken turn, VISION, identity, Spark/grounding, dream, distillation, Matrix skill lifecycle, self-improve, HRR/P4/P5, persist-after-bounce, plugins — Shockwave validates:
+
+1. The signal actually fired (log + API + `~/.jarvis` JSON).
+2. The lane had authority ([AGENT_MAP.md](../AGENT_MAP.md)).
+3. Maturity / immune / CapabilityGate were not bypassed.
+4. The process matches project DNA ([ARCHITECTURE_PILLARS.md](../ARCHITECTURE_PILLARS.md), earn-don’t-declare, shadow-first).
+5. The book matches the wire.
+
+Current state: [NOW.md](../NOW.md) (wins over frozen handoff git/stage).  
+Roster snapshot: [SHOCKWAVE_HANDOFF.md](../SHOCKWAVE_HANDOFF.md).  
 Turn contract: [AGENT_MAP.md](../AGENT_MAP.md).  
 Gate numbers: [MATURITY_GATES_REFERENCE.md](../MATURITY_GATES_REFERENCE.md) — **single source for thresholds. Do not retune them here.**  
 Honesty layers: [SCIENTIFIC_HONESTY.md](../SCIENTIFIC_HONESTY.md).  
 Dashboard map: [V2_SURFACE_TRUTH.md](../V2_SURFACE_TRUTH.md).
+DNA: [ARCHITECTURE_PILLARS.md](../ARCHITECTURE_PILLARS.md).
 
-Loop after bounce: `brain.log` → process → API → `~/.jarvis` JSON. Docs lose if they disagree with the log.
+Loop after bounce: `brain.log` → process → API → `~/.jarvis` JSON. Docs lose if they disagree with the log **until** you run the DNA test below.
 
 Security scans: **skip on purpose.**
+
+---
+
+## DNA test (book says A→B, live is A→C→B)
+
+1. What did the log do?
+2. What does the book say?
+3. Is **C** in AGENT_MAP / pillars / gates as a **required station**?
+
+| Answer | Class |
+|---|---|
+| Yes — C is a required station, wire is correct | **DOC DRIFT** (update the book; do not “fix” a correct wire) |
+| No — C is not a required station | **REAL** if the gate is already earned; else **GATED / EXPECTED** or **THEATER** |
+| Pipeline skipped a required station or forged a ledger | **PROCESS BREAK** |
 
 ---
 
@@ -81,6 +105,8 @@ Maturity.html is a **subset**. Spark, `native_voice`, OSV P2, voice-intent **pri
 
 **Do not lower sample floors, win-rates, Face 0.55, or any Do-Not-Tune gate** to make a bar green.
 
+**Do not flip:** Spark / GroundingDrivePromotion, OSV P2, `native_voice`, revoice-live, voice-intent primary, HRR, SI Stage 2, Weight Room `enforces`, L3, CapabilityGate L0.
+
 ---
 
 ## Immune system (can the lie spread?)
@@ -140,18 +166,47 @@ If a correction did not write a teacher pair (kitchen MEMORY mash, “check agai
 
 ---
 
+## Process immune
+
+If JARVIS ran a process, Shockwave traces **that** process. Earned vs theater is not “did a sentence sound alive.”
+
+| Process | Validate | Earned vs theater | Probe | Hard no |
+|---|---|---|---|---|
+| Spoken turn | STT **or TAP** → route → lane mouth → CapabilityGate → TTS | Lane in AGENT_MAP spoke with authority. Pytest is not this row. | `brain.log` STT or `OPERATOR-PROXY TAP` + `route=` | Phrase-hack a new route; score pytest as a sit; `/api/chat` |
+| Spoken recall | `search_memory` → native MEMORY **or** LLM+pref inject → **L0** → TTS | Native about-me is fail-closed retrieval, not LLM warmth. Pref inject firing + padded mouth = L0 ate a sentence, not “she forgot.” | `route=MEMORY` / `Preference injection:` / `Gate blocked` vs spoken text | Skip L0; delete `music`/`dance` from blocked verbs; steal about-me onto the LLM; speak fractal/dream/HRR |
+| Fractal / dream / HRR | Fractal never speaks, never writes canonical; dream_observer is not autobiography; HRR PRE-MATURE album OFF | `no seed above 0.40` = expected; prove Claim 2 = store survival not conversation retrieval | fractal_recall logs; `dream_stats.json`; `/api/hrr/status` | Couple a silent lane into the mouth “to fix Stage 6” |
+| VISION | Fresh JPEG + VLM; retry after wrong re-grabs | Caption/VQA from frame, not dinner-chat | snapshot `sha=` `age_ms` `fresh=`; `/api/scene` | YOLO on Pi; Face 0.55 |
+| Identity | Fusion method, face/voice known, L3 filter | Voice/persisted David ≠ wipe; unknown face under 0.55 expected | `/api/identity`; `Identity pre-filter` | Lower 0.55; weaken L3 |
+| Spark / grounding | Operator-pull queue; shadow would-haves; **level** | pending=0 is starved, not broken | `/v2/grounding`; `grounding_drive_promotion.json` | Flip GroundingDrivePromotion |
+| Dream | Skip if &lt;5 recent non-dream memories; artifacts gated | Dream text is not lived speech | `dream_stats.json`; dream logs | Force-run overnight “learning” |
+| Distillation / Matrix skill | Teacher pair written; student still shadow until floor | Samples ≠ control; heuristic still routes | `/api/nn-fleet`; `hemisphere_training/` | Promote voice-intent / native_voice |
+| Self-improve | Stage, sandbox, human gate, rollback | Dashboard “active” ≠ SI Stage 2 | `/api/self-improve`; `/api/meta/status-markers` | Flip SI Stage 2 |
+| HRR / P4 / P5 | PRE-MATURE; zero influence; scene ≠ HRR | Tracker/VLM is live scene; HRR is shadow | `/api/hrr/status`; `/api/scene` | Treat HRR as canonical live scene |
+| Policy NN | Shadow A/B; non-causal estimand | 0/3 is measurement, not a router bug | `/api/policy`; experience jsonl | Wait for policy to become the brain |
+| World model | Predictions validated; canonical ≠ speech | Empty phys after bounce can be recovery | world-model logs; full-snapshot | Declare world-model the mouth |
+| OSV | P1 articulator; P2 not flipped; revoice teacher-only | Spec-sheet TTS is the floor | `self_view_kind`; voice-lab | Flip OSV P2 / native_voice |
+| Plugin / acquisition | Isolation, skill contract, operational handoff | “Know about X” ≠ “can do X” | `/api/plugins`; acquisition JSON | Embodiment as missing architecture |
+| Bounce / persist | Tags, downweight, spark clocks survive restart | RAM clobbering disk tags = persist miss | `memories.json` vs pre-bounce tags | Wipe `~/.jarvis`; treat unstaged persist patch as shipped |
+
+Unstaged bounce-persist patch on WSL ≠ shipped. Do not report it as live.
+
+---
+
 ## Probe card (copy this)
 
-After bounce or after David talks:
+After bounce, after TAP, or after David talks:
 
 ```
-1. brain.log: STT → route= → snapshot sha/age/fresh → spoken
+0. GET :9200/api/operator/tap/status  (busy / ear / follow_up — wait if busy)
+1. brain.log: STT **or** OPERATOR-PROXY TAP → route= → snapshot sha/age/fresh → spoken
 2. ps: pid + start (is this the code you think it is?)
 3. GET :9200/api/scene  (caption, person_bbox_count, region_visibility, entities)
 4. GET :9200/api/identity  (method, face known, voice known)
 5. GET :9200/api/eval/snapshot  (current vs high-water)
-6. GET :9200/api/nn-fleet  (shadow / not_born / sample counts)
-7. JSON: memories tags on disputed ids; grounding_drive_promotion.json level;
+6. GET :9200/api/nn-fleet  (live_state + consumed — not sample counts)
+7. GET :9200/api/self-improve
+8. GET :9200/api/meta/status-markers
+9. JSON: memories tags on disputed ids; grounding_drive_promotion.json level;
          dream_stats.json; calibration watchdog
 ```
 
@@ -163,14 +218,16 @@ Classify **each finding** with exactly one class. **REAL does not mean “it wor
 | **REAL** | Documented contract **broken** *and* the maturity gate is **already earned**. Fix-class only. | After P1 is live, OSV invents a job that is not in the model |
 | **GATED / EXPECTED** | Zero, shadow, PRE-MATURE, `not_born`, or leftover cadence because the floor is not earned | Sparse `fresh=False` periodic captions; Spark pending=0 |
 | **THEATER** | LLM authored a fact no sensor/lane had | “I tracked you to your chair” with no sit-down event |
-| **DOC DRIFT** | Book disagrees with the log | Audit text still saying `/api/scene` is tracker-only |
+| **DOC DRIFT** | Book disagrees with the log **and** the wire matches DNA (C is a required station) | Audit text still saying `/api/scene` is tracker-only |
+| **PROCESS BREAK** | Required station skipped or a ledger was forged | VISION spoke without a snapshot; SI “applied” with no sandbox/approval |
 
 Worked example (do not file these as REAL):
 
 - VISION VQA live after bounce → **LIVE / WIRED**
 - Sit-down path-tracking with no sit-down event → **THEATER**
-- Stale audit copy vs current AGENT_MAP → **DOC DRIFT**
+- Stale audit copy vs current AGENT_MAP, wire correct → **DOC DRIFT**
 - Periodic captions still `fresh=False` / hours apart → **GATED / EXPECTED** leftover
+- Book says A→B, live A→C→B, C not in AGENT_MAP, gate already earned → **REAL** or **PROCESS BREAK**
 
 Megatron: if Shockwave stamps REAL on a working wire, send it back. REAL is a defect class, not a compliment.
 

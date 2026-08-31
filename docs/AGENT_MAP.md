@@ -6,11 +6,22 @@ what you must not invent. If a change is conversation, OSV, memory, routing,
 TTS, or preferences: match a box on these diagrams first.
 
 Roster: Grok 4.6 in-chair; Shockwave debug/docs; Megatron on Shockwave’s pulse.
-[SHOCKWAVE_HANDOFF.md](SHOCKWAVE_HANDOFF.md). Do not skip it for a fresh
-“the dashboard looks wrong” pass. **REAL ≠ live.**
+Current branch / stage / leftovers: [NOW.md](NOW.md) (**wins** over any other
+git/stage line). Frozen roster snapshot: [SHOCKWAVE_HANDOFF.md](SHOCKWAVE_HANDOFF.md).
+Do not skip those for a fresh “the dashboard looks wrong” pass. **REAL ≠ live.**
 
 Lived miss 2026-08-24 (`69d7819`): an agent added `briefing_register` /
 exec-tech-ops mouths instead of using the path already drawn here.
+
+**How we test:** verbal conversation testing always hits `handle_transcription`.
+That is Pi STT **or** `POST /api/operator/tap` (second ear). Canon:
+[OPERATOR_PROXY_TAP.md](OPERATOR_PROXY_TAP.md). `POST /api/chat` is retired
+(410 — it skipped the router). Do not forge face/voice.
+
+`brain/tests/` are **contract pins and they stay.** They catch L0 / aboutness /
+TAP provenance / 410 regressions. Green pytest is not a Stage 6 sit. Synthetic
+gym audio must never reach `handle_transcription`. Dashboard pages are
+instruments; read them after a sit.
 
 ---
 
@@ -38,12 +49,14 @@ flowchart LR
     spk[Speaker]
   end
   subgraph brain [Brain — source of truth]
-    perc[Perception: wake VAD STT speaker face]
+    perc[handle_transcription — the spoken mind]
     route[Tool router + P1 overrides]
     mind[OSV / memory / LLM-as-voice]
     tts[Kokoro TTS]
   end
-  mic -->|PCM ws:9100| perc
+  tap[Operator TAP]
+  mic -->|PCM ws:9100 STT| perc
+  tap -->|text inject operator_proxy| perc
   cam -->|PerceptionEvent| perc
   perc --> route --> mind --> tts -->|audio_b64| spk
 ```
@@ -56,7 +69,7 @@ Validated against `conversation_handler.py` (2026-08-24). Order is load-bearing.
 
 ```mermaid
 flowchart TD
-  stt[STT transcription + speaker fusion]
+  stt["STT or TAP → handle_transcription"]
   intel[Personal intel + response_style store]
   tbs["TBS-0 ToM read — SHADOW, injects nothing"]
   router[tool_router.route]
@@ -122,18 +135,44 @@ flowchart LR
 
 ---
 
-## Memory: one write path, one recall path
+## Memory: one write path, one *spoken* recall path
+
+Agents keep fucking this up. Fractal, dream, HRR, salience, belief-graph, and
+ranker are **not missing**. They are **not the mouth**. Full table: [NOW.md](NOW.md)
+§ STOP — spoken memory vs silent memory.
 
 **Write** (`engine.remember`): synthetic-block → identity-stamp → quarantine
 → salience (NN gated, heuristic fallback) → store → vector index → `MEMORY_WRITE`.
 Banter/soft tastes downgrade to `casual_conversation`. Do not add a second store.
+Dream promotion, when it happens, still comes through this gate (`dream_observer`).
 
-**Recall** (`search_memory`): vector → **L3 personal security** (identity
-boundary) → ranker.
+**Spoken recall** (`search_memory`): vector → **L3 personal security** (identity
+boundary) → ranker → aboutness / wipe-skip → **native MEMORY formatter or**
+LLM+pref inject → **CapabilityGate L0** → TTS.
+
 About-me = **this-turn speaker**, not a hardcoded companion. About-X comes
 from the query, not soul `known_names`. First sentence must be about the
 subject. Curiosity asks are not autobiography. OSV-contradicted wipe claims
 stay in the store (never discard) and must not be recalled as fact.
+
+**Silent (must not be coupled into speech to “fix” a sit):**
+
+| Lane | Speaks? |
+|---|---|
+| Fractal recall (cue 0.40; dream provenance fitness &lt; 0; never writes canonical) | **Never** |
+| Dream cycle / `dream_observer` / dream_synthesis student | Not autobiography |
+| HRR / spatial album (PRE-MATURE, album OFF) | No |
+| Belief graph | No |
+| Salience NN | No (write advisory) |
+
+Native MEMORY (`_format_personal_activity_memory_reply`) is the **epistemic
+floor** for about-X: fail-closed to retrieved payloads. Do **not** steal
+about-me onto the LLM so it sounds warmer. Do **not** emit
+“I can pull more details if you want” — that is a tool-shaped claim; L0 is
+**correct** to kill it. Do **not** remove `music`/`dance` from L0 blocked
+verbs because a *user* preference sentence was stripped; the sweep must
+require first-person **in the same sentence** as the verb, which is already
+the gate’s contract.
 
 ### Personal security (L3) — this is a lock, not a miss
 
@@ -175,6 +214,9 @@ letting guests through.
 | “Look at me / see my face” only describes the shirt | IDENTITY enroll/refresh for this-turn speaker | Lower face 0.55; new biometric stack |
 | David asked about Skyler and she “doesn’t know” | Stamp bug: querier typed guest. Fix resolver. Store still has the dog. | Delete memories or skip L3 |
 | About me is empty / is the dog | Cue rewrite me → this-turn speaker | Hardcode David |
+| About me dumps “first words this session” + “I don't have that capability yet” | Native MEMORY spoke session bookkeeping; formatter invited “pull more details”; **L0 correctly killed the invite** | Steal to LLM; skip L0; delete the session memory |
+| “You like EDM” never spoken; coding-session / playlist pad | Pref inject fired; L0 residual sweep cut `music`/`dance` because first-person was in **another** sentence | Remove those verbs from L0; EDM whitelist |
+| Fractal `no seed above 0.40` / dream didn't speak / HRR empty | Silent lanes. Success. | Wire them into TTS “for Stage 6” |
 | Too long / too technical | `response_style`, length hint, ToM, TBS-0, revoice | `briefing_register` |
 | Wrong tool | Intent class + `nn_fleet_registry.json` | One-off verb regex |
 | Flag default-OFF | Governance. See `MATURITY_GATES_REFERENCE.md` | Treat as a bug and flip it |
@@ -185,7 +227,8 @@ letting guests through.
 
 - Do not merge to `main` unless asked.
 - Do not start/stop supervisor, `main.py`, or lidar. Operator owns the stack.
-- Do not run pytest on the live brain host against `~/.jarvis`. Tests write registries (lived 2026-08-24: `plugin_registry.json` overwritten, restored from snapshot).
+- Do not run pytest on the live brain host against `~/.jarvis`. Tests write registries (lived 2026-08-24: `plugin_registry.json` overwritten, restored from snapshot). Run `brain/tests/` on WSL — they are contract pins, not sits.
+- Agent verbal sits: `GET /api/operator/tap/status` then `POST /api/operator/tap`. Never `POST /api/chat`.
 - Sync with `./sync-desktop.sh` when code should hit the brain; they bounce.
 - Do not flip `OSV_P2_ACTIVE`, revoice-live, voice-intent, or native_voice
   unless the operator asks.
@@ -197,6 +240,7 @@ letting guests through.
 
 | Need | File |
 |---|---|
+| Current branch / stage / leftovers | [NOW.md](NOW.md) |
 | Agent field manual (VRAM, events, env) | `AGENTS.md` |
 | Full architecture essay | `ARCHITECTURE.md` |
 | Two-device mermaid (overview, older) | `docs/SYSTEM_OVERVIEW.md` |

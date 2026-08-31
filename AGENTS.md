@@ -2,7 +2,7 @@
 
 This file provides guidance to AI coding agents when working with this repository.
 
-**Mandatory first read:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) — what this is, one spoken turn, who has authority, what not to invent. Roster (Grok 4.6 in-chair; Shockwave debug/docs; Megatron pulse): [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md). Growth validation: [docs/shockwave/GROWTH_VALIDATION.md](docs/shockwave/GROWTH_VALIDATION.md). **REAL means defect, not “the wire works.”** The rest of this file is the field manual. If you skip the map and edit conversation / OSV / memory / routing / TTS / preferences, you will ship a parallel.
+**Mandatory first read:** [docs/NOW.md](docs/NOW.md) — current branch, life-phase, leftovers, **How we test**. Verbal conversation testing always enters `handle_transcription` via Pi STT **or** [docs/OPERATOR_PROXY_TAP.md](docs/OPERATOR_PROXY_TAP.md) (`POST /api/operator/tap`, not `/api/chat`). Pytest under `brain/tests/` **stays and is correct** — contract pins, **not sits**. Green pytest ≠ she spoke it. Then [docs/AGENT_MAP.md](docs/AGENT_MAP.md) — what this is, one spoken turn, who has authority, what not to invent. Roster: Grok 4.6 in-chair; Shockwave debug/docs; Megatron pulse. Frozen snapshot: [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md) (do not take its git HEAD as current). Growth validation: [docs/shockwave/GROWTH_VALIDATION.md](docs/shockwave/GROWTH_VALIDATION.md). **REAL means defect, not “the wire works.”** The rest of this file is the field manual. If you skip the map and edit conversation / OSV / memory / routing / TTS / preferences, you will ship a parallel.
 
 ## STOP. Gated is not missing. Do not build a parallel.
 
@@ -31,17 +31,36 @@ Operator asked for exec-suite vs tech vs ops articulation, stored on user prefer
 
 An agent added `classify_register` + three articulator mouths + `Relationship.preferences["briefing_register"]`. Reverted in `69d7819`. That hack would also have poisoned the native_voice teacher (gist trained as grounded).
 
+### Lived miss 2026-08-31 — memory / epistemic (do not repeat)
+
+Stage 6 sits: about-me native MEMORY dumped session headers then L0 ate “pull more details if you want”; EDM prefs injected then L0 residual sweep cut `music`/`dance` because `I'm here` was elsewhere in the reply. Family/job/morning were already mouth-true.
+
+**Wrong “fixes” (if you almost typed one, stop):**
+
+- Steal about-me off native MEMORY onto the LLM so it “names the family”
+- Delete `music` / `dance` from `_BLOCKED_CAPABILITY_VERBS` or skip L0 on MEMORY
+- Add an EDM / “user likes music” whitelist
+- Speak fractal chains, dream_observer, or HRR album as autobiography
+- Treat `Fractal recall: no seed above 0.40` as a broken hippocampus
+- Treat prove.html Claim 2 PROVEN as “she retrieved a dream in conversation”
+- Weaken L3 guest lock; delete session memories; lower Face 0.55
+
+**Respectful couple only (and only when David names it):** keep native MEMORY; stop the formatter’s operational invite; do not *declare* session bookkeeping as “what I know about you”; residual sweep first-person **same sentence** as the blocked verb. Ranker / L3 / vec / dream firewall / fractal / HRR / L0-as-a-layer stay.
+
+Canon: [docs/NOW.md](docs/NOW.md) § STOP — spoken memory vs silent memory. [docs/AGENT_MAP.md](docs/AGENT_MAP.md) Memory section.
+
 ### What No-Verb-Hacking forbids here
 
 Not only CapabilityGate phrase lists. Also: a second copy of a gated path; a keyword overlay that pretends a shadow NN is live; shrinking the source of truth so the dump "sounds like JARVIS."
 
 Do not silently flip `OSV_P2_ACTIVE`, revoice-live, voice-intent, or native_voice. Promote a gate only when the operator asks.
 
-Turn flow (match this before adding a route or mouth):
+Turn flow (match this before adding a route or mouth). TAP injects at the
+same `handle_transcription` node as Pi STT:
 
 ```mermaid
 flowchart TD
-  stt[STT + speaker fusion]
+  stt[STT or TAP → handle_transcription]
   router[tool_router]
   p1{P1 self-view kind?}
   vis{VISION look / what do you see / targeted VQA?}

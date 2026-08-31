@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from tools.memory_tool import (
     _extract_about_subjects,
     _format_payload_preview,
+    _is_session_bookkeeping_text,
     _is_system_self_memory,
     _keyword_search,
     _search_cue_for_speaker,
@@ -599,6 +600,66 @@ def test_search_memory_about_me_does_not_declare_curiosity_asks(monkeypatch) -> 
     assert "primary user" in out
     assert "Curiosity Q" not in out
     assert "don't recognize" not in out
+
+
+def test_search_memory_about_me_does_not_declare_session_bookkeeping(monkeypatch) -> None:
+    """Lived 2026-08-31: about-me native MEMORY spoke session-start
+    'First words this session' because the lead named David. Store keeps
+    the record; about-me must not declare it as autobiography.
+    """
+    self_fact = SimpleNamespace(
+        type="user_preference",
+        payload={"response": "David works as a software engineer."},
+        weight=0.75,
+        provenance="user_claim",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("personal_fact", "speaker:david"),
+    )
+    session_header = SimpleNamespace(
+        type="conversation",
+        payload={
+            "response": (
+                'David started a conversation at 2026-08-31 11:18. '
+                'First words this session: "What do you remember about me?".'
+            )
+        },
+        weight=0.80,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    l0_decline = SimpleNamespace(
+        type="conversation",
+        payload={"response": "I don't have that capability yet."},
+        weight=0.70,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [
+            (0.90, session_header),
+            (0.80, l0_decline),
+            (0.40, self_fact),
+        ],
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+
+    out = search_memory("What do you remember about me?", speaker="David")
+    assert "software engineer" in out.lower() or "David works" in out
+    assert "First words this session" not in out
+    assert "started a conversation" not in out
+    assert "capability yet" not in out
+    assert _is_session_bookkeeping_text("First words this session: hi")
+    assert not _is_session_bookkeeping_text("User is software engineer")
 
 
 def test_about_me_search_cue_uses_live_speaker_not_hardcoded_companion() -> None:

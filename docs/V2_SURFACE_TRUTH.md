@@ -9,8 +9,9 @@ authority.
 Every listed GET was hit live at `http://192.168.1.222:9200` unless marked FAIL.
 
 Honesty kit: `static/v2/shared.js` (`window.V2`) — missing numbers render as
-UNKNOWN, never fake zero-green. Chat palette on every page **does** write
-(`/api/chat`) even on read-only pages. That is a live turn.
+UNKNOWN, never fake zero-green. `POST /api/chat` is **retired** (410). The
+v2 💬 control hits `POST /api/operator/tap` — the same `handle_transcription`
+path as Pi voice, stamped `operator_proxy`. See [OPERATOR_PROXY_TAP.md](OPERATOR_PROXY_TAP.md).
 
 Nav source of truth: `shared.js` `NAVPAGES`. `brain.html` and `flow.html` are
 retired redirects to `universe.html`.

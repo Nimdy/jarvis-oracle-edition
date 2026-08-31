@@ -190,6 +190,7 @@ python -m brain.scripts.dashboard_truth_probe
 
 ## 9. Where to go next
 
+- [NOW.md](NOW.md) — current branch / stage / leftovers (wins over frozen handoff git lines).
 - [AGENT_MAP.md](AGENT_MAP.md) — **mandatory** turn-flow / authority map. Read before editing conversation, OSV, memory, or routing.
 - [V2_SURFACE_TRUTH.md](V2_SURFACE_TRUTH.md) — dashboardV2 page → API → live meaning (maturity ladder included).
 - [AGENTS.md](../AGENTS.md) — the field-manual for agents working in this codebase.

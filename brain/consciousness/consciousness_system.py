@@ -1534,7 +1534,11 @@ class ConsciousnessSystem:
                 1 for mem in all_memories
                 if _IDENTITY_TAGS.intersection(getattr(mem, "tags", ()))
             )
-            from personality.onboarding import count_preference_memories
+            from personality.onboarding import (
+                count_preference_memories,
+                correction_training_metrics,
+                get_onboarding_manager,
+            )
             m["preference_memories"] = count_preference_memories(all_memories)
             m["routine_memories"] = sum(
                 1 for mem in all_memories
@@ -1636,27 +1640,41 @@ class ConsciousnessSystem:
                 m["unsafe_inferences_24h"] = 0
 
             try:
-                from epistemic.calibration.correction_detector import correction_detector
-                cd_stats = correction_detector.get_stats()
-                total_checks = cd_stats.get("total_checks", 0)
-                total_corrections = cd_stats.get("total_corrections", 0)
-                # Vacuous 1.0 with zero corrections let Stage 5 skip. The
-                # drill is: bait a wrong answer, then That's wrong.
-                if total_corrections < 1:
-                    m["correction_accuracy"] = 0.0
-                elif total_checks >= 3:
-                    m["correction_accuracy"] = 1.0 - (total_corrections / total_checks)
-                else:
-                    m["correction_accuracy"] = 1.0
-                m["repeated_mistakes"] = 0
+                live_cd: dict[str, Any] = {}
+                try:
+                    from epistemic.calibration import TruthCalibrationEngine
+                    _tce = TruthCalibrationEngine.get_instance()
+                    _det = getattr(_tce, "_correction_detector", None) if _tce else None
+                    if _det is not None and hasattr(_det, "get_stats"):
+                        live_cd = dict(_det.get_stats())
+                except Exception:
+                    live_cd = {}
+                stage5_started = 0.0
+                try:
+                    stage5_started = float(
+                        (get_onboarding_manager()._state.day_started_at or {}).get(5) or 0.0
+                    )
+                except Exception:
+                    stage5_started = 0.0
+                # Vacuous 1.0 with zero corrections let Stage 5 skip. Chip from
+                # friction_type=correction in the Stage 5 window — the detector
+                # singleton does not exist and RAM zeros on bounce.
+                _cm = correction_training_metrics(
+                    stage5_started_at=stage5_started, live_stats=live_cd,
+                )
+                m["correction_accuracy"] = _cm["correction_accuracy"]
+                m["repeated_mistakes"] = _cm["repeated_mistakes"]
             except Exception:
-                pass
+                m["correction_accuracy"] = 0.0
+                m["repeated_mistakes"] = 0
 
-            orphan_rate = m.get("belief_orphan_rate", 1.0)
-            m["memory_recall_precision"] = max(0.0, 1.0 - orphan_rate)
+            # Lived 2026-08-31: Stage 6 showed recall 0.54 because this line
+            # was `1 - orphan`. Orphan is graph health (unlinked
+            # external_source), not spoken 9/10. Leave unset — the mouth is
+            # scored from TAP/Pi sits. High orphan after a wipe is expected.
+            m.pop("memory_recall_precision", None)
 
             try:
-                from personality.onboarding import get_onboarding_manager
                 ob = get_onboarding_manager()
                 m["readiness_composite"] = ob.compute_readiness(m)
             except Exception:

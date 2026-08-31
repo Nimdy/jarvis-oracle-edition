@@ -136,16 +136,17 @@ window.V2 = (function(){
     var bd=modal('Chat with JARVIS',
       '<div id="v2chat-log" style="max-height:46vh;overflow:auto;font-size:11px;line-height:1.5;margin-bottom:8px;"></div>'+
       '<div style="display:flex;gap:8px;"><input id="v2chat-in" class="v2-field" style="margin:0;flex:1" placeholder="Talk to JARVIS…" autocomplete="off"><button class="btn-act" id="v2chat-send">Send</button></div>'+
-      '<div class="opnote" style="margin-top:7px;">POST /api/chat — the LLM articulates over grounded state, subject to the L0 capability-gate. This is a live conversation turn (it writes to memory).</div>');
+      '<div class="opnote" style="margin-top:7px;">POST /api/operator/tap — same mind as Pi voice (router → memory → L0 → TTS). Provenance operator_proxy. Not the retired /api/chat bypass.</div>');
     var log=bd.querySelector('#v2chat-log'), inp=bd.querySelector('#v2chat-in');
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
     function send(){
       var msg=inp.value.trim(); if(!msg) return;
       log.innerHTML+='<div style="color:var(--cyan);margin:5px 0;">▸ '+esc(msg)+'</div>';
       inp.value=''; inp.disabled=true; log.scrollTop=log.scrollHeight;
-      post('/api/chat',{message:msg}).then(function(d){
-        var reply=d.response||d.reply||d.text||d.message||JSON.stringify(d).slice(0,500);
-        log.innerHTML+='<div style="color:var(--text);margin:2px 0 9px;">'+esc(reply)+'</div>';
+      post('/api/operator/tap',{text:msg,speaker:'David'}).then(function(d){
+        var reply=d.spoken||d.error||JSON.stringify(d).slice(0,500);
+        var meta=d.route?(' <span style="color:var(--dim)">route='+esc(d.route)+'</span>'):'';
+        log.innerHTML+='<div style="color:var(--text);margin:2px 0 9px;">'+esc(reply)+meta+'</div>';
       }).catch(function(e){ log.innerHTML+='<div style="color:var(--red);margin:2px 0 9px;">error: '+esc(e.message)+'</div>'; })
       .then(function(){ inp.disabled=false; inp.focus(); log.scrollTop=log.scrollHeight; });
     }

@@ -14,6 +14,7 @@ from consciousness.engine import ConsciousnessEngine
 from consciousness.events import (
     event_bus, CONVERSATION_USER_MESSAGE, CONVERSATION_RESPONSE,
     resolve_write_provenance, SOFT_CLAIM_CATEGORIES,
+    operator_proxy_turn,
 )
 from consciousness.release_validation import output_release_validator
 from consciousness.trace_context import build_trace_context
@@ -37,7 +38,12 @@ from reasoning.language_runtime_bridge import (
 )
 from tools.time_tool import get_current_time
 from tools.system_tool import get_system_status
-from tools.memory_tool import search_memory, get_memory_summary
+from tools.memory_tool import (
+    search_memory,
+    get_memory_summary,
+    _is_session_bookkeeping_text,
+    is_household_self_fact_recall,
+)
 from tools.vision_tool import (
     describe_scene, describe_scene_stream, describe_jpeg, fetch_snapshot,
     GENERIC_SCENE_PROMPT, vqa_prompt,
@@ -1006,11 +1012,6 @@ def _format_personal_activity_memory_reply(
     if not memory_ctx.strip():
         return empty_msg
 
-    total = 0
-    header = re.search(r"Found\s+(\d+)\s+relevant memory\(ies\)", memory_ctx, re.IGNORECASE)
-    if header:
-        total = int(header.group(1))
-
     ranked_items: list[tuple[int, float, str]] = []
     for raw_line in memory_ctx.splitlines():
         match = _MEMORY_RESULT_LINE_RE.match(raw_line.strip())
@@ -1024,6 +1025,8 @@ def _format_personal_activity_memory_reply(
             score = float(match.group("score"))
         except Exception:
             score = 0.0
+        if _is_session_bookkeeping_text(normalized):
+            continue
         ranked_items.append((_memory_priority(memory_type, normalized), score, normalized))
 
     if not ranked_items:
@@ -1036,6 +1039,8 @@ def _format_personal_activity_memory_reply(
         sentence = _to_speakable_memory_sentence(normalized)
         if not sentence:
             continue
+        if _is_session_bookkeeping_text(sentence):
+            continue
         key = sentence.lower()
         if key in seen:
             continue
@@ -1047,11 +1052,8 @@ def _format_personal_activity_memory_reply(
     if not selected:
         return _format_grounded_fallback("Memory recall", memory_ctx, max_lines=8, max_chars=560)
 
-    total = total or len(ranked_items)
     parts = [lead]
     parts.extend(selected)
-    if total > len(selected):
-        parts.append("I can pull more details if you want.")
     return " ".join(parts)
 
 
@@ -1267,6 +1269,8 @@ def _should_use_memory_search(
     if any(token in lower for token in ("search", "remember", "recall")):
         return True
     if extracted_args and extracted_args.get("about_subjects"):
+        return True
+    if is_household_self_fact_recall(text):
         return True
     return _is_personal_activity_recall_query(text)
 
@@ -1505,8 +1509,16 @@ _FACT_PATTERNS: list[tuple[re.Pattern, str, str]] = [
 ]
 
 _PREFERENCE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
-    (re.compile(r"\bi prefer\b(.{5,160}?)(?:\.|,|!|$)", re.I),
+    # Lived: "I prefer … to not say, I am active and listening" stopped at the
+    # comma and stored "to not say", then "I am …" became User is active and listening.
+    (re.compile(r"\bi prefer\b(.{5,200}?)(?:[.!?]|$)", re.I),
      "User prefers {0}", "personal_preference"),
+    (re.compile(
+        r"\b(?:don'?t|do not|never)\s+(?:always\s+)?(?:have to\s+)?"
+        r"(?:tell me|say)\s+(.{3,160}?)(?:[.!?]|$)",
+        re.I,
+    ),
+     "User prefers not to hear: {0}", "response_style"),
     (re.compile(
         r"\bi(?:'d| would) like help with\s+(.{5,200}?)(?:\.|,|!|$)",
         re.I,
@@ -1902,7 +1914,17 @@ def _is_unstable_personal_fact(payload: str, category: str) -> bool:
         # Block self-references ("jarvis", "the brain", "an ai")
         if captured in ("jarvis", "ai", "bot", "assistant", "robot"):
             return True
+        # Lived: "do not say, I am active and listening" stored as a core claim.
+        if "active and listening" in lower or captured in ("active", "here"):
+            return True
     return False
+
+
+_NOT_SAY_UTTERANCE_RE = re.compile(
+    r"(?:don'?t|do not|never|not)\s+(?:always\s+)?(?:have to\s+)?"
+    r"(?:tell me|say)\b",
+    re.I,
+)
 
 
 def _collect_personal_intel_matches(
@@ -1922,6 +1944,12 @@ def _collect_personal_intel_matches(
             else:
                 payload = template.format(match.group(0).strip())
             if _is_unstable_personal_fact(payload, category):
+                continue
+            if (
+                category == "personal_fact"
+                and payload.lower().startswith("user is ")
+                and _NOT_SAY_UTTERANCE_RE.search(text or "")
+            ):
                 continue
             personal.append((payload, category))
 
@@ -1964,16 +1992,47 @@ def _store_personal_memory(
         tags.append(f"speaker:{speaker.lower().strip()}")
 
     existing = memory_storage.get_by_tag("user_preference")
-    payload_lower = payload.lower()
-    for m in existing:
-        if isinstance(m.payload, str) and payload_lower in m.payload.lower():
-            return False
-        if isinstance(m.payload, str) and m.payload.lower() in payload_lower:
-            return False
-
+    payload_lower = payload.lower().strip()
     weight = 0.70 if category in ("personal_interest", "personal_fact") else 0.65
     if extra_tags and "explicit_core_memory" in extra_tags:
         weight = max(weight, 0.8 if category == "personal_fact" else 0.75)
+    for m in existing:
+        if not isinstance(m.payload, str):
+            continue
+        old = m.payload.lower().strip()
+        if not old:
+            continue
+        if payload_lower == old:
+            # Lived: restating "Tanya is my wife" no-op'd because the 0.07
+            # corrected row already existed. Same payload is reinforcement.
+            kept = (set(getattr(m, "tags", ()) or ()) | set(tags)) - {
+                "corrected", "fact_check_rejected",
+            }
+            updated = replace(
+                m,
+                weight=max(float(getattr(m, "weight", 0) or 0), weight),
+                tags=tuple(sorted(kept)),
+                last_validated=time.time(),
+            )
+            if not memory_storage.add(updated):
+                logger.warning("Reinforce add failed [%s]: %s", category, payload)
+                return False
+            logger.info("Reinforced restated personal intel [%s]: %s", category, payload)
+            if category == "personal_fact":
+                _try_set_relationship_from_fact(payload, speaker)
+            return True
+        if payload_lower in old:
+            return False
+        if old in payload_lower:
+            # Lived: truncated "…to not say" blocked the complete restatement.
+            updated = replace(
+                m,
+                payload=payload,
+                weight=max(float(getattr(m, "weight", 0) or 0), weight),
+            )
+            memory_storage.add(updated)
+            logger.info("Extended truncated personal intel [%s]: %s", category, payload)
+            return True
     identity_kwargs = _build_user_claim_identity_kwargs(payload, speaker, memory_type="user_preference")
     from memory.core import canonical_remember
     mem = canonical_remember(CreateMemoryData(
@@ -2054,25 +2113,109 @@ def _retire_matching_preferences(text: str, speaker: str) -> None:
         return
 
 
+_NEGATED_JOB_RE = re.compile(
+    r"\bi (?:do not|don't)\s+work as (?:a |an )?([\w][\w\s]{1,40}?)(?:\.|,|!|$)",
+    re.I,
+)
+
+
+def _downweight_payload_exact(payload: str, *, reason: str) -> int:
+    """Downweight stored memories whose payload equals *payload* (case-insensitive)."""
+    target = (payload or "").strip().lower()
+    if not target:
+        return 0
+    n = 0
+    try:
+        memories = list(memory_storage.get_all())
+    except Exception:
+        return 0
+    for m in memories:
+        p = m.payload if isinstance(getattr(m, "payload", None), str) else ""
+        if p.strip().lower() != target:
+            continue
+        if float(getattr(m, "weight", 1.0) or 0) < 0.2:
+            continue
+        updated = replace(
+            m,
+            weight=max(0.05, float(m.weight) * 0.1),
+            tags=tuple(sorted(set(m.tags) | {"corrected", "fact_check_rejected"})),
+        )
+        memory_storage.add(updated)
+        n += 1
+        logger.info(
+            "Downweighted stored claim (%s, weight→%.2f): %s",
+            reason, updated.weight, p[:80],
+        )
+    return n
+
+
+_CORRECTION_STOPWORDS = frozenset({
+    "user", "that", "this", "than", "with", "from", "have", "just", "about",
+    "wrong", "incorrect", "actually", "really", "jarvis", "work",
+})
+
+
+def _content_tokens(text: str) -> set[str]:
+    return {
+        t for t in re.findall(r"[a-z]{4,}", (text or "").lower())
+        if t not in _CORRECTION_STOPWORDS
+    }
+
+
 def _correct_recent_facts(text: str) -> None:
-    """Detect user corrections ("that's wrong", "no I'm not X") and downweight
-    recently captured user_preference memories that might be wrong."""
+    """Downweight only memories the correction actually names or conflicts with.
+
+    Lived: 'That's wrong. I work as a software engineer' shotgun-downweighted
+    every user_preference in 5 minutes (household rows included). That is a
+    bad teacher for ranker/salience — not a missing NN, and not a name list.
+    """
     is_correction = any(p.search(text) for p in _CORRECTION_PATTERNS)
     if not is_correction:
         return
 
+    for match in _NEGATED_JOB_RE.finditer(text or ""):
+        job = (match.group(1) or "").strip()
+        if job:
+            _downweight_payload_exact(f"User is {job}", reason="negated-job")
+
+    personal, _ = _collect_personal_intel_matches(text or "")
+    asserted = {
+        payload.strip().lower()
+        for payload, category in personal
+        if category == "personal_fact" and isinstance(payload, str)
+    }
+    held_jobs = _held_biographical_jobs()
+    for payload, category in personal:
+        if category != "personal_fact":
+            continue
+        held = _fact_check_conflict(payload, held_jobs)
+        if held:
+            _downweight_payload_exact(held, reason="correction-conflict")
+
     recent_prefs = memory_storage.get_by_tag("user_preference")
     if not recent_prefs:
+        if asserted or any(_NEGATED_JOB_RE.finditer(text or "")):
+            logger.info("User correction detected — targeted biographical downweight")
         return
 
     now = time.time()
-    _RECENT_WINDOW_S = 300.0  # 5 min — corrections likely target recent captures
+    _RECENT_WINDOW_S = 300.0
+    corr_tok = _content_tokens(text)
     corrected_any = False
     for m in recent_prefs:
-        age = now - m.timestamp
+        age = now - getattr(m, "timestamp", 0.0)
         if age > _RECENT_WINDOW_S:
             continue
         if not isinstance(m.payload, str):
+            continue
+        payload_l = m.payload.strip().lower()
+        if payload_l in asserted:
+            continue
+        tags = set(getattr(m, "tags", ()) or ())
+        if tags & {"corrected", "former"}:
+            continue
+        overlap = _content_tokens(m.payload) & corr_tok
+        if len(overlap) < 2:
             continue
         updated = replace(
             m,
@@ -2081,11 +2224,13 @@ def _correct_recent_facts(text: str) -> None:
         )
         memory_storage.add(updated)
         corrected_any = True
-        logger.info("Correction downweighted recent fact (weight→%.2f): %s",
-                     updated.weight, m.payload[:60])
+        logger.info(
+            "Correction downweighted overlapping fact (weight→%.2f overlap=%s): %s",
+            updated.weight, sorted(overlap)[:6], m.payload[:60],
+        )
 
-    if corrected_any:
-        logger.info("User correction detected — downweighted recent preference memories")
+    if corrected_any or asserted:
+        logger.info("User correction detected — overlap/conflict only, not a 5-min shotgun")
 
 
 _NAME_FROM_PAYLOAD_RE = re.compile(
@@ -2369,22 +2514,36 @@ def _is_confirmation_seek(text: str) -> bool:
     return bool(text and _CONFIRM_SEEK_RE.search(text.strip()))
 
 
+_DANGLING_JOB_RE = re.compile(
+    r"(?:\b(?:a|an|the|that is|basically|essentially)\s*)$",
+    re.I,
+)
+
+
 def _held_biographical_jobs() -> list[str]:
-    """Existing job/identity-role facts the confirmation should be checked against."""
-    held: list[str] = []
+    """Existing job/identity-role facts the confirmation should be checked against.
+
+    Rank complete jobs first. Lived native No quoted the 60-char chop
+    'research and development person that is basically' ahead of software engineer.
+    """
+    scored: list[tuple[int, float, int, str]] = []
     try:
         for m in memory_storage.get_by_tag("fact_kind:biographical"):
-            if float(getattr(m, "weight", 1.0) or 0) < 0.2:
+            weight = float(getattr(m, "weight", 1.0) or 0)
+            if weight < 0.2:
                 continue
             tags = set(getattr(m, "tags", ()) or ())
             if tags & {"fact_kind:name", "fact_kind:preferred_name", "fact_kind:birthday"}:
                 continue
             payload = m.payload if isinstance(m.payload, str) else ""
-            if payload.lower().startswith("user is "):
-                held.append(payload)
+            if not payload.lower().startswith("user is "):
+                continue
+            dangling = 1 if _DANGLING_JOB_RE.search(payload.strip()) else 0
+            scored.append((dangling, -weight, -len(payload), payload))
     except Exception:
         pass
-    return held
+    scored.sort()
+    return [payload for _, _, _, payload in scored]
 
 
 def _fact_check_conflict(proposed: str, held: list[str]) -> str | None:
@@ -2417,6 +2576,7 @@ def _extract_personal_intel(
     speaker: str = "unknown",
     *,
     suppress_write: bool = False,
+    operator_proxy: bool = False,
 ) -> dict[str, Any]:
     """Scan user message for personal information and build a HUMINT profile.
 
@@ -2456,6 +2616,13 @@ def _extract_personal_intel(
             "fact_check_conflicts": conflicts,
             "confirmation_seek": confirm,
         }
+    for conflict in conflicts:
+        _downweight_payload_exact(conflict["proposed"], reason="fact-check-conflict")
+    for payload, category in personal:
+        if "not to hear" in payload.lower() or "to not say" in payload.lower():
+            _downweight_payload_exact(
+                "User is active and listening", reason="not-say-closer",
+            )
 
     # Banter firewall (David's golden-command authority model): a golden command
     # is the write-authority (authoritative even mid-banter); otherwise soft
@@ -2465,8 +2632,9 @@ def _extract_personal_intel(
     _is_golden = parse_golden_command(text) is not None
 
     def _write_prov(category: str) -> str:
+        base = "operator_proxy" if operator_proxy else "user_claim"
         return resolve_write_provenance(
-            "user_claim",
+            base,
             is_golden_command=_is_golden,
             is_soft_claim=category in SOFT_CLAIM_CATEGORIES,
         )
@@ -2642,6 +2810,13 @@ async def handle_transcription(
     _backing_job_ids: list[str] = []
     _intention_registered_turn: dict[str, bool] = {"done": False}
     speaker = (speaker_state or {}).get("name", "unknown")
+    _operator_proxy = bool(
+        (speaker_state or {}).get("operator_proxy")
+        or str((speaker_state or {}).get("method") or "").strip().lower() == "operator_proxy"
+    )
+    _proxy_tok = operator_proxy_turn.set(_operator_proxy)
+    reply = ""
+    routing = None
     try:
         engine._current_speaker = speaker if speaker and speaker != "unknown" else ""
     except Exception:
@@ -3100,6 +3275,7 @@ async def handle_transcription(
         text,
         speaker=speaker,
         suppress_write=bool(explicit_core_memory_payload),
+        operator_proxy=_operator_proxy,
     )
     _apply_inline_preferences(text, engine)
 
@@ -3851,7 +4027,7 @@ async def handle_transcription(
                 _memory_safety_flags.append("deterministic_grounded_recall")
                 reply = _format_personal_activity_memory_reply(
                     memory_ctx,
-                    max_items=3,
+                    max_items=4 if is_household_self_fact_recall(text) else 3,
                     lead="Here's what I remember about that.",
                     empty_msg="I don't have any memories matching that.",
                 )
@@ -5704,6 +5880,7 @@ async def handle_transcription(
                 )
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                _persist_spoken_turn(text, reply)
                 _none_route_handled = True
                 logger.info(
                     "NONE route: fact-check conflict native reply (TBS-0 stays shadow; "
@@ -5719,6 +5896,7 @@ async def handle_transcription(
                 )
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                _persist_spoken_turn(text, reply)
                 _none_route_handled = True
                 logger.info(
                     "NONE route: preference-instruction acknowledgement applied "
@@ -6493,3 +6671,15 @@ async def handle_transcription(
             _adv.propose(_read, _person_model)
     except Exception:
         logger.debug("Situational read / theory-of-mind / advisory (companion P0/P1/P3) failed", exc_info=True)
+
+    try:
+        operator_proxy_turn.reset(_proxy_tok)
+    except Exception:
+        pass
+    return {
+        "spoken": (reply or "")[:4000],
+        "route": routing.tool.value if routing else "",
+        "conversation_id": conversation_id,
+        "speaker": speaker,
+        "operator_proxy": _operator_proxy,
+    }

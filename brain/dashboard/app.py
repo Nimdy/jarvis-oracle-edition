@@ -2073,33 +2073,48 @@ def _create_app() -> FastAPI:
 
     @app.post("/api/chat", dependencies=[Depends(_require_api_key)])
     async def api_chat(request: Request):
-        if not _ENABLE_DASHBOARD_CHAT:
-            return JSONResponse(
-                {"error": "Dashboard chat is disabled. Use Pi5 voice input."},
-                status_code=403,
-            )
-        if not _response_gen:
-            return JSONResponse({"error": "Not ready"}, status_code=503)
+        """Retired. This path skipped the router (LLM + L0 only). Use TAP."""
+        return JSONResponse(
+            {
+                "error": "POST /api/chat is retired. It bypassed handle_transcription. "
+                "Use POST /api/operator/tap or speak on the Pi.",
+                "tap": "/api/operator/tap",
+            },
+            status_code=410,
+        )
+
+    @app.post("/api/operator/tap", dependencies=[Depends(_require_api_key)])
+    async def api_operator_tap(request: Request):
+        """Second ear: text into handle_transcription as David/operator_proxy."""
+        if not _perc_orch:
+            return JSONResponse({"error": "Perception orchestrator not ready"}, status_code=503)
         body = await request.json()
-        message = body.get("message", "")
+        message = (body.get("text") or body.get("message") or "").strip()
+        speaker = (body.get("speaker") or "David").strip() or "David"
         if not message:
-            return JSONResponse({"error": "Missing 'message'"}, status_code=400)
-        response = await _response_gen.respond(message)
-        gated_text = response.text
-        try:
-            from skills.capability_gate import capability_gate
-            gated_text = capability_gate.check_text(response.text) or response.text
-        except Exception:
-            import re as _re
-            _fallback_re = _re.compile(
-                r"\bI (?:can|could|will|'ll|'m able to) .{3,80}?[.!?\n]", _re.IGNORECASE,
-            )
-            gated_text = _fallback_re.sub("I don't have that capability yet.", response.text)
-        return {
-            "text": gated_text,
-            "memory_tags": response.memory_tags,
-            "latency_ms": response.latency_ms,
-        }
+            return JSONResponse({"error": "Missing 'text'"}, status_code=400)
+        follow_raw = body.get("follow_up", None)
+        follow_up = None
+        if follow_raw is True or follow_raw is False:
+            follow_up = bool(follow_raw)
+        elif isinstance(follow_raw, str) and follow_raw.strip().lower() in ("true", "false"):
+            follow_up = follow_raw.strip().lower() == "true"
+        result = await _perc_orch.inject_operator_turn_async(
+            message, speaker=speaker, follow_up=follow_up,
+        )
+        if not result.get("ok"):
+            code = 409 if result.get("refused") in (
+                "voice_busy", "synthetic_session_active", "timeout",
+            ) else 400
+            return JSONResponse(result, status_code=code)
+        return result
+
+    @app.get("/api/operator/tap/status")
+    async def api_operator_tap_status():
+        """Ear state for agents: new sit vs continuation. Not a sit."""
+        if not _perc_orch:
+            return JSONResponse({"error": "Perception orchestrator not ready"}, status_code=503)
+        return _perc_orch.tap_ear_status()
 
     @app.post("/api/feedback", dependencies=[Depends(_require_api_key)])
     async def api_feedback(request: Request):

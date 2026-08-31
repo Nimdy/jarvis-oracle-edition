@@ -67,6 +67,22 @@ class IdentityResolver:
         if self._soul_identity and hasattr(self._soul_identity, "relationships"):
             for key in self._soul_identity.relationships:
                 self._known_names.add(key.lower().strip())
+        # Enrolled voices — she already knows these people. Names only;
+        # does not read embeddings or mint a match. Lived TAP: empty soul
+        # keys + unknown crop stamped guest while speakers.json still had David.
+        try:
+            import json
+            import os
+            from pathlib import Path
+            path = Path(os.environ.get("JARVIS_HOME", Path.home() / ".jarvis")) / "speakers.json"
+            if path.exists():
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    for name in data:
+                        if isinstance(name, str) and name.strip():
+                            self._known_names.add(name.lower().strip())
+        except Exception:
+            pass
 
     def get_known_names(self) -> set[str]:
         self._refresh_known_names()
@@ -114,13 +130,26 @@ class IdentityResolver:
                 fusion_name = getattr(resolved, "name", "unknown").lower().strip()
                 is_known = getattr(resolved, "is_known", False)
                 method = str(getattr(resolved, "method", "none") or "none")
+                self._refresh_known_names()
+                speaker_enrolled = speaker_known and speaker_s in self._known_names
+                fusion_unknown_crop = (
+                    (not is_known)
+                    or fusion_conf < CONFIDENCE_THRESHOLDS["soft"]
+                    or fusion_name not in self._known_names
+                )
+                # This-turn speaker she already enrolled (ear voice OR TAP
+                # name David) is who she is. Unknown live crop is expected
+                # (Face 0.55). Same law as 17:40 speaker vs persist — not a
+                # TAP login flag, not a hardcoded "david" string.
+                enrolled_speaker_beats_unknown_crop = (
+                    speaker_enrolled and fusion_unknown_crop
+                )
                 sticky_other = (
                     speaker_known
                     and fusion_name != speaker_s
                     and method in _STICKY_FUSION
                 )
-                if not sticky_other:
-                    self._refresh_known_names()
+                if not sticky_other and not enrolled_speaker_beats_unknown_crop:
                     id_type: IdentityType = (
                         "primary_user"
                         if is_known or fusion_name in self._known_names

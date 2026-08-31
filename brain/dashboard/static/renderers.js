@@ -1899,7 +1899,16 @@ function _renderOnboardingCurrentTargets(ob, stageInfo) {
   var keys = Object.keys(targets);
   if (!keys.length) return '';
   var missing = keys.filter(function(k) { return !met[k]; });
-  var html = '<div style="font-size:0.58rem;color:#6a6a80;margin-bottom:3px;">Current Stage Targets</div>' +
+  var html = '';
+  var stageNum = Number((ob && (ob.current_stage || ob.current_day)) || 0);
+  if (stageNum === 6) {
+    var orph = live.belief_orphan_rate;
+    html += '<div style="font-size:0.5rem;color:#ff0;margin-bottom:5px;">Stage 6 gate is <b>spoken recall</b> (MEMORY mouth names stored facts). ' +
+      'The old recall-precision number was 1−orphan — not the mouth. Orphan now ' +
+      (orph == null ? '—' : Number(orph).toFixed(2)) +
+      ' is graph health; high after a wipe is expected. Do not graduate on it.</div>';
+  }
+  html += '<div style="font-size:0.58rem;color:#6a6a80;margin-bottom:3px;">Current Stage Targets</div>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:3px;margin-bottom:6px;">';
   keys.forEach(function(k) {
     var target = targets[k];

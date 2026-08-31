@@ -1,6 +1,6 @@
 # JARVIS Architecture
 
-> **Agents start here:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) (one spoken turn, authority, do-not-invent). This essay is the long architecture. Line numbers drift; the map is the contract.
+> **Agents start here:** [docs/NOW.md](docs/NOW.md) (branch / stage / leftovers), then [docs/AGENT_MAP.md](docs/AGENT_MAP.md) (one spoken turn, authority, do-not-invent). This essay is the long architecture. Line numbers drift; the map is the contract.
 >
 > **Validated 2026-06-09** by a multi-agent investigation of the live code (18 subsystem deep-readers + adversarial verifiers). Each section was re-checked against the source; maturity is labeled honestly — **SHIPPED** (live), **SHADOW** (computes, zero authority by design), **GATED** (earned-not-yet), **DESIGNED** (not built). *Gate-blocked ≠ broken.* Supersedes the April data-flow reference.
 >
@@ -162,7 +162,7 @@ Legend: **SHIPPED** = live with real authority · **SHADOW** = computes, zero au
 | Library | sqlite-vec semantic index; retrieval telemetry | SHADOW | no `init()` caller in snapshot; telemetry collects future reranker pairs |
 | Dashboard / API | snapshot cache + ~179 routes + WS push + SSE ring + API-key gate + 5-state trust derivation | SHIPPED | 52 destructive routes gated |
 | Dashboard / API | /api/matrix, /api/grounding/queue read | SHADOW | zero-authority observability |
-| Dashboard / API | /api/domains, /api/chat (writes); telemetry_api.py | GATED / DORMANT | telemetry_api unimported contract |
+| Dashboard / API | /api/domains (writes); telemetry_api.py | GATED / DORMANT | telemetry_api unimported contract. `/api/chat` is **retired 410** — TAP is the write. |
 | Governance | 5 promotion state machines + synthetic-origin firewall + quarantine-pressure friction + maturity catalog | SHIPPED | no central manager (cross-cutting discipline) |
 | Governance | Weight-Room lived-baseline firewall (P2) | SHADOW | enforces nothing; P3-P5 DESIGNED |
 | Growth Loop | Goal Continuity Layer (signal→goal→dispatch) + #9.3-A churn dampening | SHIPPED | throttles creation only, no authority change |
@@ -1102,7 +1102,7 @@ All four core stores share ONE SQLite file `~/.jarvis/library/library.db` and a 
 | /api/meta/status-markers (one-source-of-truth maturity map) | **shipped** | app.py:4090-4178 static `SHIPPED/PARTIAL/PRE-MATURE/DEFERRED` map; only `phase_e` auto-flips on the language-kernel registry state (:4111-4122). |
 | Code-freshness / "restart before trusting" banner | **shipped** | app.py:197 (`_scan_code_freshness`, `is_stale = newest_mtime > _PROCESS_STARTED_TS` :245), :4026 /api/system/code-freshness, static freshness-banner.js. |
 | /api/build-history + /api/maturity-gates (live doc parsers) | **shipped** | app.py:4314 parses docs/BUILD_HISTORY.md `##` headings + mtime; :4180 parses docs/MATURITY_GATES_REFERENCE.md with a live-values overlay from `/api/full-snapshot`. |
-| /api/chat (dashboard text chat) | **gated** (off by default) | app.py:1916-1922 hard-returns 403 unless `ENABLE_DASHBOARD_CHAT` env is set (default false, :33-35); routes response through `capability_gate.check_text` (:1932-1933, with a regex fallback :1936-1939) so even when on it cannot over-claim. |
+| /api/chat (dashboard text chat) | **retired (410)** | Bypassed `handle_transcription` (LLM + L0 only). Use `POST /api/operator/tap` or Pi voice. See `docs/OPERATOR_PROXY_TAP.md`. Do not set `ENABLE_DASHBOARD_CHAT`. |
 | `telemetry_api.py` shape contract | **designed / dormant** | Defines `TimeseriesPoint`/`Histogram`/`Heatmap`/`Topology` dataclasses + serializers, but NO import found anywhere in brain/ (`grep -rn telemetry_api` returns only the file itself) — documented/aspirational, not enforced in the current cache path. |
 
 

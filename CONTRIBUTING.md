@@ -8,7 +8,7 @@ We welcome contributions that preserve and strengthen that north star.
 
 ---
 
-**Agents: read [docs/AGENT_MAP.md](docs/AGENT_MAP.md) before any conversation / OSV / memory / routing change.** That file is the turn-flow contract. This page is how to contribute.
+**Agents: read [docs/NOW.md](docs/NOW.md), then [docs/AGENT_MAP.md](docs/AGENT_MAP.md) before any conversation / OSV / memory / routing change.** NOW is branch/stage/leftovers. AGENT_MAP is the turn-flow contract. This page is how to contribute.
 
 ## Before You Contribute: The Three Rules
 

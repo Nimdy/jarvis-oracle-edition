@@ -2559,8 +2559,16 @@ class TestOB03MissingCheckpointMetrics:
     def test_correction_accuracy_collected(self):
         assert '"correction_accuracy"' in self._get_method_body()
 
-    def test_memory_recall_precision_collected(self):
-        assert '"memory_recall_precision"' in self._get_method_body()
+    def test_correction_accuracy_uses_training_metrics_not_missing_singleton(self):
+        body = self._get_method_body()
+        assert "import correction_detector" not in body
+        assert "correction_training_metrics" in body
+
+    def test_memory_recall_precision_not_orphan_alias(self):
+        """Lived: Stage 6 0.54 was 1-orphan, not spoken recall."""
+        body = self._get_method_body()
+        assert "1.0 - orphan_rate" not in body
+        assert "memory_recall_precision" in body
 
     def test_stage4_routine_priority_tags_counted(self):
         block = self._get_method_body()

@@ -141,11 +141,11 @@ window._sendChat = function(e) {
     '<span style="color:#0cf;font-weight:600;">You:</span> ' + esc(msg) + '</div>';
   log.scrollTop = log.scrollHeight;
 
-  _apiPost('/api/chat', { message: msg }).then(function(r) { return r.json(); }).then(function(d) {
+  _apiPost('/api/operator/tap', { text: msg, speaker: 'David' }).then(function(r) { return r.json(); }).then(function(d) {
     var latency = d.latency_ms || 0;
     var tags = d.memory_tags || [];
     var route = d.route || '';
-    var text = d.text || d.error || '--';
+    var text = d.spoken || d.text || d.error || '--';
 
     // Response with metadata
     var responseHtml = '<div style="padding:4px 0;border-bottom:1px solid #0d0d1a;">' +

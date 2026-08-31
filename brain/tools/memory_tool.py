@@ -124,6 +124,154 @@ def _extract_about_subjects(query: str, speaker: str = "") -> set[str]:
 
 _ABOUT_ME_CUE_RE = re.compile(r"\babout\s+(me|myself)\b", re.I)
 
+# Household / self-fact *questions* (not teaches). Class matchers — no person names.
+# Lived 2026-08-31: "who is in my family" / kids' names / morning routine stayed NONE
+# and the LLM authored Emily/Mike. Native MEMORY formatter already fail-closes.
+_HOUSEHOLD_FAMILY_RE = re.compile(
+    r"\b(?:who(?:'s|\s+is)\s+in\s+my\s+family|"
+    r"(?:tell\s+me|talk(?:\s+to\s+me)?)\s+about\s+my\s+family)\b",
+    re.I,
+)
+_HOUSEHOLD_KIDS_RE = re.compile(
+    r"\bwhat(?:'s|\s+are|\s+is)\s+my\s+(?:kids?|children)(?:'s?)?\s+names?\b",
+    re.I,
+)
+_HOUSEHOLD_MORNING_RE = re.compile(
+    r"\bwhat(?:'s|\s+is)\s+my\s+morning\s+routine\b",
+    re.I,
+)
+_HOUSEHOLD_INTERRUPT_RE = re.compile(
+    r"\bwhen\s+should\s+you\s+not\s+interrupt\b",
+    re.I,
+)
+_HOUSEHOLD_FAMILY_FACT_RE = re.compile(
+    r"\b(?:wife|husband|partner|spouse|daughter|son|child|children|kids?)\b",
+    re.I,
+)
+_HOUSEHOLD_KIDS_FACT_RE = re.compile(
+    r"\b(?:daughter|son|child|children|kids?)\b",
+    re.I,
+)
+_HOUSEHOLD_PET_FACT_RE = re.compile(r"\b(?:dog|pet|pup|cat|collie)\b", re.I)
+_HOUSEHOLD_MORNING_FACT_RE = re.compile(
+    r"\b(?:wake|wakes|waking|coffee|morning|walk|desk|routine|6\s*a\.?m)\b",
+    re.I,
+)
+_HOUSEHOLD_INTERRUPT_FACT_RE = re.compile(r"\binterrupt", re.I)
+_HOUSEHOLD_CUES = {
+    "family": "wife husband partner daughter son child family",
+    "kids": "daughter son child kids names",
+    "morning": "morning routine wake coffee walk desk",
+    "interrupt": "do not interrupt on a call",
+}
+
+
+def household_recall_kind(query: str) -> str:
+    """Which self-fact recall class this question is, or ''."""
+    text = query or ""
+    if _HOUSEHOLD_FAMILY_RE.search(text):
+        return "family"
+    if _HOUSEHOLD_KIDS_RE.search(text):
+        return "kids"
+    if _HOUSEHOLD_MORNING_RE.search(text):
+        return "morning"
+    if _HOUSEHOLD_INTERRUPT_RE.search(text):
+        return "interrupt"
+    return ""
+
+
+def is_household_self_fact_recall(query: str) -> bool:
+    """True when the utterance asks JARVIS to recall stored household/self facts."""
+    return bool(household_recall_kind(query))
+
+
+def _preview_matches_household_kind(preview: str, kind: str) -> bool:
+    """Keep stored fact payloads; drop conversation recaps and pets-as-family."""
+    raw = str(preview or "")
+    low = raw.lower()
+    type_m = re.match(r"^\[([^\]]+)\]", raw)
+    mem_type = (type_m.group(1) if type_m else "").strip().lower()
+    if mem_type and mem_type not in {"user_preference", "personal_fact"}:
+        return False
+    if kind == "family":
+        if _HOUSEHOLD_PET_FACT_RE.search(low):
+            return False
+        return bool(_HOUSEHOLD_FAMILY_FACT_RE.search(low))
+    if kind == "kids":
+        return bool(_HOUSEHOLD_KIDS_FACT_RE.search(low))
+    if kind == "morning":
+        return bool(_HOUSEHOLD_MORNING_FACT_RE.search(low))
+    if kind == "interrupt":
+        return bool(_HOUSEHOLD_INTERRUPT_FACT_RE.search(low))
+    return False
+
+
+def _household_fact_hits(
+    kind: str,
+    *,
+    limit: int,
+    speaker: str,
+    identity_context: object | None,
+    referenced_entities: set[str] | None,
+) -> list[tuple[float, str]]:
+    """Keyword fill for an already-routed household recall (does not skip ranker).
+
+    Lived 2026-08-31: semantic recaps filled top_k so keyword never ran and
+    native fail-closed empty. Fill after sqlite-vec+ranker; L3 stays. Not a
+    new verb list and not a parallel scorer.
+    """
+    try:
+        from memory.search import keyword_search
+    except Exception:
+        return []
+    seen: set[str] = set()
+    hits: list[tuple[float, str]] = []
+    for term in _HOUSEHOLD_CUES.get(kind, "").split():
+        t = term.strip().lower()
+        if len(t) < 3 or t in _STOP_WORDS:
+            continue
+        try:
+            found = keyword_search(
+                t,
+                limit=max(limit * 4, 12),
+                speaker=speaker,
+                identity_context=identity_context,
+                referenced_entities=referenced_entities,
+            )
+        except Exception:
+            continue
+        for m in found:
+            mid = str(getattr(m, "id", "") or "")
+            if mid and mid in seen:
+                continue
+            if _is_system_self_memory(m):
+                continue
+            preview = f"[{m.type}] {_format_payload_preview(m)}"
+            if not _preview_matches_household_kind(preview, kind):
+                continue
+            if mid:
+                seen.add(mid)
+            hits.append((float(getattr(m, "weight", 0.5) or 0.5), preview))
+            if len(hits) >= limit:
+                return hits
+    return hits
+
+# Session bookkeeping is valid store (never discard) and is not autobiography.
+# Lived 2026-08-31: about-me native MEMORY spoke "First words this session"
+# because the first sentence named David.
+_SESSION_BOOKKEEPING_RE = re.compile(
+    r"first words this session|"
+    r"started a conversation|"
+    r"i don't have that capability yet|"
+    r"i can pull more details if you want",
+    re.I,
+)
+
+
+def _is_session_bookkeeping_text(text: str) -> bool:
+    """Recall-time skip for session headers / L0 declines. Never deletes."""
+    return bool(_SESSION_BOOKKEEPING_RE.search(text or ""))
+
 
 def _search_cue_for_speaker(query: str, speaker: str) -> str:
     """Embedding/keyword cue for 'about me' uses the live speaker name.
@@ -373,7 +521,10 @@ def _matches_aboutness(
         return False
     if not _is_self_aboutness(aboutness, speaker):
         return True
-    lead = _first_sentence(_payload_lead_text(memory_obj))
+    payload_text = _payload_lead_text(memory_obj)
+    lead = _first_sentence(payload_text)
+    if _is_session_bookkeeping_text(lead) or _is_session_bookkeeping_text(payload_text):
+        return False
     if _is_courtesy_lead(lead):
         return False
     if _competing_proper_names(lead, speaker):
@@ -481,6 +632,12 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
     referenced_entities = _extract_referenced_entities(query)
     aboutness_entities = _extract_about_subjects(query, speaker=speaker)
     search_cue = _search_cue_for_speaker(query, speaker)
+    household_kind = household_recall_kind(query)
+    if household_kind:
+        # Stopword "in" must not aboutness-cut the roster question.
+        # Keep the live question as the ranker cue — do not rewrite it into
+        # a relation-word bag (that starves plasticity and fills recaps).
+        aboutness_entities = set()
 
     if _EPISODE_PATTERNS.search(query):
         ep_results = _search_episodes(query_lower, limit)
@@ -506,15 +663,25 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
         aboutness_entities=aboutness_entities,
     )
 
-    if len(results) < limit:
+    run_keyword = household_kind or len(results) < limit
+    if run_keyword:
+        kw_budget = limit if household_kind else max(limit - len(results), 0)
         kw_results = _keyword_search(
             search_cue.lower(),
-            limit - len(results),
+            max(kw_budget, 1),
             speaker=speaker,
             identity_context=identity_context,
             referenced_entities=referenced_entities,
             aboutness_entities=aboutness_entities,
         )
+        if household_kind:
+            kw_results = list(kw_results) + _household_fact_hits(
+                household_kind,
+                limit=limit,
+                speaker=speaker,
+                identity_context=identity_context,
+                referenced_entities=referenced_entities,
+            )
         seen = {preview for _, preview in results}
         # Keyword is a lexical FALLBACK, scored by memory weight (not query
         # similarity, and sometimes >1.0 for core memories). Re-map it onto the
@@ -530,6 +697,13 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
                 rank += 1
                 results.append((max(0.0, kw_base - 0.01 * rank), preview))
                 seen.add(preview)
+
+    if household_kind:
+        results = [
+            (score, preview)
+            for score, preview in results
+            if _preview_matches_household_kind(preview, household_kind)
+        ]
 
     if not results:
         _set_memory_tool_summary(

@@ -72,6 +72,8 @@ def test_personal_activity_formatter_uses_conversational_memory_voice() -> None:
     assert "Most relevant" not in body
     assert "_memory_priority(" in body
     assert "_to_speakable_memory_sentence(" in body
+    assert "I can pull more details if you want." not in body
+    assert "_is_session_bookkeeping_text(" in body
 
 
 def test_none_route_fragment_noise_guard_present() -> None:

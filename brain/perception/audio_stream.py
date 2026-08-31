@@ -209,6 +209,17 @@ class AudioStreamProcessor:
             self._is_follow_up_session = False
         logger.debug("Entered FOLLOW_UP mode")
 
+    def stream_state_name(self) -> str:
+        with self._state_lock:
+            return self._state.name
+
+    def follow_up_remaining_s(self) -> float:
+        with self._state_lock:
+            if self._state != StreamState.FOLLOW_UP:
+                return 0.0
+            left = self._follow_up_timeout_s - (time.monotonic() - self._follow_up_start)
+            return max(0.0, float(left))
+
     @property
     def was_follow_up(self) -> bool:
         """Whether the current listening session originated from follow-up speech."""

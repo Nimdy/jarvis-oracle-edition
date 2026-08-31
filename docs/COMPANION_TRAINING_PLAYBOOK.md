@@ -7,6 +7,14 @@
 > "From stranger to lifelong companion - one intentional stage at a time."
 >
 > **New to JARVIS?** Read [AWAKENING_PROTOCOL.md](AWAKENING_PROTOCOL.md) first. It is the short, 2-minute front door for the first hour after gestation or reset. This playbook is the detailed curriculum Stage 0 links into.
+>
+> **How agents sit this curriculum:** every verbal turn is Pi voice **or**
+> `POST /api/operator/tap` → `handle_transcription`. Pytest is a contract pin,
+> not a stage checkpoint. Dummy name **Sarah** in the templates below is
+> **DOC DRIFT** — this household is Tonya / Lily / Owen (family). Store/STT may still say Tanya. Stage 7
+> “elevate to L2” is **DOC DRIFT** — trust [NOW.md](NOW.md) (do not raise
+> autonomy). Fractal `no seed above 0.40` is expected, not a failed Stage 6.
+> Canon: [NOW.md](NOW.md) § How we test, [OPERATOR_PROXY_TAP.md](OPERATOR_PROXY_TAP.md).
 
 ## Why Training Matters
 
@@ -645,6 +653,11 @@ Dashboard truth labels must remain: `authority=telemetry_only`,
 
 **Theme:** Reinforcement — "Show me what you've learned."
 
+**Current (NOW.md wins):** this is the live curriculum stage. Agents sit
+recalls via TAP (`follow_up=false` unless answering an invite). Score the
+**mouth**, not pytest, not the orphan chip, not fractal. Household names
+in the bullets below are templates — use Tonya / Lily / Owen.
+
 ### User Actions (20–30 minutes)
 
 1. Ask Jarvis to recall 10 random things from prior stages:
@@ -671,7 +684,10 @@ Dashboard truth labels must remain: `authority=telemetry_only`,
   - Identity confidence scores (face, voice, fusion)
   - Autonomy policy win rate
 
-**Fractal recall readiness**: By Stage 6, the system should have enough diverse memories (varied tags, emotional range, speaker associations, and topic tokens) for the Fractal Recall engine to fire. Check the dashboard for recall telemetry — if the engine is finding candidates but none exceed the 0.40 resonance threshold, the memory graph needs more tag diversity and emotional variation. Go back to Autobiographical and Emotional conversation modes to enrich the recall substrate.
+**Fractal recall:** silent lane. `no seed above 0.40` is **expected**, not a
+failed Stage 6 hippocampus. Do not couple fractal into speech. Spoken recall
+is `search_memory` → native MEMORY or LLM+pref inject → L0. See [NOW.md](NOW.md)
+§ STOP.
 
 ### Expected Checkpoint
 
@@ -687,6 +703,11 @@ Dashboard truth labels must remain: `authority=telemetry_only`,
 ## Stage 7: Autonomy Probation
 
 **Theme:** Apprenticeship graduation — "Can I trust you?"
+
+**DOC DRIFT vs NOW.md:** do **not** enter Stage 7 and do **not** raise
+autonomy to L2 because this section says so. Live autonomy is **L1 research**.
+The onboarding card / [NOW.md](NOW.md) win. Leave this curriculum text as
+historical until David names Stage 7.
 
 ### User Actions (extended session, light touch)
 

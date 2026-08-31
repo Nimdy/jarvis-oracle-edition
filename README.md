@@ -13,7 +13,7 @@ It runs on hardware you already own, using a Raspberry Pi 5 and a desktop GPU. I
 **Not a cloud LLM wrapper.**  
 **Not a benchmark-chasing model.**
 
-**Agents:** [docs/AGENT_MAP.md](docs/AGENT_MAP.md) is mandatory before you edit conversation, OSV, memory, routing, TTS, or preferences. Do not skip it. Roster (Grok 4.6 in-chair codes and directs; Shockwave debug/docs; Megatron manages Shockwave’s pulse): [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md).
+**Agents:** [docs/NOW.md](docs/NOW.md) is current branch / stage / leftovers. [docs/AGENT_MAP.md](docs/AGENT_MAP.md) is mandatory before you edit conversation, OSV, memory, routing, TTS, or preferences. Do not skip it. Roster (Grok 4.6 in-chair codes and directs; Shockwave debug/docs; Megatron manages Shockwave’s pulse). Frozen snapshot: [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md).
 
 This is a raw prototype workshop for building toward higher forms of artificial intelligence, designed from first principles with strong epistemic governance, governed recursive self-improvement, and honest maturity labeling.
 
@@ -369,13 +369,15 @@ Most subsystem dashboards will show red/zero metrics on a fresh brain. This is c
 ## Development & Contributing
 
 - All Python, 3.11+
-- Tests:
+- Tests (contract pins — not spoken sits):
 
 ```bash
 cd brain && python -m pytest
 ```
 
-- Synthetic exercises for safe training
+Verbal conversation testing is Pi voice or `POST /api/operator/tap` into `handle_transcription`. Do not use `/api/chat` (retired). See `docs/OPERATOR_PROXY_TAP.md` and `docs/NOW.md` § How we test.
+
+- Synthetic exercises for safe training (telemetry only — never a sit)
 - Validation pack + truth probe for regression safety
 
 Before opening a PR, ask:

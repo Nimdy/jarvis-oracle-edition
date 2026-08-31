@@ -82,20 +82,34 @@ class MemoryPersistence:
             ram_tags = [str(t) for t in (item.get("tags") or [])]
             disk_tags = [str(t) for t in (d.get("tags") or [])]
             item = dict(item)
-            item["tags"] = sorted(set(ram_tags) | set(disk_tags))
             extra = set(disk_tags) - set(ram_tags)
-            if extra:
-                try:
-                    item["weight"] = min(float(item.get("weight", 1.0)), float(d.get("weight", 1.0)))
-                except (TypeError, ValueError):
-                    pass
-                try:
-                    item["decay_rate"] = max(
-                        float(item.get("decay_rate", 0.0) or 0.0),
-                        float(d.get("decay_rate", 0.0) or 0.0),
-                    )
-                except (TypeError, ValueError):
-                    pass
+            try:
+                ram_w = float(item.get("weight", 1.0) or 1.0)
+                disk_w = float(d.get("weight", 1.0) or 1.0)
+            except (TypeError, ValueError):
+                ram_w, disk_w = 1.0, 1.0
+            try:
+                ram_lv = float(item.get("last_validated") or item.get("timestamp") or 0.0)
+                disk_lv = float(d.get("last_validated") or d.get("timestamp") or 0.0)
+            except (TypeError, ValueError):
+                ram_lv, disk_lv = 0.0, 0.0
+            # Lived: restatement raised weight and cleared `corrected`, then
+            # save() unioned disk tags and min() weight — 0.07 stuck.
+            # Newer higher-weight RAM is a restatement, not stale RAM.
+            restated = extra and ram_w > disk_w and ram_lv > disk_lv
+            if restated:
+                item["tags"] = ram_tags
+            else:
+                item["tags"] = sorted(set(ram_tags) | set(disk_tags))
+                if extra:
+                    item["weight"] = min(ram_w, disk_w)
+                    try:
+                        item["decay_rate"] = max(
+                            float(item.get("decay_rate", 0.0) or 0.0),
+                            float(d.get("decay_rate", 0.0) or 0.0),
+                        )
+                    except (TypeError, ValueError):
+                        pass
             merged.append(item)
         return merged
 

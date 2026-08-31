@@ -356,6 +356,16 @@
         var live=(curV===null||curV===undefined)?'':(' · now '+fmtTarget(curV)+(tgt!=null?(' / '+fmtTarget(tgt)):''));
         return '<span class="ck '+(met?'met':'miss')+'">'+(met?'✓':'○')+' '+cap(c)+live+'</span>';
       }).join('');
+      // Stage 6: 1-orphan was shown as "recall precision" and orphan greened
+      // via >=. Spoken mouth is the gate. High orphan after wipe is expected.
+      if(n===6){
+        var orph=num(lm.belief_orphan_rate);
+        ckhtml=
+          '<span class="ck miss">○ spoken recall (mouth) · job / brief / likes / family / morning — not 1−orphan</span>'+
+          '<span class="ck" style="border-color:var(--dim);color:var(--muted)">orphan graph '+
+          (orph===null?'—':fmtTarget(orph))+
+          ' · instrument; high after wipe / unlinked external_source is expected; not graduation</span>';
+      }
       var pr = num(rec.exercises_prompted!=null?rec.exercises_prompted:(ex[key]!=null?ex[key]:ex[n]));
       var lines=rec.user_lines||[];
       // Stage 5: live bait even if this PID still has old user_lines.
@@ -369,6 +379,10 @@
       var say=(!lines.length)?'':('<div class="note" style="margin-top:8px;margin-bottom:4px">You say (first person, exact-ish — the intel regex, not a story):</div>'+
         lines.map(function(s){ return '<div class="saybox" style="margin-top:4px">'+esc(s)+'</div>'; }).join(''));
       var work=rec.working?('<div class="gfoot" style="margin-top:8px;color:var(--muted)">Working? '+esc(rec.working)+'</div>'):'';
+      if(n===6){
+        work='<div class="gfoot" style="margin-top:8px;color:var(--muted)">Working? <b>route=MEMORY</b>. Mouth names stored facts (job, prefer brief, likes, family, morning), not an architecture census. '+
+          '<b>After a wipe:</b> empty recall and high orphan are expected until you teach then quiz. Do not graduate on the orphan chip. memory_recall_precision is not 1−orphan.</div>';
+      }
       html+='<div class="stage" style="border-left:2px solid '+badge.c+'">'+
         '<div class="top"><span class="nm">'+n+' · '+label+'</span>'+
           '<span class="sbadge" style="color:'+badge.c+';border-color:'+badge.c+'">'+badge.t+'</span></div>'+

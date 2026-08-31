@@ -276,12 +276,15 @@ class FaceIdentifier:
 
                 try:
                     from hemisphere.distillation import distillation_collector
-                    fidelity = min(1.0, best_raw + 0.1) if is_known else best_raw
-                    distillation_collector.record(
-                        "mobilefacenet", "embedding", embedding.tolist(),
-                        {"name": best_name, "confidence": round(best_raw, 3)},
-                        origin="camera", fidelity=fidelity,
-                    )
+                    # Desk/profile junk (raw < 0.40) was flooding quarantine as
+                    # face_N at fidelity 0.03–0.30. Same floor as EMA skip.
+                    if best_raw >= self.SCORE_EMA_MIN_RAW:
+                        fidelity = min(1.0, best_raw + 0.1) if is_known else best_raw
+                        distillation_collector.record(
+                            "mobilefacenet", "embedding", embedding.tolist(),
+                            {"name": best_name, "confidence": round(best_raw, 3)},
+                            origin="camera", fidelity=fidelity,
+                        )
                 except Exception:
                     pass
 

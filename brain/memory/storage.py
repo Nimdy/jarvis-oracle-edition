@@ -33,6 +33,35 @@ _DREAM_ORIGIN_TAGS = frozenset({
 })
 
 _MAX_ASSOCIATIONS_PER_MEMORY = 30
+_RECENT_PAYLOAD_MAX = 2000
+
+
+def _format_recent_payload(memory: Any, limit: int = _RECENT_PAYLOAD_MAX) -> str:
+    """Dashboard recent-writes text. Do not 140-char chop stored facts.
+
+    Conversation dicts render as You:/Jarvis: so the panel is readable.
+    """
+    payload = getattr(memory, "payload", "")
+    if isinstance(payload, dict):
+        user = str(payload.get("user_message") or "").strip()
+        resp = str(payload.get("response") or "").strip()
+        if user or resp:
+            parts = []
+            if user:
+                parts.append("You: " + user)
+            if resp:
+                parts.append("Jarvis: " + resp)
+            text = "  |  ".join(parts)
+        else:
+            text = str(payload)
+    elif isinstance(payload, str):
+        text = payload
+    else:
+        text = str(payload)
+    text = " ".join(str(text).split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 
 class MemoryStorage:
@@ -93,21 +122,29 @@ class MemoryStorage:
             memory = Memory(**{**asdict(memory), "weight": weight})
 
         is_new = False
+        updated_existing = False
         trim_result = None
         with self._lock:
             for i, m in enumerate(self._memories):
                 if m.id == memory.id:
                     self._memories[i] = memory
-                    return True
-            self._memories.append(memory)
-            is_new = True
-            if len(self._memories) > self._max_capacity:
-                trim_result = self._auto_trim_unlocked()
+                    updated_existing = True
+                    break
+            else:
+                self._memories.append(memory)
+                is_new = True
+                if len(self._memories) > self._max_capacity:
+                    trim_result = self._auto_trim_unlocked()
 
         if trim_result:
             self._post_trim_cleanup(trim_result)
         if is_new:
             self._log_creation(memory, creation_context)
+        # Lived: reinforce logged but disk stayed 0.07 — in-place add
+        # returned inside the lock with no flush (autosave is 60s and was
+        # losing the update). Same bounce-durability as downweight().
+        if updated_existing or is_new:
+            self._flush_to_disk()
         return True
 
     def _log_creation(
@@ -664,8 +701,7 @@ class MemoryStorage:
                 "provenance": getattr(m, "provenance", "unknown"),
                 "weight": round(m.weight, 3),
                 "age_s": round(_time.time() - m.timestamp),
-                "payload_preview": (m.payload[:140] if isinstance(m.payload, str)
-                                    else str(m.payload)[:140]),
+                "payload_preview": _format_recent_payload(m),
             }
             for m in reversed(recent)
         ]

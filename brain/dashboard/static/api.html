@@ -1217,9 +1217,14 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
       <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Diagnostic-only endpoint for local operator debugging.</p></div>
     </div>
 
-    <div class="a-endpoint" id="ep-chat-api" data-method="POST" data-path="/api/chat" data-desc="Dashboard chat" data-cat="live-addendum">
-      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/chat</span><span class="a-ep-desc">Dashboard chat entrypoint when explicitly enabled</span><span class="a-ep-lock">🔒</span></div>
-      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Protected and gated by <code>ENABLE_DASHBOARD_CHAT</code>. Normal interaction should use Pi voice input.</p></div>
+    <div class="a-endpoint" id="ep-chat-api" data-method="POST" data-path="/api/chat" data-desc="RETIRED — bypassed the mind" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/chat</span><span class="a-ep-desc">410 Gone — skipped handle_transcription</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Retired. Use <code>POST /api/operator/tap</code> (same path as Pi voice) or speak on the Pi.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-operator-tap" data-method="POST" data-path="/api/operator/tap" data-desc="Operator-proxy TAP (agent sit)" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/operator/tap</span><span class="a-ep-desc">Text into handle_transcription as David / operator_proxy</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Second ear. Refuses if a voice turn is in flight. Does not forge face/voice. Canon: docs/OPERATOR_PROXY_TAP.md</p></div>
     </div>
 
     <div class="a-endpoint" id="ep-feedback-api" data-method="POST" data-path="/api/feedback" data-desc="Conversation feedback" data-cat="live-addendum">
