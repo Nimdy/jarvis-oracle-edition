@@ -16,12 +16,12 @@ the handoff, the playbook, or a skill.
 | | |
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
-| **Branch** | `feat/gestation-period` (Stage 6 spoken lived; next cut is nn-fleet consume) |
-| **HEAD (committed)** | `8334662` plus uncommitted Stage 6 pile — TAP, identity law, household MEMORY native |
-| **vs origin** | ahead 10 plus this commit. Uncommitted ≠ bounced onto the brain until David bounces. |
+| **Branch** | `feat/nn-fleet-consume` (cut from `feat/gestation-period` `f5f0c02`) |
+| **HEAD (committed)** | `f5f0c02` — Stage 6 household MEMORY native + TAP identity law |
+| **vs origin** | `feat/gestation-period` pushed. This cut is nn-fleet `live_state` + consumed. |
 | **Merge `main`** | **No**, unless David asks |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
-| **Life phase** | Companion **Stage 6 · Memory Validation**. Stages 1–5 lived. **Do not enter Stage 7.** Playbook “elevate to L2” is **DOC DRIFT**. Live Stage 7 card already: do not raise SI or autonomy. |
+| **Life phase** | Companion **Stage 6 spoken lived**. Gate work is nn-fleet consume, not Stage 7. Playbook “elevate to L2” is **DOC DRIFT**. |
 | **Autonomy** | **L1 research.** Readiness composite live ~0.62 vs Stage 7 target 0.92. Do not grind Stage 7 for the number. |
 | **Operational queue** | **1.** Stage 6 spoken lived (kids/family/interrupt MEMORY native). **2. CURRENT:** manual gate work — nn-fleet `live_state` + **consumed**. **Not** Workstream 2 unless David names it. **Not** playbook Stage 7. |
 
