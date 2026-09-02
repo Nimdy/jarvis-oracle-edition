@@ -14,6 +14,7 @@ from cognition.self_view.grounding import (
     SUPPORTED,
     UNVERIFIED,
     ground_self_claims,
+    p2_active_default,
 )
 
 MODEL = {
@@ -134,3 +135,20 @@ class TestInvariants:
         assert log["active"] is True and log["changed"] is True
         assert log["counts"][DANGER] == 1
         assert log["actionable"] and log["actionable"][0]["verdict"] == DANGER
+
+
+def test_p2_default_is_shadow():
+    assert p2_active_default() is False
+
+
+def test_gate_text_repairs_when_env_on():
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parent.parent.joinpath("conversation_handler.py").read_text()
+    start = src.find("def _gate_text")
+    end = src.find("def _estimate_tts_playback_s", start)
+    gate = src[start:end]
+    assert "p2_active_default" in gate
+    assert "ground_self_claims" in gate
+    assert "active=True" in gate
+    assert "if p2_active_default() and gated:" in gate

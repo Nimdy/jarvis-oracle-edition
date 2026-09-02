@@ -49,7 +49,7 @@ class TestClassify:
             "what can you do?": "capabilities",
             "what new features do you have?": "recent_changes",
             "what changed recently?": "recent_changes",
-            "how are you doing?": "health",
+            "how are your systems?": "health",
             "what are your weaknesses?": "weaknesses",
             "what are you not allowed to do yet?": "gated_capabilities",
             "are you conscious?": "consciousness_query",
@@ -83,6 +83,20 @@ class TestClassify:
                   "Give me a status report, please.",
                   "What do you remember the first time you heard my voice?"):
             assert classify_self_question(q) is None, q
+
+    def test_phatic_how_are_you_is_not_p1_health(self):
+        """Lived 2026-09-01: 'How are you?' dumped inner HUD. STATUS already speaks."""
+        for q in (
+            "How are you?",
+            "how are you doing?",
+            "How are you feeling?",
+            "are you okay?",
+        ):
+            assert classify_self_question(q) is None, q
+        # "how do you feel?" is the consciousness-query lane (qualified), not HUD health.
+        assert classify_self_question("how do you feel?") == "consciousness_query"
+        assert classify_self_question("how are your systems?") == "health"
+        assert classify_self_question("are you healthy?") == "health"
 
     def test_continuity_questions_route_to_self_view(self):
         """Lived miss: last-memory-after-power-off must not fall through to the LLM."""
@@ -174,6 +188,27 @@ class TestArticulation:
         assert classify_self_question("What can you do?") == "capabilities"
         out = articulate_self_view(_model(), "capabilities").lower()
         assert "active" in out and "shadow" in out
+
+    def test_health_world_model_label_follows_promotion(self):
+        """Lived leftover: P1 health said 'world-model (shadow)' while L2 inject was on."""
+        out = articulate_self_view(_model(), "health").lower()
+        assert "world-model" in out
+        assert "l2" in out
+        assert "not family recall" in out
+        assert "world-model (shadow)" not in out
+
+        snap = _snapshot()
+        snap["world_model"]["promotion"]["level_name"] = "shadow"
+        shadow = articulate_self_view(_model(snapshot=snap), "health").lower()
+        assert "world-model" in shadow
+        assert "(shadow)" in shadow
+        assert "l2" not in shadow
+
+        snap = _snapshot()
+        snap["world_model"].pop("promotion", None)
+        snap["world_model"]["version"] = 3
+        cold = articulate_self_view(_model(snapshot=snap), "health").lower()
+        assert "world-model v3 (shadow)" in cold
 
     def test_consciousness_is_balanced(self):
         out = articulate_self_view(_model(), "consciousness_query").lower()

@@ -1016,10 +1016,10 @@ Pure-read-only scoring engine in `oracle_benchmark.py`. Scores 7 domains (total 
 - The brain uses a standard `.venv`
 - Pydantic for config and event schemas on both devices
 - PyTorch for neural policy layer + hemisphere NNs (brain only)
-- Tests: `cd brain && python -m pytest tests/`
+- Tests: `cd brain && python -m pytest tests/` **on WSL only**
 - Soak test: `cd brain && python -m tests.soak_test`
 - Event replay: use `tests/event_harness.py` with JSONL recordings
-- Sync code to desktop: `./sync-desktop.sh` (rsync over SSH)
+- **Never edit source on the brain host or the Pi.** Code on this machine (`~/projects/jarvis-oracle-edition`). Sync: `./sync-desktop.sh` (brain), `./sync-pi.sh` (Pi). Sync ≠ bounce. Git push ≠ sync. SSH is logs/API/`~/.jarvis`, not a second editor.
 
 ## Persistence (all under ~/.jarvis/ unless noted)
 

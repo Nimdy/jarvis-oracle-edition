@@ -1002,6 +1002,45 @@ def _to_speakable_memory_sentence(preview: str, max_chars: int = 170) -> str:
     return text
 
 
+def _format_unvalidated_learning_reply() -> str:
+    """Golden UNVALIDATED LEARNING — spark queue + OSV gaps. No LLM. No new facts."""
+    parts: list[str] = []
+    try:
+        from autonomy.grounding_queue import GroundingQueue
+        q = GroundingQueue.get_instance()
+        q.expire_stale()
+        n = q.pending_count()
+        if n <= 0:
+            parts.append("I don't have any grounding questions waiting for you.")
+        else:
+            parts.append(
+                f"I have {n} grounding question{'s' if n != 1 else ''} you haven't validated."
+            )
+            top = q.ranked_pending(limit=1)
+            if top:
+                claim = (top[0].rendered_claim or top[0].question_text or "").strip()
+                claim = re.sub(r"\s+", " ", claim)[:180]
+                if claim:
+                    parts.append(f"Highest leverage: {claim}")
+    except Exception:
+        logger.debug("unvalidated-learning queue read failed", exc_info=True)
+        parts.append("I couldn't read the grounding queue just now.")
+    try:
+        from cognition.self_view import load_self_view
+        model = load_self_view() or {}
+        gaps = model.get("gaps") or []
+        if gaps:
+            g0 = gaps[0]
+            area = g0.get("area") if isinstance(g0, dict) else str(g0)
+            if area:
+                parts.append(f"On my self-view, a current gap is {area}.")
+    except Exception:
+        logger.debug("unvalidated-learning OSV read failed", exc_info=True)
+    if not parts:
+        return "I don't have unvalidated learning to report right now."
+    return " ".join(parts)
+
+
 def _format_personal_activity_memory_reply(
     memory_ctx: str,
     max_items: int = 2,
@@ -1636,6 +1675,21 @@ _CORRECTION_PATTERNS: list[re.Pattern] = [
     re.compile(r"\bthat(?:'s| is) not what i said\b", re.I),
     re.compile(r"\bforget (?:that|what i said)\b", re.I),
 ]
+# Same payload shape as the existing inverted household / partner templates.
+# Not a new kinship list. Spouse aliases because "my wife is X" stores
+# "User's partner is X" while "X is my wife" stores "User's wife is X".
+_ROLE_SLOT_FACT_RE = re.compile(
+    r"^user's (wife|husband|partner|spouse|daughter|son|dog|cat|pet) is (\w+)$",
+    re.I,
+)
+_SPOUSE_ROLES = frozenset({"wife", "husband", "partner", "spouse"})
+
+
+def _role_slot_key(role: str) -> str:
+    r = (role or "").strip().lower()
+    if r in _SPOUSE_ROLES:
+        return "spouse"
+    return r
 
 _ALL_PERSONAL_PATTERNS = (
     _INTEREST_PATTERNS
@@ -1951,6 +2005,11 @@ def _collect_personal_intel_matches(
                 and _NOT_SAY_UTTERANCE_RE.search(text or "")
             ):
                 continue
+            slot = _ROLE_SLOT_FACT_RE.match(payload.strip())
+            if slot:
+                from identity.name_validator import is_valid_person_name
+                if not is_valid_person_name(slot.group(2)):
+                    continue
             personal.append((payload, category))
 
     for pattern, template, category in _THIRDPARTY_PATTERNS:
@@ -2162,6 +2221,36 @@ def _content_tokens(text: str) -> set[str]:
     }
 
 
+def _downweight_conflicting_role_slots(asserted: set[str]) -> int:
+    """If correction asserts User's wife is Tanya, downweight User's wife is She.
+
+    Same-slot conflict, like job fact-check. Not a kinship list.
+    Lived: overlap needed two 4+ letter tokens so 'not she' never hit 'wife is She'.
+    """
+    n = 0
+    slots: list[tuple[str, str]] = []
+    for payload in asserted:
+        m = _ROLE_SLOT_FACT_RE.match((payload or "").strip())
+        if m:
+            slots.append((m.group(1).lower(), m.group(2).lower()))
+    if not slots:
+        return 0
+    try:
+        memories = list(memory_storage.get_all())
+    except Exception:
+        return 0
+    for m in memories:
+        p = m.payload if isinstance(getattr(m, "payload", None), str) else ""
+        sm = _ROLE_SLOT_FACT_RE.match(p.strip())
+        if not sm:
+            continue
+        role, name = sm.group(1).lower(), sm.group(2).lower()
+        stored_key = _role_slot_key(role)
+        if any(_role_slot_key(r) == stored_key and name != nm for r, nm in slots):
+            n += _downweight_payload_exact(p, reason="role-slot-conflict")
+    return n
+
+
 def _correct_recent_facts(text: str) -> None:
     """Downweight only memories the correction actually names or conflicts with.
 
@@ -2178,12 +2267,16 @@ def _correct_recent_facts(text: str) -> None:
         if job:
             _downweight_payload_exact(f"User is {job}", reason="negated-job")
 
-    personal, _ = _collect_personal_intel_matches(text or "")
+    personal, thirdparty = _collect_personal_intel_matches(text or "")
     asserted = {
         payload.strip().lower()
         for payload, category in personal
         if category == "personal_fact" and isinstance(payload, str)
     }
+    for payload, _category, _relation in thirdparty:
+        if isinstance(payload, str) and _ROLE_SLOT_FACT_RE.match(payload.strip()):
+            asserted.add(payload.strip().lower())
+    _downweight_conflicting_role_slots(asserted)
     held_jobs = _held_biographical_jobs()
     for payload, category in personal:
         if category != "personal_fact":
@@ -2958,6 +3051,19 @@ async def handle_transcription(
         except Exception:
             logger.debug("Intention hook skipped (non-critical)", exc_info=True)
 
+        # OSV P2 — bind self-claims to the measured self-view before TTS.
+        # Shadow default: p2_active_default() is False. Operator-named WS2.
+        try:
+            from cognition.self_view.grounding import p2_active_default, ground_self_claims
+            from cognition.self_view import load_self_view
+            if p2_active_default() and gated:
+                _p2 = ground_self_claims(gated, load_self_view(), active=True)
+                if _p2.changed and _p2.grounded:
+                    logger.info("OSV P2 repaired self-claim before TTS")
+                    gated = _p2.grounded
+        except Exception:
+            logger.debug("OSV P2 gate skipped", exc_info=True)
+
         return gated
 
     _echo_ref_buf: list[str] = []
@@ -3052,6 +3158,15 @@ async def handle_transcription(
         ~500 chars per batch) so the Pi receives continuous audio blocks.
         """
         nonlocal _playback_estimate_s, _sync_chunk_count
+        # Thin soul on the native/tool mouth only (STATUS/MEMORY/VISION/P1).
+        # LLM streaming uses _send_sentence → _broadcast_chunk and already logs
+        # soul_dims in response.py. Fail-closed; no LLM; no TBS inject.
+        try:
+            from personality.thin_soul import thin_soul_native
+            _route = routing.tool.value if routing else ""
+            text_str = thin_soul_native(text_str, route=_route)
+        except Exception:
+            logger.debug("thin-soul native pass skipped", exc_info=True)
         text_str = _gate_text(text_str)
         _update_echo_ref(text_str)
         if text_str.strip():
@@ -3354,11 +3469,16 @@ async def handle_transcription(
     # Think-before-speak TBS-0 (SHADOW pre-speech read): read THIS user turn BEFORE the reply is generated
     # + emit a stance — LOGGED only, injected into NOTHING (docs/THINK_BEFORE_SPEAK.md). Fires here, BEFORE
     # the routing branches, so it covers EVERY speaking turn; cheap, no LLM, fail-open (no-op on any error).
+    # Capture onto the flight episode so person-aware labels accrue on the same turn
+    # as the mouth. Do NOT concat the stance prompt-line into _style_instruction (TBS-2).
+    _tbs_stance = None
     try:
         from consciousness.think_before_speak import pre_speech_reader as _tbs
         from consciousness.theory_of_mind import theory_of_mind_engine as _tbs_tom
-        _tbs.read_before_speak(speaker=speaker, user_text=text, user_emotion=emotion,
-                               person_model=_tbs_tom.get_model(speaker))
+        _tbs_stance = _tbs.read_before_speak(
+            speaker=speaker, user_text=text, user_emotion=emotion,
+            person_model=_tbs_tom.get_model(speaker),
+        )
     except Exception:
         logger.debug("think-before-speak TBS-0 pre-speech read failed (no-op)", exc_info=True)
 
@@ -3837,6 +3957,13 @@ async def handle_transcription(
             _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
             _persist_spoken_turn(text, reply)
             _golden_short_circuit = True
+        elif golden_op == "unvalidated_learning":
+            _set_golden_outcome("executed")
+            reply = _format_unvalidated_learning_reply()
+            await _broadcast_chunk_sync(reply, tone)
+            _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+            _persist_spoken_turn(text, reply)
+            _golden_short_circuit = True
         elif golden_op == "self_improve_execute" and golden_requires_confirmation:
             _set_golden_outcome("unauthorized", "confirmation_required")
             reply = (
@@ -3910,6 +4037,7 @@ async def handle_transcription(
     elif routing.tool == ToolType.STATUS:
         from tools.introspection_tool import get_structured_status
         from skills.capability_gate import capability_gate as _status_gate
+        reply = ""
         tool_data = get_structured_status(engine)
         engine.set_phase("PROCESSING")
         tone = engine.get_state()["tone"]
@@ -3939,6 +4067,8 @@ async def handle_transcription(
             _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
         finally:
             _status_gate.set_status_mode(False)
+        if reply:
+            _persist_spoken_turn(text, reply)
         _status_runtime_policy = _runtime_decide(
             "self_status",
             native_candidate=True,
@@ -6536,9 +6666,11 @@ async def handle_transcription(
             if reply:
                 from cognition.self_view import load_self_view
                 from cognition.self_view.grounding import ground_self_claims
-                _gr = ground_self_claims(reply, load_self_view(), active=False)
+                from cognition.self_view.grounding import p2_active_default
+                _p2_on = p2_active_default()
+                _gr = ground_self_claims(reply, load_self_view(), active=_p2_on)
                 _self_grounding = _gr.to_log()
-                _p2_grounding_stats["active"] = False
+                _p2_grounding_stats["active"] = _p2_on
                 _p2_grounding_stats["turns_checked"] += 1
                 if _gr.findings:
                     _p2_grounding_stats["turns_with_self_claims"] += 1
@@ -6579,6 +6711,7 @@ async def handle_transcription(
             "response_latency_ms": _latency_ms,
             "response_text": reply[:500] if reply else "",
             "self_grounding": _self_grounding,
+            "pre_speech": _tbs_stance.to_dict() if _tbs_stance is not None else None,
             "memories_retrieved": _retrieval_summary,
             "epistemic_flags": _epi_flags,
             "identity_state": _id_state,

@@ -120,6 +120,54 @@ def test_specialists_shape_never_collapses_to_raw_empty_dict(monkeypatch):
     _assert_specialists_shape(spec)
 
 
+def test_si_specialist_reports_lived_split_and_null_live_shadow():
+    """Weight-Room P1: origin split is visible; accuracy stays honestly-null."""
+
+    class _Eng:
+        def get_hemisphere_state(self) -> dict:
+            return {
+                "hemisphere_state": {
+                    "hemispheres": [
+                        {
+                            "focus": "claim_classifier",
+                            "status": "idle",
+                            "best_accuracy": 0,
+                            "best_training_accuracy": 0,
+                            "best_validation_accuracy": 0,
+                            "total_attempts": 0,
+                            "network_count": 0,
+                            "migration_readiness": 0,
+                        }
+                    ]
+                },
+                "distillation": {
+                    "teachers": {
+                        "claim_features": {
+                            "total": 4, "lived": 3, "synthetic": 1,
+                            "quarantined": 0, "buffer_size": 4,
+                        },
+                        "claim_verdict": {
+                            "total": 4, "lived": 3, "synthetic": 1,
+                            "quarantined": 0, "buffer_size": 4,
+                        },
+                    },
+                    "total_signals": 8,
+                    "total_quarantined": 0,
+                },
+                "tier1_gating": {"failure_counts": {}, "disabled_for_session": []},
+            }
+
+    from dashboard.snapshot import _build_si_specialists
+
+    out = _build_si_specialists(_Eng())
+    assert len(out["specialists"]) == 1
+    row = out["specialists"][0]
+    assert row["signals_lived"] == 6
+    assert row["signals_synthetic"] == 2
+    assert row["live_shadow_accuracy"] is None
+    assert row["live_accuracy_status"] == "unmeasured_no_live_inference_scoring"
+
+
 def test_specialists_list_is_populated_for_configured_focuses():
     """Happy path with real hemisphere rows still produces well-shaped output."""
 

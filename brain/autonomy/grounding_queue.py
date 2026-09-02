@@ -541,6 +541,11 @@ class GroundingQueue:
     def pending_count(self) -> int:
         return sum(1 for q in self._pending.values() if not q.answered)
 
+    def is_settled(self, belief_id: str) -> bool:
+        """True when this belief already has an operator answer. Stop re-nag."""
+        rec = self._pending.get((belief_id or "").strip())
+        return bool(rec is not None and rec.answered)
+
     def ranked_pending(self, limit: int = 50) -> list[PendingGroundingQuestion]:
         now = time.time()
         pending = [q for q in self._pending.values() if not q.answered]

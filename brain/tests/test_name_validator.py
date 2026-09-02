@@ -35,6 +35,14 @@ def test_valid_short_names():
     assert is_valid_person_name("Al")
 
 
+def test_rejects_pronouns_as_names():
+    """Lived: 'She is my wife' enrolled User's wife is She."""
+    assert not is_valid_person_name("She")
+    assert not is_valid_person_name("he")
+    assert not is_valid_person_name("Her")
+    assert not is_valid_person_name("They")
+
+
 # ── Blocked behavior/state tokens ("Staring" class of bug) ──────────────────
 
 def test_rejects_staring():

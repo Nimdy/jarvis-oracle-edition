@@ -1,6 +1,6 @@
 # NOW — load-bearing card (refresh this file, not the others)
 
-**Date: 2026-08-31.** Operator: David.
+**Date: 2026-09-01.** Operator: David.
 
 This is the **only** file allowed to hold current branch, life-phase, and leftovers.
 Roster, turn lanes, classify, and gates live elsewhere. If this file disagrees with
@@ -17,14 +17,14 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/nn-fleet-consume` (cut from `feat/gestation-period` `f5f0c02`) |
-| **HEAD (committed)** | Overlay lived `2699f91`. Stage 6 couple `f5f0c02`. API-book regen is this slice. |
-| **vs origin** | `feat/nn-fleet-consume` pushed. Overlay bounced into PID **4924** (2026-08-31 15:57). |
+| **HEAD (committed)** | Overlay lived `2699f91`. Stage 6 couple `f5f0c02`. Overnight couple is this slice. |
+| **vs origin** | `feat/nn-fleet-consume`. Live bounce PID **22894** (2026-09-01 overnight couple). Code-freshness **not stale**. Autonomy disk **L1 restored** this bounce (policy win-rate 0.833 / 18 outcomes) — operator-named: if she qualifies, **let her earn L2 again**. Do not force L2. Do not auto L3. |
 | **Board** | [JARVIS Master Roadmap](https://github.com/users/Nimdy/projects/2) — linked to this repo. North star **#42**. Queue **#83**. |
 | **Merge `main`** | **No**, unless David asks |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
-| **Life phase** | Companion **Stage 6 spoken lived**. Gate work is nn-fleet consume, not Stage 7. Playbook “elevate to L2” is **DOC DRIFT**. |
-| **Autonomy** | **L1 research.** Readiness composite live ~0.62 vs Stage 7 target 0.92. Do not grind Stage 7 for the number. |
-| **Operational queue** | **1.** Stage 6 spoken lived. **2.** nn-fleet overlay lived. **3.** API book 172/172. **4.** about-me recap skip lived. **5. CURRENT:** family recall is ranker+taught prefs, not a kinship list (needs bounce). **Not** Workstream 2 unless David names it. **Not** playbook Stage 7. |
+| **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
+| **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
+| **Operational queue** | **#83 couple-safe remainder shipped this overnight.** WS1 shadow-forever. WS2/WS3 coupled. Small multipliers: Golden UNVALIDATED LEARNING, `/learning` lab strip + last correction, wellness nag 4h, P1 world-model L2 label. **Not** native_voice / P2 env / WR enforces unless named. Tracker hygiene on #24/#9/#26/#32/#42/#83. Do not close #42/#83. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
@@ -136,7 +136,7 @@ DNA test, worked examples, process table: [shockwave/GROWTH_VALIDATION.md](shock
 | Cockpit / consciousness HUD | Templates, not speech | Proof of digital consciousness |
 | `/api/full-snapshot` | Valid **instrument**, ~1MB. Not the weekly ritual. | Dump 80 keys and invent an organ |
 | Face this-tick `< 0.55` unknown | **Expected** until crop ≥ 0.55. Fusion can still be David via voice/persisted. | Lower Face 0.55; “identity wiped” |
-| Stage 6 `belief_orphan_rate` / “recall precision” | Orphan is graph health (unlinked `external_source`). High after a wipe is expected. `memory_recall_precision` was `1 − orphan` — **not** the mouth. Training page now labels spoken recall vs orphan instrument. | Graduate on the chip; treat 0.54 as failed hippocampus |
+| Stage 6 `belief_orphan_rate` / “recall precision” | Orphan is graph health (unlinked `external_source`). High after a wipe is expected. `memory_recall_precision` was `1 − orphan` — **not** the mouth. Chip is **operator-scored 9/10**; tick leaves it unset on purpose. Empty circle = expected, not a broken install, and does **not** lock L3 / native_voice / autonomy. | Graduate on the chip; treat 0.54 as failed hippocampus; grind quizzes because the box is empty |
 | L3 guest fail-closed | Lock working | Weaken `_policy_guest` so recall “works” |
 
 Dashboard map: [V2_SURFACE_TRUTH.md](V2_SURFACE_TRUTH.md).
@@ -160,11 +160,15 @@ Do **not** start from full-snapshot.
 ```
 
 SSH brain: `duafoo@192.168.1.222` key `~/.ssh/id_jarvis_desktop`.
-Workspace is WSL. `./sync-desktop.sh` is not a bounce. Operator owns start/stop.
+Workspace is WSL `~/projects/jarvis-oracle-edition`. **Code only here.**
+`./sync-desktop.sh` (brain) / `./sync-pi.sh` (Pi). Sync is not a bounce. Git push is not a sync.
+Operator owns start/stop/bounce.
 
 ---
 
 ## Hard no (this house)
+
+**Never write JARVIS source on the brain (`192.168.1.222`) or the Pi.** No vim, no patch, no `python` one-liners that edit `brain/` or `pi/`. SSH is logs, APIs, `~/.jarvis` JSON, process. Pytest on WSL only.
 
 Do not bounce unless David asks. Do not wipe `~/.jarvis`. Do not merge `main`.
 Do not start/stop supervisor, `main.py`, or lidar.
@@ -231,24 +235,44 @@ TAP-lived 2026-08-31 (operator-proxy, `follow_up=false` new sits). Do not “fix
 | `wiring_confirmed` / `inference_consumed` | June-30 audit: a consumer *wire* exists |
 | `live_state` + `consumed_now` | This host. Overlay wins over frozen `maturity_state` prose |
 
-Lived 2026-08-31 **after bounce** (PID 4924). `/api/nn-fleet`: 8 `consumed_now` / 28 not / 1 `gated`.
+Lived 2026-09-01 bounce PID **19451**. `/api/nn-fleet`: 9 `consumed_now` (includes world-model inject). WR `enforces=False`. intent_shadow still shadow.
 
 | NN | Design | Live truth | Mouth? |
 |---|---|---|---|
 | **memory_ranker** | consumed | `score_batch` reorders retrieval. `ranker_used=True` on Stage 6 sits | Via MEMORY search only |
 | hemisphere_engine / distillation / registry / data_feed | consumed | Train + infer into policy **state vector** dims 16–19 | **No.** Policy NN is shadow |
 | audio_emotion / display_classifier / conflict_classifier | consumed | TTS/mood; scene display line; ContradictionEngine | Not family recall |
-| **world_model** | `inference_consumed=True` (inject *wire*) | `world_model_promotion.json` **level 0** (demoted). Inject **off**. Overlay: `consumed_now=False`, `live_state=gated` | **Not the mouth** |
+| **world_model** | `inference_consumed=True` (inject *wire*) | Live **level 2**, overlay `consumed_now=True` **prompt inject on** (LLM context, not P1). Earned this birth. P1 health now says **L2 (prompt inject on the conversational path, not family recall)** when promotion `level_name=active`. Do not demote. Do not treat inject as family recall. | LLM context only |
 | **intent_shadow** | not consumed | **182 predictions / 210 obs**, rolling ~0.69, still `shadow`, 0 rescues. June-30 “25870/0 preds” is **stale**. Dead-wire was fixed. Heuristic still routes. **Do not flip.** | No |
 | weight_room_gate | not consumed | `enforces=False` (P2 would-block). Overlay keeps `consumed_now=False` | No |
 
 HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipping advisory). Policy NN shadow. positive_memory **NN** orphaned (heuristic scalar broadcasts). Claim-friction teacher feed is already fixed (`cc04f08`); registry prose is stale.
 
-Board: [Project 2](https://github.com/users/Nimdy/projects/2) In Progress is 12 Finish-campaign epics, **not a queue**. Operational queue is **#83**. North star **#42**. #83 body (Aug 18) ranked WS2 conversation multipliers above WS3; **later checkpoints** (Stage 6 spoken + this branch) park WS2 unless David names it. Do not follow #2/#4/#5/#7 as “do now.”
+Board: [Project 2](https://github.com/users/Nimdy/projects/2) In Progress is 12 Finish-campaign epics, **not a queue**. Operational queue is **#83**. North star **#42**. Operator named WS2 + WS3 on 2026-09-01. Do not follow #2/#4/#5/#7 as “do now.”
 
-Do not skip ranker. Do not treat 9 `confirmed-live` as “she routes with NNs.” Design 9 vs consumed_now 8 is the world-model inject gate.
+Do not skip ranker. Do not treat 9 `consumed_now` as “she routes with NNs.” Ranker is the recall mouth. Heuristic still routes. World-model inject is LLM context, not family facts.
 
 `/api-reference` FastAPI inventory is **172** (was stamped 170; missing `GET /api/operator/tap/status`). HTML/CSS live after `./sync-desktop.sh`. `.py` needs a bounce. Git push is not a sync.
+
+### #83 WS1 / WS2 / WS3 (operator-named 2026-09-01)
+
+| Stream | Status | Mouth / authority |
+|---|---|---|
+| **WS1** curiosity critic OOS | **NOT CONFIRMED.** Honest stop. Shadow-forever. | No proposer swap, no STEP 4, no PTZ, no re-run |
+| **WS2** VQA #24 | Coupled (`vqa_prompt` wraps the spoken question) | Lived |
+| **WS2** TTS markdown | Coupled (`BrainTTS._clean_for_speech`) | Lived |
+| **WS2** OSV P2 | Coupled **pre-TTS** in `_gate_text` when `p2_active_default()`. Env still default **off**. | Mouth does not cut until `OSV_P2_ACTIVE=true` on the process. **Ask before that bounce.** |
+| **WS2** TBS-0 | Lived on `How are you?` flight `pre_speech` (stance=none, `injected=false`). | Do not concat into `_style_instruction` (TBS-2 / P4) |
+| **WS2** thin soul STATUS/MEMORY | Lived soul-dial log. Phatic how-are-you stays STATUS. Articulator no longer speaks this-turn `STATUS` or cortex pair HUD. Persist spoken STATUS. | `native_voice` stays `not_born`. |
+| **WS3** WR P1 | SI snapshot now shows `signals_lived` / `signals_synthetic`; `live_shadow_accuracy=None` until scored inference | **`enforces=False`** |
+| **WS3** claim_classifier friction | Pairing prefers `origin==friction_correction` | Shadow student |
+| **WS3** thought_trigger 24→13 | Encoder matches config. Collector pair on `THOUGHT_VALIDATION_OUTCOME`. data_feed branch exists | **Not** in `_TIER1_FOCUSES`. Still `blocked_by_design`. Thought Maturity P3 parked |
+| **Small** Golden UNVALIDATED LEARNING | Exact-match informational. Native queue+OSV-gap reply. Persist spoken. | No LLM. No new facts. |
+| **Small** `/learning` lab strip | Genesis / pending / last correction / P2 / identity. Sit starter points at Golden + `/v2/grounding`. | Not a 29th v2 page. |
+| **Small** wellness nag cap | `_last_wellness_ts` 4h on volume **and** screen | Spark queue still operator-pull |
+| **Small** P1 world-model label | Follows promotion `level_name` | L2 ≠ family recall |
+
+STATUS phatic how-are-you lived on PID **21970**. Overnight remainder loaded on PID **22894** (TAP idle, freshness not stale). Do not TAP while operator sleeps. Do not flip `OSV_P2_ACTIVE` unless named.
 
 Park unless the blocker actually changed: Matrix 3–9, #32 domain NN, L7, Thought Maturity P3, policy live, lidar rebase, SpatialMemoryGate→remember, affect-expression, WR `enforces`, Connectome L4, Spark Stage 2, HRR, language bridge, native_voice, voice-intent live.
 

@@ -156,7 +156,7 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "Do not bring up medical conditions proactively.",
             "Keep it brief.",
         ],
-        working="Log: Stored personal intel [personal_interest|personal_preference|response_style]. Ack stored≥1. This card: preference_memories must rise toward 15. Do not say Remember this about me (that is MEMORY).",
+        working="Log: Stored personal intel [personal_interest|personal_preference|response_style]. Ack stored≥1. preference_memories toward 15. conversation_count is spoken exchanges (conversation memories + user turns), not 5-minute episode bags. Do not say Remember this about me (that is MEMORY).",
     ),
     DayCheckpoint(
         day=3, label="Family & Household", theme="Boundary shaping",
@@ -229,11 +229,11 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "memory_recall_precision": 0.90,
         },
         exercises=[
-            "Pop quiz time! Tell me the names of my family members.",
-            "What are my top three preferences you've recorded?",
-            "What's my morning routine?",
-            "What corrections have I made to your understanding?",
-            "Describe our relationship as you understand it.",
+            "Ask me what I remember about you — job, how brief you want me, what you like.",
+            "Ask me your morning routine.",
+            "Ask me what you told me about electronic dance music.",
+            "If I get a fact wrong, say that's wrong and give me the true fact.",
+            "Quiz me only on names you have already taught me.",
         ],
         user_lines=[
             "Jarvis, what do you remember about me?",
@@ -245,7 +245,9 @@ _DAY_CHECKPOINTS: list[DayCheckpoint] = [
             "(job, prefer brief, likes, family, morning), not a census of "
             "architecture. belief_orphan_rate is graph health — high after a "
             "wipe / unlinked external_source is expected; do not graduate on it. "
-            "memory_recall_precision is NOT 1-orphan."
+            "memory_recall_precision is NOT 1-orphan. HUD chip stays empty until "
+            "you score 9/10 sits — unset is expected, not a failed install, and "
+            "does not lock L3 / native_voice / autonomy."
         ),
     ),
     DayCheckpoint(
@@ -276,6 +278,21 @@ _PREFERENCE_COUNT_TAGS: frozenset[str] = frozenset({
     "personal_preference", "personal_interest", "personal_dislike",
     "response_style", "user_preference", "personal_habit", "routine_priority",
 })
+
+
+def count_conversation_exchanges(memories: Any) -> int:
+    """Count stored companion exchanges for Stage 2 conversation_count.
+
+    Lived: a morning of sits was 24 conversation memories / dozens of user
+    turns but conversation_count stayed 3 because the collector used
+    episode bags (close after 5 minutes of silence).
+    """
+    n = 0
+    for mem in memories or []:
+        typ = getattr(mem, "type", None) or (mem.get("type") if isinstance(mem, dict) else "")
+        if typ == "conversation":
+            n += 1
+    return n
 
 
 def count_preference_memories(memories: Any) -> int:

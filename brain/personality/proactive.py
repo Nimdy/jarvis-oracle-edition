@@ -157,6 +157,7 @@ class ProactiveBehavior:
         self._pending_question: str | None = None
         self._active_traits: dict[str, float] = {}
         self._dialogue_history: deque[DialogueEntry] = deque(maxlen=200)
+        self._last_wellness_ts: float = 0.0
 
     @classmethod
     def get_instance(cls) -> ProactiveBehavior:
@@ -434,7 +435,10 @@ class ProactiveBehavior:
             m for m in memories
             if m.type == "conversation" and now - m.timestamp < 7200
         ]
+        if now - getattr(self, "_last_wellness_ts", 0.0) < 4 * 3600:
+            return None
         if len(recent_convos) > 15:
+            self._last_wellness_ts = now
             return ProactiveSuggestion(
                 "wellness",
                 "We've had quite a few conversations today. Everything going well?",
@@ -447,6 +451,7 @@ class ProactiveBehavior:
                 if m.type == "observation" and "screen" in m.tags and now - m.timestamp < 7200
             ]
             if len(recent_obs) > 20:
+                self._last_wellness_ts = now
                 return ProactiveSuggestion(
                     "wellness",
                     "You've been at the screen for a while. Consider a short break?",

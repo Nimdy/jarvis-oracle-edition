@@ -1536,10 +1536,15 @@ class ConsciousnessSystem:
             )
             from personality.onboarding import (
                 count_preference_memories,
+                count_conversation_exchanges,
                 correction_training_metrics,
                 get_onboarding_manager,
             )
             m["preference_memories"] = count_preference_memories(all_memories)
+            m["conversation_count"] = max(
+                int(m.get("conversation_count", 0) or 0),
+                count_conversation_exchanges(all_memories),
+            )
             m["routine_memories"] = sum(
                 1 for mem in all_memories
                 if any(
@@ -1561,7 +1566,10 @@ class ConsciousnessSystem:
                 try:
                     from consciousness.observer import consciousness_observer
                     obs = consciousness_observer.get_state()
-                    m["conversation_count"] = obs.get("total_observations", 0)
+                    m["conversation_count"] = max(
+                        int(m.get("conversation_count", 0) or 0),
+                        int(obs.get("total_observations", 0) or 0),
+                    )
                 except Exception:
                     pass
 
@@ -1569,13 +1577,18 @@ class ConsciousnessSystem:
                 episodes = getattr(engine, "episodes", None)
                 if not episodes:
                     episodes = getattr(po, "episodes", None) if po else None
-                if episodes and hasattr(episodes, "get_episode_count"):
-                    episode_count = int(episodes.get_episode_count())
-                    if episode_count > 0:
-                        m["conversation_count"] = max(
-                            int(m.get("conversation_count", 0) or 0),
-                            episode_count,
-                        )
+                if episodes:
+                    bags = 0
+                    if hasattr(episodes, "get_episode_count"):
+                        bags = int(episodes.get_episode_count() or 0)
+                    turns = 0
+                    if hasattr(episodes, "get_user_turn_count"):
+                        turns = int(episodes.get_user_turn_count() or 0)
+                    m["conversation_count"] = max(
+                        int(m.get("conversation_count", 0) or 0),
+                        bags,
+                        turns,
+                    )
             except Exception:
                 pass
 

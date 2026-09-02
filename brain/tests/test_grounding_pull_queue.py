@@ -78,6 +78,12 @@ def test_being_corrected_still_counts_as_grounded():
     res = q.answer(qid, "No, that's wrong.")
     assert res["record"]["external_validation"] == "refuted"
     assert res["record"]["grounded"] is True  # moved from inferred -> externally-anchored
+    assert q.is_settled("b1") is True
+    assert q.is_settled("missing") is False
+    # Lived: set_wake_armed would-have every 120s after the queue item existed.
+    again = q.enqueue(belief_id="b1", question_text="Is X true?", facet="factual", channel="web")
+    assert again is not None and again.answered is True
+    assert q.pending_count() == 0
 
 
 def test_belief_less_would_have_still_lands_on_pull_queue():

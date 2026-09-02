@@ -219,6 +219,53 @@ def test_correction_does_not_shotgun_unrelated_recent_household(monkeypatch) -> 
     assert "User is software engineer" not in payloads
 
 
+def test_she_is_my_wife_does_not_store_pronoun_as_name() -> None:
+    """Lived: inverted household stored User's wife is She from 'She is my wife'."""
+    personal, _ = _collect_personal_intel_matches("Tanya is also in my family. She is my wife.")
+    payloads = [p for p, _c in personal]
+    assert "User's wife is She" not in payloads
+    assert not any(p.lower().endswith(" is she") for p in payloads)
+
+
+def test_correction_downweights_wife_is_she_not_tanya(monkeypatch) -> None:
+    """Lived: 'Tanya, not she' reinforced Tanya and left User's wife is She at 0.77."""
+
+    @dataclass
+    class _Mem:
+        payload: str
+        weight: float = 0.77
+        tags: tuple = ("user_preference", "personal_fact")
+        timestamp: float = 1_000.0
+
+    she = _Mem("User's wife is She")
+    tanya = _Mem("User's partner is Tanya", weight=0.8)
+    lily = _Mem("User's daughter is Lily", weight=0.77)
+    added: list[object] = []
+
+    monkeypatch.setattr(
+        "conversation_handler.time.time",
+        lambda: 1_030.0,
+    )
+    monkeypatch.setattr(
+        "conversation_handler.memory_storage.get_by_tag",
+        lambda *_a, **_k: [she, tanya, lily],
+    )
+    monkeypatch.setattr(
+        "conversation_handler.memory_storage.get_all",
+        lambda: [she, tanya, lily],
+    )
+    monkeypatch.setattr(
+        "conversation_handler.memory_storage.add",
+        lambda m: added.append(m),
+    )
+    _correct_recent_facts("Jarvis, that's incorrect. My wife's name is Tanya, not she.")
+    payloads = [getattr(m, "payload", "") for m in added]
+    assert "User's wife is She" in payloads
+    assert "User's partner is Tanya" not in payloads
+    assert "User's daughter is Lily" not in payloads
+    assert added[0].weight < 0.2
+
+
 def test_injection_skips_low_weight_corrected_and_prefers_complete_job() -> None:
     """Lived: 'what do I work as' spoke 0.07 plumber over 0.77 engineer."""
 

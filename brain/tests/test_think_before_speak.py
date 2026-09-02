@@ -58,6 +58,19 @@ def test_unearned_pref_does_not_trip(tmp_path, monkeypatch):
     assert s.stance == "none"
 
 
+def test_handler_captures_stance_on_flight_record_without_injecting():
+    """TBS-0: person-aware labels accrue on the episode. Prompt stays unchanged."""
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parent.parent.joinpath("conversation_handler.py").read_text()
+    assert "_tbs_stance = _tbs.read_before_speak(" in src
+    assert '"pre_speech": _tbs_stance.to_dict()' in src
+    assert "+ _tbs_stance.would_inject" not in src
+    assert "_style_instruction += " not in src
+    window = src[src.find("_tbs_stance = _tbs.read_before_speak"):src.find("_flight_recorder.append")]
+    assert ".would_inject" not in window
+
+
 def test_glassbox_persists_across_restart(tmp_path, monkeypatch):
     _reset(tmp_path, monkeypatch)
     r = tbs.PreSpeechReader.get_instance()

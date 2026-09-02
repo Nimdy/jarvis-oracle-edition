@@ -229,6 +229,7 @@ letting guests through.
 - Do not start/stop supervisor, `main.py`, or lidar. Operator owns the stack.
 - Do not run pytest on the live brain host against `~/.jarvis`. Tests write registries (lived 2026-08-24: `plugin_registry.json` overwritten, restored from snapshot). Run `brain/tests/` on WSL — they are contract pins, not sits.
 - Agent verbal sits: `GET /api/operator/tap/status` then `POST /api/operator/tap`. Never `POST /api/chat`.
+- **Never code on the brain or the Pi.** Edit on WSL. Sync `./sync-desktop.sh` / `./sync-pi.sh`. Operator bounces. Git push is not a sync.
 - Sync with `./sync-desktop.sh` when code should hit the brain; they bounce.
 - Do not flip `OSV_P2_ACTIVE`, revoice-live, voice-intent, or native_voice
   unless the operator asks.

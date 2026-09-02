@@ -2615,6 +2615,15 @@ def _build_si_specialists(engine: Any) -> dict[str, Any]:
             "signals_labels": label_count,
             "signals_quarantined": feature_quarantined + label_quarantined,
             "signals_buffer": feature_buffer + label_buffer,
+            # Weight-Room P1: origin split is observable. live_shadow_accuracy
+            # stays None until a specialist actually scores lived inference
+            # (honesty floor — not a fake 0.0). enforces stays False.
+            "signals_lived": int(feature_stats.get("lived", 0) or 0)
+            + int(label_stats.get("lived", 0) or 0),
+            "signals_synthetic": int(feature_stats.get("synthetic", 0) or 0)
+            + int(label_stats.get("synthetic", 0) or 0),
+            "live_shadow_accuracy": None,
+            "live_accuracy_status": "unmeasured_no_live_inference_scoring",
             "last_signal_s": last_signal_s,
             "failure_count": failure_counts.get(focus, 0),
             "disabled": focus in disabled,

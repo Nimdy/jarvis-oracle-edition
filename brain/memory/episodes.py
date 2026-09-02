@@ -345,6 +345,12 @@ class EpisodicMemory:
     def get_episode_count(self) -> int:
         return len(self._episodes)
 
+    def get_user_turn_count(self) -> int:
+        """User utterances across episodes (Stage 2 conversation_count)."""
+        return sum(
+            1 for ep in self._episodes for t in ep.turns if t.role == "user"
+        )
+
     def link_memory(self, memory_id: str) -> None:
         """Link a memory to the current episode."""
         if self._active_episode and memory_id not in self._active_episode.memory_ids:

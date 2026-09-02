@@ -434,6 +434,15 @@ def test_every_canonical_golden_command_routes():
         assert result.extracted_args.get("golden_canonical_body") == body, body
 
 
+def test_golden_unvalidated_learning_exact_route():
+    result = router.route("Jarvis, GOLDEN COMMAND UNVALIDATED LEARNING")
+    assert result.extracted_args.get("tier") == "golden"
+    assert result.extracted_args.get("golden_status") == "executed"
+    assert result.golden_context is not None
+    assert result.golden_context.command_id == "GW_UNVALIDATED_LEARNING"
+    assert result.extracted_args.get("golden_operation") == "unvalidated_learning"
+
+
 def test_golden_status_exact_route():
     result = router.route("Jarvis, GOLDEN COMMAND STATUS")
     assert result.tool == ToolType.STATUS

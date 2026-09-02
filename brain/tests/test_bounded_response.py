@@ -30,10 +30,30 @@ class BoundedResponseTests(unittest.TestCase):
         )
 
         reply = articulate_meaning_frame(frame)
-        self.assertIn("handling a request", reply)
+        # Lived 2026-09-01: do not speak this-turn route as "handling STATUS".
+        self.assertNotIn("STATUS", reply)
+        self.assertNotIn("handling a request", reply)
         self.assertIn("passive mode", reply)
+        self.assertNotIn("just switched", reply)
         self.assertNotIn("I am operational", reply)
         self.assertNotIn("I am processing", reply)
+
+    def test_self_status_skips_cortex_pair_hud(self) -> None:
+        frame = build_meaning_frame(
+            response_class="self_status",
+            grounding_payload=(
+                "=== Operating Mode [live] ===\n"
+                "Mode: conversational\n"
+                "Dwell: 400s in current mode\n\n"
+                "=== Cortex training ===\n"
+                "Ranker: 500/50 training pairs\n"
+                "Ready: yes\n"
+            ),
+        )
+        reply = articulate_meaning_frame(frame)
+        self.assertIn("conversational mode", reply)
+        self.assertNotIn("500", reply)
+        self.assertNotIn("training pairs", reply)
 
     def test_recent_research_frame_includes_verified_facts(self) -> None:
         frame = build_meaning_frame(

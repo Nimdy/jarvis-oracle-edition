@@ -19,6 +19,7 @@
     .checks{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;}
     .ck{font-size:8.5px;border:1px solid var(--line);border-radius:3px;padding:1px 5px;}
     .ck.met{border-color:var(--green);color:var(--green);} .ck.miss{border-color:var(--amber);color:var(--amber);}
+    .ck.wait{border-color:var(--cyan);color:var(--cyan);}
     .mode{border:1px solid var(--line);border-radius:5px;padding:8px 10px;margin:6px 0;background:rgba(3,8,14,.4);}
     .mode h4{margin:0 0 3px;font-size:10px;color:var(--cyan);letter-spacing:.04em;}
     .mode p{margin:0;font-size:9.5px;color:var(--muted);line-height:1.5;}
@@ -360,11 +361,15 @@
       // via >=. Spoken mouth is the gate. High orphan after wipe is expected.
       if(n===6){
         var orph=num(lm.belief_orphan_rate);
+        var recPrec=lm.memory_recall_precision;
+        var scored=(recPrec!==null&&recPrec!==undefined);
         ckhtml=
-          '<span class="ck miss">○ spoken recall (mouth) · job / brief / likes / family / morning — not 1−orphan</span>'+
+          '<span class="ck '+(scored?'met':'wait')+'">'+(scored?'✓':'○')+
+            ' spoken recall 9/10 · <b>you</b> score the mouth · the tick never fills this</span>'+
+          '<span class="ck wait">empty chip is expected — not a broken install · does not lock L3 / native_voice / autonomy</span>'+
           '<span class="ck" style="border-color:var(--dim);color:var(--muted)">orphan graph '+
           (orph===null?'—':fmtTarget(orph))+
-          ' · instrument; high after wipe / unlinked external_source is expected; not graduation</span>';
+          ' · instrument only; not graduation</span>';
       }
       var pr = num(rec.exercises_prompted!=null?rec.exercises_prompted:(ex[key]!=null?ex[key]:ex[n]));
       var lines=rec.user_lines||[];
@@ -381,6 +386,7 @@
       var work=rec.working?('<div class="gfoot" style="margin-top:8px;color:var(--muted)">Working? '+esc(rec.working)+'</div>'):'';
       if(n===6){
         work='<div class="gfoot" style="margin-top:8px;color:var(--muted)">Working? <b>route=MEMORY</b>. Mouth names stored facts (job, prefer brief, likes, family, morning), not an architecture census. '+
+          'Ask her; do not wait for a checkbox. Repeating the same quiz does not move this chip. '+
           '<b>After a wipe:</b> empty recall and high orphan are expected until you teach then quiz. Do not graduate on the orphan chip. memory_recall_precision is not 1−orphan.</div>';
       }
       html+='<div class="stage" style="border-left:2px solid '+badge.c+'">'+
@@ -400,8 +406,8 @@
     var gap = comp===null?null:(0.92-comp);
     el('grad').innerHTML = (OB&&OB.graduated)
       ? '<b style="color:var(--green)">GRADUATED</b> '+(OB.graduated_at?('· '+ago(num(OB.graduated_at))):'')
-      : 'Composite <b style="color:'+bandColor(comp,0.92,0.8)+'">'+(comp===null?'—':comp.toFixed(3))+'</b> vs gate <b>0.92</b>'+
-        (gap!==null&&gap>0?' — <b style="color:var(--amber)">'+gap.toFixed(3)+'</b> to go; train the floor dimension shown above. Stage 7 auto-extends until the gate holds.':' — gate met.');
+      : 'Composite <b style="color:'+bandColor(comp,0.92,0.8)+'">'+(comp===null?'—':comp.toFixed(3))+'</b> vs <b>0.92</b> is an <b>instrument</b>, not first-install homework. Stage 7 / autonomy L2 is not unlocked by filling Stage 6 boxes. Unchecked spoken-recall does not lock other gates.'+
+        (gap!==null&&gap>0?' <span style="color:var(--muted)">('+gap.toFixed(3)+' below 0.92 — do not grind this number.)</span>':'');
     function kv(k,v,color){ return '<span><div class="k">'+k+'</div><b'+(color?(' style="color:'+color+'"'):'')+'>'+v+'</b></span>'; }
     el('livemetrics').innerHTML=
       kv('memories', num(lm.memory_count)||0)+

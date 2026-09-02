@@ -93,3 +93,29 @@ def test_negative_identity_fact_guard_present() -> None:
     assert "startswith(\"user is not \")" in guard_body
     assert "if _is_unstable_personal_fact(payload, category):" in collect_body
 
+
+def test_unvalidated_learning_golden_persists_and_does_not_llm() -> None:
+    src = _source()
+    body = _function_body(src, "handle_transcription")
+    at = body.find('golden_op == "unvalidated_learning"')
+    assert at > 0
+    chunk = body[at:at + 900]
+    assert "_format_unvalidated_learning_reply()" in chunk
+    assert "_persist_spoken_turn(text, reply)" in chunk
+    assert "_broadcast_chunk_sync" in chunk
+    fmt = _function_body(src, "_format_unvalidated_learning_reply")
+    assert "GroundingQueue" in fmt
+    assert "ranked_pending" in fmt
+    assert "ollama" not in fmt.lower()
+
+
+def test_status_native_persists_spoken_turn() -> None:
+    """Lived 2026-09-01: STATUS how-are-you was in flight but not conversation_history."""
+    src = _source()
+    body = _function_body(src, "handle_transcription")
+    status_at = body.find("routing.tool == ToolType.STATUS")
+    assert status_at > 0
+    next_elif = body.find("elif routing.tool == ToolType.MEMORY", status_at)
+    chunk = body[status_at:next_elif if next_elif > 0 else status_at + 2500]
+    assert "_persist_spoken_turn(text, reply)" in chunk
+

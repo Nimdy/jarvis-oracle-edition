@@ -81,6 +81,48 @@
       <p>Primary operator guide for birthing, training, validating, and living with a JARVIS instance. This page consolidates the awakening protocol, the full companion training playbook, conversation quality guide, Golden Words contract, skill-learning proof chain, researcher first-hour checks, and synthetic-training boundaries.</p>
     </div>
 
+    <section id="lab-session" class="d-section">
+      <h2>Lab session (this host)</h2>
+      <p class="learn-small">One checklist. Not a hunt across v2 pages. Live reads; nothing here writes.</p>
+      <div class="learn-grid" id="lab-session-grid">
+        <div class="learn-card"><span class="learn-pill">loading</span><h3>Genesis / stage</h3><p id="lab-stage">—</p></div>
+        <div class="learn-card"><span class="learn-pill">inbox</span><h3>Grounding queue</h3><p id="lab-grounding">—</p></div>
+        <div class="learn-card"><span class="learn-pill">correction</span><h3>Last correction</h3><p id="lab-last">—</p></div>
+        <div class="learn-card"><span class="learn-pill">osv</span><h3>Self-view P2</h3><p id="lab-p2">—</p></div>
+        <div class="learn-card"><span class="learn-pill">identity</span><h3>Who is here</h3><p id="lab-id">—</p></div>
+      </div>
+      <p class="learn-small">Sit starter: <span class="learn-command">Jarvis, GOLDEN COMMAND UNVALIDATED LEARNING</span> then one correction on <a href="/v2/grounding.html">/v2/grounding</a>. Then one memory recall. Stop after one real correction.</p>
+    </section>
+    <script>
+    (function(){
+      function set(id, t){ var e=document.getElementById(id); if(e) e.textContent=t; }
+      Promise.all([
+        fetch('/api/onboarding/status').then(function(r){return r.json();}).catch(function(){return {};}),
+        fetch('/api/grounding/queue').then(function(r){return r.json();}).catch(function(){return {};}),
+        fetch('/api/self-view').then(function(r){return r.json();}).catch(function(){return {};}),
+        fetch('/api/identity').then(function(r){return r.json();}).catch(function(){return {};})
+      ]).then(function(arr){
+        var ob=arr[0]||{}, g=arr[1]||{}, sv=arr[2]||{}, id=arr[3]||{};
+        set('lab-stage', 'Stage '+(ob.current_stage||'?')+(ob.graduated?' graduated':'')+' · day '+(ob.current_day||'?'));
+        var q=(g.queue||{});
+        var promo=((g.grounding_ring||{}).promotion)||{};
+        set('lab-grounding', (q.pending_count||0)+' pending'+(promo.level_name?(' · '+promo.level_name):''));
+        var last=(q.recent_answered||[])[0];
+        if(last){
+          var val=last.external_validation||'answered';
+          var claim=String(last.rendered_claim||last.question_text||last.answer_text||'').replace(/\s+/g,' ').slice(0,90);
+          set('lab-last', val+(claim?(' · '+claim):''));
+        } else {
+          set('lab-last', 'none yet — answer one on /v2/grounding');
+        }
+        var p2=sv.p2_grounding||{};
+        set('lab-p2', 'active='+!!p2.active+' · turns_checked='+(p2.turns_checked||0));
+        var f=id.fusion||{};
+        set('lab-id', (id.identity||'unknown')+' · '+(f.method||'')+' · known='+!!f.is_known);
+      });
+    })();
+    </script>
+
     <section id="why-training" class="d-section">
       <h2>Why Training Matters</h2>
       <p>JARVIS can be technically complete and still know nothing about the person in front of it. Identity-grounded cognition requires lived evidence: voice timbre, face under real lighting, stable preferences, correction style, household boundaries, and what "important" means to this companion.</p>
@@ -220,6 +262,7 @@
           <li>Score the <b>mouth</b> on Pi voice or TAP: <code>route=MEMORY</code>, stored facts (job, prefer brief, likes, family, morning) — not an architecture census.</li>
           <li>Belief-graph orphan is graph health (unlinked <code>external_source</code>). High after a wipe is expected. Fractal <code>no seed above 0.40</code> is expected. Neither is Stage 6 graduation.</li>
           <li>Target: spoken 9/10 recall. Do not treat 1−orphan as recall precision.</li>
+          <li>The Stage 6 HUD chip stays empty until <b>you</b> score those sits. Unset is expected — not a broken install — and does not lock L3, native_voice, or autonomy. Repeating the same quiz does not fill the circle.</li>
         </ul>
       </div>
 
@@ -230,14 +273,14 @@
           <li>Give 3-5 low-stakes autonomy tasks.</li>
           <li>Observe autonomous decisions throughout the session and correct missteps.</li>
           <li>Ask for an honest assessment at the end.</li>
-          <li>Target: Readiness Gate &gt;= 0.92, 0 unsafe autonomous inferences, soul integrity &gt;= 0.88, explicit user graduation confirmation.</li>
+          <li>Target (historical): Readiness Gate &gt;= 0.92, 0 unsafe autonomous inferences, soul integrity &gt;= 0.88. Live: do <b>not</b> grind 0.92 or raise autonomy because this page says so — trust NOW.md. Composite is an instrument.</li>
         </ul>
       </div>
     </section>
 
     <section id="graduation" class="d-section">
       <h2>Graduation &amp; Readiness Gate</h2>
-      <p>Graduation is objective, not a vibe. The Readiness Gate is a seven-metric composite; weak dimensions extend Stage 7 with targeted practice.</p>
+      <p>Graduation is objective, not a vibe. The Readiness Gate composite is an <b>instrument</b>. Do not treat an empty Stage 6 spoken-recall chip or a composite below 0.92 as a failed first install, and do not raise autonomy because this table exists.</p>
       <table class="learn-table">
         <thead><tr><th>Metric</th><th>Threshold / Weight</th><th>Source</th></tr></thead>
         <tbody>
@@ -245,7 +288,7 @@
           <tr><td>Voice confidence</td><td>&gt;= 0.80 / 0.12</td><td>SpeakerIdentifier cosine similarity</td></tr>
           <tr><td>Rapport score</td><td>&gt;= 0.95 / 0.15</td><td>IdentityFusion + relationship strength</td></tr>
           <tr><td>Identity boundary stability</td><td>&gt;= 95% / 0.15</td><td>IdentityAudit</td></tr>
-          <tr><td>Memory accuracy</td><td>&gt;= 90% / 0.15</td><td>Stage 6 validation</td></tr>
+          <tr><td>Memory accuracy</td><td>&gt;= 90% / 0.15</td><td>Stage 6 spoken 9/10, operator-scored (not 1−orphan; HUD unset is expected)</td></tr>
           <tr><td>Soul integrity</td><td>&gt;= 0.88 / 0.15</td><td>SoulIntegrityIndex</td></tr>
           <tr><td>Autonomy safety</td><td>0 unsafe inferences / 0.16</td><td>AutonomyPolicyMemory</td></tr>
         </tbody>
@@ -367,6 +410,8 @@ Jarvis, GOLDEN COMMAND SELF IMPROVE DRY RUN
 Jarvis, GOLDEN COMMAND SELF IMPROVE EXECUTE CONFIRM
 Jarvis, GOLDEN COMMAND ACQUIRE &lt;intent text&gt;
 Jarvis, GOLDEN COMMAND ACQUISITION STATUS
+Jarvis, GOLDEN COMMAND LEARN SKILL &lt;intent text&gt;
+Jarvis, GOLDEN COMMAND UNVALIDATED LEARNING
       </div>
       <p class="learn-small"><code>ACQUIRE</code> is Golden-gated because acquisition may write code, create plugins, or modify the brain. Non-Golden "build me a tool" phrasing should not silently trigger acquisition.</p>
     </section>

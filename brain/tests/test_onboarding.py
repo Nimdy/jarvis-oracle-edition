@@ -39,6 +39,7 @@ from personality.onboarding import (
     _LOWER_IS_BETTER,
     _checkpoint_passed,
     correction_training_metrics,
+    count_conversation_exchanges,
     count_preference_memories,
 )
 
@@ -240,6 +241,24 @@ class TestCheckpointEvaluation:
         assert mgr.current_day == 3
 
 
+def test_count_conversation_exchanges_uses_stored_sits_not_episode_bags() -> None:
+    """Lived: 24 conversation memories, dashboard conversation_count=3 (episodes)."""
+    class _Mem:
+        def __init__(self, typ, tags=()):
+            self.type = typ
+            self.tags = tags
+
+    memories = [
+        _Mem("conversation"),
+        _Mem("conversation"),
+        _Mem("user_preference", ("personal_preference",)),
+        _Mem("factual_knowledge"),
+        {"type": "conversation"},
+    ]
+    assert count_conversation_exchanges(memories) == 3
+    assert count_conversation_exchanges([]) == 0
+
+
 def test_correction_training_metrics_blocks_vacuous_and_chips_from_friction(tmp_path):
     """Lived: Stage 5 stayed empty because a missing singleton never set the metric."""
     empty = correction_training_metrics(stage5_started_at=100.0, live_stats={})
@@ -298,6 +317,15 @@ def test_stage6_does_not_graduate_on_orphan():
     assert "belief_orphan_rate" not in DAY_CHECKPOINT_MAP[6].metrics
     assert "memory_recall_precision" in DAY_CHECKPOINT_MAP[6].metrics
     assert "1-orphan" in DAY_CHECKPOINT_MAP[6].working
+    assert "failed install" in DAY_CHECKPOINT_MAP[6].working.lower() or "unset is expected" in DAY_CHECKPOINT_MAP[6].working.lower()
+
+
+def test_stage6_exercises_are_not_inverted_pop_quiz():
+    """Lived: she asked him for family names. user_lines are him asking her."""
+    joined = " ".join(DAY_CHECKPOINT_MAP[6].exercises).lower()
+    assert "pop quiz" not in joined
+    assert "tell me the names of my family" not in joined
+    assert "ask me" in joined
 
 
 def test_inverted_orphan_checkpoint_is_retracted():

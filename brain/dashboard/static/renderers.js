@@ -1903,10 +1903,13 @@ function _renderOnboardingCurrentTargets(ob, stageInfo) {
   var stageNum = Number((ob && (ob.current_stage || ob.current_day)) || 0);
   if (stageNum === 6) {
     var orph = live.belief_orphan_rate;
-    html += '<div style="font-size:0.5rem;color:#ff0;margin-bottom:5px;">Stage 6 gate is <b>spoken recall</b> (MEMORY mouth names stored facts). ' +
-      'The old recall-precision number was 1−orphan — not the mouth. Orphan now ' +
+    html += '<div style="font-size:0.5rem;color:#7fb0ff;margin-bottom:5px;">Stage 6 spoken recall is <b>operator-scored 9/10</b> (MEMORY mouth names stored facts). ' +
+      'The tick leaves this unset on purpose — empty is expected, not a broken install, and does not lock L3 / native_voice / autonomy. ' +
+      'Old HUD number was 1−orphan. Orphan now ' +
       (orph == null ? '—' : Number(orph).toFixed(2)) +
       ' is graph health; high after a wipe is expected. Do not graduate on it.</div>';
+    keys = keys.filter(function(k) { return k !== 'memory_recall_precision'; });
+    missing = missing.filter(function(k) { return k !== 'memory_recall_precision'; });
   }
   html += '<div style="font-size:0.58rem;color:#6a6a80;margin-bottom:3px;">Current Stage Targets</div>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:3px;margin-bottom:6px;">';
@@ -1926,7 +1929,9 @@ function _renderOnboardingCurrentTargets(ob, stageInfo) {
       '</div></div>';
   });
   html += '</div>';
-  if (missing.length) {
+  if (stageNum === 6 && !missing.length) {
+    html += '<div style="font-size:0.5rem;color:#7fb0ff;margin-bottom:5px;">Not blocking other gates. Ask her the Stage 6 lines; do not grind this circle.</div>';
+  } else if (missing.length) {
     html += '<div style="font-size:0.5rem;color:#f90;margin-bottom:5px;">Blocking now: ' +
       missing.map(function(k) { return esc(k.replace(/_/g, ' ')); }).join(', ') + '</div>';
   }

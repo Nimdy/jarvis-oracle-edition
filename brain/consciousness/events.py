@@ -458,12 +458,12 @@ CURIOSITY_ANSWER_PROCESSED = "curiosity:answer_processed"
 # BELIEF_EXTERNALLY_CONFIRMED fires (P3+) when an external validator
 # (operator answer, world-model prediction validated, or source-cited
 # finding) touches a belief — the never-self-scored close at station 5.
-# THOUGHT_VALIDATION_OUTCOME fires (P3+) on ResearchIntent completion as
-# the missing teacher signal for the tension-thought selector.
-# Both are reserved here in P0 so the baselines can be observed before any
-# mechanism can move them. No subscriber, no emitter yet.
+# THOUGHT_VALIDATION_OUTCOME fires on tension-seeded ResearchIntent
+# completion (research_intent.emit_thought_validation_outcome). The
+# thought_trigger_selector collector feed is shadow; the NN stays out of
+# _TIER1_FOCUSES / blocked_by_design until Thought Maturity P3 is named.
 BELIEF_EXTERNALLY_CONFIRMED = "belief:externally_confirmed"  # reserved (P0): not emitted yet
-THOUGHT_VALIDATION_OUTCOME = "thought:validation_outcome"  # reserved (P0): not emitted yet
+THOUGHT_VALIDATION_OUTCOME = "thought:validation_outcome"
 
 # Fractal Recall events
 FRACTAL_RECALL_SURFACED = "fractal_recall:surfaced"

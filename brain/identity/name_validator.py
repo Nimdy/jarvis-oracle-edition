@@ -49,6 +49,11 @@ _BLOCKED_WORDS: frozenset[str] = frozenset({
     "awake", "asleep", "free", "stuck", "safe", "right",
     "wrong", "certain", "curious", "available", "unavailable",
 
+    # Pronouns — lived: "She is my wife" stored User's wife is She
+    "she", "he", "her", "him", "they", "them", "we", "us", "it",
+    "me", "you", "my", "his", "its", "our", "your",
+    "herself", "himself", "myself", "yourself", "themselves",
+
     # Jarvis-specific tokens that should never be person names
     "jarvis", "brain", "consciousness", "autonomy", "calibration",
     "quarantine", "hemisphere", "cortex", "kernel", "policy",

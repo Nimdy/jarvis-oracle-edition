@@ -2129,7 +2129,7 @@ class TestA10CS1CycleProtection:
         src = self._read_cs()
         idx = src.find("def _run_existential(")
         assert idx > 0
-        body = src[idx:idx + 1100]
+        body = src[idx:idx + 2800]
         assert "except Exception" in body or "except:" in body
 
     def test_dialogue_has_try_except(self):
@@ -2563,6 +2563,12 @@ class TestOB03MissingCheckpointMetrics:
         body = self._get_method_body()
         assert "import correction_detector" not in body
         assert "correction_training_metrics" in body
+
+    def test_conversation_count_uses_exchanges_not_only_episode_bags(self):
+        """Lived: Stage 2 3/5 after dozens of sits because collector used episodes."""
+        body = self._get_method_body()
+        assert "count_conversation_exchanges" in body
+        assert "get_user_turn_count" in body
 
     def test_memory_recall_precision_not_orphan_alias(self):
         """Lived: Stage 6 0.54 was 1-orphan, not spoken recall."""
@@ -3333,11 +3339,23 @@ class TestAudit14_HEMI14_01_SpeakerDiarizeInTier1:
         assert HemisphereFocus.SPEAKER_DIARIZE in _TIER1_FOCUSES
 
     def test_all_distillation_configs_classified(self):
-        """Every distillation config focus should be in _TIER1_FOCUSES."""
+        """Every distillation config is live Tier-1, or parked blocked_by_design.
+
+        thought_trigger_selector has a DistillationConfig so the teacher pair
+        can land (#83 WS3). It stays out of _TIER1_FOCUSES until Thought
+        Maturity P3 is named. Do not add it to live distillation.
+        """
         from hemisphere.orchestrator import _TIER1_FOCUSES
         from hemisphere.types import HemisphereFocus, DISTILLATION_CONFIGS
+        from hemisphere.weight_room_gate import MODE_BLOCKED_BY_DESIGN, classify
+
+        parked = {HemisphereFocus.THOUGHT_TRIGGER_SELECTOR}
         for key in DISTILLATION_CONFIGS:
             focus = HemisphereFocus(key)
+            if focus in parked:
+                assert focus not in _TIER1_FOCUSES, key
+                assert classify(key)["mode"] == MODE_BLOCKED_BY_DESIGN
+                continue
             assert focus in _TIER1_FOCUSES, (
                 f"Distillation config '{key}' missing from _TIER1_FOCUSES"
             )

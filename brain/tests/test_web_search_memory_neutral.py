@@ -14,6 +14,16 @@ def test_remove_last_user_turn_if_match_drops_empty_active_episode(tmp_path) -> 
     assert episodes.get_episode_count() == 0
 
 
+def test_user_turn_count_counts_utterances_not_episode_bags(tmp_path) -> None:
+    episodes = EpisodicMemory(persist_path=str(tmp_path / "episodes.json"))
+    episodes.add_user_turn("one", speaker="David")
+    episodes.add_assistant_turn("ack")
+    episodes.add_user_turn("two", speaker="David")
+    episodes.add_assistant_turn("ack")
+    assert episodes.get_episode_count() == 1
+    assert episodes.get_user_turn_count() == 2
+
+
 def test_remove_last_user_turn_if_match_ignores_non_matching_text(tmp_path) -> None:
     episodes = EpisodicMemory(persist_path=str(tmp_path / "episodes.json"))
     episodes.add_user_turn("search web for robotics news", speaker="unknown")

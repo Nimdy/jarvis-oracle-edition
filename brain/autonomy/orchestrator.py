@@ -2396,6 +2396,17 @@ class AutonomyOrchestrator:
                 belief_id = tag.split(":", 2)[2]
         facet = facet or "factual"
 
+        # Lived: bel_BEUWo3vzjMjT (set_wake_armed docstring) logged
+        # "would have researched" every 120s. Settled queue items must not
+        # re-enter the would-have ring or advisory TTS.
+        if belief_id:
+            try:
+                from autonomy.grounding_queue import GroundingQueue
+                if GroundingQueue.get_instance().is_settled(belief_id):
+                    return True
+            except Exception:
+                pass
+
         channel_label = {
             "operator": "the operator",
             "memory": "Pi senses / memory",

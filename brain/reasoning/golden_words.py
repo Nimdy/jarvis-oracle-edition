@@ -271,6 +271,14 @@ _COMMANDS: tuple[GoldenCommandDefinition, ...] = (
         allowed_subsystems=("acquisition",),
         operation="acquisition_status",
     ),
+    GoldenCommandDefinition(
+        command_id="GW_UNVALIDATED_LEARNING",
+        canonical_body="UNVALIDATED LEARNING",
+        target_route="NONE",
+        authority_class="informational",
+        allowed_subsystems=("autonomy", "cognition"),
+        operation="unvalidated_learning",
+    ),
 )
 
 def _build_canonical_index() -> dict[str, "GoldenCommandDefinition"]:

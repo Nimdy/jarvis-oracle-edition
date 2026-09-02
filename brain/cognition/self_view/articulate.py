@@ -60,8 +60,17 @@ _KIND_PATTERNS: list[tuple[re.Pattern[str], str | None]] = [
     (re.compile(r"\bweakness(es)?\b|\b(your )?(limitation|struggl|shortcoming|blind spot)\b|\bwhat are you bad at\b|\byour worst\b", re.I), "weaknesses"),
     # unknowns — JARVIS not knowing ONLY (not the user's "I don't know")
     (re.compile(r"\b(you|jarvis)\b.{0,6}\b(don'?t|do not|can'?t|cannot)\b.{0,6}\b(know|measure|see|read)\b|\b(don'?t|do not|can'?t|cannot) you (know|measure|see|read)\b|\bwhat (don'?t|can'?t) you (know|measure|read)\b|\byour (unknowns|blind spots)\b", re.I), "unknowns"),
-    # health / how are you
-    (re.compile(r"\bhow are you( doing| feeling)?\b(?!\s*(built|structured|made|wired|designed|composed|put together))|\bhow do you feel\b|\byour (health|wellbeing)\b|\bare you (ok|okay|alright|well|healthy)\b", re.I), "health"),
+    # health — operational self-report only. Phatic "how are you / doing / feeling"
+    # is STATUS (spoken native articulator). Lived 2026-09-01: "How are you?"
+    # routed STATUS then P1 stole it as kind=health and dumped inner HUD
+    # (integrity composite / 40 gaps / NN cycles). Inner HUD is not the mouth
+    # (#42). Do not add a feelings organ. "how are you built" stays capabilities.
+    (re.compile(
+        r"\byour (health|wellbeing|integrity composite)\b"
+        r"|\bare you healthy\b"
+        r"|\bhow (?:are|is) your (?:system|systems|health|integrity)\b",
+        re.I,
+    ), "health"),
     # turn path — how an answer is produced. Lived 14:24: these hit capabilities
     # and recited the architecture inventory. Not MEMORY. Not LLM theater.
     (re.compile(
@@ -246,8 +255,19 @@ def _live_activity_line(model: dict[str, Any]) -> str:
         bits.append(f"{_v('hemisphere_cycles')} specialist-NN evolution cycles")
     if _v("mutations_this_hour") is not None:
         bits.append(f"{_v('mutations_this_hour')} kernel mutation(s) this hour")
-    if _v("world_model_version") is not None:
-        bits.append(f"world-model v{_v('world_model_version')} (shadow)")
+    wm_ver = _v("world_model_version")
+    wm_life = str(_v("world_model_lifecycle") or "").strip().lower()
+    if wm_ver is not None or wm_life:
+        ver_bit = f" v{wm_ver}" if wm_ver is not None else ""
+        if wm_life == "active":
+            bits.append(
+                f"world-model{ver_bit} L2 (prompt inject on the conversational path, "
+                "not family recall)"
+            )
+        elif wm_life == "advisory":
+            bits.append(f"world-model{ver_bit} advisory")
+        else:
+            bits.append(f"world-model{ver_bit} (shadow)")
     if _v("policy"):
         bits.append(f"policy {_v('policy')}")
     if _v("transcendence_level") is not None:
