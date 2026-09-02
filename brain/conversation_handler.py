@@ -1019,8 +1019,10 @@ def _format_unvalidated_learning_reply() -> str:
             top = q.ranked_pending(limit=1)
             if top:
                 claim = (top[0].rendered_claim or top[0].question_text or "").strip()
-                claim = re.sub(r"\s+", " ", claim)[:180]
+                claim = re.sub(r"\s+", " ", claim)[:180].rstrip(" ,;:-")
                 if claim:
+                    if claim[-1] not in ".!?":
+                        claim += "."
                     parts.append(f"Highest leverage: {claim}")
     except Exception:
         logger.debug("unvalidated-learning queue read failed", exc_info=True)
