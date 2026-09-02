@@ -221,10 +221,14 @@ def test_correction_does_not_shotgun_unrelated_recent_household(monkeypatch) -> 
 
 def test_she_is_my_wife_does_not_store_pronoun_as_name() -> None:
     """Lived: inverted household stored User's wife is She from 'She is my wife'."""
-    personal, _ = _collect_personal_intel_matches("Tanya is also in my family. She is my wife.")
-    payloads = [p for p, _c in personal]
+    personal, third = _collect_personal_intel_matches("Tanya is also in my family. She is my wife.")
+    payloads = [p for p, _c in personal] + [p for p, _c, _r in third]
     assert "User's wife is She" not in payloads
     assert not any(p.lower().endswith(" is she") for p in payloads)
+    personal2, third2 = _collect_personal_intel_matches("My wife is She.")
+    payloads2 = [p for p, _c in personal2] + [p for p, _c, _r in third2]
+    assert "User's wife is She" not in payloads2
+    assert "User's partner is She" not in payloads2
 
 
 def test_correction_downweights_wife_is_she_not_tanya(monkeypatch) -> None:

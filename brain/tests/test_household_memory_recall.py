@@ -68,11 +68,21 @@ def test_household_fact_preview_keeps_taught_facts_not_recaps() -> None:
         "[user_preference] User prefers not to discuss my family proactively",
         "family",
     )
+    # Lived: STT "She is my wife" left a scar the mouth kept speaking.
+    assert not _preview_matches_household_kind(
+        "[user_preference] User's wife is She", "family",
+    )
+    assert not _preview_matches_household_kind(
+        "[user_preference] User's partner is He", "family",
+    )
     assert _preview_matches_household_kind(
         "[user_preference] User works as a software engineer", "job",
     )
     assert _preview_matches_household_kind(
         "[user_preference] User's favorite food is pizza", "food",
+    )
+    assert not _preview_matches_household_kind(
+        "[user_preference] User's favorite color is blue", "food",
     )
     assert _preview_matches_household_kind("[user_preference] User's cousin is family", "family")
     assert not _preview_matches_household_kind(
@@ -133,6 +143,75 @@ def test_household_search_returns_facts_not_conversation_recaps(monkeypatch) -> 
     out = search_memory("Jarvis, who is in my family?", speaker="David")
     assert "User's wife is Tanya" in out
     assert "dog is skylar" in out.lower()
+    assert "Emily" not in out
+
+
+def test_family_fill_finds_taught_people_and_drops_she_scar(monkeypatch) -> None:
+    """Live keyword 'family' only hits the privacy pref; roster payloads never say family."""
+    wife = SimpleNamespace(
+        id="w", type="user_preference", payload="User's wife is Tanya",
+        tags=("personal_fact",), provenance="user_claim", weight=0.85,
+        identity_subject="david", identity_subject_type="person",
+        identity_owner_type="primary_user",
+    )
+    she = SimpleNamespace(
+        id="s", type="user_preference", payload="User's wife is She",
+        tags=("corrected", "fact_check_rejected", "personal_fact"),
+        provenance="user_claim", weight=0.1,
+        identity_subject="david", identity_subject_type="person",
+        identity_owner_type="primary_user",
+    )
+    privacy = SimpleNamespace(
+        id="p", type="user_preference",
+        payload="User prefers not to discuss my family proactively",
+        tags=("user_preference",), provenance="user_claim", weight=0.7,
+        identity_subject="david", identity_subject_type="person",
+        identity_owner_type="primary_user",
+    )
+    daughter = SimpleNamespace(
+        id="k", type="user_preference", payload="User's daughter is Lily",
+        tags=("personal_fact",), provenance="user_claim", weight=0.75,
+        identity_subject="david", identity_subject_type="person",
+        identity_owner_type="primary_user",
+    )
+    recap = SimpleNamespace(
+        id="c", type="conversation",
+        payload={"user_message": "Who is in my family?", "response": "Emily and Mike"},
+        tags=("conversation",), provenance="conversation", weight=0.6,
+        identity_subject="david", identity_subject_type="person",
+        identity_owner_type="primary_user",
+    )
+
+    monkeypatch.setattr(
+        "tools.memory_tool._build_identity_context", lambda speaker="": None,
+    )
+    monkeypatch.setattr(
+        "tools.memory_tool._extract_referenced_entities", lambda query: set(),
+    )
+
+    def fake_keyword(query, limit=20, **kwargs):
+        q = str(query).lower()
+        if "family" in q:
+            return [privacy, she]
+        return []
+
+    def fake_by_type(mem_type):
+        if mem_type in {"user_preference", "personal_fact"}:
+            return [wife, she, privacy, daughter]
+        return []
+
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [(0.91, she), (0.88, privacy), (0.8, recap)],
+        keyword_search=fake_keyword,
+        search_by_type=fake_by_type,
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+
+    out = search_memory("Jarvis, who is in my family?", speaker="David")
+    assert "User's wife is Tanya" in out
+    assert "User's daughter is Lily" in out
+    assert "User's wife is She" not in out
+    assert "proactively" not in out
     assert "Emily" not in out
 
 

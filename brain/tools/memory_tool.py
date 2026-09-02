@@ -166,23 +166,39 @@ _HOUSEHOLD_MORNING_FACT_RE = re.compile(
 )
 _HOUSEHOLD_INTERRUPT_FACT_RE = re.compile(r"\binterrupt", re.I)
 _HOUSEHOLD_JOB_FACT_RE = re.compile(
-    r"\b(?:job|works?|career|occupation|living)\b",
+    r"\b(?:job|works?|career|occupation|living|engineer)\b",
     re.I,
 )
 _HOUSEHOLD_FOOD_FACT_RE = re.compile(
-    r"\b(?:food|eat|favorite)\b",
+    r"\b(?:food|eats?|eating)\b",
     re.I,
 )
 _HOUSEHOLD_FAMILY_PRIVACY_RE = re.compile(
     r"\b(?:not to (?:discuss|bring up)|proactively|keep .{0,12}private)\b",
     re.I,
 )
+# Lived: inverted "She is my …" stored a pronoun as the name (rejected scar).
+# Pronoun values are not taught people. No kinship list.
+_HOUSEHOLD_PRONOUN_VALUE_RE = re.compile(
+    r"\b(?:name\s+is|is)\s+(she|he|her|him|they|them|it)\b",
+    re.I,
+)
+# Taught household ascriptions: "User's <slot> is <Name>". Not a role list.
+_HOUSEHOLD_TAUGHT_PERSON_RE = re.compile(
+    r"\buser'?s\s+(?!name\b)(?:[\w'-]+\s+){0,4}(?:name\s+is|is)\s+[A-Za-z][A-Za-z'-]*",
+    re.I,
+)
+_HOUSEHOLD_NONPERSON_SLOT_RE = re.compile(
+    r"\b(?:favorite|prefers?|enjoys?|routine|interrupt|workday|habit|color|food|job|career)\b",
+    re.I,
+)
+_REJECTED_PERSONAL_TAGS = frozenset({"corrected", "former", "fact_check_rejected"})
 _HOUSEHOLD_CUES = {
     "family": "family",
     "kids": "daughter son child kids names",
     "morning": "morning routine wake coffee walk desk",
     "interrupt": "do not interrupt on a call",
-    "job": "job work career occupation",
+    "job": "job work career occupation engineer",
     "food": "favorite food",
 }
 
@@ -228,7 +244,13 @@ def _preview_matches_household_kind(preview: str, kind: str) -> bool:
         # proactively" beat roster facts. Boundary prefs are not the roster.
         if _HOUSEHOLD_FAMILY_PRIVACY_RE.search(low):
             return False
-        return True
+        if _HOUSEHOLD_PRONOUN_VALUE_RE.search(low):
+            return False
+        if _HOUSEHOLD_NONPERSON_SLOT_RE.search(low):
+            return bool(re.search(r"\bfamily\b", low))
+        if _HOUSEHOLD_TAUGHT_PERSON_RE.search(raw):
+            return True
+        return bool(re.search(r"\bfamily\b", low))
     if kind == "kids":
         return bool(_HOUSEHOLD_KIDS_FACT_RE.search(low))
     if kind == "morning":
@@ -262,6 +284,24 @@ def _household_fact_hits(
         return []
     seen: set[str] = set()
     hits: list[tuple[float, str]] = []
+
+    def _consider(found) -> bool:
+        for m in found:
+            mid = str(getattr(m, "id", "") or "")
+            if mid and mid in seen:
+                continue
+            if _is_system_self_memory(m) or _is_rejected_personal_memory(m):
+                continue
+            preview = f"[{m.type}] {_format_payload_preview(m)}"
+            if not _preview_matches_household_kind(preview, kind):
+                continue
+            if mid:
+                seen.add(mid)
+            hits.append((float(getattr(m, "weight", 0.5) or 0.5), preview))
+            if len(hits) >= limit:
+                return True
+        return False
+
     for term in _HOUSEHOLD_CUES.get(kind, "").split():
         t = term.strip().lower()
         if len(t) < 3 or t in _STOP_WORDS:
@@ -276,20 +316,20 @@ def _household_fact_hits(
             )
         except Exception:
             continue
-        for m in found:
-            mid = str(getattr(m, "id", "") or "")
-            if mid and mid in seen:
-                continue
-            if _is_system_self_memory(m):
-                continue
-            preview = f"[{m.type}] {_format_payload_preview(m)}"
-            if not _preview_matches_household_kind(preview, kind):
-                continue
-            if mid:
-                seen.add(mid)
-            hits.append((float(getattr(m, "weight", 0.5) or 0.5), preview))
-            if len(hits) >= limit:
-                return hits
+        if _consider(found):
+            return hits
+    if kind == "family":
+        # Roster payloads never contain the word "family". Scan taught prefs
+        # after ranker; still not a relation-word bag.
+        extra: list = []
+        try:
+            from memory.search import search_by_type
+            extra = list(search_by_type("user_preference") or [])
+            extra.extend(list(search_by_type("personal_fact") or []))
+        except Exception:
+            extra = []
+        if _consider(extra):
+            return hits
     return hits
 
 # Session bookkeeping is valid store (never discard) and is not autobiography.
@@ -669,6 +709,16 @@ def _is_contradicted_wipe_memory(memory_obj, model: dict | None = None) -> bool:
     return bool(contradicts_measured_continuity(response, model))
 
 
+def _is_rejected_personal_memory(memory_obj) -> bool:
+    """True for downweighted scars (pronoun stored as a name). Store keeps the row."""
+    tags = {
+        str(tag).strip().lower()
+        for tag in getattr(memory_obj, "tags", ()) or ()
+        if str(tag).strip()
+    }
+    return bool(tags & _REJECTED_PERSONAL_TAGS)
+
+
 def _is_system_self_memory(memory_obj) -> bool:
     memory_type = str(getattr(memory_obj, "type", "") or "").strip().lower()
     subject = str(getattr(memory_obj, "identity_subject", "") or "").strip().lower()
@@ -881,6 +931,8 @@ def _semantic_search(
         for sim, m in hits:
             if is_personal_activity and _is_system_self_memory(m):
                 continue
+            if _is_rejected_personal_memory(m):
+                continue
             if _is_contradicted_wipe_memory(m, osv):
                 continue
             aboutness = aboutness_entities if aboutness_entities is not None else referenced_entities
@@ -935,6 +987,8 @@ def _keyword_search(
     osv = _load_osv_for_continuity()
     for m in hits:
         if is_personal_activity and _is_system_self_memory(m):
+            continue
+        if _is_rejected_personal_memory(m):
             continue
         if _is_contradicted_wipe_memory(m, osv):
             continue

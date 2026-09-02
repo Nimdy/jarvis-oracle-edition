@@ -2032,6 +2032,17 @@ def _collect_personal_intel_matches(
             payload = template.format(relation, groups[1].strip())
         else:
             payload = template.format(relation, match.group(0).strip())
+        if category == "thirdparty_fact":
+            from identity.name_validator import is_valid_person_name
+            name_slot = ""
+            if len(groups) >= 2 and groups[1]:
+                name_slot = str(groups[1]).strip()
+            if (
+                name_slot
+                and " " not in name_slot
+                and not is_valid_person_name(name_slot)
+            ):
+                continue
         thirdparty.append((payload, category, relation))
 
     return personal, thirdparty
