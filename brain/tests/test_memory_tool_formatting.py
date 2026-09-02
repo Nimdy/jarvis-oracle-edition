@@ -498,14 +498,14 @@ def test_search_memory_about_me_does_not_declare_other_subjects_or_library(monke
     is another subject; external/library provenance is not autobiography.
     """
     self_fact = SimpleNamespace(
-        type="conversation",
+        type="user_preference",
         payload={"response": "You are David, the primary user of this system."},
         weight=0.70,
-        provenance="conversation",
+        provenance="user_claim",
         identity_subject="david",
         identity_subject_type="primary_user",
         identity_owner_type="person",
-        tags=("conversation", "speaker:david"),
+        tags=("personal_fact", "speaker:david"),
     )
     skyler = SimpleNamespace(
         type="conversation",
@@ -555,14 +555,14 @@ def test_search_memory_about_me_does_not_declare_curiosity_asks(monkeypatch) -> 
     'I remember you'.
     """
     self_fact = SimpleNamespace(
-        type="conversation",
+        type="user_preference",
         payload={"response": "You are David, the primary user of this system."},
         weight=0.40,
-        provenance="conversation",
+        provenance="user_claim",
         identity_subject="david",
         identity_subject_type="primary_user",
         identity_owner_type="person",
-        tags=("conversation", "speaker:david"),
+        tags=("personal_fact", "speaker:david"),
     )
     curiosity_ask = SimpleNamespace(
         type="conversation",
@@ -884,9 +884,50 @@ def test_search_memory_about_me_does_not_declare_status_or_hud_recaps(monkeypatc
     assert "conversational mode" not in low
     assert "measured state" not in low
     assert "memories.json" not in low
+    assert "resonates" not in low
     assert _is_session_bookkeeping_text("I'm in sleep mode.")
     assert _is_phatic_user_turn(status)
     assert _is_phatic_user_turn(hud)
+
+
+def test_search_memory_about_me_drops_conversation_recaps_for_prefs(monkeypatch) -> None:
+    """Lived tap_b674927ae261: after HUD skip, NONE essays still won."""
+    pizza = SimpleNamespace(
+        type="user_preference",
+        payload="User's favorite food is pizza",
+        weight=0.40,
+        provenance="user_claim",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("personal_preference", "speaker:david"),
+    )
+    essay = SimpleNamespace(
+        type="conversation",
+        payload={
+            "user_message": "which name resonates",
+            "response": (
+                '"Jarvis" is the one that resonates most - not because it\'s a name, '
+                "but because it's a role."
+            ),
+        },
+        weight=0.95,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [(0.95, essay), (0.40, pizza)],
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+    out = search_memory("What do you remember about me?", speaker="David").lower()
+    assert "pizza" in out
+    assert "resonates" not in out
+    assert "refining my systems" not in out
 
 
 def test_about_me_search_cue_uses_live_speaker_not_hardcoded_companion() -> None:

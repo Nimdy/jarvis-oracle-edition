@@ -587,6 +587,11 @@ def _matches_aboutness(
         return False
     if not self_about:
         return True
+    # Lived 2026-09-01 tap_b674927ae261: NONE-LLM recaps beat pizza/job.
+    # Conversation recaps stay stored. About-me declares taught prefs/facts.
+    mem_type = str(getattr(memory_obj, "type", "") or "").strip().lower()
+    if mem_type in {"conversation", "episode_summary"}:
+        return False
     payload_text = _payload_lead_text(memory_obj)
     lead = _first_sentence(payload_text)
     if _is_session_bookkeeping_text(lead) or _is_session_bookkeeping_text(payload_text):
