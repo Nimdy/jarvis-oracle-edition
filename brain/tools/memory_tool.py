@@ -129,7 +129,9 @@ _ABOUT_ME_CUE_RE = re.compile(r"\babout\s+(me|myself)\b", re.I)
 # and the LLM authored Emily/Mike. Native MEMORY formatter already fail-closes.
 _HOUSEHOLD_FAMILY_RE = re.compile(
     r"\b(?:who(?:'s|\s+is)\s+in\s+my\s+family|"
-    r"(?:tell\s+me|talk(?:\s+to\s+me)?)\s+about\s+my\s+family)\b",
+    r"who(?:'s|\s+is)\s+my\s+family|"
+    r"(?:tell\s+me|talk(?:\s+to\s+me)?|what do you (?:remember|know))\s+about\s+my\s+family|"
+    r"remember about my family)\b",
     re.I,
 )
 _HOUSEHOLD_KIDS_RE = re.compile(
@@ -284,7 +286,10 @@ _SESSION_BOOKKEEPING_RE = re.compile(
     r"measured integrity composite|"
     r"prompt inject on the conversational path|"
     r"i'?d rather report a gap than guess|"
-    r"handling a request",
+    r"handling a request|"
+    r"the one that resonates|"
+    r"stored it in your face record|"
+    r"i don'?t have a specific memory recorded",
     re.I,
 )
 

@@ -29,6 +29,7 @@ def test_household_questions_route_to_memory() -> None:
         "Jarvis, who is in my family?",
         "Who is in my family?",
         "Tell me about my family.",
+        "Jarvis, what do you remember about my family?",
         "Jarvis, what are my kids' names?",
         "What are my kids names?",
         "What's my morning routine?",

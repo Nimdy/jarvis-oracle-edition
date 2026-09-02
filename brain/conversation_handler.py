@@ -1075,7 +1075,7 @@ def _format_personal_activity_memory_reply(
         ranked_items.append((_memory_priority(memory_type, normalized), score, normalized))
 
     if not ranked_items:
-        return _format_grounded_fallback("Memory recall", memory_ctx, max_lines=8, max_chars=560)
+        return empty_msg
 
     ranked_items.sort(key=lambda item: (item[0], -item[1]))
     selected: list[str] = []
@@ -1095,7 +1095,7 @@ def _format_personal_activity_memory_reply(
             break
 
     if not selected:
-        return _format_grounded_fallback("Memory recall", memory_ctx, max_lines=8, max_chars=560)
+        return empty_msg
 
     parts = [lead]
     parts.extend(selected)
