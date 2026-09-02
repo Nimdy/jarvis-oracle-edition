@@ -1022,6 +1022,7 @@ _VQA_ATTR_RE = re.compile(
     r"\b(?:how many|what colo(?:u)?r|what am i holding|what am i wearing|"
     r"am i (?:holding|wearing)|what(?:'s| is) (?:this|that)|"
     r"is (?:this|that) |"
+    r"is there (?:a |an |any )?\w+|"
     r"is the \w[\w-]{0,20} (?:on|off|open|closed|lit))\b",
     re.I,
 )

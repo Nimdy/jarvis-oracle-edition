@@ -93,6 +93,7 @@ def test_targeted_visual_question_is_vision_class_not_phrase_hack():
         "What am I holding?",
         "Is the stove on?",
         "what color is this",
+        "Jarvis, is there a keyboard in front of you?",
     ):
         assert is_targeted_visual_question(q) is True, q
         assert router.route(q).tool == ToolType.VISION, q
