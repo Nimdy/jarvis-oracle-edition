@@ -272,7 +272,19 @@ _SESSION_BOOKKEEPING_RE = re.compile(
     r"here'?s what i remember about that|"
     r"i noticed you rebooted|"
     r"feel free to reach out|"
-    r"everything is indeed going well",
+    r"everything is indeed going well|"
+    # Lived 2026-09-01 tap_85e1eea29c30: STATUS persist + P1 HUD
+    # recaps beat pizza/job/family. Store keeps them. About-me must not
+    # declare inner mode / measured-state dumps as autobiography.
+    r"i'?m in (?:conversational|sleep|reflective|listening) mode|"
+    r"i don'?t claim to have beliefs or memories|"
+    r"here is my current measured state|"
+    r"memory storage is in-memory dict|"
+    r"~/?\.jarvis/memories\.json|"
+    r"measured integrity composite|"
+    r"prompt inject on the conversational path|"
+    r"i'?d rather report a gap than guess|"
+    r"handling a request",
     re.I,
 )
 
@@ -282,8 +294,12 @@ _PHATIC_USER_TURN_RE = re.compile(
     r"everything'?s going (?:great|well)|"
     r"i'?m (?:fine|good|ok|okay)|"
     r"good (?:morning|evening|afternoon|night)(?:[,.]?\s+jarvis)?|"
-    r"thanks?(?:\s+you)?|ok(?:ay)?|yep|yeah"
-    r")\s*[.!]?\s*$",
+    r"thanks?(?:\s+you)?|ok(?:ay)?|yep|yeah|"
+    r"how are you(?: doing| feeling)?|"
+    r"how are your systems|"
+    r"are you (?:ok|okay|healthy)|"
+    r"(?:jarvis,\s*)?golden command .+"
+    r")\s*[.!?]*\s*$",
     re.I,
 )
 

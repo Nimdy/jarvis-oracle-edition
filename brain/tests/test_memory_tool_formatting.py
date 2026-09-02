@@ -821,6 +821,74 @@ def test_search_memory_about_me_does_not_declare_session_closer(monkeypatch) -> 
     )
 
 
+def test_search_memory_about_me_does_not_declare_status_or_hud_recaps(monkeypatch) -> None:
+    """Lived 2026-09-01 tap_85e1eea29c30: MEMORY about-me spoke STATUS
+    'I'm in conversational mode' plus a P1 measured-state HUD dump.
+    Store keeps the rows. Ranker still scores. Prefs must be what it declares.
+    """
+    from tools.memory_tool import _is_phatic_user_turn
+
+    pizza = SimpleNamespace(
+        type="user_preference",
+        payload="User's favorite food is pizza",
+        weight=0.67,
+        provenance="user_claim",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("personal_preference", "speaker:david"),
+    )
+    status = SimpleNamespace(
+        type="conversation",
+        payload={
+            "user_message": "How are you?",
+            "response": "I'm in conversational mode.",
+        },
+        weight=0.90,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    hud = SimpleNamespace(
+        type="conversation",
+        payload={
+            "user_message": "How are your systems?",
+            "response": (
+                "Here is my current measured state. Memory storage is in-memory "
+                "dict + JSON persistence (~/.jarvis/memories.json)."
+            ),
+        },
+        weight=0.88,
+        provenance="conversation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("conversation", "speaker:david"),
+    )
+    fake_module = SimpleNamespace(
+        semantic_search_scored=lambda *a, **k: [
+            (0.95, status),
+            (0.92, hud),
+            (0.40, pizza),
+        ],
+        keyword_search=lambda *a, **k: [],
+    )
+    monkeypatch.setitem(sys.modules, "memory.search", fake_module)
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+
+    out = search_memory("What do you remember about me?", speaker="David")
+    low = out.lower()
+    assert "pizza" in low
+    assert "conversational mode" not in low
+    assert "measured state" not in low
+    assert "memories.json" not in low
+    assert _is_session_bookkeeping_text("I'm in sleep mode.")
+    assert _is_phatic_user_turn(status)
+    assert _is_phatic_user_turn(hud)
+
+
 def test_about_me_search_cue_uses_live_speaker_not_hardcoded_companion() -> None:
     """Lived 13:51 vs 13:52: 'about me' embedded as pronoun; 'about David'
     found the name. Cue follows the current speaker (voice/face identity),

@@ -1020,6 +1020,10 @@ def _format_unvalidated_learning_reply() -> str:
             if top:
                 claim = (top[0].rendered_claim or top[0].question_text or "").strip()
                 claim = re.sub(r"\s+", " ", claim)[:180].rstrip(" ,;:-")
+                if claim.count("(") > claim.count(")"):
+                    claim = claim.rstrip("(").strip()
+                    if claim.count("(") > claim.count(")"):
+                        claim += ")"
                 if claim:
                     if claim[-1] not in ".!?":
                         claim += "."
