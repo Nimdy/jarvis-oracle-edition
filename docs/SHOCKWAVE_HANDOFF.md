@@ -43,7 +43,7 @@ Canon for everyone (Shockwave reads; Grok 4.6 edits against):
 4. [AGENT_MAP.md](AGENT_MAP.md) — what the system *is*, one spoken turn, who has authority.
 5. [AGENTS.md](../AGENTS.md) — field manual.
 6. [MATURITY_GATES_REFERENCE.md](MATURITY_GATES_REFERENCE.md) + `brain/nn_fleet_registry.json` — before anyone touches an NN.
-7. GitHub **#83** — couple what exists, stop opening organs.
+7. GitHub [Project 8](https://github.com/users/Nimdy/projects/8) (Sequence). **#83** is frozen notes — do not execute those checkboxes. Project 2 is a closed archive.
 8. This file — frozen roster / hard nos only.
 
 Grok Bot / Shockwave skill: `.grok/skills/jarvis-shockwave/SKILL.md`.
@@ -127,7 +127,7 @@ Lived on this branch through `531e809`:
 
 **Does not:** Pair-program the soul. Open PRs. Flip gates. Invent organs because a sentence sounded wrong. Replace Grok 4.6.
 
-**Grok 4.6** owns coupling: **#83**. Before adding a classifier, route override, `kind`, register, or articulator: search the repo, open the fleet registry + maturity gates, stop if shadow/`not_born`/default-OFF.
+**Grok 4.6** owns coupling. Order is [Project 8](https://github.com/users/Nimdy/projects/8) + [NOW.md](NOW.md), not **#83** checkboxes. Before adding a classifier, route override, `kind`, register, or articulator: search the repo, open the fleet registry + maturity gates, stop if shadow/`not_born`/default-OFF.
 
 Memory (everyone): one write path (`engine.remember`), one recall (`search_memory`). About-me = **this-turn speaker**. About-X from the query. Curiosity asks are not autobiography.
 

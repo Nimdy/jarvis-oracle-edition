@@ -18,7 +18,7 @@ Do not implement from the growth-validation book.
 
 ## Mandatory reads
 
-1. `docs/NOW.md` — **current** branch, life-phase, leftovers, misread table, How we test. Wins over any other git/stage line.
+1. `docs/NOW.md` — **current** branch, life-phase, leftovers, misread table, How we test. Wins over any other git/stage line. Queue: GitHub Project 8 (Sequence). Project 2 is a closed archive. #83 is frozen notes.
 2. `docs/OPERATOR_PROXY_TAP.md` — verbal sits (TAP or Pi). Pytest is a pin, not a sit.
 3. `docs/AGENT_MAP.md` — turn lanes / authority
 4. `docs/shockwave/GROWTH_VALIDATION.md` — integrity, maturity, immune, distillation, process immune, classify

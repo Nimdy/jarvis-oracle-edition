@@ -1,6 +1,6 @@
 # NOW — load-bearing card (refresh this file, not the others)
 
-**Date: 2026-09-01.** Operator: David.
+**Date: 2026-09-02.** Operator: David.
 
 This is the **only** file allowed to hold current branch, life-phase, and leftovers.
 Roster, turn lanes, classify, and gates live elsewhere. If this file disagrees with
@@ -17,14 +17,14 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/project-2-oneshot` (cut from `feat/nn-fleet-consume` `a98f018` so a bad slice can be dropped) |
-| **HEAD (committed)** | Overlay lived `2699f91`. Overnight couple `a98f018`. This branch is the Project 2 one-shot. |
-| **vs origin** | Safety branch **not** `main`. Live PID was **22894** on `feat/nn-fleet-consume`. Autonomy disk **L1 restored** — let her earn L2 again. Do not force L2. Do not auto L3. |
-| **Board** | [JARVIS Master Roadmap](https://github.com/users/Nimdy/projects/2) — linked to this repo. North star **#42**. Queue **#83**. |
+| **HEAD (committed)** | `581885f` on `feat/project-2-oneshot`. Uncommitted leftover: household job `engineer` cue + food≠color in `memory_tool.py`. |
+| **vs origin** | Safety branch **not** `main`. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
+| **Board** | **Only board:** [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8) (sort by Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. North star **#42**. **#83** is frozen notes — do not execute those checkboxes. |
 | **Merge `main`** | **No**, unless David asks |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
 | **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
-| **Operational queue** | **Project 2 one-shot on `feat/project-2-oneshot`.** Remaining [build-now]: OSV P2 default ON (kill-switch `OSV_P2_ACTIVE=false`), #26 actionability, #20 `/api/goals/observe` keyed, WR `live_shadow_accuracy` scoring path (`enforces` still default off), ToM correction learning, Pi5 known-wiring map, existential observation from live belief tension. **Not flipped live:** native_voice, WR `enforces`, P4, L3, voice-intent, Face 0.55. Park still binds for L7 / #32 / 3D lidar / PTZ / Matrix 3–9. |
+| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence 1–5 is Now.** Mouth leftover **#25 reopened**: family-class cue still fail-closes (store has Tanya/Lily/Owen/Skyler; privacy pref is not the roster). Then job/food leftover, then **#23** P2 ramble-cut sit (default ON on this branch; kill-switch `OSV_P2_ACTIVE=false`). Do not close #42/#83. **Not flipped live:** native_voice, WR `enforces`, P4, L3, voice-intent, Face 0.55. Park still binds for L7 / #32 / 3D lidar / PTZ / Matrix 3–9. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
@@ -83,7 +83,7 @@ North star **#42**: a **living companion you want to be with** — playful, warm
 
 **Agent failure mode (this is the theater):** mouth missed X → add X to a allowlist (wife/son/dog/cousin, extra verbs, skip L0). The sit goes green. The NN never learns. Next leftover is great-great-grandmother. Do not do that. Integrity floor = LLM must not **invent** family. Plastic = whoever you taught, the ranker ranks. Tests must pin recaps-out and ranker-used, **never who is in the roster**.
 
-Board: [JARVIS Master Roadmap](https://github.com/users/Nimdy/projects/2). Tracker: close on the **mouth**, not on a wire. #25 was closed too early; reopened.
+Board: [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. Tracker: close on the **mouth**, not on a wire. #25 was closed too early **twice**; reopened 2026-09-02. #83 is frozen notes.
 
 Two devices, one mind. Pi = senses. Brain = source of truth. Inner-life HUD (awareness 0.98, soul bars) is **not the mouth**.
 
@@ -248,7 +248,7 @@ Lived 2026-09-01 bounce PID **19451**. `/api/nn-fleet`: 9 `consumed_now` (includ
 
 HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipping advisory). Policy NN shadow. positive_memory **NN** orphaned (heuristic scalar broadcasts). Claim-friction teacher feed is already fixed (`cc04f08`); registry prose is stale.
 
-Board: [Project 2](https://github.com/users/Nimdy/projects/2) In Progress is 12 Finish-campaign epics, **not a queue**. Operational queue is **#83**. North star **#42**. Operator named WS2 + WS3 on 2026-09-01. Do not follow #2/#4/#5/#7 as “do now.”
+Board: [Project 8](https://github.com/users/Nimdy/projects/8) is the ranked queue (Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. **#83** is frozen notes. North star **#42**. Do not follow #2/#4/#5/#7 as “do now.” Parked issues are closed `not_planned` (L7 / Matrix remainder / domain NN / HRR / lidar / connectome L4 / thought P3 / self-sensing P3).
 
 Do not skip ranker. Do not treat 9 `consumed_now` as “she routes with NNs.” Ranker is the recall mouth. Heuristic still routes. World-model inject is LLM context, not family facts.
 
@@ -287,4 +287,4 @@ Park unless the blocker actually changed: Matrix 3–9, #32 domain NN, L7, Thoug
 5. [MATURITY_GATES_REFERENCE.md](MATURITY_GATES_REFERENCE.md) + `/api/nn-fleet` — before touching an NN.
 6. Frozen roster/hard-nos snapshot: [SHOCKWAVE_HANDOFF.md](SHOCKWAVE_HANDOFF.md) (do not take its git HEAD as current).
 7. Field manual: [AGENTS.md](../AGENTS.md).
-8. GitHub **#83** if the question is “what to build next” after Stage 6.
+8. GitHub **[Project 8](https://github.com/users/Nimdy/projects/8)** (Sequence) if the question is “what to build next.” **#83** is frozen notes.

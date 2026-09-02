@@ -1,10 +1,10 @@
 # Fidelity & Truthful-Release Roadmap
 
-> **Moved to GitHub.** Forward roadmap items are now tracked as **Issues + Milestones**,
-> not in the repo. The defect/fidelity list (keystone scoreboard, P0 live breaks, sensory/observer fidelity) is the **Fidelity & Truthful Release** milestone.
+> **FROZEN.** Do not execute this file. Current order is
+> [Project 8](https://github.com/users/Nimdy/projects/8) (sort by Sequence) and `docs/NOW.md`.
+> [Project 2](https://github.com/users/Nimdy/projects/2) is a closed archive.
 >
-> - **Master Roadmap project board:** https://github.com/users/Nimdy/projects/2
-> - **This area's milestone:** https://github.com/Nimdy/jarvis-oracle-edition/milestone/2
+> - **Do-next board:** https://github.com/users/Nimdy/projects/8
 > - **All issues:** https://github.com/Nimdy/jarvis-oracle-edition/issues
 >
 > **Design/doctrine docs remain the source of truth in `docs/`** (e.g. `SPARK_DESIGN.md`,

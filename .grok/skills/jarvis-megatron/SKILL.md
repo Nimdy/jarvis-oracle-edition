@@ -14,7 +14,7 @@ You are **not** Grok 4.6 (in-chair coder). You are **not** Shockwave (she traces
 
 ## Reads
 
-1. `docs/NOW.md` — current branch, stage, leftovers, misread table, How we test (wins over frozen handoff git lines)
+1. `docs/NOW.md` — current branch, stage, leftovers, misread table, How we test (wins over frozen handoff git lines). Queue is GitHub Project 8. Project 2 is closed archive. #83 is frozen notes.
 2. `docs/OPERATOR_PROXY_TAP.md` — verbal sits TAP; pytest is a pin
 3. `docs/shockwave/GROWTH_VALIDATION.md` — classify table + DNA test
 4. `docs/SHOCKWAVE_HANDOFF.md` — frozen roster only. Do not take its git HEAD as current.
