@@ -35,6 +35,8 @@ def test_household_questions_route_to_memory() -> None:
         "What's my morning routine?",
         "Jarvis, what's my morning routine?",
         "When should you not interrupt me?",
+        "Jarvis, what is my job?",
+        "What's my favorite food?",
     ]
     for text in cases:
         assert router.route(text).tool == ToolType.MEMORY, f"{text!r} -> {router.route(text).tool}"
@@ -62,6 +64,16 @@ def test_household_fact_preview_keeps_taught_facts_not_recaps() -> None:
     assert _preview_matches_household_kind("[user_preference] User's son is Owen", "kids")
     # Plastic: a taught dog/cousin/great-great is a pref, not a kinship regex.
     assert _preview_matches_household_kind("[user_preference] User's dog is Skylar", "family")
+    assert not _preview_matches_household_kind(
+        "[user_preference] User prefers not to discuss my family proactively",
+        "family",
+    )
+    assert _preview_matches_household_kind(
+        "[user_preference] User works as a software engineer", "job",
+    )
+    assert _preview_matches_household_kind(
+        "[user_preference] User's favorite food is pizza", "food",
+    )
     assert _preview_matches_household_kind("[user_preference] User's cousin is family", "family")
     assert not _preview_matches_household_kind(
         "[conversation] Jarvis, who is in my family? | Your family includes",

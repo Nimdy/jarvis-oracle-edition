@@ -146,6 +146,16 @@ _HOUSEHOLD_INTERRUPT_RE = re.compile(
     r"\bwhen\s+should\s+you\s+not\s+interrupt\b",
     re.I,
 )
+_HOUSEHOLD_JOB_RE = re.compile(
+    r"\bwhat(?:'s|\s+is)\s+my\s+job\b|"
+    r"\bwhat do i do for (?:a living|work)\b",
+    re.I,
+)
+_HOUSEHOLD_FOOD_RE = re.compile(
+    r"\bwhat(?:'s|\s+is)\s+my\s+favorite\s+food\b|"
+    r"\bwhat food do i like\b",
+    re.I,
+)
 _HOUSEHOLD_KIDS_FACT_RE = re.compile(
     r"\b(?:daughter|son|child|children|kids?)\b",
     re.I,
@@ -155,11 +165,25 @@ _HOUSEHOLD_MORNING_FACT_RE = re.compile(
     re.I,
 )
 _HOUSEHOLD_INTERRUPT_FACT_RE = re.compile(r"\binterrupt", re.I)
+_HOUSEHOLD_JOB_FACT_RE = re.compile(
+    r"\b(?:job|works?|career|occupation|living)\b",
+    re.I,
+)
+_HOUSEHOLD_FOOD_FACT_RE = re.compile(
+    r"\b(?:food|eat|favorite)\b",
+    re.I,
+)
+_HOUSEHOLD_FAMILY_PRIVACY_RE = re.compile(
+    r"\b(?:not to (?:discuss|bring up)|proactively|keep .{0,12}private)\b",
+    re.I,
+)
 _HOUSEHOLD_CUES = {
     "family": "family",
     "kids": "daughter son child kids names",
     "morning": "morning routine wake coffee walk desk",
     "interrupt": "do not interrupt on a call",
+    "job": "job work career occupation",
+    "food": "favorite food",
 }
 
 
@@ -174,6 +198,10 @@ def household_recall_kind(query: str) -> str:
         return "morning"
     if _HOUSEHOLD_INTERRUPT_RE.search(text):
         return "interrupt"
+    if _HOUSEHOLD_JOB_RE.search(text):
+        return "job"
+    if _HOUSEHOLD_FOOD_RE.search(text):
+        return "food"
     return ""
 
 
@@ -196,6 +224,10 @@ def _preview_matches_household_kind(preview: str, kind: str) -> bool:
     if mem_type and mem_type not in {"user_preference", "personal_fact"}:
         return False
     if kind == "family":
+        # Lived tap_68cbe16bce82: privacy pref "not to discuss my family
+        # proactively" beat roster facts. Boundary prefs are not the roster.
+        if _HOUSEHOLD_FAMILY_PRIVACY_RE.search(low):
+            return False
         return True
     if kind == "kids":
         return bool(_HOUSEHOLD_KIDS_FACT_RE.search(low))
@@ -203,6 +235,10 @@ def _preview_matches_household_kind(preview: str, kind: str) -> bool:
         return bool(_HOUSEHOLD_MORNING_FACT_RE.search(low))
     if kind == "interrupt":
         return bool(_HOUSEHOLD_INTERRUPT_FACT_RE.search(low))
+    if kind == "job":
+        return bool(_HOUSEHOLD_JOB_FACT_RE.search(low))
+    if kind == "food":
+        return bool(_HOUSEHOLD_FOOD_FACT_RE.search(low))
     return False
 
 
