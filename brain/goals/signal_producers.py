@@ -26,6 +26,7 @@ _producer_stats: dict[str, int] = {
     # #9.3-A: deficits seen below threshold but NOT yet sustained long enough to
     # create a goal (the single-sample churn this gate suppresses).
     "metric_sustained_skipped": 0,
+    "metric_unactionable_skipped": 0,
     "autonomy_created": 0,
     "autonomy_ignored": 0,
     "merges": 0,
@@ -300,15 +301,23 @@ def detect_conversation_goal(text: str) -> GoalSignal | None:
 
 # ── Metric-deficit producer ──
 
+# #26 actionability: observational metric producers have no executor. Emitting
+# them manufactures create→abandon churn. Only emit when a named repair path
+# exists (operator-review is a path; "wait for it to recover" is not).
+_ACTIONABLE_METRIC_SOURCES: frozenset[str] = frozenset({
+    "truth_calibration",
+    "metric_triggers",
+})
+
 _DEFICIT_CONFIGS: list[dict[str, Any]] = [
     {"component": "processing_health", "threshold": 0.45, "tags": ("performance", "processing", "health"),
-     "template": "Processing health degraded: {value:.2f}"},
+     "template": "Processing health degraded: {value:.2f}", "repair": None},
     {"component": "memory_health", "threshold": 0.40, "tags": ("memory", "health", "integrity"),
-     "template": "Memory health degraded: {value:.2f}"},
+     "template": "Memory health degraded: {value:.2f}", "repair": None},
     {"component": "personality_health", "threshold": 0.45, "tags": ("personality", "stability", "health"),
-     "template": "Personality stability degraded: {value:.2f}"},
+     "template": "Personality stability degraded: {value:.2f}", "repair": None},
     {"component": "event_health", "threshold": 0.55, "tags": ("events", "reliability", "health"),
-     "template": "Event system health degraded: {value:.2f}"},
+     "template": "Event system health degraded: {value:.2f}", "repair": None},
 ]
 
 
@@ -342,6 +351,9 @@ def detect_metric_deficits(
                 if is_deficit:
                     sustained_skipped += 1
                 continue
+            if not cfg.get("repair"):
+                _producer_stats["metric_unactionable_skipped"] += 1
+                continue
             signals.append(GoalSignal(
                 signal_type="metric_deficit",
                 source="health_monitor",
@@ -367,7 +379,7 @@ def detect_metric_deficits(
                 signal_type="metric_deficit",
                 source="truth_calibration",
                 source_scope="metric",
-                content=f"Calibration domain '{domain}' critically low: {score:.2f}",
+                content=f"Calibration domain '{domain}' critically low: {score:.2f} (repair: operator review)",
                 tag_cluster=("calibration", domain, "drift"),
                 priority_hint=0.5,
             ))

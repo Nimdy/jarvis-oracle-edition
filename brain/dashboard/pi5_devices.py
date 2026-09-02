@@ -93,4 +93,14 @@ def derive_pi5_devices(cache: dict[str, Any]) -> list[dict[str, Any]]:
         {"name": "RPLIDAR", "kind": "lidar", "present": bool(lidar),
          "status": "operational" if lidar else "absent",
          "detail": {"sensors": list(lidar.keys())}},
+        {"name": "Known wiring (design, not live GPIO scan)", "kind": "map",
+         "present": True, "status": "documented",
+         "detail": {
+             "camera": "CSI / imx519",
+             "hailo": "PCIe HAT",
+             "lidar": "USB serial (optional)",
+             "audio_out": "USB / HDMI",
+             "gpio_live_scan": False,
+         },
+         "note": "#31: live pin/bus introspection is not on this Pi image. This is the known two-device map, not fabricated GPIO telemetry."},
     ]

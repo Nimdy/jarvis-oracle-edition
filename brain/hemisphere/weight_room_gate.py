@@ -54,6 +54,45 @@ _HYBRID_MIN_LIVED = 3          # ...PLUS at least a few real reps (synthetic alo
 _LIVED_MIN = 10
 
 
+def enforces() -> bool:
+    """P3 authority gate. Default OFF. Flip WEIGHT_ROOM_ENFORCES=true to deny promotions."""
+    import os
+    return os.environ.get("WEIGHT_ROOM_ENFORCES", "false").strip().lower() in ("1", "true", "yes", "on")
+
+
+def may_promote(teacher: str, lived: int = 0, synthetic: int = 0,
+                live_shadow_accuracy: float | None = None,
+                acc_floor: float = 0.65) -> dict[str, Any]:
+    """Would this specialist be allowed to gain authority right now?
+
+    When enforces() is False this still computes the decision but ``allowed``
+    stays True (shadow). When True, would_block becomes a real deny.
+    """
+    gate = WeightRoomGate.get_instance()
+    decision = gate._evaluate_one(teacher, lived, synthetic)
+    baseline_met = bool(decision.get("lived_baseline_met"))
+    acc_ok = live_shadow_accuracy is not None and live_shadow_accuracy >= acc_floor
+    would = baseline_met and acc_ok
+    if enforces():
+        allowed = would
+        reason = decision.get("reason", "")
+        if not acc_ok:
+            reason = (reason + "; live_shadow_accuracy "
+                      f"{live_shadow_accuracy} below {acc_floor}").strip("; ")
+    else:
+        allowed = True
+        reason = "enforces=False (shadow would-block only): " + str(decision.get("reason", ""))
+    return {
+        "allowed": allowed,
+        "would_allow": would,
+        "enforces": enforces(),
+        "lived_baseline_met": baseline_met,
+        "live_shadow_accuracy": live_shadow_accuracy,
+        "reason": reason,
+        "mode": decision.get("mode"),
+    }
+
+
 def classify(teacher: str) -> dict[str, Any]:
     """Map a teacher/specialist name to its lived-baseline regime.
 

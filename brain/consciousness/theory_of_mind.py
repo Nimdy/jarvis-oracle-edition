@@ -240,6 +240,32 @@ class TheoryOfMindEngine:
         except Exception:
             pass
 
+    def observe_correction(self, speaker: str, *, was_wrong: bool) -> None:
+        """Companion-learning (#2): a lived correction tunes ToM calibration.
+
+        Shadow only — does not write beliefs. A wrong read lowers consistency
+        so later advisories are less person-aware until more reads accrue.
+        """
+        try:
+            name = (speaker or "unknown").strip() or "unknown"
+            if name.lower() == "unknown":
+                return
+            pm = self._people.get(name)
+            if pm is None:
+                return
+            if was_wrong:
+                pm.consistency = round(max(0.0, float(pm.consistency or 0.0) - 0.05), 3)
+                pm.disposition_confidence = round(
+                    max(0.0, float(pm.disposition_confidence or 0.0) * 0.9), 3
+                )
+            else:
+                pm.disposition_confidence = round(
+                    min(1.0, float(pm.disposition_confidence or 0.0) + 0.02), 3
+                )
+            pm.last_updated = time.time()
+        except Exception:
+            return
+
     def observe(self, speaker: str, read: Any) -> "PersonModel | None":
         """Fold one situational read into the speaker's model. No side effects."""
         try:

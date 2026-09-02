@@ -137,8 +137,13 @@ class TestInvariants:
         assert log["actionable"] and log["actionable"][0]["verdict"] == DANGER
 
 
-def test_p2_default_is_shadow():
+def test_p2_default_is_active_on_oneshot_branch(monkeypatch):
+    monkeypatch.delenv("OSV_P2_ACTIVE", raising=False)
+    assert p2_active_default() is True
+    monkeypatch.setenv("OSV_P2_ACTIVE", "false")
     assert p2_active_default() is False
+    monkeypatch.setenv("OSV_P2_ACTIVE", "true")
+    assert p2_active_default() is True
 
 
 def test_gate_text_repairs_when_env_on():

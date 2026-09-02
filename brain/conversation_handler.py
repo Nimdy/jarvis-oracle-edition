@@ -3052,7 +3052,7 @@ async def handle_transcription(
             logger.debug("Intention hook skipped (non-critical)", exc_info=True)
 
         # OSV P2 — bind self-claims to the measured self-view before TTS.
-        # Shadow default: p2_active_default() is False. Operator-named WS2.
+        # P2 default ON this branch (bound the mouth). Kill-switch OSV_P2_ACTIVE=false.
         try:
             from cognition.self_view.grounding import p2_active_default, ground_self_claims
             from cognition.self_view import load_self_view
@@ -6392,6 +6392,14 @@ async def handle_transcription(
                 try:
                     from skills.capability_gate import capability_gate as _cg
                     _cg.record_friction_correction(_friction_event.timestamp)
+                except Exception:
+                    pass
+                try:
+                    from consciousness.theory_of_mind import theory_of_mind_engine as _tom
+                    _tom.observe_correction(
+                        speaker,
+                        was_wrong=_friction_event.friction_type == "correction",
+                    )
                 except Exception:
                     pass
     except Exception:

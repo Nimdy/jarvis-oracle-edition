@@ -2616,14 +2616,14 @@ def _build_si_specialists(engine: Any) -> dict[str, Any]:
             "signals_quarantined": feature_quarantined + label_quarantined,
             "signals_buffer": feature_buffer + label_buffer,
             # Weight-Room P1: origin split is observable. live_shadow_accuracy
-            # stays None until a specialist actually scores lived inference
-            # (honesty floor — not a fake 0.0). enforces stays False.
+            # stays None until scored lived inference exists (honesty floor).
             "signals_lived": int(feature_stats.get("lived", 0) or 0)
             + int(label_stats.get("lived", 0) or 0),
             "signals_synthetic": int(feature_stats.get("synthetic", 0) or 0)
             + int(label_stats.get("synthetic", 0) or 0),
             "live_shadow_accuracy": None,
             "live_accuracy_status": "unmeasured_no_live_inference_scoring",
+            "last_lived_signal_s": feature_stats.get("last_lived_seen_s") or label_stats.get("last_lived_seen_s"),
             "last_signal_s": last_signal_s,
             "failure_count": failure_counts.get(focus, 0),
             "disabled": focus in disabled,
@@ -2632,6 +2632,16 @@ def _build_si_specialists(engine: Any) -> dict[str, Any]:
             "shadow_only": focus in _SHADOW_ONLY_SPECIALIST_FOCUSES,
             "live_influence": False if focus in _SHADOW_ONLY_SPECIALIST_FOCUSES else None,
         }
+        try:
+            from hemisphere.distillation import DistillationCollector
+            acc = DistillationCollector.instance().live_shadow_accuracy(label_key)
+            if acc is None:
+                acc = DistillationCollector.instance().live_shadow_accuracy(feature_key)
+            if acc is not None:
+                specialist_entry["live_shadow_accuracy"] = acc
+                specialist_entry["live_accuracy_status"] = "lived_scored"
+        except Exception:
+            pass
 
         if focus == "claim_classifier":
             try:

@@ -3379,9 +3379,9 @@ def _create_app() -> FastAPI:
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
 
-    @app.post("/api/goals/observe")
+    @app.post("/api/goals/observe", dependencies=[Depends(_require_api_key)])
     async def api_goal_observe(request: Request):
-        """Inject a GoalSignal manually for testing the goal lifecycle."""
+        """Inject a GoalSignal. Operator-keyed — never an open write (#20)."""
         body = await request.json()
         content = body.get("content", "").strip()
         if not content:

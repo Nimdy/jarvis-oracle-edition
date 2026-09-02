@@ -16,15 +16,15 @@ the handoff, the playbook, or a skill.
 | | |
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
-| **Branch** | `feat/nn-fleet-consume` (cut from `feat/gestation-period` `f5f0c02`) |
-| **HEAD (committed)** | Overlay lived `2699f91`. Stage 6 couple `f5f0c02`. Overnight couple is this slice. |
-| **vs origin** | `feat/nn-fleet-consume`. Live bounce PID **22894** (2026-09-01 overnight couple). Code-freshness **not stale**. Autonomy disk **L1 restored** this bounce (policy win-rate 0.833 / 18 outcomes) — operator-named: if she qualifies, **let her earn L2 again**. Do not force L2. Do not auto L3. |
+| **Branch** | `feat/project-2-oneshot` (cut from `feat/nn-fleet-consume` `a98f018` so a bad slice can be dropped) |
+| **HEAD (committed)** | Overlay lived `2699f91`. Overnight couple `a98f018`. This branch is the Project 2 one-shot. |
+| **vs origin** | Safety branch **not** `main`. Live PID was **22894** on `feat/nn-fleet-consume`. Autonomy disk **L1 restored** — let her earn L2 again. Do not force L2. Do not auto L3. |
 | **Board** | [JARVIS Master Roadmap](https://github.com/users/Nimdy/projects/2) — linked to this repo. North star **#42**. Queue **#83**. |
 | **Merge `main`** | **No**, unless David asks |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
 | **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
-| **Operational queue** | **#83 couple-safe remainder shipped this overnight.** WS1 shadow-forever. WS2/WS3 coupled. Small multipliers: Golden UNVALIDATED LEARNING, `/learning` lab strip + last correction, wellness nag 4h, P1 world-model L2 label. **Not** native_voice / P2 env / WR enforces unless named. Tracker hygiene on #24/#9/#26/#32/#42/#83. Do not close #42/#83. |
+| **Operational queue** | **Project 2 one-shot on `feat/project-2-oneshot`.** Remaining [build-now]: OSV P2 default ON (kill-switch `OSV_P2_ACTIVE=false`), #26 actionability, #20 `/api/goals/observe` keyed, WR `live_shadow_accuracy` scoring path (`enforces` still default off), ToM correction learning, Pi5 known-wiring map, existential observation from live belief tension. **Not flipped live:** native_voice, WR `enforces`, P4, L3, voice-intent, Face 0.55. Park still binds for L7 / #32 / 3D lidar / PTZ / Matrix 3–9. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
