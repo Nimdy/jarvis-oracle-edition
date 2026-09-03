@@ -524,6 +524,14 @@ window.removeFace = function(name) {
   });
 };
 
+window.removePersonalIntel = function(id) {
+  if (!id) return;
+  if (!confirm('Forget this personal intel row? She will stop recalling it. Conversation history stays.')) return;
+  _apiDelete('/api/memories/' + encodeURIComponent(id)).then(function(r) {
+    _toast(r.ok ? 'Forgot intel' : 'Failed', r.ok ? '#0f9' : '#f44');
+  });
+};
+
 
 // ---------------------------------------------------------------------------
 // Library ingest

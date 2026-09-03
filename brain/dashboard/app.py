@@ -2240,6 +2240,50 @@ def _create_app() -> FastAPI:
                     break
         return results
 
+    @app.delete("/api/memories/{memory_id}", dependencies=[Depends(_require_api_key)])
+    async def api_memory_forget(memory_id: str):
+        """Operator surgical forget for personal intel (rapport rows).
+
+        Only ``user_preference`` rows. Conversation / library / core stay.
+        Flushes memories.json so a bounce cannot resurrect the scar.
+        """
+        from memory.storage import memory_storage
+        mem = memory_storage.get(memory_id)
+        if mem is None:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        mem_type = str(getattr(mem, "type", "") or "")
+        if mem_type != "user_preference":
+            return JSONResponse(
+                {"error": "Only personal intel (user_preference) can be forgotten here"},
+                status_code=400,
+            )
+        payload = mem.payload if isinstance(mem.payload, str) else str(mem.payload or "")
+        if not memory_storage.remove(memory_id):
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        dropped_pref_keys = 0
+        try:
+            from consciousness.soul import soul_service, _preference_key
+            key = _preference_key(payload)
+            needle = payload.strip()
+            for rel in soul_service.identity.relationships.values():
+                prefs = getattr(rel, "preferences", None)
+                if not isinstance(prefs, dict):
+                    continue
+                for k, v in list(prefs.items()):
+                    if k == key or str(v).strip() == needle:
+                        prefs.pop(k, None)
+                        dropped_pref_keys += 1
+            if dropped_pref_keys:
+                soul_service.save_identity()
+        except Exception:
+            logger.debug("rapport preference cleanup after forget failed", exc_info=True)
+        logger.info("Operator forgot personal intel %s", memory_id)
+        return {
+            "status": "removed",
+            "id": memory_id,
+            "dropped_pref_keys": dropped_pref_keys,
+        }
+
     @app.get("/api/memories/{memory_id}")
     async def api_memory_detail(memory_id: str):
         if not _engine:

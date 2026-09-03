@@ -200,12 +200,18 @@ class MemoryStorage:
             return [m for m in self._memories if tag in m.tags]
 
     def remove(self, memory_id: str) -> bool:
+        evicted = None
         with self._lock:
             for i, m in enumerate(self._memories):
                 if m.id == memory_id:
-                    self._memories.pop(i)
-                    return True
-        return False
+                    evicted = self._memories.pop(i)
+                    break
+        if evicted is None:
+            return False
+        self._clean_vector_store({memory_id})
+        self._clean_index({memory_id}, {memory_id: evicted})
+        self._flush_to_disk()
+        return True
 
     def count(self) -> int:
         with self._lock:

@@ -48,8 +48,8 @@ def test_memory_route_uses_search_for_personal_activity_queries() -> None:
     assert "_should_use_memory_search(text, extracted_args=routing.extracted_args)" in body
     assert "deterministic_personal_activity_recall" in body
     assert "_is_personal_activity_recall_query(text)" in body
-    assert "_format_personal_activity_memory_reply(memory_ctx)" in body
-    assert "_format_personal_activity_memory_reply(_memory_ctx)" in body
+    assert "_format_personal_activity_memory_reply(memory_ctx, speaker=speaker)" in body
+    assert "_format_personal_activity_memory_reply(_memory_ctx, speaker=speaker)" in body
 
 
 def test_personal_activity_regex_covers_tell_me_what_i_did() -> None:
@@ -63,6 +63,25 @@ def test_personal_activity_formatter_helpers_exist() -> None:
     assert "def _normalize_memory_preview(" in src
     assert "def _to_speakable_memory_sentence(" in src
     assert "def _format_personal_activity_memory_reply(" in src
+
+
+def test_speakable_memory_uses_this_turn_speaker_not_user() -> None:
+    """Store stays 'User\\'s …'; mouth uses this-turn speaker. No hardcoded name."""
+    import re
+    src = _source()
+    body = _function_body(src, "_to_speakable_memory_sentence")
+    assert "speaker: str = \"\"" in body or "speaker: str = ''" in body
+    assert 'r"^User' in body and "count=1" in body and "re.sub" in body
+    # Same rewrite rule the mouth uses — pin the behavior without importing
+    # conversation_handler (ollama/aiohttp not on the WSL pin env).
+    def rewrite(text: str, speaker: str) -> str:
+        name = str(speaker or "").strip()
+        if name and name.lower() not in {"", "unknown", "user"}:
+            text = re.sub(r"^User\b", name, text, count=1)
+        return text
+    assert rewrite("User's wife is Tanya", "David") == "David's wife is Tanya"
+    assert rewrite("User enjoys pizza", "David") == "David enjoys pizza"
+    assert rewrite("User's wife is Tanya", "unknown") == "User's wife is Tanya"
 
 
 def test_personal_activity_formatter_uses_conversational_memory_voice() -> None:

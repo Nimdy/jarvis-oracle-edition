@@ -281,7 +281,8 @@
       stat('relationships', rels.length, rels.length>0?'var(--green)':'var(--amber)')+
       stat('total interactions', totalI, num(totalI)?'var(--green)':'var(--amber)')+
       stat('personal intel', num((r.personal_intel||[]).length)===null?'—':(r.personal_intel||[]).length);
-    el('rap-list').innerHTML=rels.length?rels.slice(0,5).map(function(x){
+    var intel=(r.personal_intel||[]);
+    var relHtml=rels.length?rels.slice(0,5).map(function(x){
       var fam=num(x.familiarity), rap=num(x.rapport), ic=num(x.interactions);
       // "topics" not exposed as a field — surface stored notes/preferences as labelled proxies.
       var topics=(x.notes||[]).slice(0,3).concat(Object.values(x.preferences||{}).slice(0,2));
@@ -291,6 +292,28 @@
         '<div class="meta">familiarity '+(fam===null?'—':fam.toFixed(2))+' · rapport '+(rap===null?'—':rap.toFixed(2))+' '+tag('self','self-scored')+' · last seen '+ago(x.last_seen)+'</div>'+
         (chips?'<div class="topics chiprow">'+chips+'</div>':'')+'</div>';
     }).join(''):'<div class="offline">no relationship nodes — recovering</div>';
+    function _escIntel(s){ return String(s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+    var intelHtml=intel.length?('<div class="opsub" style="margin-top:10px">Personal intel · forget a scar</div>'+
+      '<div class="opnote2">Surgical remove of a taught pref. Type REMOVE. Conversation history stays.</div>'+
+      '<div style="max-height:280px;overflow:auto">'+intel.map(function(i){
+        var mid=String(i.id||'');
+        var w=num(i.weight);
+        return '<div class="rel" style="display:flex;gap:8px;align-items:flex-start">'+
+          '<div style="flex:1;font-size:10px">'+_escIntel(String(i.payload||'').slice(0,140))+
+          ' <span style="color:var(--dim)">w:'+(w===null?'—':w.toFixed(2))+'</span></div>'+
+          (mid?'<button class="btn-danger" data-forget-intel="'+_escIntel(mid)+'">forget</button>':'')+
+          '</div>';
+      }).join('')+'</div>'):'';
+    el('rap-list').innerHTML=relHtml+intelHtml;
+    el('rap-list').querySelectorAll('[data-forget-intel]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id=btn.getAttribute('data-forget-intel');
+        if(!id||!window.V2) return;
+        V2.confirm('Forget personal intel', 'Remove this row from rapport. She will stop recalling it. Conversation history stays.', function(){
+          V2.act(V2.del('/api/memories/'+encodeURIComponent(id)), 'forgot intel').then(function(){ refreshParity(); });
+        }, {typed:'REMOVE', yesLabel:'Forget'});
+      });
+    });
     el('rap-contrast').innerHTML=
       'interactions is the '+tag('grounded','grounded')+' counter; familiarity &amp; rapport are '+tag('self','self-scored')+' and unverified externally. '+
       'The engine exposes no sentiment or topic model — the chips above are stored notes/preferences, shown verbatim, not an inferred sentiment.';

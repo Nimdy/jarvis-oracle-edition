@@ -986,7 +986,9 @@ def _memory_priority(memory_type: str, normalized_preview: str) -> int:
     return 1
 
 
-def _to_speakable_memory_sentence(preview: str, max_chars: int = 170) -> str:
+def _to_speakable_memory_sentence(
+    preview: str, max_chars: int = 170, *, speaker: str = "",
+) -> str:
     text = re.sub(r"\s+", " ", str(preview or "")).strip()
     if not text:
         return ""
@@ -995,6 +997,11 @@ def _to_speakable_memory_sentence(preview: str, max_chars: int = 170) -> str:
     if not text:
         return ""
     text = text.replace(" | ", ". ")
+    # Store templates are speaker-agnostic ("User's wife is Tanya") so L3
+    # can scope the row. The mouth uses this-turn speaker, not a hardcoded name.
+    name = str(speaker or "").strip()
+    if name and name.lower() not in {"", "unknown", "user"}:
+        text = re.sub(r"^User\b", name, text, count=1)
     if len(text) > max_chars:
         text = text[: max_chars - 3].rstrip() + "..."
     if text and text[-1] not in ".!?":
@@ -1053,6 +1060,7 @@ def _format_personal_activity_memory_reply(
     *,
     lead: str = "Here's what I remember from that time.",
     empty_msg: str = "I couldn't find matching memories for that time window.",
+    speaker: str = "",
 ) -> str:
     if not memory_ctx.strip():
         return empty_msg
@@ -1081,7 +1089,7 @@ def _format_personal_activity_memory_reply(
     selected: list[str] = []
     seen: set[str] = set()
     for _, _, normalized in ranked_items:
-        sentence = _to_speakable_memory_sentence(normalized)
+        sentence = _to_speakable_memory_sentence(normalized, speaker=speaker)
         if not sentence:
             continue
         if _is_session_bookkeeping_text(sentence):
@@ -4152,7 +4160,7 @@ async def handle_transcription(
                 _memory_provenance = "grounded_memory_context_native"
                 _memory_confidence = 0.93
                 _memory_safety_flags.append("deterministic_personal_activity_recall")
-                reply = _format_personal_activity_memory_reply(memory_ctx)
+                reply = _format_personal_activity_memory_reply(memory_ctx, speaker=speaker)
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                 print(f"  [Brain] Memory deterministic recall reply ({len(reply)} chars)")
@@ -4177,6 +4185,7 @@ async def handle_transcription(
                     max_items=4 if is_household_self_fact_recall(text) else 3,
                     lead="Here's what I remember about that.",
                     empty_msg="I don't have any memories matching that.",
+                    speaker=speaker,
                 )
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
@@ -6065,7 +6074,7 @@ async def handle_transcription(
                         native_candidate=True,
                         strict_native=True,
                     )
-                    reply = _format_personal_activity_memory_reply(_memory_ctx)
+                    reply = _format_personal_activity_memory_reply(_memory_ctx, speaker=speaker)
                     await _broadcast_chunk_sync(reply, tone)
                     _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                     _language_example_seed = {

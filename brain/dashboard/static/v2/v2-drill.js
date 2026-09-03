@@ -771,7 +771,18 @@ window.V2D = (function(){
       }
 
       html += '<div style="margin-top:8px;font-size:9px;color:#484860;">ID: '+esc(m.id||memId)+'</div>';
+      if((m.type||'')==='user_preference'){
+        html += '<div style="margin-top:10px;"><button class="btn-danger" id="v2d-mem-forget">Forget this intel</button></div>';
+      }
       body.innerHTML = html;
+      var fb=document.getElementById('v2d-mem-forget');
+      if(fb && V && V.confirm && V.del){
+        fb.addEventListener('click', function(){
+          V.confirm('Forget personal intel', 'Remove this taught pref. She will stop recalling it. Conversation history stays.', function(){
+            V.act(V.del('/api/memories/'+encodeURIComponent(m.id||memId)), 'forgot intel').then(function(){ V.closeModal(); });
+          }, {typed:'REMOVE', yesLabel:'Forget'});
+        });
+      }
     }).catch(function(e){
       var body = document.getElementById('v2d-mem-body');
       if(body) body.innerHTML = (String(e.message||'').indexOf('404')>-1)
@@ -789,7 +800,7 @@ window.V2D = (function(){
       '<form id="v2d-mem-search-form" style="display:flex;gap:6px;margin-bottom:8px;">'+
         '<input id="v2d-mem-q" type="text" placeholder="Search memories…" class="v2-field" style="margin:0;flex:1;" autocomplete="off">'+
         '<select id="v2d-mem-type" class="v2-field" style="margin:0;width:auto;">'+
-          '<option value="">All types</option><option value="observation">observation</option><option value="conversation">conversation</option><option value="core">core</option><option value="insight">insight</option><option value="research">research</option><option value="identity">identity</option>'+
+          '<option value="">All types</option><option value="user_preference">user_preference</option><option value="observation">observation</option><option value="conversation">conversation</option><option value="core">core</option><option value="insight">insight</option><option value="research">research</option><option value="identity">identity</option>'+
         '</select>'+
         '<button type="submit" class="btn-act">Search</button>'+
       '</form>'+
