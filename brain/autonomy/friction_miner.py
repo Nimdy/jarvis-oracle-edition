@@ -73,6 +73,7 @@ _CORRECTION_PHRASES = [
     re.compile(r"\bthat'?s?\s+(?:not\s+(?:right|correct|true|accurate)|wrong|incorrect)\b", re.I),
     re.compile(r"\bno[,.]?\s+(?:it'?s?\s+(?:actually|not)|that'?s?\s+not|i\s+(?:said|meant))\b", re.I),
     re.compile(r"\byou\s+(?:misunderstood|got\s+(?:it|that)\s+wrong|are\s+wrong)\b", re.I),
+    re.compile(r"\byou\s+(?:missed|forgot|left out)\b", re.I),
     re.compile(r"\bi\s+(?:never\s+said|didn'?t\s+(?:say|mean))\b", re.I),
     re.compile(r"\b(?:actually|correction)[,:]?\s+", re.I),
 ]

@@ -1015,6 +1015,47 @@ def test_commitment_tool_shaped_future_work_unbacked_rewritten():
     print("  PASS: tool-shaped future work commitments rewrite when unbacked")
 
 
+def test_memory_write_unbacked_is_rewritten():
+    """Lived: 'I've updated my records' / 'I'll keep those names' with no write."""
+    gate = CapabilityGate(_fresh_registry())
+    for text in (
+        "I've updated my records.",
+        "I'll make sure to keep those names.",
+        "I'll ensure the records are updated properly.",
+        "I've added them to my memory.",
+    ):
+        new_text, changed = gate.evaluate_memory_write(text, backing_write_ids=None)
+        assert changed is True, text
+        assert "did not write a new fact" in new_text.lower(), (text, new_text)
+        assert "capability" not in new_text.lower(), new_text
+    print("  PASS: unbacked memory-write claims rewritten")
+
+
+def test_memory_write_backed_passes_through():
+    gate = CapabilityGate(_fresh_registry())
+    text = "I've updated my records."
+    new_text, changed = gate.evaluate_memory_write(
+        text, backing_write_ids=["User's son is Kai"],
+    )
+    assert changed is False
+    assert new_text == text
+    print("  PASS: backed memory-write claim passes")
+
+
+def test_memory_write_safe_reflections_ignored():
+    gate = CapabilityGate(_fresh_registry())
+    for text in (
+        "I'll remember that.",
+        "I'll keep that in mind.",
+        "I'll keep it light.",
+        "I remember your family.",
+    ):
+        new_text, changed = gate.evaluate_memory_write(text, backing_write_ids=None)
+        assert changed is False, (text, new_text)
+        assert new_text == text
+    print("  PASS: memory-write extractor ignores conversational reflections")
+
+
 if __name__ == "__main__":
     print("\n=== Capability Gate Tests (Registry-First) ===\n")
     test_blocks_operational_claim_with_safe_substring()

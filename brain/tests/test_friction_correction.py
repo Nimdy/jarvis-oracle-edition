@@ -11,3 +11,4 @@ def test_that_is_wrong_is_correction():
     assert miner._classify(spoken, "ten fingers", None) == "correction"
     assert miner._classify("that's wrong", "blue", None) == "correction"
     assert miner._classify("that was incorrect", "ten", None) == "correction"
+    assert miner._classify("You missed my son, Kai.", "Kai is already registered.", None) == "correction"

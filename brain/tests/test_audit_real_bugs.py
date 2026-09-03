@@ -259,6 +259,9 @@ def test_finalize_persists_gated_not_raw_capability_claim(monkeypatch) -> None:
         def evaluate_commitment(self, text, *_a, **_k):
             return text, False
 
+        def evaluate_memory_write(self, text, *_a, **_k):
+            return text, False
+
     monkeypatch.setattr("skills.capability_gate.capability_gate", _Gate())
     gen._finalize_response(
         "sing a song",

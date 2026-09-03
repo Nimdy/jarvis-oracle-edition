@@ -179,6 +179,35 @@ _UNBACKED_TOOL_ACTION_REWRITE = (
     "background research or retrieval task."
 )
 
+# Personal-store mutation claims. Distinct from job commitments
+# ("I'll get back to you") and from conversational reflections
+# ("I'll remember that"). Lived theater: "I've updated my records" /
+# "I'll make sure to keep those names" with no this-turn write.
+_MEMORY_WRITE_CLAIM_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(
+        r"\bI(?:['\u2019]ve| have| just)\s+"
+        r"(?:updated|added|saved|stored|recorded|written|wrote)\b"
+        r".{0,48}?\b(?:records?|memory|memories|roster|notes?)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\bI(?:['\u2019]ve| have| just)\s+added\s+"
+        r"(?:them|those names)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\bI(?:['\u2019]ll| will)\s+(?:make sure to |ensure (?:the |that )?)?"
+        r"(?:update|keep|add|save|store)\b"
+        r".{0,48}?\b(?:records?|names?|roster|memory|memories)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\bI(?:['\u2019]ll| will)\s+(?:make sure|ensure)\b"
+        r".{0,56}?\brecords?\b",
+        re.I,
+    ),
+]
+
 # ── Soft-signal patterns ────────────────────────────────────────────────────
 _OFFER_PATTERNS: list[re.Pattern[str]] = [
     re.compile(
@@ -1612,6 +1641,54 @@ class CapabilityGate:
                     changed = True
                     self._commitments_rewritten_unbacked += 1
                     self._record_block(f"unbacked_commitment:{m.commitment_type}:{phrase[:60]}")
+        return modified, changed
+
+    def evaluate_memory_write(
+        self,
+        text: str,
+        backing_write_ids: list[str] | tuple[str, ...] | None,
+    ) -> tuple[str, bool]:
+        """Rewrite unbacked personal-store mutation claims.
+
+        Class-level, not a verb whitelist. If outgoing text claims this turn
+        updated records / kept names / added people AND no personal-intel
+        write actually fired, rewrite the committing sentence. Backed writes
+        (created / reinforced / extended this turn) pass through.
+
+        Conversational reflections ("I'll remember that", "I'll keep that in
+        mind") do not match — they are not store-mutation claims.
+        """
+        if not text or len(text) < 4:
+            return text, False
+
+        hits: list[str] = []
+        for pattern in _MEMORY_WRITE_CLAIM_PATTERNS:
+            for match in pattern.finditer(text):
+                phrase = match.group(0).strip()
+                if phrase:
+                    hits.append(phrase)
+        if not hits:
+            return text, False
+        if backing_write_ids:
+            return text, False
+
+        modified = text
+        changed = False
+        rewrite_phrase = "I did not write a new fact."
+        seen: set[str] = set()
+        for phrase in hits:
+            if phrase in seen:
+                continue
+            seen.add(phrase)
+            if phrase not in modified:
+                continue
+            modified = self._replace_through_sentence_end(
+                modified, phrase, rewrite_phrase,
+            )
+            changed = True
+            self._record_block(f"unbacked_memory_write:{phrase[:60]}")
+            self._record_claim_signal(phrase, "blocked")
+            logger.info("Gate rewrote unbacked memory-write claim: %r", phrase[:80])
         return modified, changed
 
     def _scan_system_action_narration(self, text: str) -> str:

@@ -32,11 +32,13 @@ sys.modules.setdefault("aiohttp", _aiohttp_stub)
 
 from conversation_handler import (
     _build_fact_check_conflict_reply,
+    _build_household_write_ack,
     _build_preference_instruction_ack,
     _collect_personal_intel_matches,
     _correct_recent_facts,
     _extract_personal_intel,
     _held_biographical_jobs,
+    _household_write_outcomes,
     _is_confirmation_seek,
     _store_personal_memory,
 )
@@ -305,6 +307,48 @@ def test_household_inverted_list_extracts_each_person() -> None:
     assert "skyler" in blob, personal
 
 
+def test_missed_role_class_extracts_without_name_list() -> None:
+    """Lived: 'You missed my son, Owen' never reached the store."""
+    personal, _ = _collect_personal_intel_matches("You missed my son, Kai.")
+    assert any(p.lower() == "user's son is kai" for p, _c in personal), personal
+    personal2, _ = _collect_personal_intel_matches("you forgot my daughter Mira")
+    assert any(p.lower() == "user's daughter is mira" for p, _c in personal2), personal2
+
+
+def test_family_appositive_extracts_role_slots() -> None:
+    """Lived: 'Also in my family is Lily, my daughter, Owen, my son' stored nothing."""
+    personal, _ = _collect_personal_intel_matches(
+        "Also in my family is Mira, my daughter, Kai, my son."
+    )
+    blob = " | ".join(p.lower() for p, _ in personal)
+    assert "user's daughter is mira" in blob, personal
+    assert "user's son is kai" in blob, personal
+    well, _ = _collect_personal_intel_matches("Well, my son is tall.")
+    assert not any("user's son is well" in p.lower() for p, _ in well), well
+
+
+def test_household_write_ack_created_vs_reinforced() -> None:
+    created = _build_household_write_ack([
+        {"payload": "User's son is Kai", "category": "personal_fact", "outcome": "created"},
+    ])
+    assert "Got it" in created
+    assert "Kai is your son" in created
+    assert "already registered" not in created
+    restated = _build_household_write_ack([
+        {"payload": "User's son is Kai", "category": "personal_fact", "outcome": "reinforced"},
+    ])
+    assert "already registered" in restated
+    assert "I missed that" in restated
+    assert "Got it" not in restated
+    assert "capability" not in restated.lower()
+    both = _household_write_outcomes([
+        {"payload": "User enjoys pizza", "category": "personal_interest", "outcome": "created"},
+        {"payload": "User's son is Kai", "category": "personal_fact", "outcome": "reinforced"},
+    ])
+    assert len(both) == 1
+    assert both[0]["payload"] == "User's son is Kai"
+
+
 def test_identical_restatement_reinforces_low_weight_corrected(monkeypatch) -> None:
     """Lived: family restatement stored=0 and left Tanya/Lily at 0.07 corrected."""
 
@@ -338,7 +382,7 @@ def test_identical_restatement_reinforces_low_weight_corrected(monkeypatch) -> N
         lambda *_a, **_k: None,
     )
     ok = _store_personal_memory("User's wife is Tanya", "personal_fact", "David")
-    assert ok is True
+    assert ok == "reinforced"
     assert added
     assert added[0].weight >= 0.65
     assert "corrected" not in added[0].tags
@@ -377,7 +421,7 @@ def test_store_extends_truncated_preference_instead_of_skipping(monkeypatch) -> 
         "personal_preference",
         "David",
     )
-    assert ok is True
+    assert ok == "extended"
     assert added
     assert "I am active and listening" in added[0].payload
 

@@ -1559,6 +1559,15 @@ _FACT_PATTERNS: list[tuple[re.Pattern, str, str]] = [
         r"(wife|husband|partner|spouse|daughter|son|dog|cat|pet)(?:\s+dog)?\b"
     ),
      "User's {1} is {0}", "personal_fact"),
+    # Lived: "You missed my son, Owen" routed NONE and never reached the store.
+    # Class: operator names a missed household role + person. Not a name list.
+    (re.compile(
+        r"\byou (?:missed|forgot|left out)\s+my\s+"
+        r"(wife|husband|partner|spouse|daughter|son|dog|cat|pet)"
+        r"\s*[,:]?\s+([A-Za-z][A-Za-z'\-]{1,39})\b",
+        re.I,
+    ),
+     "User's {0} is {1}", "personal_fact"),
 ]
 
 _PREFERENCE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
@@ -1697,6 +1706,19 @@ _ROLE_SLOT_FACT_RE = re.compile(
     re.I,
 )
 _SPOUSE_ROLES = frozenset({"wife", "husband", "partner", "spouse"})
+_HOUSEHOLD_ROLE = r"(wife|husband|partner|spouse|daughter|son|dog|cat|pet)"
+# Lived: "Also in my family is Lily, my daughter, Owen, my son" — comma
+# appositive, not "X is my daughter". Gated on family/household in the
+# utterance so "Well, my son" does not store.
+_HOUSEHOLD_APPOSITIVE_RE = re.compile(
+    r"\b([A-Za-z][A-Za-z'\-]{1,39})\s*,\s*my\s+" + _HOUSEHOLD_ROLE + r"\b",
+    re.I,
+)
+_HOUSEHOLD_TEACH_CUE_RE = re.compile(r"\b(?:family|household)\b", re.I)
+_APPOSITIVE_SKIP_NAMES = frozenset({
+    "well", "so", "anyway", "sorry", "oh", "hey", "yes", "yeah",
+    "ok", "okay", "please", "also", "and", "but",
+})
 
 
 def _role_slot_key(role: str) -> str:
@@ -2026,6 +2048,20 @@ def _collect_personal_intel_matches(
                     continue
             personal.append((payload, category))
 
+    if _HOUSEHOLD_TEACH_CUE_RE.search(text or ""):
+        from identity.name_validator import is_valid_person_name
+        for match in _HOUSEHOLD_APPOSITIVE_RE.finditer(text or ""):
+            name = (match.group(1) or "").strip()
+            role = (match.group(2) or "").strip().lower()
+            if name.lower() in _APPOSITIVE_SKIP_NAMES:
+                continue
+            if not is_valid_person_name(name):
+                continue
+            payload = f"User's {role} is {name}"
+            if _is_unstable_personal_fact(payload, "personal_fact"):
+                continue
+            personal.append((payload, "personal_fact"))
+
     for pattern, template, category in _THIRDPARTY_PATTERNS:
         match = pattern.search(text)
         if not match:
@@ -2053,7 +2089,16 @@ def _collect_personal_intel_matches(
                 continue
         thirdparty.append((payload, category, relation))
 
-    return personal, thirdparty
+    seen_personal: set[str] = set()
+    unique_personal: list[tuple[str, str]] = []
+    for payload, category in personal:
+        key = payload.strip().lower()
+        if key in seen_personal:
+            continue
+        seen_personal.add(key)
+        unique_personal.append((payload, category))
+
+    return unique_personal, thirdparty
 
 
 def _store_personal_memory(
@@ -2063,11 +2108,15 @@ def _store_personal_memory(
     *,
     extra_tags: list[str] | None = None,
     provenance: str = "user_claim",
-) -> bool:
-    """Create a user_preference memory through the unified write path."""
+) -> str:
+    """Write a user_preference through the unified path.
+
+    Returns ``created``, ``reinforced``, or ``extended`` on success, or
+    ``""`` when nothing was written. Truthy means the store mutated.
+    """
     payload, metadata_tags = _derive_personal_memory_metadata(payload, category)
     if not payload:
-        return False
+        return ""
 
     tags = ["user_preference", category, *metadata_tags]
     if extra_tags:
@@ -2100,13 +2149,13 @@ def _store_personal_memory(
             )
             if not memory_storage.add(updated):
                 logger.warning("Reinforce add failed [%s]: %s", category, payload)
-                return False
+                return ""
             logger.info("Reinforced restated personal intel [%s]: %s", category, payload)
             if category == "personal_fact":
                 _try_set_relationship_from_fact(payload, speaker)
-            return True
+            return "reinforced"
         if payload_lower in old:
-            return False
+            return ""
         if old in payload_lower:
             # Lived: truncated "…to not say" blocked the complete restatement.
             updated = replace(
@@ -2116,7 +2165,7 @@ def _store_personal_memory(
             )
             memory_storage.add(updated)
             logger.info("Extended truncated personal intel [%s]: %s", category, payload)
-            return True
+            return "extended"
     identity_kwargs = _build_user_claim_identity_kwargs(payload, speaker, memory_type="user_preference")
     from memory.core import canonical_remember
     mem = canonical_remember(CreateMemoryData(
@@ -2131,8 +2180,8 @@ def _store_personal_memory(
         logger.info("Stored personal intel [%s]: %s", category, payload)
         if category == "personal_fact":
             _try_set_relationship_from_fact(payload, speaker)
-        return True
-    return False
+        return "created"
+    return ""
 
 
 from consciousness.soul import _preference_key  # normalized relationship-preference key (soul owns it)
@@ -2689,6 +2738,60 @@ def _build_fact_check_conflict_reply(conflicts: list[dict[str, str]]) -> str:
     return f"No. I have you as {job}, not what you just said. I did not overwrite that."
 
 
+def _household_write_outcomes(
+    write_outcomes: list[dict[str, str]] | None,
+) -> list[dict[str, str]]:
+    """Role-slot facts this turn actually created or reinforced."""
+    out: list[dict[str, str]] = []
+    for item in write_outcomes or []:
+        if item.get("outcome") not in ("created", "reinforced", "extended"):
+            continue
+        payload = (item.get("payload") or "").strip()
+        if not _ROLE_SLOT_FACT_RE.match(payload):
+            continue
+        out.append(item)
+    return out
+
+
+def _build_household_write_ack(write_outcomes: list[dict[str, str]]) -> str:
+    """Native mouth bound to this-turn store outcome. No LLM. No capability line."""
+    created: list[tuple[str, str]] = []
+    reinforced: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for item in write_outcomes:
+        payload = (item.get("payload") or "").strip()
+        slot = _ROLE_SLOT_FACT_RE.match(payload)
+        if not slot:
+            continue
+        role = slot.group(1).strip().lower()
+        name = slot.group(2).strip()
+        key = f"{role}:{name.lower()}"
+        if key in seen:
+            continue
+        seen.add(key)
+        if item.get("outcome") == "reinforced":
+            reinforced.append((name, role))
+        else:
+            created.append((name, role))
+    parts: list[str] = []
+    if created:
+        bits = [f"{name} is your {role}" for name, role in created]
+        if len(bits) == 1:
+            parts.append(f"Got it. {bits[0]}.")
+        else:
+            parts.append("Got it. " + "; ".join(bits) + ".")
+    if reinforced:
+        if len(reinforced) == 1:
+            name, role = reinforced[0]
+            parts.append(
+                f"{name} is already registered as your {role}. I missed that."
+            )
+        else:
+            names = " and ".join(name for name, _role in reinforced)
+            parts.append(f"{names} are already registered. I missed that.")
+    return " ".join(parts).strip()
+
+
 def _extract_personal_intel(
     text: str,
     speaker: str = "unknown",
@@ -2733,6 +2836,7 @@ def _extract_personal_intel(
             "stored_categories": [],
             "fact_check_conflicts": conflicts,
             "confirmation_seek": confirm,
+            "write_outcomes": [],
         }
     for conflict in conflicts:
         _downweight_payload_exact(conflict["proposed"], reason="fact-check-conflict")
@@ -2759,22 +2863,34 @@ def _extract_personal_intel(
 
     stored = 0
     stored_categories: list[str] = []
+    write_outcomes: list[dict[str, str]] = []
     skip_facts = confirm
     for payload, category in personal:
         if skip_facts and category == "personal_fact":
             continue
         _prov = _write_prov(category)
-        if _store_personal_memory(payload, category, speaker, provenance=_prov):
+        outcome = _store_personal_memory(payload, category, speaker, provenance=_prov)
+        if outcome:
             if _prov != "casual_conversation":
                 _update_relationship(speaker, payload, category)
             stored += 1
             stored_categories.append(category)
+            write_outcomes.append({
+                "payload": payload,
+                "category": category,
+                "outcome": outcome,
+            })
 
     for payload, category, relation in thirdparty:
         if _store_thirdparty_memory(payload, category, speaker, relation,
                                     provenance=_write_prov(category)):
             stored += 1
             stored_categories.append(category)
+            write_outcomes.append({
+                "payload": payload,
+                "category": category,
+                "outcome": "created",
+            })
 
     return {
         "personal_matches": len(personal),
@@ -2785,6 +2901,7 @@ def _extract_personal_intel(
         "stored_categories": sorted(set(stored_categories)),
         "fact_check_conflicts": conflicts,
         "confirmation_seek": confirm,
+        "write_outcomes": write_outcomes,
     }
 
 
@@ -2926,6 +3043,7 @@ async def handle_transcription(
     # outgoing response are backed by a real job. Stays empty for
     # synchronous routes — commitments on those routes are confabulation.
     _backing_job_ids: list[str] = []
+    _backing_memory_writes: list[str] = []
     _intention_registered_turn: dict[str, bool] = {"done": False}
     speaker = (speaker_state or {}).get("name", "unknown")
     _operator_proxy = bool(
@@ -3075,6 +3193,17 @@ async def handle_transcription(
                     _intention_registered_turn["done"] = True
         except Exception:
             logger.debug("Intention hook skipped (non-critical)", exc_info=True)
+
+        try:
+            from skills.capability_gate import capability_gate
+            rewritten, changed = capability_gate.evaluate_memory_write(
+                gated, list(_backing_memory_writes),
+            )
+            if changed:
+                _gate_rewrite_buffer.append((gated, rewritten))
+                gated = rewritten
+        except Exception:
+            logger.debug("Memory-write honesty hook skipped (non-critical)", exc_info=True)
 
         # OSV P2 — bind self-claims to the measured self-view before TTS.
         # P2 default ON this branch (bound the mouth). Kill-switch OSV_P2_ACTIVE=false.
@@ -3417,6 +3546,11 @@ async def handle_transcription(
         suppress_write=bool(explicit_core_memory_payload),
         operator_proxy=_operator_proxy,
     )
+    for _wo in (_personal_intel_result or {}).get("write_outcomes") or []:
+        if _wo.get("outcome") in ("created", "reinforced", "extended"):
+            _payload = str(_wo.get("payload") or "").strip()
+            if _payload:
+                _backing_memory_writes.append(_payload)
     _apply_inline_preferences(text, engine)
 
     if speaker != "unknown" and (speaker_state or {}).get("first_this_session"):
@@ -6042,6 +6176,22 @@ async def handle_transcription(
                     "NONE route: fact-check conflict native reply (TBS-0 stays shadow; "
                     "confirmation did not overwrite held biographical fact)"
                 )
+            elif _household_write_outcomes(
+                list((_personal_intel_result or {}).get("write_outcomes") or []),
+            ):
+                _hh = _household_write_outcomes(
+                    list((_personal_intel_result or {}).get("write_outcomes") or []),
+                )
+                reply = _build_household_write_ack(_hh)
+                if reply:
+                    await _broadcast_chunk_sync(reply, tone)
+                    _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                    _persist_spoken_turn(text, reply)
+                    _none_route_handled = True
+                    logger.info(
+                        "NONE route: household write native reply outcomes=%s",
+                        [item.get("outcome") for item in _hh],
+                    )
             elif routing.extracted_args.get("tier") == "preference_instruction":
                 _stored_count = int((_personal_intel_result or {}).get("stored", 0) or 0)
                 _matched = int((_personal_intel_result or {}).get("personal_matches", 0) or 0) + int(
