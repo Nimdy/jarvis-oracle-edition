@@ -161,7 +161,7 @@ Do **not** start from full-snapshot.
 
 SSH brain: `duafoo@192.168.1.222` key `~/.ssh/id_jarvis_desktop`.
 Workspace is WSL `~/projects/jarvis-oracle-edition`. **Code only here.**
-`./sync-desktop.sh` (brain) / `./sync-pi.sh` (Pi). Sync is not a bounce. Git push is not a sync.
+After WSL edits, Grok 4.6 runs `./sync-desktop.sh` (and `./sync-pi.sh` if `pi/` changed). Git push is not a sync. Sync is not a bounce.
 Operator owns start/stop/bounce.
 
 ---
