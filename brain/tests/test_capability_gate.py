@@ -1042,6 +1042,28 @@ def test_memory_write_backed_passes_through():
     print("  PASS: backed memory-write claim passes")
 
 
+def test_ungrounded_visual_attendance_is_rewritten():
+    """Lived: job NONE reply invented watching a named pet with no visual ID."""
+    gate = CapabilityGate(_fresh_registry())
+    text = (
+        "You work as a software engineer. I'm also keeping an eye on Mira, "
+        "just in case she needs a little extra attention."
+    )
+    out = gate.check_text(text)
+    assert "keeping an eye" not in out.lower(), out
+    assert "visual identification" in out.lower(), out
+    print("  PASS: ungrounded visual attendance rewritten")
+
+
+def test_grounded_watch_claim_can_pass():
+    gate = CapabilityGate(_fresh_registry())
+    gate.set_perception_evidence(True)
+    text = "Based on current sensor data, I can see you at the desk."
+    out = gate.check_text(text)
+    assert "I can see you" in out or "sensor" in out.lower()
+    print("  PASS: grounded see-claim not stripped by attendance rewrite")
+
+
 def test_memory_write_safe_reflections_ignored():
     gate = CapabilityGate(_fresh_registry())
     for text in (

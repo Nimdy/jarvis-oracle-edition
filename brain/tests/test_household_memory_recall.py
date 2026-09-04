@@ -36,6 +36,7 @@ def test_household_questions_route_to_memory() -> None:
         "Jarvis, what's my morning routine?",
         "When should you not interrupt me?",
         "Jarvis, what is my job?",
+        "What do I work as?",
         "What's my favorite food?",
     ]
     for text in cases:

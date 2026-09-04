@@ -179,6 +179,23 @@ _UNBACKED_TOOL_ACTION_REWRITE = (
     "background research or retrieval task."
 )
 
+# Live visual/caretaking attendance of a named being. Memory of a name is
+# not eyes. Lived: NONE job reply invented "keeping an eye on Skylar"
+# with no pet ID and no visual enrollment.
+_UNGROUNDED_VISUAL_ATTENDANCE_RE = re.compile(
+    r"\bI(?:['\u2019]m| am)\s+(?:also\s+)?"
+    r"(?:keeping an eye on|keeping watch (?:on|over)|watching over|looking after)\s+"
+    r"([A-Za-z][A-Za-z'-]{1,30})\b",
+    re.I,
+)
+_ATTENDANCE_OBJECT_SKIP = frozenset({
+    "that", "this", "you", "it", "them", "him", "her", "things",
+    "everything", "stuff", "work", "things", "everyone",
+})
+_UNGROUNDED_VISUAL_ATTENDANCE_REWRITE = (
+    "I don't have a visual identification for that."
+)
+
 # Personal-store mutation claims. Distinct from job commitments
 # ("I'll get back to you") and from conversational reflections
 # ("I'll remember that"). Lived theater: "I've updated my records" /
@@ -1529,6 +1546,7 @@ class CapabilityGate:
         modified = self._rewrite_ungrounded_affect(modified)
         modified = self._rewrite_ungrounded_self_state(modified)
         modified = self._rewrite_ungrounded_learning(modified)
+        modified = self._rewrite_ungrounded_visual_attendance(modified)
         modified = self._strip_active_listening_tic(modified)
 
         for pat_idx, (pattern, is_readiness) in enumerate(_CLAIM_PATTERNS):
@@ -2176,6 +2194,29 @@ class CapabilityGate:
                 self._learning_rewrites += 1
                 logger.debug("Learning rewrite: '%s' → '%s'", original, replacement)
         return text
+
+    def _rewrite_ungrounded_visual_attendance(self, text: str) -> str:
+        """Block live 'watching / keeping an eye on <Name>' without sensor evidence.
+
+        A taught name in memory is not a visual ID. Scene must ground the claim.
+        """
+        if not text:
+            return text
+        modified = text
+        for match in list(_UNGROUNDED_VISUAL_ATTENDANCE_RE.finditer(modified)):
+            obj = (match.group(1) or "").strip()
+            if obj.lower() in _ATTENDANCE_OBJECT_SKIP:
+                continue
+            claimed = match.group(0)
+            if self._is_grounded_observation(claimed, modified):
+                continue
+            self._record_block(f"ungrounded_visual_attendance:{obj[:40]}")
+            self._record_claim_signal(claimed, "blocked")
+            logger.info("Gate blocked ungrounded visual attendance: '%s'", claimed[:80])
+            modified = self._replace_through_sentence_end(
+                modified, claimed, _UNGROUNDED_VISUAL_ATTENDANCE_REWRITE,
+            )
+        return modified
 
     def gate_identity_mention(self, text: str, confirmed_name: str | None) -> str:
         """Replace user-name mentions with neutral address when identity unconfirmed.

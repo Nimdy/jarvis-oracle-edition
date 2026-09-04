@@ -148,7 +148,9 @@ _HOUSEHOLD_INTERRUPT_RE = re.compile(
 )
 _HOUSEHOLD_JOB_RE = re.compile(
     r"\bwhat(?:'s|\s+is)\s+my\s+job\b|"
-    r"\bwhat do i do for (?:a living|work)\b",
+    r"\bwhat do i do for (?:a living|work)\b|"
+    r"\bwhat do i work as\b|"
+    r"\bwhat(?:'s|\s+is)\s+my\s+(?:occupation|career)\b",
     re.I,
 )
 _HOUSEHOLD_FOOD_RE = re.compile(

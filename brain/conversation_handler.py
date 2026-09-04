@@ -3676,6 +3676,17 @@ async def handle_transcription(
             # addressee checks, so we can safely allow a bare "GOLDEN COMMAND ..."
             # prefix without weakening exact command-body matching.
             routing = tool_router.route(text, golden_allow_bare_prefix=True)
+            if (
+                routing
+                and not routing.golden_context
+                and routing.tool in {ToolType.NONE, ToolType.INTROSPECTION}
+                and is_household_self_fact_recall(text)
+            ):
+                routing = RoutingResult(
+                    tool=ToolType.MEMORY,
+                    confidence=0.94,
+                    extracted_args={"household_self_fact": True},
+                )
             _route_ms = (_time.monotonic() - _conv_mono_start) * 1000
             logger.info("[LATENCY] route_complete=%.0fms route=%s (conv=%s)",
                         _route_ms, routing.tool.value if routing else "?",
