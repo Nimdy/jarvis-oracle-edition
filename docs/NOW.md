@@ -17,7 +17,7 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/project-2-oneshot` (cut from `feat/nn-fleet-consume` `a98f018` so a bad slice can be dropped) |
-| **HEAD (committed)** | `feat/project-2-oneshot`. **#26** soaked. **#5** WR would-block lived PID **23093**. Routing sits parked. **Now #2** TBS-1 post-hoc score (injects_prompt still False; P4/TBS-2 gated). **#23** Later. |
+| **HEAD (committed)** | `feat/project-2-oneshot`. **#26** soaked. **#5** WR lived. **#2** TBS-1 lived on INTROSPECTION sits; native early-return now shares `_run_companion_post_hoc`. P4/TBS-2 gated. **#23** Later. |
 | **vs origin** | Safety branch **not** `main`. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
 | **Board** | **Only board:** [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8) (sort by Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. North star **#42**. **#83** is frozen notes — do not execute those checkboxes. |
 | **Merge `main`** | **No**, unless David asks |

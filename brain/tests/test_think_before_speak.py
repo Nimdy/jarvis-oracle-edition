@@ -71,6 +71,11 @@ def test_handler_captures_stance_on_flight_record_without_injecting():
     window = src[src.find("_tbs_stance = _tbs.read_before_speak"):src.find("_flight_recorder.append")]
     assert ".would_inject" not in window
     assert "score_against_post_hoc" in src
+    assert "def _run_companion_post_hoc" in src
+    assert "_run_companion_post_hoc()" in src
+    emerge = src.find("_persist_spoken_turn(introspection_query, reply)")
+    assert emerge > 0
+    assert "_run_companion_post_hoc()" in src[emerge:emerge + 220]
     assert "_style_instruction += " not in src
 
 

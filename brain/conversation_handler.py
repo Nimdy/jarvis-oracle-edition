@@ -3646,6 +3646,40 @@ async def handle_transcription(
     except Exception:
         logger.debug("think-before-speak TBS-0 pre-speech read failed (no-op)", exc_info=True)
 
+    def _run_companion_post_hoc() -> None:
+        """P0/P1/P3 + TBS-1. Shadow only. Safe on native early returns.
+
+        STATUS/MEMORY/P1 fall through to the end; INTROSPECTION emergence
+        used to `return` after persist and skip this. Injects nothing.
+        """
+        try:
+            from consciousness.situational_read import situational_read_engine as _sit_read
+            from consciousness.affect_state import affect_state as _sit_affect
+            _read = _sit_read.observe_turn(
+                speaker=speaker,
+                user_text=text,
+                response_text=reply,
+                user_emotion=emotion,
+                follow_up=follow_up,
+                latency_ms=int((_time.time() - _conv_start) * 1000),
+                complexity=_score_complexity(text),
+                route=(routing.tool.value if routing else ""),
+                affect=_sit_affect.snapshot(),
+            )
+            if _read is not None:
+                from consciousness.theory_of_mind import theory_of_mind_engine as _tom
+                _person_model = _tom.observe(speaker, _read)
+                from consciousness.behavior_advisory import behavior_advisory_engine as _adv
+                _adv_out = _adv.propose(_read, _person_model)
+                try:
+                    if _tbs_stance is not None:
+                        from consciousness.think_before_speak import pre_speech_reader as _tbs1
+                        _tbs1.score_against_post_hoc(_tbs_stance, _read, _adv_out)
+                except Exception:
+                    logger.debug("TBS-1 post-hoc score skipped", exc_info=True)
+        except Exception:
+            logger.debug("Situational read / theory-of-mind / advisory (companion P0/P1/P3) failed", exc_info=True)
+
     if _guided_collect_struct is not None:
         routing = RoutingResult(
             tool=ToolType.SKILL,
@@ -4752,6 +4786,7 @@ async def handle_transcription(
                 }
                 _set_golden_outcome("executed")
                 _persist_spoken_turn(introspection_query, reply)
+                _run_companion_post_hoc()
                 return
             introspection_data, intro_meta = get_introspection(engine, query=introspection_query)
             logger.info(
@@ -6970,48 +7005,9 @@ async def handle_transcription(
         except Exception:
             logger.debug("Meta-learning reflection failed", exc_info=True)
 
-    # ─── Companion Cognition P0: situational read (LOGGED-ONLY / shadow) ───
-    # Observe the just-completed exchange and log JARVIS's internal read of it:
-    # what it thinks is happening, why, how confident, what evidence contributed,
-    # and what it WOULD have done if it had the authority.  Zero behavior — no
-    # tone change, no belief write, no ask.  The salience/affect gate is recorded
-    # but never acted on (the anti-chatterbox spine, validated before it steers).
-    # Runs last so it can never perturb the turn.  See
-    # docs/COMPANION_COGNITION_DESIGN.md (P0).
-    try:
-        from consciousness.situational_read import situational_read_engine as _sit_read
-        from consciousness.affect_state import affect_state as _sit_affect
-        _read = _sit_read.observe_turn(
-            speaker=speaker,
-            user_text=text,
-            response_text=reply,
-            user_emotion=emotion,
-            follow_up=follow_up,
-            latency_ms=latency_ms,
-            complexity=complexity,
-            route=(routing.tool.value if routing else ""),
-            affect=_sit_affect.snapshot(),
-        )
-        # Companion P1: fold the read into the per-person theory-of-mind (SHADOW —
-        # hypotheses only, gates nothing, never persisted to identity).
-        if _read is not None:
-            from consciousness.theory_of_mind import theory_of_mind_engine as _tom
-            _person_model = _tom.observe(speaker, _read)
-            # Companion P3: join the read + learned person-model into a narrate-only
-            # behavior advisory ("would have softened / wrapped up / asked"). SHADOW —
-            # applies nothing; only logged for operator review + the P3->P4 earn-gate.
-            from consciousness.behavior_advisory import behavior_advisory_engine as _adv
-            _adv_out = _adv.propose(_read, _person_model)
-            # TBS-1: score the pre-speech stance against this post-hoc read.
-            # Injects nothing (TBS-2 / P4 still gated).
-            try:
-                if _tbs_stance is not None:
-                    from consciousness.think_before_speak import pre_speech_reader as _tbs1
-                    _tbs1.score_against_post_hoc(_tbs_stance, _read, _adv_out)
-            except Exception:
-                logger.debug("TBS-1 post-hoc score skipped", exc_info=True)
-    except Exception:
-        logger.debug("Situational read / theory-of-mind / advisory (companion P0/P1/P3) failed", exc_info=True)
+    # Companion P0/P1/P3 + TBS-1. Native STATUS/MEMORY/P1 fall through to here.
+    # Emergence INTROSPECTION calls the same helper before its early return.
+    _run_companion_post_hoc()
 
     try:
         operator_proxy_turn.reset(_proxy_tok)
