@@ -17,14 +17,14 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/project-2-oneshot` (cut from `feat/nn-fleet-consume` `a98f018` so a bad slice can be dropped) |
-| **HEAD (committed)** | `feat/project-2-oneshot`. **#26** actionability lived PID **19705** (no metric navel-gaze after soak). Routing sits parked. **Now #5** WR live-shadow would-block (enforces stays off). Then **#2**. **#23** leftover Later. |
+| **HEAD (committed)** | `feat/project-2-oneshot`. **#26** soaked. **#5** WR would-block lived PID **23093**. Routing sits parked. **Now #2** TBS-1 post-hoc score (injects_prompt still False; P4/TBS-2 gated). **#23** Later. |
 | **vs origin** | Safety branch **not** `main`. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
 | **Board** | **Only board:** [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8) (sort by Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. North star **#42**. **#83** is frozen notes — do not execute those checkboxes. |
 | **Merge `main`** | **No**, unless David asks |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
 | **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
-| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** **#26** soaked (focus none; 137 metric ticks ignored; 0 minted). **Now #5** WR: would-block requires scored live-shadow accuracy, not sample counts; `enforces=False`. Then **#2**. **#25** Done. **#23** Later. Do not close #42/#83. **Not flipped live:** native_voice, WR `enforces`, P4, L3, voice-intent, Face 0.55. |
+| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** **Now #2** TBS-1: score pre-speech stance vs post-hoc read (`injects_prompt=False`). P4/`applied` still off. **#5** WR lived. **#26** soaked. **#25** Done. **#23** Later. Do not close #42/#83. **Not flipped live:** native_voice, WR `enforces`, P4, L3, voice-intent, Face 0.55. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 

@@ -7001,7 +7001,15 @@ async def handle_transcription(
             # behavior advisory ("would have softened / wrapped up / asked"). SHADOW —
             # applies nothing; only logged for operator review + the P3->P4 earn-gate.
             from consciousness.behavior_advisory import behavior_advisory_engine as _adv
-            _adv.propose(_read, _person_model)
+            _adv_out = _adv.propose(_read, _person_model)
+            # TBS-1: score the pre-speech stance against this post-hoc read.
+            # Injects nothing (TBS-2 / P4 still gated).
+            try:
+                if _tbs_stance is not None:
+                    from consciousness.think_before_speak import pre_speech_reader as _tbs1
+                    _tbs1.score_against_post_hoc(_tbs_stance, _read, _adv_out)
+            except Exception:
+                logger.debug("TBS-1 post-hoc score skipped", exc_info=True)
     except Exception:
         logger.debug("Situational read / theory-of-mind / advisory (companion P0/P1/P3) failed", exc_info=True)
 
