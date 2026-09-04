@@ -87,3 +87,53 @@ class TestWouldBlock:
     def test_evaluate_all_never_raises(self):
         # fail-closed-to-shadow: even with no collector it returns a dict, never raises
         assert isinstance(self.gate.evaluate_all(), dict)
+
+    def test_evaluate_all_blocks_unmeasured_accuracy(self, monkeypatch):
+        class _Fake:
+            def get_stats(self):
+                return {"teachers": {"claim_verdict": {"lived": 159, "synthetic": 0}}}
+
+            def live_shadow_accuracy(self, teacher, min_n=10):
+                return None
+
+        monkeypatch.setattr(
+            "hemisphere.distillation.DistillationCollector.instance",
+            classmethod(lambda cls: _Fake()),
+        )
+        d = self.gate.evaluate_all()["claim_verdict"]
+        assert d["lived_baseline_met"] is True
+        assert d["live_shadow_accuracy"] is None
+        assert d["decision"] == "would_block"
+        assert "unmeasured" in d["reason"]
+
+    def test_evaluate_all_allows_when_scored_accuracy_meets_floor(self, monkeypatch):
+        class _Fake:
+            def get_stats(self):
+                return {"teachers": {"claim_verdict": {"lived": 159, "synthetic": 0}}}
+
+            def live_shadow_accuracy(self, teacher, min_n=10):
+                return 0.80
+
+        monkeypatch.setattr(
+            "hemisphere.distillation.DistillationCollector.instance",
+            classmethod(lambda cls: _Fake()),
+        )
+        d = self.gate.evaluate_all()["claim_verdict"]
+        assert d["decision"] == "would_allow"
+        assert d["live_shadow_accuracy"] == 0.80
+
+    def test_evaluate_all_blocks_low_scored_accuracy(self, monkeypatch):
+        class _Fake:
+            def get_stats(self):
+                return {"teachers": {"claim_verdict": {"lived": 159, "synthetic": 0}}}
+
+            def live_shadow_accuracy(self, teacher, min_n=10):
+                return 0.40
+
+        monkeypatch.setattr(
+            "hemisphere.distillation.DistillationCollector.instance",
+            classmethod(lambda cls: _Fake()),
+        )
+        d = self.gate.evaluate_all()["claim_verdict"]
+        assert d["decision"] == "would_block"
+        assert "0.40" in d["reason"]

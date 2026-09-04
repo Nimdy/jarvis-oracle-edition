@@ -3463,6 +3463,22 @@ class AcquisitionOrchestrator:
             shadow.correct = (shadow.predicted_class == actual_class)
             shadow.reviewed_at = time.time()
             self._store_shadow_prediction(shadow)
+            try:
+                from hemisphere.distillation import distillation_collector
+                _origin = getattr(shadow, "origin", None) or "live"
+                distillation_collector.record(
+                    teacher="acquisition_planner",
+                    signal_type="shadow_scored",
+                    data={
+                        "predicted": shadow.predicted_class,
+                        "actual": actual_class,
+                    },
+                    metadata={"correct": bool(shadow.correct), "hit": bool(shadow.correct)},
+                    origin=_origin,
+                    fidelity=1.0,
+                )
+            except Exception:
+                logger.debug("Shadow scored-signal record skipped", exc_info=True)
             logger.info(
                 "Shadow accuracy for %s: predicted=%s actual=%s correct=%s",
                 job.acquisition_id, shadow.predicted_class, actual_class, shadow.correct,
