@@ -176,6 +176,35 @@ def _build_scene_block() -> dict[str, Any]:
     return block
 
 
+_ECHO_SENTENCE_SPLIT_RE = re.compile(r"[.!?]+")
+
+
+def echo_reference_spans(response_text: str) -> list[str]:
+    """Full reply plus last sentence. Echo STT often captures only the tail."""
+    full = (response_text or "").strip().lower()
+    if not full:
+        return []
+    spans = [full]
+    parts = [p.strip() for p in _ECHO_SENTENCE_SPLIT_RE.split(full) if p.strip()]
+    if parts:
+        last = parts[-1]
+        if last not in spans:
+            spans.append(last)
+    return spans
+
+
+def echo_best_similarity(heard: str, response_text: str) -> float:
+    """Max SequenceMatcher ratio of heard text against echo reference spans."""
+    from difflib import SequenceMatcher
+    h = (heard or "").strip().lower()
+    if not h:
+        return 0.0
+    best = 0.0
+    for span in echo_reference_spans(response_text):
+        best = max(best, SequenceMatcher(None, span, h).ratio())
+    return best
+
+
 class PerceptionOrchestrator:
     """Encapsulates all perception wiring so main.py stays clean."""
 
@@ -1987,9 +2016,11 @@ class PerceptionOrchestrator:
         if any(marker in lower for marker in self._ECHO_CONVERSATIONAL_MARKERS):
             return False
 
-        ref_lower = self._last_response_text.strip().lower()
+        refs = echo_reference_spans(self._last_response_text)
+        if not refs:
+            return False
 
-        is_substring = lower in ref_lower and len(lower) >= 10
+        is_substring = any(lower in span and len(lower) >= 10 for span in refs)
         if is_substring:
             gap = time.monotonic() - self._playback_complete_time if self._playback_complete_time else -1
             logger.warning("Echo detected (substring match, gap=%.1fs) — discarding: %s",
@@ -2001,11 +2032,13 @@ class PerceptionOrchestrator:
                 pass
             return True
 
-        from difflib import SequenceMatcher
-        similarity = SequenceMatcher(None, ref_lower, lower).ratio()
-
+        similarity = echo_best_similarity(lower, self._last_response_text)
+        shortest = min(len(span) for span in refs)
         threshold = self._ECHO_SIMILARITY_THRESHOLD
-        if len(lower) < len(ref_lower) * 0.5 and len(lower) >= 10:
+        if len(lower) < shortest * 0.5 and len(lower) >= 10:
+            threshold = self._ECHO_PARTIAL_THRESHOLD
+        elif len(refs) > 1 and len(lower) <= len(refs[-1]) + 8:
+            # Tail STT vs last sentence: full-reply 0.70 is the miss class.
             threshold = self._ECHO_PARTIAL_THRESHOLD
 
         if similarity >= threshold:
@@ -2039,10 +2072,29 @@ class PerceptionOrchestrator:
         if is_known and speaker != "unknown":
             return False
 
-        ref_lower = self._last_response_text.strip().lower()
-        lower = text.strip().lower()
+        is_follow_up = bool(
+            self.audio_stream and getattr(self.audio_stream, "was_follow_up", False)
+        )
+        # Identity floor: follow-up is continuation of the owner's sit.
+        # Unknown speaker in the echo window is not a David turn.
+        # Lived: TTS tail STT as speaker_3 "we're engineers."
+        if is_follow_up:
+            logger.warning(
+                "ECHO-GUARD: unknown speaker on follow-up in echo window — blocking: %s",
+                text[:80],
+            )
+            try:
+                event_bus.emit(
+                    "echo:detected", text=text[:80], similarity=0.0,
+                    speaker=speaker, guard="unknown_follow_up",
+                )
+            except Exception:
+                pass
+            return True
 
-        if lower in ref_lower and len(lower) >= 8:
+        refs = echo_reference_spans(self._last_response_text)
+        lower = text.strip().lower()
+        if any(lower in span and len(lower) >= 8 for span in refs):
             logger.warning(
                 "ECHO-GUARD: unknown speaker substring match — blocking: %s", text[:80],
             )
@@ -2053,8 +2105,7 @@ class PerceptionOrchestrator:
                 pass
             return True
 
-        from difflib import SequenceMatcher
-        similarity = SequenceMatcher(None, ref_lower, lower).ratio()
+        similarity = echo_best_similarity(lower, self._last_response_text)
         if similarity >= self._SPEAKER_ECHO_SIMILARITY:
             logger.warning(
                 "ECHO-GUARD: unknown speaker (%.0f%% match to last response) — blocking: %s",
