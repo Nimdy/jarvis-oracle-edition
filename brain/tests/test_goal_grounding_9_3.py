@@ -33,14 +33,14 @@ def test_single_sample_is_suppressed():
     assert sp._producer_stats["metric_created"] == 0
 
 
-def test_sustained_deficit_creates_after_streak():
+def test_sustained_health_deficit_is_unactionable():
+    # Health-monitor components have no goal-layer executor (#26).
     _reset()
-    detect_metric_deficits(_BAD, None, None, uptime_s=300)        # streak 1 -> nothing
-    s2 = detect_metric_deficits(_BAD, None, None, uptime_s=300)   # streak 2 -> create
-    assert len(s2) == 1
-    assert s2[0].source == "health_monitor"
-    assert s2[0].source_scope == "metric"
-    assert sp._producer_stats["metric_created"] == 1
+    detect_metric_deficits(_BAD, None, None, uptime_s=300)        # streak 1
+    s2 = detect_metric_deficits(_BAD, None, None, uptime_s=300)   # streak 2 — still no mint
+    assert s2 == []
+    assert sp._producer_stats["metric_created"] == 0
+    assert sp._producer_stats["metric_unactionable_skipped"] >= 1
 
 
 def test_recovery_resets_streak():
@@ -74,13 +74,15 @@ def test_calibration_deficit_also_gated():
     assert len(s2) == 1 and s2[0].source == "truth_calibration"
 
 
-def test_active_deficits_source_unaffected_by_gate():
-    # active_deficits already carries its own duration>=300s gate; it should still
-    # create immediately (it is not routed through the consecutive-tick streak).
+def test_active_deficits_are_unactionable():
+    # metric_triggers have no goal-layer repair path. Lived leftover: reasoning_coherence
+    # merged hundreds of times with 0 task successes. Do not mint.
     _reset()
     ad = {"tick_overrun": {"duration_s": 600, "severity": "high"}}
     s = detect_metric_deficits(None, None, ad, uptime_s=300)
-    assert len(s) == 1 and s[0].source == "metric_triggers"
+    assert s == []
+    assert sp._producer_stats["metric_unactionable_skipped"] >= 1
+    assert sp._producer_stats["metric_created"] == 0
 
 
 # ── #9.3-A.2: per-kind active cap ──
@@ -161,3 +163,56 @@ class TestSourceLifecycle:
         m = _mgr()
         status = m.get_status()
         assert "source_lifecycle" in status
+
+    def test_lifecycle_rebuilds_from_persisted_registry(self):
+        m = _mgr()
+        now = _time.time()
+        m._registry.add(Goal(
+            title="old metric", kind="system_health", status="abandoned",
+            source_scope="system", created_at=now, updated_at=now,
+        ))
+        m._rebuild_source_lifecycle()
+        lc = m.get_source_lifecycle()
+        assert lc.get("system", {}).get("created", 0) >= 1
+        assert lc["system"]["abandoned"] >= 1
+
+
+class TestActionabilityConsume:
+    def test_review_abandons_sticky_metric_trigger_goal(self):
+        from goals.review import GoalReview
+        g = Goal(
+            title="Sustained metric deficit: reasoning_coherence (high, 302s)",
+            kind="system_health",
+            status="active",
+            evidence_types=["metric_deficit"],
+            source_event="metric_triggers",
+            source_scope="system",
+        )
+        update = GoalReview().review_goal(g)
+        assert update.should_abandon is True
+        assert "actionable" in update.reason
+
+    def test_calibration_operator_review_is_kept(self):
+        from goals.review import GoalReview
+        g = Goal(
+            title="Calibration domain 'weather' critically low: 0.10 (repair: operator review)",
+            kind="system_health",
+            status="active",
+            evidence_types=["metric_deficit"],
+            source_event="truth_calibration",
+            source_scope="metric",
+        )
+        update = GoalReview().review_goal(g)
+        assert update.should_abandon is False
+
+    def test_user_requested_system_health_is_kept(self):
+        from goals.review import GoalReview
+        g = Goal(
+            title="Fix the disk fill",
+            kind="system_health",
+            status="active",
+            explicit_user_requested=True,
+            source_scope="user",
+        )
+        update = GoalReview().review_goal(g)
+        assert update.should_abandon is False

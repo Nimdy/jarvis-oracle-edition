@@ -20,6 +20,7 @@ from goals.constants import (
     STALE_WINDOW_S,
 )
 from goals.goal import Goal, GoalUpdate
+from goals.signal_producers import system_health_goal_is_actionable
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,19 @@ class GoalReview:
     ) -> GoalUpdate:
         now = time.time()
         update = GoalUpdate()
+
+        # #26: unactionable system_health (metric_triggers / health-monitor
+        # navel-gaze) must not stay current_focus. Calibration+operator-review
+        # still qualifies. No new authority.
+        if (
+            goal.kind == "system_health"
+            and not goal.explicit_user_requested
+            and not system_health_goal_is_actionable(goal)
+        ):
+            update.should_abandon = True
+            update.reason = "no actionable repair path"
+            goal.abandoned_reason = update.reason
+            return update
 
         # Progress from goal_effect distribution across terminal tasks.
         # advanced=1.0, inconclusive=0.25 (execution succeeded, goal not yet),
@@ -169,6 +183,8 @@ class GoalReview:
             return None
         if "metric_deficit" not in goal.evidence_types:
             return None
+        if not system_health_goal_is_actionable(goal):
+            return "no actionable repair path"
 
         still_degraded = False
         title_lower = goal.title.lower()
@@ -190,9 +206,6 @@ class GoalReview:
             for domain, score in domain_scores.items():
                 if domain in title_lower and score < 0.35:
                     still_degraded = True
-
-        if "sustained metric deficit" in title_lower:
-            still_degraded = True
 
         if still_degraded:
             goal.revalidation_pass_count = 0

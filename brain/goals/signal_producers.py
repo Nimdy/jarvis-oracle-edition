@@ -301,13 +301,31 @@ def detect_conversation_goal(text: str) -> GoalSignal | None:
 
 # ── Metric-deficit producer ──
 
-# #26 actionability: observational metric producers have no executor. Emitting
-# them manufactures create→abandon churn. Only emit when a named repair path
-# exists (operator-review is a path; "wait for it to recover" is not).
+# #26 actionability: observational metric producers have no executor on the
+# *goal* layer. Research-about-the-number is not a repair path. Lived 2026-09-04:
+# metric_triggers minted "Sustained metric deficit: reasoning_coherence" that
+# merged 823x with 0 task successes. Autonomy MetricTriggers may still fire
+# ResearchIntents on their own pipeline. Calibration + operator-review is a path.
 _ACTIONABLE_METRIC_SOURCES: frozenset[str] = frozenset({
     "truth_calibration",
-    "metric_triggers",
 })
+
+
+def system_health_goal_is_actionable(goal: Any) -> bool:
+    """True only when a system_health goal has a named repair path.
+
+    User-requested goals and truth-calibration (operator review) qualify.
+    health_monitor / metric_triggers titles do not.
+    """
+    if getattr(goal, "explicit_user_requested", False):
+        return True
+    src = (getattr(goal, "source_event", "") or "").strip()
+    title = (getattr(goal, "title", "") or "").lower()
+    if src in _ACTIONABLE_METRIC_SOURCES or "operator review" in title:
+        return True
+    if "calibration domain" in title:
+        return True
+    return False
 
 _DEFICIT_CONFIGS: list[dict[str, Any]] = [
     {"component": "processing_health", "threshold": 0.45, "tags": ("performance", "processing", "health"),
@@ -394,14 +412,9 @@ def detect_metric_deficits(
             severity = info.get("severity", "low")
             if severity == "low":
                 continue
-            signals.append(GoalSignal(
-                signal_type="metric_deficit",
-                source="metric_triggers",
-                source_scope="system",
-                content=f"Sustained metric deficit: {metric_name} ({severity}, {duration:.0f}s)",
-                tag_cluster=("metric", metric_name.replace("_", " ").split()[0], severity),
-                priority_hint=0.5 if severity == "medium" else 0.6,
-            ))
+            # Goal layer cannot repair these. Do not mint a system_health navel-gaze.
+            _producer_stats["metric_unactionable_skipped"] += 1
+            continue
 
     if sustained_skipped:
         _producer_stats["metric_sustained_skipped"] += sustained_skipped

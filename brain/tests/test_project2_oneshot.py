@@ -35,6 +35,14 @@ def test_metric_health_deficits_are_unactionable():
     assert all(s.source != "health_monitor" for s in signals)
 
 
+def test_metric_triggers_are_unactionable():
+    before = get_producer_stats()["metric_unactionable_skipped"]
+    ad = {"reasoning_coherence": {"duration_s": 600, "severity": "high"}}
+    signals = detect_metric_deficits(None, None, ad, uptime_s=1000.0)
+    assert signals == []
+    assert get_producer_stats()["metric_unactionable_skipped"] > before
+
+
 def test_live_shadow_accuracy_none_below_min_n(monkeypatch):
     from collections import deque
     import threading

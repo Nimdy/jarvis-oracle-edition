@@ -839,18 +839,19 @@ class TestPromotionScore:
 
 class TestMetricRevalidation:
     def test_resolves_healthy_memory_candidate(self):
+        # #26: health-monitor goals have no repair path — abandon immediately.
         review = GoalReview()
         g = Goal(
             title="Memory health degraded: 0.00",
             kind="system_health",
             evidence_types=["metric_deficit"],
+            source_event="health_monitor",
             status="candidate",
         )
         healthy_report = {"components": {"memory_health": 0.95}}
-        for _ in range(3):
-            reason = review.revalidate_metric_candidate(g, healthy_report, None)
+        reason = review.revalidate_metric_candidate(g, healthy_report, None)
         assert reason is not None
-        assert "resolved" in reason.lower()
+        assert "actionable" in reason.lower()
 
     def test_keeps_still_degraded_candidate(self):
         review = GoalReview()
@@ -858,30 +859,33 @@ class TestMetricRevalidation:
             title="Memory health degraded: 0.30",
             kind="system_health",
             evidence_types=["metric_deficit"],
+            source_event="health_monitor",
             status="candidate",
         )
         bad_report = {"components": {"memory_health": 0.20}}
-        for _ in range(5):
-            reason = review.revalidate_metric_candidate(g, bad_report, None)
-        assert reason is None
+        reason = review.revalidate_metric_candidate(g, bad_report, None)
+        assert reason is not None
+        assert "actionable" in reason.lower()
 
     def test_resets_counter_on_regression(self):
+        # Calibration (operator-review path) still uses the streak/reset gate.
         review = GoalReview()
         g = Goal(
-            title="Memory health degraded: 0.10",
+            title="Calibration domain 'autonomy' critically low: 0.10 (repair: operator review)",
             kind="system_health",
             evidence_types=["metric_deficit"],
+            source_event="truth_calibration",
             status="candidate",
         )
-        healthy = {"components": {"memory_health": 0.95}}
-        degraded = {"components": {"memory_health": 0.20}}
-        review.revalidate_metric_candidate(g, healthy, None)
-        review.revalidate_metric_candidate(g, healthy, None)
-        review.revalidate_metric_candidate(g, degraded, None)
+        recovered = {"domain_scores": {"autonomy": 0.95}}
+        still_bad = {"domain_scores": {"autonomy": 0.10}}
+        review.revalidate_metric_candidate(g, None, recovered)
+        review.revalidate_metric_candidate(g, None, recovered)
+        review.revalidate_metric_candidate(g, None, still_bad)
         for _ in range(2):
-            reason = review.revalidate_metric_candidate(g, healthy, None)
+            reason = review.revalidate_metric_candidate(g, None, recovered)
         assert reason is None
-        reason = review.revalidate_metric_candidate(g, healthy, None)
+        reason = review.revalidate_metric_candidate(g, None, recovered)
         assert reason is not None
 
     def test_ignores_non_metric_goals(self):
@@ -1024,15 +1028,12 @@ class TestMetricDeficitProducer:
         _deficit_streaks.clear()
 
     def test_detects_processing_deficit(self):
-        # #9.3-A: a deficit must be SUSTAINED (>=2 consecutive ticks) before it
-        # becomes a goal signal — one weak sample is suppressed.
+        # #26: health-monitor deficits are unactionable on the goal layer.
         report = {"components": {"processing_health": 0.30, "memory_health": 0.9,
                                   "personality_health": 0.9, "event_health": 0.9}}
         assert detect_metric_deficits(report, None, None, uptime_s=300) == []  # tick 1
         signals = detect_metric_deficits(report, None, None, uptime_s=300)      # tick 2
-        assert len(signals) >= 1
-        assert any(s.signal_type == "metric_deficit" for s in signals)
-        assert any("processing" in s.tag_cluster for s in signals)
+        assert signals == []
 
     def test_no_signal_when_healthy(self):
         report = {"components": {"processing_health": 0.9, "memory_health": 0.9,
@@ -1055,11 +1056,13 @@ class TestMetricDeficitProducer:
         assert len(signals) == 0
 
     def test_detects_sustained_metric_trigger(self):
+        from goals.signal_producers import get_producer_stats
         deficits = {"confidence_volatility": {"value": 0.25, "threshold": 0.15,
                                                 "duration_s": 600, "severity": "medium"}}
+        before = get_producer_stats()["metric_unactionable_skipped"]
         signals = detect_metric_deficits(None, None, deficits, uptime_s=300)
-        assert len(signals) == 1
-        assert signals[0].source_scope == "system"
+        assert signals == []
+        assert get_producer_stats()["metric_unactionable_skipped"] > before
 
     def test_ignores_short_duration_deficit(self):
         deficits = {"confidence_volatility": {"value": 0.25, "threshold": 0.15,
@@ -1091,7 +1094,7 @@ class TestMetricDeficitProducer:
                                   "personality_health": 0.9, "event_health": 0.9}}
         detect_metric_deficits(report, None, None, uptime_s=300)            # tick 1 (sustained gate)
         signals = detect_metric_deficits(report, None, None, uptime_s=300)  # tick 2
-        assert len(signals) >= 1
+        assert signals == []  # health-monitor: unactionable (#26)
 
 
 # ──────────────────────────────────────────────────────────────

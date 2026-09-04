@@ -1,6 +1,6 @@
 # NOW — load-bearing card (refresh this file, not the others)
 
-**Date: 2026-09-02.** Operator: David.
+**Date: 2026-09-04.** Operator: David.
 
 This is the **only** file allowed to hold current branch, life-phase, and leftovers.
 Roster, turn lanes, classify, and gates live elsewhere. If this file disagrees with
@@ -17,14 +17,14 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/project-2-oneshot` (cut from `feat/nn-fleet-consume` `a98f018` so a bad slice can be dropped) |
-| **HEAD (committed)** | `feat/project-2-oneshot`. Household leftover: family fill + drop pronoun-name scar (`User's … is She`); job `engineer` cue; food≠color. **Needs bounce** before a family-class sit. |
+| **HEAD (committed)** | `feat/project-2-oneshot`. Household mouth (family/job/food) lived. Routing sits **parked**. **Now #26** metric-goal actionability (WSL couple; needs bounce). Then **#5** WR scoring, then **#2**. **#23** P2 leftover open, do not grind. |
 | **vs origin** | Safety branch **not** `main`. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
 | **Board** | **Only board:** [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8) (sort by Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. North star **#42**. **#83** is frozen notes — do not execute those checkboxes. |
 | **Merge `main`** | **No**, unless David asks |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
 | **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
-| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence 1–5 is Now.** **#25** family-class consume coupled on WSL (privacy pref / pronoun-name scar out; type-scan fill for taught people facts — no kinship list). **Needs bounce + sit** *who is in my family* with no names. Then job / pizza / **#23** P2 ramble-cut. Do not close #42/#83. **Not flipped live:** native_voice, WR `enforces`, P4, L3, voice-intent, Face 0.55. |
+| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** **Now: #26** actionability (stop un-repairable `system_health` navel-gaze). **Next: #5** WR live-shadow scoring (`enforces=False`), then **#2** companion (P4/TBS-2 gated). **#25** Done. **#23** Later leftover — no more P2/routing sits. Do not close #42/#83. **Not flipped live:** native_voice, WR `enforces`, P4, L3, voice-intent, Face 0.55. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
