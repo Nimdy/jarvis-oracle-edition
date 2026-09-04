@@ -175,6 +175,13 @@ _HOUSEHOLD_FOOD_FACT_RE = re.compile(
     r"\b(?:food|eats?|eating)\b",
     re.I,
 )
+# Lived: favorite-food sit fail-closed; store had "User enjoys pizza"
+# as personal_interest with no food token. Color is a different class.
+_HOUSEHOLD_FOOD_COLOR_RE = re.compile(r"\bcolou?r\b", re.I)
+_HOUSEHOLD_FOOD_ENJOY_RE = re.compile(
+    r"\b(?:enjoys?|likes?)\s+[a-z][a-z'-]{1,24}$",
+    re.I,
+)
 _HOUSEHOLD_FAMILY_PRIVACY_RE = re.compile(
     r"\b(?:not to (?:discuss|bring up)|proactively|keep .{0,12}private)\b",
     re.I,
@@ -201,7 +208,7 @@ _HOUSEHOLD_CUES = {
     "morning": "morning routine wake coffee walk desk",
     "interrupt": "do not interrupt on a call",
     "job": "job work career occupation engineer",
-    "food": "favorite food",
+    "food": "food eat eating enjoy",
 }
 
 
@@ -262,7 +269,12 @@ def _preview_matches_household_kind(preview: str, kind: str) -> bool:
     if kind == "job":
         return bool(_HOUSEHOLD_JOB_FACT_RE.search(low))
     if kind == "food":
-        return bool(_HOUSEHOLD_FOOD_FACT_RE.search(low))
+        if _HOUSEHOLD_FOOD_COLOR_RE.search(low):
+            return False
+        if _HOUSEHOLD_FOOD_FACT_RE.search(low):
+            return True
+        # Taught "I like X" stores User enjoys X — not a food ontology.
+        return bool(_HOUSEHOLD_FOOD_ENJOY_RE.search(low.strip()))
     return False
 
 
@@ -320,9 +332,8 @@ def _household_fact_hits(
             continue
         if _consider(found):
             return hits
-    if kind == "family":
-        # Roster payloads never contain the word "family". Scan taught prefs
-        # after ranker; still not a relation-word bag.
+    if kind in {"family", "food"}:
+        # Family roster / enjoyed-food payloads often omit the cue word.
         extra: list = []
         try:
             from memory.search import search_by_type

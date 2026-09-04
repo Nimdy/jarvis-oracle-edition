@@ -1809,6 +1809,11 @@ def _derive_personal_memory_metadata(payload: str, category: str) -> tuple[str, 
         tags.extend(["preference_kind:response_style", "high_confidence_fact"])
     elif category == "personal_interest":
         tags.append("interest_kind:positive")
+        if re.search(r"\b(?:food|eats?|eating)\b", lower) or (
+            re.search(r"\benjoys?\s+[a-z][a-z'-]{1,24}$", lower)
+            and not re.search(r"\bcolou?r\b", lower)
+        ):
+            tags.append("fact_kind:food")
     elif category == "personal_dislike":
         tags.append("interest_kind:negative")
     elif category == "personal_habit":

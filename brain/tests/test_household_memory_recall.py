@@ -82,8 +82,14 @@ def test_household_fact_preview_keeps_taught_facts_not_recaps() -> None:
     assert _preview_matches_household_kind(
         "[user_preference] User's favorite food is pizza", "food",
     )
+    assert _preview_matches_household_kind(
+        "[user_preference] User enjoys pizza", "food",
+    )
     assert not _preview_matches_household_kind(
         "[user_preference] User's favorite color is blue", "food",
+    )
+    assert not _preview_matches_household_kind(
+        "[user_preference] User enjoys electronic dance music", "food",
     )
     assert _preview_matches_household_kind("[user_preference] User's cousin is family", "family")
     assert not _preview_matches_household_kind(
