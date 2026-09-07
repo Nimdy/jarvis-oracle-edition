@@ -24,7 +24,7 @@ the handoff, the playbook, or a skill.
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
 | **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
-| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** Companion mouth lived 2026-09-07: STATUS `I'm here with you.`; TBS hello not `give_space`; about-me recap (EDM / workday / engineer / brief / blue). **TBS-2 / P4 still gated.** Do not close #42/#83. |
+| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** Companion mouth lived 2026-09-07: STATUS `I'm here with you.`; TBS hello not `give_space`; about-me recap (EDM / workday / engineer / brief / blue). NONE length-hint consumes **earned** ToM concise only (unmet today: verbosity_confidence=0). **TBS-2 / P4 still gated.** Do not close #42/#83. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 

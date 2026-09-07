@@ -6413,25 +6413,46 @@ async def handle_transcription(
                 except Exception:
                     pass
 
-                async for sentence, is_final in response_gen.respond_stream(
-                    text, perception_context=perception_ctx, cancel_check=_cancelled,
-                    speaker_name=speaker, user_emotion=emotion,
-                    conversation_id=conversation_id,
-                    tool_hint=_none_tool_hint,
-                    style_instruction=_style_instruction,
-                ):
-                    if _cancelled():
-                        logger.info("Barge-in: aborting response stream")
-                        break
-                    if is_final:
-                        full_reply = sentence
-                        if chunks_sent == 0 and sentence:
-                            await _send_sentence(sentence, tone)
-                        await _flush_tts()
-                        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
-                        continue
-                    await _send_sentence(sentence, tone)
-                    chunks_sent += 1
+                _len_restore = None
+                try:
+                    from consciousness.think_before_speak import earned_concise_length_hint
+                    _earned_brief = earned_concise_length_hint(
+                        _tbs_stance,
+                        current_hint=engine.policy_response_length,
+                    )
+                    if _earned_brief:
+                        _len_restore = engine.policy_response_length
+                        engine._policy_response_length = _earned_brief
+                        logger.info(
+                            "NONE route: earned ToM concise → length_hint=%s "
+                            "(not TBS-2 inject)",
+                            _earned_brief,
+                        )
+                except Exception:
+                    _len_restore = None
+                try:
+                    async for sentence, is_final in response_gen.respond_stream(
+                        text, perception_context=perception_ctx, cancel_check=_cancelled,
+                        speaker_name=speaker, user_emotion=emotion,
+                        conversation_id=conversation_id,
+                        tool_hint=_none_tool_hint,
+                        style_instruction=_style_instruction,
+                    ):
+                        if _cancelled():
+                            logger.info("Barge-in: aborting response stream")
+                            break
+                        if is_final:
+                            full_reply = sentence
+                            if chunks_sent == 0 and sentence:
+                                await _send_sentence(sentence, tone)
+                            await _flush_tts()
+                            _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                            continue
+                        await _send_sentence(sentence, tone)
+                        chunks_sent += 1
+                finally:
+                    if _len_restore is not None:
+                        engine._policy_response_length = _len_restore
 
                 reply = full_reply
                 _language_example_seed = {

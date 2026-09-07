@@ -75,6 +75,27 @@ def test_unearned_pref_does_not_trip(tmp_path, monkeypatch):
     assert s.stance == "none"
 
 
+def test_earned_concise_length_hint_only_when_tom_earned(tmp_path, monkeypatch):
+    """NONE length-hint consume. Not TBS-2 inject. Unearned ToM is a no-op."""
+    _reset(tmp_path, monkeypatch)
+    r = tbs.PreSpeechReader.get_instance()
+    earned = r.read_before_speak(
+        speaker="David", user_text="how does X work",
+        person_model={"verbosity_pref": "prefers concise replies", "verbosity_confidence": 0.6})
+    assert earned.stance == "lean_concise"
+    assert earned.injected is False
+    assert tbs.earned_concise_length_hint(earned, current_hint="normal") == "brief"
+    assert tbs.earned_concise_length_hint(earned, current_hint="") == "brief"
+    assert tbs.earned_concise_length_hint(earned, current_hint="detailed") is None
+    assert tbs.earned_concise_length_hint(earned, current_hint="brief") is None
+    unearned = r.read_before_speak(
+        speaker="David", user_text="how does X work",
+        person_model={"verbosity_pref": "prefers concise replies", "verbosity_confidence": 0.0})
+    assert unearned.stance == "none"
+    assert tbs.earned_concise_length_hint(unearned, current_hint="normal") is None
+    assert tbs.earned_concise_length_hint(None, current_hint="normal") is None
+
+
 def test_handler_captures_stance_on_flight_record_without_injecting():
     """TBS-0: person-aware labels accrue on the episode. Prompt stays unchanged."""
     from pathlib import Path
@@ -84,6 +105,7 @@ def test_handler_captures_stance_on_flight_record_without_injecting():
     assert '"pre_speech": _tbs_stance.to_dict()' in src
     assert "+ _tbs_stance.would_inject" not in src
     assert "_style_instruction += " not in src
+    assert "earned_concise_length_hint" in src
     window = src[src.find("_tbs_stance = _tbs.read_before_speak"):src.find("_flight_recorder.append")]
     assert ".would_inject" not in window
     assert "score_against_post_hoc" in src

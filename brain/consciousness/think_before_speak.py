@@ -77,6 +77,33 @@ class PreSpeechStance:
         }
 
 
+_PROTECTED_LENGTH_HINTS = frozenset({"brief", "detailed"})
+
+
+def earned_concise_length_hint(
+    stance: PreSpeechStance | None,
+    *,
+    current_hint: str = "",
+) -> str | None:
+    """NONE LLM length-hint consume of earned ToM concise.
+
+    When TBS stance is ``lean_concise`` (ToM ``prefers concise replies`` at
+    the person-aware floor), return ``brief`` so the existing
+    ``response_length_hint`` guideline fires. Does not return the TBS-2
+    prompt line. Does not overwrite a this-turn brief/detailed hint.
+    Unearned ToM (David 2026-09-07: confidence 0) returns None — Qwen
+    stays the conversational voice until the axis earns.
+    """
+    if stance is None:
+        return None
+    if getattr(stance, "stance", "") != "lean_concise":
+        return None
+    cur = str(current_hint or "").strip().lower()
+    if cur in _PROTECTED_LENGTH_HINTS:
+        return None
+    return "brief"
+
+
 class PreSpeechReader:
     """TBS-0 engine. Computes + LOGS a pre-speech stance each turn (glass-box). Injects nothing."""
 
