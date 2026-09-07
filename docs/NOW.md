@@ -1,6 +1,6 @@
 # NOW — load-bearing card (refresh this file, not the others)
 
-**Date: 2026-09-04.** Operator: David.
+**Date: 2026-09-07.** Operator: David.
 
 This is the **only** file allowed to hold current branch, life-phase, and leftovers.
 Roster, turn lanes, classify, and gates live elsewhere. If this file disagrees with
@@ -17,14 +17,14 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/project-2-oneshot` (cut from `feat/nn-fleet-consume` `a98f018` so a bad slice can be dropped) |
-| **HEAD (committed)** | `feat/project-2-oneshot`. **#26** soaked. **#5** WR lived. **#2** TBS-1 lived on INTROSPECTION sits; native early-return now shares `_run_companion_post_hoc`. P4/TBS-2 gated. **#23** Later. |
-| **vs origin** | Safety branch **not** `main`. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
+| **HEAD (committed)** | `feat/project-2-oneshot`. **Skill learning pipeline lived 2026-09-07:** GOLDEN learn-X → research contract → plan review → codegen → quarantine → verify → deploy. Sit `Hey Jarvis, roll a D20.` → PLUGIN → `I rolled the Dice, you got 1`. P4/TBS-2 still gated. **#26** soaked. **#5** WR lived. **#23** Later. |
+| **vs origin** | Pushing this branch; operator asked **2026-09-07** to merge up to GitHub/`main`. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
 | **Board** | **Only board:** [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8) (sort by Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. North star **#42**. **#83** is frozen notes — do not execute those checkboxes. |
-| **Merge `main`** | **No**, unless David asks |
+| **Merge `main`** | **Yes — operator asked 2026-09-07** (skill-learning pipeline lived). |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
 | **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
-| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** **Now #2** TBS-1: score pre-speech stance vs post-hoc read (`injects_prompt=False`). P4/`applied` still off. **#5** WR lived. **#26** soaked. **#25** Done. **#23** Later. Do not close #42/#83. **Not flipped live:** native_voice, WR `enforces`, P4, L3, voice-intent, Face 0.55. |
+| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** **Milestone lived:** off-catalog skill learning. d20 plugin `operational_proof_plugin_for_r_2174a7` **active**. Do **not** Improve unless named. Do not TAP. Do not close #42/#83. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
@@ -247,6 +247,8 @@ Lived 2026-09-01 bounce PID **19451**. `/api/nn-fleet`: 9 `consumed_now` (includ
 | weight_room_gate | not consumed | `enforces=False` (P2 would-block). Overlay keeps `consumed_now=False` | No |
 
 HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipping advisory). Policy NN shadow. positive_memory **NN** orphaned (heuristic scalar broadcasts). Claim-friction teacher feed is already fixed (`cc04f08`); registry prose is stale.
+
+**CODEBASE locate+leash (2026-09-04).** G20/G21 lived on PID **26936**: index stats; *voice* abstains (no allowlist). Sit 3 STT `handle transcription` went NONE → Qwen theater. **STT-join couple on WSL** (`resolve_stt_locate` + router before NONE): spoken *where is handle transcription* → exact `handle_transcription`. Household where-is not stolen. Needs bounce. Do **not** encode the tree into HRR.
 
 Board: [Project 8](https://github.com/users/Nimdy/projects/8) is the ranked queue (Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. **#83** is frozen notes. North star **#42**. Do not follow #2/#4/#5/#7 as “do now.” Parked issues are closed `not_planned` (L7 / Matrix remainder / domain NN / HRR / lidar / connectome L4 / thought P3 / self-sensing P3).
 

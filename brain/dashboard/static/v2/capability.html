@@ -135,6 +135,20 @@
     .pausebtn.on{background:rgba(40,30,3,.7);border-color:var(--amber);color:var(--amber);font-weight:700;}
     body.paused .acqd .acqd-hd{cursor:pointer;}
     .acqd .acqd-act .btn-danger{background:rgba(45,15,15,.6);border-color:rgba(180,40,40,.5);color:var(--red);}
+    /* Plan-review desk — ports v1 Learning-tab Capability Acquisition pending review */
+    .acq-pending{background:rgba(40,30,3,.45);border:1px solid var(--amber);border-radius:6px;padding:10px 12px;margin:8px 0;}
+    .acq-pending .ph{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);font-weight:700;margin-bottom:8px;}
+    .acq-pend{border-top:1px solid rgba(255,170,0,.22);padding:8px 0;}
+    .acq-pend:first-of-type{border-top:none;padding-top:0;}
+    .acq-warn{color:var(--red);font-size:10px;margin:3px 0;line-height:1.45;}
+    .acq-amber{color:var(--amber);font-size:10px;margin:3px 0;line-height:1.45;}
+    .acq-reject{display:none;background:rgba(45,15,15,.45);border:1px solid var(--red);border-radius:5px;padding:8px 10px;margin-top:8px;}
+    .acq-reject.open{display:block;}
+    .acq-reject .rk{font-size:10px;color:var(--red);font-weight:700;margin-bottom:6px;}
+    .acq-stall{border:1px solid var(--amber);border-radius:4px;padding:5px 8px;margin:4px 0;font-size:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+    .prior-rej{background:rgba(45,15,15,.4);border:1px solid var(--red);border-radius:4px;padding:6px 8px;margin:6px 0;font-size:10px;line-height:1.45;}
+    .verdict-row{display:flex;gap:8px;font-size:10px;padding:1px 0;}
+    .verdict-row .vk{color:var(--muted);min-width:120px;}
     /* Phase 1: pending self-improvement patch approvals — inline review (diff + sandbox + approve/reject) */
     .si-pending{margin-top:12px;}
     .sip-empty{color:var(--muted);font-size:.82rem;padding:8px 0;}
@@ -232,7 +246,7 @@
 
     <section class="card col12">
       <h2>Capability Deliberation <span id="acqd-count" class="floorpill"></span></h2>
-      <div class="note">The internal think&rarr;code&rarr;validate of each plugin build, inline (no pivoting): the lane ladder, the codegen <b>repair rounds</b> (including what it caught and rejected), per-stage diagnostics, and the gate it's waiting on. Click a build to drill into its full plan.</div>
+      <div class="note">The internal think&rarr;code&rarr;validate of each plugin build, inline (no pivoting): the lane ladder, the codegen <b>repair rounds</b>, per-stage diagnostics, and the <b>plan-review desk</b> from the old Learning tab. Pause auto-refresh while you type reject notes. Incomplete plans (no approach / sketch / tests) cannot be approved — Reject &amp; Revise with what to keep, add (input validation, tests), or change. Click a build to drill the full plan.</div>
       <div id="acq-deliberation"></div>
     </section>
 
@@ -251,7 +265,10 @@
 
     <section class="card col12">
       <h2>Skill Learning &amp; Registry <span id="skill-count" class="floorpill"></span></h2>
-      <div class="note">Every skill JARVIS is learning or has verified. <b>Active learning jobs</b> show the phase ladder (assess → collect → train → verify → register), live exit-condition progress, <b>what you asked it to learn</b> (so you can confirm the subject is true), and its claimability — a skill cannot claim a capability until held-out evidence passes. <b>Click any row</b> to load its id into the operator actions below.</div>
+      <div class="note">Same audit packet as the old Learning tab. <b>Click a job or skill</b> for the drill: one tab per learning phase (glass box), plus Review. Baseline skills shipped with JARVIS are labeled and <b>cannot be deleted</b> — only skills learned later. Matrix jobs are tagged — specialist lifecycle stays on <a href="/static/v2/matrix.html">/v2/matrix</a>.</div>
+      <div class="statline" id="skill-stats"></div>
+      <div class="sk-gate" id="skill-gate"></div>
+      <div id="skill-jobs"></div>
       <div id="skill-learning"></div>
       <div id="skill-registry"></div>
     </section>
@@ -326,6 +343,7 @@
   </main>
 
 <script src="/static/v2/shared.js"></script>
+<script src="/static/v2/v2-drill.js"></script>
 <script>
 (function(){
   "use strict";
@@ -336,7 +354,7 @@
 
   // local HTML-escape (note: `esc` is used elsewhere as the escalation object, so use escH)
   function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  var SKILL_PHASES=['assess','collect','train','verify','register'];
+  var SKILL_PHASES=['assess','research','acquire','integrate','collect','train','verify','register'];
 
   // a fail-CLOSED gate tile: ok=true => green, false => red, else => amber/unknown
   function gate(label, v, detail){
@@ -436,10 +454,27 @@
   // Approve applies a self-modification to JARVIS's own source — gate it behind an explicit confirm.
   function siApprove(rid, approved){
     if(!rid){ V2.toast('missing patch id', false); return; }
-    if(approved && !window.confirm("Apply this self-modification to JARVIS's source code? It passed sandbox, but you are the final gate.")) return;
-    V2.act(V2.post('/api/self-improve/approve', {patch_id:rid, approved:approved}),
-           approved?'patch approved — applying':'patch rejected')
-      .then(function(){ refresh(true); }).catch(function(){});
+    if(approved){
+      if(!window.confirm("Apply this self-modification to JARVIS's source code? It passed sandbox, but you are the final gate.")) return;
+      V2.act(V2.post('/api/self-improve/approve', {patch_id:rid, approved:true}),
+             'patch approved — applying')
+        .then(function(){ refresh(true); }).catch(function(){});
+      return;
+    }
+    var bd=V2.modal('Reject patch',
+      '<div class="cfm-msg">Tell JARVIS why this failed review. That note is operator input for later codegen / suggestions. Nothing applies until you confirm.</div>'+
+      '<input id="si-rej-reason" class="v2-field" autocomplete="off" placeholder="rejection reason (required)">'+
+      '<div class="cfm-btns"><button class="btn-act" id="si-rej-no">Cancel</button>'+
+      '<button class="btn-danger" id="si-rej-yes">Reject</button></div>');
+    bd.querySelector('#si-rej-no').addEventListener('click', V2.closeModal);
+    bd.querySelector('#si-rej-yes').addEventListener('click', function(){
+      var reason=(bd.querySelector('#si-rej-reason').value||'').trim();
+      if(reason.length<5){ V2.toast('rejection reason is required', false); return; }
+      V2.closeModal();
+      V2.act(V2.post('/api/self-improve/approve', {patch_id:rid, approved:false, reason:reason}),
+             'patch rejected')
+        .then(function(){ refresh(true); }).catch(function(){});
+    });
   }
 
   // Self-improvement drill-downs (scanner detectors + activity log + proposal history).
@@ -606,8 +641,15 @@
     el('mode').textContent='self-improve stage '+(stage===null?'—':stage)+' · acq '+sch;
   }
 
-  function fillSkillId(id){ var f=el('op-skill-id'); if(f){ f.value=id; f.scrollIntoView({behavior:'smooth',block:'center'}); V2.toast('skill id loaded: '+id, true); } }
-  window._fillSkillId=fillSkillId;  // referenced from inline onclick
+  function fillSkillId(id){ var f=el('op-skill-id'); if(f){ f.value=id; } }
+  window._fillSkillId=fillSkillId;
+  function openSkillAudit(id){
+    if(!id) return;
+    fillSkillId(id);
+    if(window.V2D && V2D.skillDetail) V2D.skillDetail(id, {onDone:function(){ refresh(true); }});
+    else V2.toast('skill audit module missing', false);
+  }
+  window.openSkillAudit=openSkillAudit;
 
   function _phaseLadder(curPhase){
     var ci=SKILL_PHASES.indexOf(String(curPhase||'').toLowerCase());
@@ -620,25 +662,96 @@
 
   // JOBS holds learning-job detail keyed by skill_id, fetched lazily for learning skills.
   var JOBS={};
+  function _wireSkillClicks(){
+    ['skill-jobs','skill-learning','skill-registry'].forEach(function(id){
+      var box=el(id); if(!box||box._wired) return; box._wired=true;
+      box.addEventListener('click', function(e){
+        var row=(e.target&&e.target.closest)?e.target.closest('[data-skill-id]'):null;
+        if(!row) return;
+        openSkillAudit(row.getAttribute('data-skill-id'));
+      });
+    });
+  }
   function renderSkillLearning(){
     var box=el('skill-learning'), reg=el('skill-registry'), cnt=el('skill-count');
+    var jobsBox=el('skill-jobs'), statsBox=el('skill-stats'), gateBox=el('skill-gate');
     var data=SKILLS&&SKILLS.registry;
-    if(!data){ box.innerHTML='<span style="color:var(--dim);font-size:10.5px">skills endpoint offline</span>'; reg.innerHTML=''; cnt.textContent=''; return; }
+    var lj=(SKILLS&&SKILLS.learning_jobs)||{};
+    var gate=(SKILLS&&SKILLS.capability_gate)||{};
+    if(!data){
+      if(box) box.innerHTML='<span style="color:var(--dim);font-size:10.5px">skills endpoint offline</span>';
+      if(reg) reg.innerHTML='';
+      if(cnt) cnt.textContent='';
+      return;
+    }
     var skills=data.skills||[];
+    var by=data.by_status||{};
     var learning=skills.filter(function(s){return String(s.status).toLowerCase()==='learning';});
     var verified=skills.filter(function(s){return String(s.status).toLowerCase()!=='learning';});
-    cnt.textContent=(data.total||skills.length)+' skills · '+learning.length+' learning';
-    cnt.style.cssText=learning.length?'border-color:var(--amber);color:var(--amber)':'';
+    var nLearn=by.learning!=null?by.learning:learning.length;
+    cnt.textContent=(data.total||skills.length)+' skills · '+nLearn+' learning';
+    cnt.style.cssText=nLearn?'border-color:var(--amber);color:var(--amber)':'';
 
-    // --- active learning jobs (rich drill-down) ---
+    if(statsBox){
+      statsBox.innerHTML=
+        stat('total', data.total||skills.length)+
+        stat('verified', by.verified||0, (by.verified||0)?'var(--green)':'var(--text)')+
+        stat('learning', nLearn, nLearn?'var(--amber)':'var(--text)')+
+        stat('blocked', by.blocked||0, (by.blocked||0)?'var(--red)':'var(--text)')+
+        stat('jobs', lj.total_count||0)+
+        stat('jobs done', lj.completed_count||0, (lj.failed_count||0)?'var(--amber)':'var(--green)');
+    }
+    if(gateBox){
+      var bits=[
+        '<span>Capability Gate</span>',
+        '<span style="color:var(--green)">'+(gate.claims_passed||0)+' passed</span>',
+        '<span style="color:var(--red)">'+(gate.claims_blocked||0)+' blocked</span>',
+        '<span style="color:var(--cyan)">'+(gate.claims_conversational||0)+' conv</span>'
+      ];
+      if(gate.affect_rewrites) bits.push('<span style="color:var(--cyan)">'+gate.affect_rewrites+' affect rw</span>');
+      if(gate.self_state_rewrites) bits.push('<span>'+gate.self_state_rewrites+' self-state rw</span>');
+      if(gate.learning_rewrites) bits.push('<span>'+gate.learning_rewrites+' learning rw</span>');
+      if(gate.honesty_failures) bits.push('<span style="color:var(--red)">'+gate.honesty_failures+' honesty fail</span>');
+      if(gate.jobs_auto_created) bits.push('<span style="color:var(--amber)">'+gate.jobs_auto_created+' auto jobs</span>');
+      if(lj.failed_count) bits.push('<span style="color:var(--red)">jobs failed '+lj.failed_count+'</span>');
+      if(gate.identity_confirmed) bits.push('<span style="color:var(--green)">ID confirmed</span>');
+      gateBox.innerHTML=bits.join(' · ');
+    }
+
+    var activeJobs=lj.active_jobs||[];
+    if(jobsBox){
+      if(!activeJobs.length){
+        jobsBox.innerHTML='';
+      } else {
+        jobsBox.innerHTML='<div style="font-size:9px;color:var(--amber);letter-spacing:.06em;text-transform:uppercase;margin:4px 0 6px">Active learning jobs ('+(lj.active_count||activeJobs.length)+') — click for full audit</div>'+
+          '<div class="sk-jobs">'+activeJobs.slice(0,8).map(function(j){
+            var phase=j.phase||'';
+            var idx=SKILL_PHASES.indexOf(String(phase).toLowerCase());
+            var bar=SKILL_PHASES.map(function(p,i){
+              var cls=i<idx?'past':(i===idx?'cur':'');
+              return '<i class="'+cls+'" title="'+escH(p)+'"></i>';
+            }).join('');
+            var mx=j.matrix_protocol?'<span class="sk-mx">MATRIX</span>':'';
+            var stale=j.stale?(' · stale '+Math.round((j.phase_age_s||0)/3600)+'h'):'';
+            return '<div class="sk-job" data-skill-id="'+escH(j.skill_id||'')+'" title="open audit packet">'+
+              '<div class="sh"><span>'+mx+'<span class="snm">'+escH(j.skill_id||'—')+'</span></span>'+
+              '<span class="sbadge" style="background:rgba(255,176,0,.15);color:var(--amber)">'+escH(j.status||'')+' · '+escH(phase||'—')+'</span></div>'+
+              '<div class="sk-pbar">'+bar+'</div>'+
+              '<div class="smeta">type '+escH(j.capability_type||'—')+' · priority '+(j.priority||0)+stale+'</div>'+
+              '</div>';
+          }).join('')+'</div>';
+      }
+    }
+
+    // --- learning skills (summary; full packet is the modal) ---
     if(!learning.length){
-      box.innerHTML='<div style="font-size:10.5px;color:var(--muted);padding:4px 0">No skills currently in a learning job. Ask JARVIS (by voice) to learn a skill — it appears here with its plan, the request that triggered it, and live phase progress.</div>';
+      box.innerHTML='<div style="font-size:10.5px;color:var(--muted);padding:4px 0">No skills currently in a learning job. Ask JARVIS (by voice or GOLDEN COMMAND LEARN SKILL) — the job appears here. Click it for evidence, artifacts, timeline, and operator review.</div>';
     } else {
       box.innerHTML=learning.map(function(s){
-        var job=JOBS[s.skill_id];           // may be undefined until detail fetch lands
+        var job=JOBS[s.skill_id];
         var jb=(job&&job.learning_job)||{};
         var sk=(job&&job.skill)||s;
-        var ap=(job&&job.audit_packet)||{};      // the rich audit packet (parity w/ old dashboard)
+        var ap=(job&&job.audit_packet)||{};
         var asked=(jb.requested_by||(ap.request_context||{}))||{};
         var phase=jb.phase||(ap.decision_summary||{}).current_phase||'—';
         var plan=jb.plan||{};
@@ -647,63 +760,64 @@
         phases.forEach(function(p){ if(String(p.name).toLowerCase()===String(phase).toLowerCase()) curExit=(p.exit_conditions||[]).join(', '); });
         var ds=ap.decision_summary||{};
         var missing=ap.missing_proof||[];
-        var ec=ap.evidence_classes||{};
-        var rc=ap.resolver_contract||{};
-        var tl=ap.timeline||[];
-        var ach=ap.acquisition_chain||{};
         var oh=ap.operational_handoff||{};
         var loading=(job===null||job===undefined);
-        return '<div class="skl" onclick="_fillSkillId(\''+escH(s.skill_id)+'\')" title="click to load into operator actions">'+
-          '<div class="sh"><span><span class="snm">'+escH(s.name||s.skill_id)+'</span> <span class="sid">'+escH(s.skill_id)+'</span></span>'+
+        var mx=(jb.matrix_protocol||asked.matrix_trigger)?'<span class="sk-mx">MATRIX</span>':'';
+        return '<div class="skl" data-skill-id="'+escH(s.skill_id)+'" title="open full audit packet">'+
+          '<div class="sh"><span>'+mx+'<span class="snm">'+escH(s.name||s.skill_id)+'</span> <span class="sid">'+escH(s.skill_id)+'</span></span>'+
             '<span class="sbadge" style="background:rgba(255,176,0,.15);color:var(--amber)">'+escH(jb.status||sk.status||'learning')+' · '+escH(phase)+'</span></div>'+
           (asked.user_text?('<div class="asked"><b>You asked:</b> “'+escH(asked.user_text)+'”'+(asked.speaker?(' <span style="color:var(--dim);font-style:normal">— '+escH(asked.speaker)+(asked.matrix_trigger?' · matrix':' · voice')+'</span>'):'')+'</div>'):'')+
           (plan.summary?('<div class="smeta" style="color:var(--text)">'+escH(plan.summary)+'</div>'):'')+
           _phaseLadder(phase)+
           (curExit?('<div class="smeta">current exit: <span class="rt">'+escH(curExit)+'</span></div>'):'')+
-          // --- decision summary / why not verified ---
+          (function(){
+            var design=ap.proposed_design||{};
+            if(!design.approach && !design.technical_approach) return '';
+            var files=(design.plugin_structure||[]).slice(0,6).map(escH).join(' · ');
+            return '<div class="aud-sec"><div class="aud-h">How this plugin should work</div>'+
+              '<div class="smeta" style="color:var(--text)">'+escH(design.approach||design.technical_approach)+'</div>'+
+              (files?('<div class="smeta" style="font-family:var(--mono,monospace)">'+files+'</div>'):'')+
+              (design.thin?'<div class="aud-miss">thin template — bounce to rebuild a real design</div>':'')+
+              '</div>';
+          })()+
           (ds.message?('<div class="aud-why">'+escH(ds.message)+(ds.missing_count!=null?(' <b style="color:var(--amber)">('+ds.missing_count+' missing)</b>'):'')+'</div>'):'')+
-          // --- missing proof (the "why not verified yet" list) ---
           (missing.length?('<div class="aud-sec"><div class="aud-h">Why not verified yet</div>'+
             missing.map(function(m){return '<div class="aud-miss">✗ <span class="rt">'+escH(m.name)+'</span> <span style="color:var(--dim)">— '+escH(m.reason||'')+'</span></div>';}).join('')+'</div>'):'')+
-          // --- evidence classes (which proof families are satisfied) ---
-          (Object.keys(ec).length?('<div class="aud-sec"><div class="aud-h">Evidence classes</div><div class="aud-ec">'+
-            Object.keys(ec).map(function(k){var ok=ec[k];return '<span class="ec-chip '+(ok?'ec-y':'ec-n')+'">'+(ok?'✓':'✗')+' '+escH(k.replace(/_evidence$/,'').replace(/_/g,' '))+'</span>';}).join('')+'</div></div>'):'')+
-          // --- resolver contract (required evidence, executor, acquisition) ---
-          (Object.keys(rc).length?('<div class="aud-sec"><div class="aud-h">Contract</div><div class="smeta">'+
-            (rc.capability_type?('type <span class="rt">'+escH(rc.capability_type)+'</span> · '):'')+
-            (rc.required_executor?('executor <span class="rt">'+escH(rc.required_executor)+'</span> · '):'')+
-            ('acquisition '+ (rc.acquisition_eligible?'<span style="color:var(--amber)">eligible</span>':'no'))+
-            ((rc.required_evidence&&rc.required_evidence.length)?('<br>must prove: <span class="rt">'+rc.required_evidence.map(escH).join(', ')+'</span>'):'')+
-          '</div></div>'):'')+
-          // --- operational handoff / acquisition chain (if any) ---
           ((oh&&oh.status)?('<div class="smeta">operational handoff: <b style="color:var(--amber)">'+escH(oh.status)+'</b></div>'):'')+
-          ((ach&&(ach.status||ach.acquisition_id))?('<div class="smeta">acquisition proof: <span class="rt">'+escH(ach.status||ach.acquisition_id)+'</span></div>'):'')+
-          // --- live timeline (the phase ladder progress over time) ---
-          (tl.length?('<div class="aud-sec"><div class="aud-h">Timeline</div>'+
-            tl.slice(-6).map(function(t){return '<div class="aud-tl"><span class="aud-ts">'+escH((t.ts||'').replace('T',' ').replace('Z',''))+'</span> '+escH(t.message||t.type||'')+'</div>';}).join('')+'</div>'):
-            (loading?'<div class="smeta" style="color:var(--dim)">loading audit detail…</div>':''))+
-          '<div class="smeta" style="color:var(--dim)">job '+escH(jb.job_id||'—')+' · click row → loads id into Operator Actions below</div>'+
+          (loading?'<div class="smeta" style="color:var(--dim)">loading audit summary…</div>':'')+
+          '<div class="smeta" style="color:var(--dim)">job '+escH(jb.job_id||'—')+' · click → evidence, artifacts, timeline, operator notes</div>'+
         '</div>';
       }).join('');
-      // lazily fetch full job detail for any learning skill we don't have yet
       learning.forEach(function(s){
         if(JOBS[s.skill_id]===undefined){
-          JOBS[s.skill_id]=null;  // mark in-flight
+          JOBS[s.skill_id]=null;
           fetchJSON('/api/skills/'+encodeURIComponent(s.skill_id)).then(function(d){ JOBS[s.skill_id]=d; renderSkillLearning(); }).catch(function(){});
         }
       });
     }
 
-    // --- verified registry (compact, click-to-load) ---
-    reg.innerHTML='<div style="font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin:10px 0 4px">Verified registry ('+verified.length+')</div>'+
-      verified.map(function(s){
-        var stc=String(s.status).toLowerCase()==='verified'?'var(--green)':'var(--muted)';
-        return '<div class="reg" onclick="_fillSkillId(\''+escH(s.skill_id)+'\')" title="click to load id">'+
-          '<span class="rnm">'+escH(s.name||s.skill_id)+' <span class="sid">'+escH(s.skill_id)+'</span></span>'+
-          '<span class="sid">'+escH(s.capability_type||'')+'</span>'+
-          '<span class="rst" style="color:'+stc+'">'+escH(s.status)+(s.has_evidence?' ✓':'')+'</span>'+
-        '</div>';
-      }).join('');
+    var evSum=function(s){
+      var e=s.evidence_summary||{};
+      return e.verification_method||e.summary||'';
+    };
+    var rowHtml=function(s){
+      var stc=String(s.status).toLowerCase()==='verified'?'var(--green)':(String(s.status).toLowerCase()==='blocked'?'var(--red)':'var(--muted)');
+      var extra=evSum(s);
+      var base=!!s.is_default;
+      return '<div class="reg" data-skill-id="'+escH(s.skill_id)+'" title="open audit packet">'+
+        '<span class="rnm">'+(base?'<span class="sk-base">BASELINE</span>':'')+escH(s.name||s.skill_id)+' <span class="sid">'+escH(s.skill_id)+'</span>'+
+          (extra?'<div class="sid">'+escH(String(extra).substring(0,48))+(s.learning_job_id?' · job linked':'')+(base?' · not deletable':'')+'</div>':'')+'</span>'+
+        '<span class="sid">'+escH(s.capability_type||'')+'</span>'+
+        '<span class="rst" style="color:'+stc+'">'+escH(s.status)+(s.has_evidence?' ✓':'')+'</span>'+
+      '</div>';
+    };
+    var baseline=verified.filter(function(s){ return !!s.is_default; });
+    var learned=verified.filter(function(s){ return !s.is_default; });
+    reg.innerHTML=
+      (baseline.length?('<div style="font-size:9px;color:var(--cyan);letter-spacing:.06em;text-transform:uppercase;margin:10px 0 4px">Baseline · shipped with JARVIS ('+baseline.length+') — not deletable</div>'+baseline.map(rowHtml).join('')):'')+
+      (learned.length?('<div style="font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin:10px 0 4px">Learned later ('+learned.length+') — click for phase glass box</div>'+learned.map(rowHtml).join('')):'')+
+      ((!baseline.length && !learned.length)?'<div class="note">Registry empty.</div>':'');
+    _wireSkillClicks();
   }
 
   // ── Capability Deliberation (acquisition lane) ──────────────────
@@ -713,6 +827,8 @@
   var ACQDETAIL={};   // id -> full /api/acquisition/{id} (lazy)
   var ACQREC={};      // id -> recent[] summary (lanes, repair_log) — survives re-render
   var _acqOpen={};    // id -> true: open drill-downs, preserved across auto-refresh
+  var _acqRejectOpen={};  // reject-form open, preserved across refresh
+  var _acqRejectDraft={}; // {cat, notes} so pause isn't the only way to keep typing
   var _pastOpen=null; // null=auto (expand when few); else manual bool
   function _laneCls(st){ st=String(st||''); return st==='completed'?'l-ok':st==='running'?'l-run':st==='failed'?'l-fail':'l-pend'; }
   function _isActive(a){ return ACQ_TERMINAL_ST.indexOf(String((a||{}).status||'').toLowerCase())<0; }
@@ -739,12 +855,95 @@
     });
     return h;
   }
-  // Row-level actions: approve gates while alive; Remove ONLY when terminal (never an alive build).
+  function _planObj(a){ return (a&&(a.plan_summary||a.plan))||{}; }
+  function _fmtTc(tc){
+    if(tc==null) return '';
+    if(typeof tc==='string') return tc;
+    return tc.description||tc.name||JSON.stringify(tc);
+  }
+  function _planInvalid(ps){
+    ps=ps||{};
+    var ta=String(ps.technical_approach||'').trim();
+    var sk=String(ps.implementation_sketch||'').trim();
+    var tc=ps.test_cases||[];
+    if(!ta) return true;
+    if(ta==='Coder model returned empty response.') return true;
+    if(ta.indexOf('Technical design unavailable')===0) return true;
+    if(ta.indexOf('Technical design generation failed:')===0) return true;
+    if(!sk) return true;
+    if(!tc.length) return true;
+    return false;
+  }
+  function _acqDomId(id){ return String(id||'').replace(/[^A-Za-z0-9_-]/g,'_'); }
+  function _codeFileCount(cb){
+    if(!cb) return 0;
+    var f=cb.code_files;
+    if(Array.isArray(f)) return f.length;
+    if(f && typeof f==='object') return Object.keys(f).length;
+    return 0;
+  }
+  function _acqHasCode(a){
+    return _codeFileCount(a&&a.code_bundle_summary) + _codeFileCount(a&&a.code_bundle) > 0;
+  }
+  function _acqRejectForm(id){
+    var dom=_acqDomId(id), open=_acqRejectOpen[id]===true, draft=_acqRejectDraft[id]||{};
+    var cat=draft.cat||'incomplete_design';
+    var cats=['incomplete_design','wrong_approach','missing_tests','security_concern','scope_too_large','needs_more_detail','other'];
+    var opts=cats.map(function(c){ return '<option value="'+c+'"'+(c===cat?' selected':'')+'>'+c.replace(/_/g,' ')+'</option>'; }).join('');
+    return '<div class="acq-reject'+(open?' open':'')+'" id="acq-rej-'+dom+'">'+
+      '<div class="rk">Reject with feedback</div>'+
+      '<div style="margin-bottom:4px;font-size:9.5px;color:var(--muted)">Category: '+
+      '<select id="acq-rej-cat-'+dom+'" onchange="_acqSaveRejectDraft(\''+id+'\')">'+opts+'</select></div>'+
+      '<label style="font-size:9.5px;color:var(--muted)">Feedback (what to keep, what to change, what to add):</label>'+
+      '<textarea id="acq-rej-notes-'+dom+'" class="impv-in" rows="3" oninput="_acqSaveRejectDraft(\''+id+'\')" '+
+        'placeholder="e.g. Keep the API endpoint design but add input validation and rate limiting. Also add unit tests for error cases.">'+escH(draft.notes||'')+'</textarea>'+
+      '<div class="acqd-act">'+
+        '<button class="btn-danger" onclick="_acqSubmitReject(\''+id+'\')">Submit rejection</button>'+
+        '<button class="btn-act" onclick="_acqShowReject(\''+id+'\')">Cancel</button>'+
+      '</div></div>';
+  }
+  function _acqPlanReviewDesk(a){
+    var id=a.acquisition_id, ps=_planObj(a), invalid=_planInvalid(ps), ver=ps.version||1;
+    var h='<div class="acqd-act">';
+    if(ver>1) h+='<div class="acq-amber">Revision v'+escH(ver)+' — re-planned with operator feedback</div>';
+    if(invalid) h+='<div class="acq-warn">Plan is incomplete. Reject &amp; Revise before approval.</div>';
+    h+='<button class="btn-act" '+(invalid?'disabled title="Plan is incomplete; use Reject &amp; Revise."':'onclick="_acqApprovePlan(\''+id+'\')"')+'>Approve plan</button>';
+    h+='<button class="btn-danger" onclick="_acqShowReject(\''+id+'\')">Reject &amp; Revise</button>';
+    if(_acqHasCode(a)) h+='<button class="btn-act" onclick="_acqViewCode(\''+id+'\')">View full code</button>';
+    h+='</div>'+_acqRejectForm(id);
+    return h;
+  }
+  function _acqVerifyHtml(vs){
+    vs=vs||{};
+    var ok=vs.overall_passed===true;
+    var h='<div class="delib-h">'+(ok?'Verification passed':'Verification')+'</div>';
+    if(vs.overall_passed===false) h='<div class="delib-h" style="color:var(--red)">Verification failed</div>';
+    var verdicts=vs.lane_verdicts||{};
+    Object.keys(verdicts).forEach(function(ln){
+      var v=verdicts[ln], pass=v===true||v==='pass'||v==='passed';
+      h+='<div class="verdict-row"><span class="vk">'+escH(ln)+'</span><span style="color:'+(pass?'var(--green)':'var(--red)')+'">'+(pass?'pass':'FAIL')+'</span></div>';
+    });
+    return h;
+  }
+  function _acqDeployDesk(a){
+    var id=a.acquisition_id, vs=a.verification_summary||{};
+    var h='';
+    if(vs.overall_passed!==undefined || (vs.lane_verdicts && Object.keys(vs.lane_verdicts).length)) h+=_acqVerifyHtml(vs);
+    h+='<div class="acqd-act">'+
+      '<button class="btn-act" onclick="_acqApproveDeploy(\''+id+'\',true)">Approve deploy</button>'+
+      '<button class="btn-danger" onclick="_acqApproveDeploy(\''+id+'\',false)">Deny deploy</button>';
+    if(_acqHasCode(a)) h+='<button class="btn-act" onclick="_acqViewCode(\''+id+'\')">View full code</button>';
+    h+='</div>';
+    return h;
+  }
+  // Row-level actions: plan-review desk / deploy desk while alive; Remove ONLY when terminal.
   function _acqActions(a){
-    var s=String(a.status||'').toLowerCase(), id=a.acquisition_id, b=[];
-    if(s==='awaiting_plan_review') b.push('<button class="btn-act" onclick="_acqApprovePlan(\''+id+'\')">Approve plan</button>');
-    if(s==='awaiting_approval') b.push('<button class="btn-act" onclick="_acqApproveDeploy(\''+id+'\')">Approve deploy</button>');
-    if(!_isActive(a)) b.push('<button class="btn-danger" onclick="_acqRemove(\''+id+'\')">Remove</button>');
+    var s=String(a.status||'').toLowerCase();
+    if(s==='awaiting_plan_review') return _acqPlanReviewDesk(a);
+    if(s==='awaiting_approval') return _acqDeployDesk(a);
+    var b=[];
+    if(_acqHasCode(a)) b.push('<button class="btn-act" onclick="_acqViewCode(\''+a.acquisition_id+'\')">View full code</button>');
+    if(!_isActive(a)) b.push('<button class="btn-danger" onclick="_acqRemove(\''+a.acquisition_id+'\')">Remove</button>');
     return b.length?'<div class="acqd-act">'+b.join('')+'</div>':'';
   }
   // One compact row: header + badges + lane ladder + actions; the heavy deliberation lives in the drill.
@@ -782,6 +981,15 @@
     if(a.revision_feedback) h+='<div class="delib-h">Improvement request (this build)</div><pre>'+escH(a.revision_feedback)+'</pre>';
     h+=_acqGovHtml(full||a);
     h+=_acqPlanHtml(full||a);
+    var vs=(full&&full.verification)||a.verification_summary;
+    if(vs && (vs.overall_passed!==undefined || (vs.lane_verdicts && Object.keys(vs.lane_verdicts).length))){
+      if(String(a.status||'').toLowerCase()!=='awaiting_approval') h+=_acqVerifyHtml(vs);
+    }
+    var cb=a.code_bundle_summary||(full&&full.code_bundle);
+    var st=String(a.status||'').toLowerCase();
+    if(_codeFileCount(cb) && st!=='awaiting_plan_review' && st!=='awaiting_approval'){
+      h+='<div class="acqd-act"><button class="btn-act" onclick="_acqViewCode(\''+id+'\')">View full code</button></div>';
+    }
     if(!_isActive(a)) h+=_acqImproveBox(id);   // Pillar 3: feedback re-enters the pipeline
     return h||'<span class="note">no deliberation detail recorded for this build.</span>';
   }
@@ -817,23 +1025,97 @@
       .then(function(){ if(ta) ta.value=''; delete _acqOpen[id]; refresh(true); }).catch(function(){});
   };
   function _acqPlanHtml(acq){
-    var p=(acq&&(acq.plan||acq.plan_summary))||{}, h='';
+    var p=_planObj(acq), h='';
+    var pr=p.prior_rejection;
+    if(pr && (pr.notes||pr.category)){
+      h+='<div class="prior-rej"><b>Prior rejection</b> (addressed in this revision)<br>Category: '+escH(pr.category||'unknown')+'<br>'+escH(pr.notes||'');
+      (pr.changes||[]).forEach(function(ch){
+        var desc=typeof ch==='string'?ch:(ch.description||JSON.stringify(ch));
+        h+='<div>&bull; '+escH(desc)+'</div>';
+      });
+      h+='</div>';
+    }
     if(p.objective) h+='<div class="delib-h">Objective</div><pre>'+escH(p.objective)+'</pre>';
     if(p.technical_approach) h+='<div class="delib-h">Technical approach</div><pre>'+escH(p.technical_approach)+'</pre>';
+    else h+='<div class="acq-warn">No technical approach specified — plan is empty</div>';
+    if(p.risk_analysis) h+='<div class="delib-h">Risk</div><pre>'+escH(p.risk_analysis)+'</pre>';
+    if(p.risk_level) h+='<div class="diag">Risk level: '+escH(p.risk_level)+'</div>';
+    if(p.dependencies && p.dependencies.length) h+='<div class="diag">Dependencies: '+escH(p.dependencies.join(', '))+'</div>';
+    if(Array.isArray(p.test_cases)&&p.test_cases.length){
+      h+='<div class="delib-h">Test cases ('+p.test_cases.length+')</div><pre>'+escH(p.test_cases.map(_fmtTc).join('\n'))+'</pre>';
+    } else {
+      h+='<div class="acq-amber">No test cases defined</div>';
+    }
     if(p.implementation_sketch) h+='<div class="delib-h">Implementation sketch</div><pre>'+escH(p.implementation_sketch)+'</pre>';
-    if(Array.isArray(p.test_cases)&&p.test_cases.length) h+='<div class="delib-h">Test cases</div><pre>'+escH(p.test_cases.join('\n'))+'</pre>';
+    if(p.required) h+='<div class="delib-h">Required</div><pre>'+escH(typeof p.required==='string'?p.required:JSON.stringify(p.required,null,2))+'</pre>';
+    if(p.expected) h+='<div class="delib-h">Expected</div><pre>'+escH(typeof p.expected==='string'?p.expected:JSON.stringify(p.expected,null,2))+'</pre>';
+    var meta=[];
+    if(p.version) meta.push('v'+p.version);
+    if(p.doc_count!=null) meta.push(p.doc_count+' doc artifacts');
+    if(meta.length) h+='<div class="diag">'+escH(meta.join(' · '))+'</div>';
     return h;
+  }
+  function _openHash(){
+    var m=(location.hash||'').match(/^#acquisition:(.+)$/);
+    if(!m) return;
+    var id=decodeURIComponent(m[1]);
+    if(id) _acqOpen[id]=true;
+  }
+  function _pendingBanner(){
+    var pend=((ACQ||{}).pending_approvals)||[];
+    if(!pend.length) return '';
+    var h='<div class="acq-pending"><div class="ph">Pending human review ('+pend.length+')</div>';
+    pend.forEach(function(p){
+      var gate=p.gate==='plan_review'?'Plan review':'Deploy approval';
+      h+='<div class="acq-pend"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">'+
+        '<b>'+escH(p.title||p.acquisition_id)+'</b>'+
+        '<span class="acqd-badge b-wait">'+escH(gate)+' · T'+escH(p.risk_tier!=null?p.risk_tier:'?')+' · '+escH(p.outcome_class||'')+'</span></div>'+
+        '<div class="acqd-act" style="margin-top:6px"><button class="btn-act" onclick="_acqOpenPending(\''+escH(p.acquisition_id)+'\')">Open review desk</button></div></div>';
+    });
+    return h+'</div>';
+  }
+  function _stallBanner(){
+    var stalls=((ACQ||{}).stalled_jobs)||[];
+    if(!stalls.length) return '';
+    return stalls.map(function(s){
+      var elapsed=s.elapsed_s>3600?(s.elapsed_s/3600).toFixed(1)+'h':s.elapsed_s>60?Math.round(s.elapsed_s/60)+'m':(s.elapsed_s||0)+'s';
+      return '<div class="acq-stall"><span style="color:var(--amber)">stall</span><span>'+escH(s.title||'—')+'</span><span>'+escH(s.current_lane||'')+'</span><span>'+escH(elapsed)+'</span>'+
+        (s.blocked_reason?'<span>'+escH(String(s.blocked_reason).split(':')[0])+'</span>':'')+
+        (s.next_expected_lane?'<span>&rarr; '+escH(s.next_expected_lane)+'</span>':'')+'</div>';
+    }).join('');
   }
   function renderAcqDeliberation(){
     var box=el('acq-deliberation'); if(!box) return;
+    _openHash();
     var rec=((ACQ||{}).recent)||[];
     var cnt=el('acqd-count'); if(cnt) cnt.textContent=rec.length+' build'+(rec.length===1?'':'s');
-    if(!rec.length){ box.innerHTML='<div class="note">No capability builds in flight or recent &mdash; idle background state, not failure.</div>'; return; }
-    // cache each summary by id so open drills survive auto-refresh re-renders
     ACQREC={}; rec.forEach(function(a){ if(a&&a.acquisition_id) ACQREC[a.acquisition_id]=a; });
-    var active=rec.filter(_isActive), past=rec.filter(function(a){ return !_isActive(a); });
+    (((ACQ||{}).pending_approvals)||[]).forEach(function(p){
+      if(!p||!p.acquisition_id) return;
+      var cur=ACQREC[p.acquisition_id]||{};
+      ACQREC[p.acquisition_id]=Object.assign({}, cur, p, {
+        lanes: cur.lanes||p.lanes||{},
+        plan_summary: p.plan_summary||cur.plan_summary,
+        verification_summary: p.verification_summary||cur.verification_summary
+      });
+    });
+    var pend=((ACQ||{}).pending_approvals)||[];
+    if(!rec.length && !pend.length){
+      box.innerHTML='<div class="note">No capability builds in flight or recent &mdash; idle background state, not failure.</div>';
+      return;
+    }
+    var seen={}, active=[], past=rec.filter(function(a){ return !_isActive(a); });
+    rec.filter(_isActive).forEach(function(a){
+      seen[a.acquisition_id]=true;
+      active.push(ACQREC[a.acquisition_id]||a);
+    });
+    pend.forEach(function(p){
+      if(!p||!p.acquisition_id||seen[p.acquisition_id]) return;
+      seen[p.acquisition_id]=true;
+      active.push(ACQREC[p.acquisition_id]||p);
+    });
     var showPast=(_pastOpen===null)?(past.length<=6):_pastOpen;
-    var h='';
+    var h=_pendingBanner()+_stallBanner();
     if(active.length){ h+='<div class="grp-h">Active &middot; '+active.length+'</div>'+active.map(_rowHtml).join(''); }
     else { h+='<div class="note">No active builds &mdash; nothing in flight right now.</div>'; }
     if(past.length){
@@ -841,7 +1123,79 @@
          '<div id="past-builds"'+(showPast?'':' class="collapsed"')+'>'+past.map(_rowHtml).join('')+'</div>';
     }
     box.innerHTML=h;
+    Object.keys(_acqOpen).forEach(function(id){
+      if(_acqOpen[id]!==true || ACQDETAIL[id]!==undefined) return;
+      ACQDETAIL[id]=null;
+      fetchJSON('/api/acquisition/'+encodeURIComponent(id)).then(function(r){
+        ACQDETAIL[id]=(r&&r.acquisition)||r||{};
+        if(_acqOpen[id]){ var dd=el('drill-'+id); if(dd) dd.innerHTML=_drillHtml(id); }
+      }).catch(function(){});
+    });
   }
+  function _pauseForRead(){
+    if(_paused) return;
+    _paused=true;
+    var b=el('pausebtn');
+    if(b){ b.textContent='▶ Resume'; b.classList.add('on'); }
+    document.body.classList.add('paused');
+  }
+  function _scrollAcq(id){
+    var d=el('drill-'+id);
+    var card=d && d.closest ? d.closest('.acqd') : null;
+    if(card) card.scrollIntoView({block:'center', behavior:'smooth'});
+    else if(d) d.scrollIntoView({block:'center', behavior:'smooth'});
+    var box=el('acq-deliberation');
+    if(box && !d) box.scrollIntoView({block:'start', behavior:'smooth'});
+  }
+  function _mountAcqThenOpen(id){
+    _acqOpen[id]=true;
+    renderAcqDeliberation();
+    var d=el('drill-'+id);
+    if(d && !d.classList.contains('open')){
+      d.classList.add('open');
+      d.innerHTML=_drillHtml(id);
+    }
+    _scrollAcq(id);
+    if(typeof V2.toast==='function') V2.toast('opened acquisition review', true);
+  }
+  window._acqOpenPending=function(id){
+    if(!id) return;
+    _pauseForRead();
+    var want='#acquisition:'+encodeURIComponent(id);
+    if(location.hash!==want){
+      _acqOpen[id]=true;
+      location.hash=want;
+      return;
+    }
+    _mountAcqThenOpen(id);
+  };
+  window.openAcquisitionReview=function(id){
+    if(!id){ V2.toast('no acquisition id on this handoff', false); return; }
+    V2.closeModal();
+    _pauseForRead();
+    _acqOpen[id]=true;
+    var have=ACQREC[id] || ((((ACQ||{}).recent)||[]).some(function(a){ return a && a.acquisition_id===id; }));
+    if(have){
+      var want='#acquisition:'+encodeURIComponent(id);
+      if(location.hash!==want) location.hash=want;
+      else _mountAcqThenOpen(id);
+      return;
+    }
+    fetchJSON('/api/acquisition/'+encodeURIComponent(id)).then(function(r){
+      var a=(r && r.acquisition) || r || {};
+      if(!a.acquisition_id) a.acquisition_id=id;
+      ACQREC[id]=a;
+      ACQDETAIL[id]=a;
+      if(!ACQ) ACQ={recent:[], pending_approvals:[]};
+      ACQ.recent=ACQ.recent||[];
+      if(!ACQ.recent.some(function(x){ return x && x.acquisition_id===id; })) ACQ.recent.unshift(a);
+      var want='#acquisition:'+encodeURIComponent(id);
+      if(location.hash!==want) location.hash=want;
+      else _mountAcqThenOpen(id);
+    }).catch(function(){
+      V2.toast('acquisition not loaded yet — wait a tick, then click again', false);
+    });
+  };
   window._togglePast=function(){
     var past=(((ACQ||{}).recent)||[]).filter(function(a){ return !_isActive(a); });
     var cur=(_pastOpen===null)?(past.length<=6):_pastOpen;
@@ -862,8 +1216,63 @@
       }).catch(function(){});
     }
   };
-  window._acqApprovePlan=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan',{verdict:'approved'}),'plan approved').then(function(){ refresh(true); }).catch(function(){}); };
-  window._acqApproveDeploy=function(id){ V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-deploy',{approved:true}),'deploy approved').then(function(){ refresh(true); }).catch(function(){}); };
+  window._acqSaveRejectDraft=function(id){
+    var dom=_acqDomId(id);
+    var catEl=el('acq-rej-cat-'+dom), notesEl=el('acq-rej-notes-'+dom);
+    _acqRejectDraft[id]={cat:catEl?catEl.value:'other', notes:notesEl?notesEl.value:''};
+  };
+  window._acqShowReject=function(id){
+    _acqSaveRejectDraft(id);
+    _acqRejectOpen[id]=!(_acqRejectOpen[id]===true);
+    var box=el('acq-rej-'+_acqDomId(id));
+    if(box) box.classList.toggle('open', _acqRejectOpen[id]===true);
+  };
+  window._acqSubmitReject=function(id){
+    _acqSaveRejectDraft(id);
+    var d=_acqRejectDraft[id]||{};
+    var notes=String(d.notes||'').trim();
+    if(!notes){ V2.toast('feedback required so the planner knows what to change', false); return; }
+    V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan', {
+      verdict:'rejected',
+      notes:notes,
+      reason_category:d.cat||'other',
+      suggested_changes:[{description:notes}]
+    }), 'plan rejected — re-planning with your notes').then(function(){
+      delete _acqRejectOpen[id]; delete _acqRejectDraft[id]; refresh(true);
+    }).catch(function(){});
+  };
+  window._acqApprovePlan=function(id){
+    var a=ACQREC[id]||{};
+    if(_planInvalid(_planObj(a))){ V2.toast('plan incomplete — Reject & Revise first', false); return; }
+    V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan', {
+      verdict:'approved_as_is', notes:'', reason_category:'other'
+    }), 'plan approved').then(function(){ refresh(true); }).catch(function(){});
+  };
+  window._acqApproveDeploy=function(id, approved){
+    approved=approved!==false;
+    V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-deploy', {approved:approved}),
+      approved?'deploy approved':'deploy denied').then(function(){ refresh(true); }).catch(function(){});
+  };
+  window._acqViewCode=function(id){
+    V2.modal('Code bundle '+String(id).slice(-12),
+      '<div id="acq-code-body" class="note">Loading…</div>', {wide:true});
+    fetchJSON('/api/acquisition/'+encodeURIComponent(id)).then(function(d){
+      var body=el('acq-code-body'); if(!body) return;
+      var cb=d.code_bundle||{};
+      var files=cb.code_files||{};
+      var names=Object.keys(files);
+      if(!names.length){ body.textContent='No code files in this bundle.'; return; }
+      var h='<div class="diag">bundle '+escH(cb.bundle_id||'—')+' · hash '+escH(String(cb.code_hash||'').slice(0,16))+'</div>';
+      names.forEach(function(fn){
+        h+='<div class="delib-h">'+escH(fn)+'</div><pre>'+escH(files[fn])+'</pre>';
+      });
+      if(cb.manifest) h+='<div class="delib-h">manifest</div><pre>'+escH(JSON.stringify(cb.manifest,null,2))+'</pre>';
+      body.innerHTML=h;
+    }).catch(function(e){
+      var body=el('acq-code-body');
+      if(body) body.textContent='failed: '+((e&&e.message)||e);
+    });
+  };
   // Remove is gated twice: refuse if still alive, then a typed-free confirm. Deletes this
   // build's OWN record + artifacts; the shared plugin venv/dir are kept if a live plugin
   // (or another build) still needs them. The toast reports exactly what was cleaned/kept.
@@ -1045,7 +1454,7 @@
     // ---- acquisition ----
     on('op-acq-approve-plan', function(){
       var id=val('op-acq-id'); if(!need(id,'acquisition id')) return;
-      V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan', {verdict:'approved'}), 'plan approved').then(done).catch(function(){});
+      V2.act(V2.post('/api/acquisition/'+encodeURIComponent(id)+'/approve-plan', {verdict:'approved_as_is', notes:'', reason_category:'other'}), 'plan approved').then(done).catch(function(){});
     });
     on('op-acq-approve-deploy', function(){
       var id=val('op-acq-id'); if(!need(id,'acquisition id')) return;
@@ -1109,16 +1518,27 @@
     });
     on('op-skill-delete', function(){
       var id=val('op-skill-id'); if(!need(id,'skill id')) return;
-      V2.confirm('Delete skill',
-        'Forget skill <b>'+id+'</b> entirely. This removes its record and cannot be undone.',
+      var recs=(((SKILLS||{}).registry||{}).skills)||[];
+      var hit=recs.filter(function(s){ return s.skill_id===id; })[0];
+      if(hit && hit.is_default){ V2.toast('baseline skills cannot be deleted', false); return; }
+      var shipped=((SKILLS||{}).default_skill_ids)||[];
+      if(shipped.indexOf(id)>=0){ V2.toast('baseline skills cannot be deleted', false); return; }
+      V2.confirm('Delete learned skill',
+        'Forget learned skill <b>'+id+'</b> and its job? Baseline skills are not in this path. This cannot be undone.',
         function(){ V2.act(V2.del('/api/skills/'+encodeURIComponent(id)), 'skill deleted').then(done).catch(function(){}); },
-        { typed:'DELETE', yesLabel:'Delete skill' });
+        { typed:'DELETE', yesLabel:'Delete learned skill' });
     });
     on('op-lj-cleanup', function(){
       V2.act(V2.post('/api/learning-jobs/cleanup', {}), 'stale learning jobs cleaned').then(done).catch(function(){});
     });
   }
   wireOps();
+  window.addEventListener('hashchange', function(){
+    V2.closeModal();
+    renderAcqDeliberation();
+    var m=(location.hash||'').match(/^#acquisition:(.+)$/);
+    if(m) _scrollAcq(decodeURIComponent(m[1]));
+  });
 
   refresh(); setInterval(function(){ refresh(); }, 5000); tick(); setInterval(tick, 1000);
 })();

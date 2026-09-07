@@ -84,6 +84,18 @@ class TestClassify:
                   "What do you remember the first time you heard my voice?"):
             assert classify_self_question(q) is None, q
 
+    def test_learn_a_new_skill_is_not_recent_changes(self):
+        """Lived 2026-09-06: 'Learn a new skill … d20' stole to OSV what's-new."""
+        for q in (
+            "Learn a new skill to play D&D. I need you to roll a 20-sided dice when I ask you to.",
+            "Learn a skill to roll a 20-sided dice.",
+            "Learn a skill to quiz me on large language models.",
+            "Learn a skill to keep a list of tasks for me",
+        ):
+            assert classify_self_question(q) is None, q
+        assert classify_self_question("what new features do you have?") == "recent_changes"
+        assert classify_self_question("what changed recently?") == "recent_changes"
+
     def test_phatic_how_are_you_is_not_p1_health(self):
         """Lived 2026-09-01: 'How are you?' dumped inner HUD. STATUS already speaks."""
         for q in (
@@ -161,6 +173,27 @@ class TestArticulation:
         out = articulate_self_view(_model(), "gated_capabilities").lower()
         assert "shadow" in out
         assert "earned" in out  # earned-not-declared framing
+
+    def test_llm_as_brain_correction_is_answer_path_not_allowlist(self):
+        """Lived 2026-09-04: Qwen denied being the mouth. No Quinn/qwen token required."""
+        lived = (
+            "Jarvis, you made up a lot of stuff on there because you let your "
+            "baseline large language model continue to think for you. You cannot "
+            "do that. Think before you speak and make sure that the baseline "
+            "Quinn model doesn't do the thinking for you. Quinn model only speaks."
+        )
+        assert classify_self_question(lived) == "answer_path"
+        assert classify_self_question("who is thinking?") == "answer_path"
+        # User's project talk must not steal to P1
+        assert classify_self_question(
+            "I'm using LTX 2.5, a model with weights for animation from images."
+        ) is None
+        assert classify_self_question(
+            "a project that is 100% artificial intelligence, large language model generated"
+        ) is None
+        out = articulate_self_view(_model(), "answer_path").lower()
+        assert "mouth" in out and "brain" in out
+        assert "quinn" not in out and "qwen" not in out
 
     def test_answer_path_is_measured_not_theater(self):
         """Lived 14:24: walk-through classified capabilities and recited the

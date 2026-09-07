@@ -111,6 +111,7 @@ class PluginProcessManager:
         self._install_log: str = ""
 
         self._process: asyncio.subprocess.Process | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._last_request_at: float = 0.0
         self._idle_check_task: asyncio.Task | None = None
         self._invocation_count: int = 0
@@ -265,8 +266,37 @@ class PluginProcessManager:
 
     # ── Child Process Lifecycle ───────────────────────────────────────
 
+    def _needs_respawn_for_loop(self) -> bool:
+        """True when the child pipes belong to a different running event loop.
+
+        Acquisition shadow-smoke starts the child on a worker loop. A later
+        conversation sit runs on the brain loop. asyncio streams cannot move.
+        """
+        if not self.is_running or self._loop is None:
+            return False
+        try:
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            return False
+        return self._loop is not current
+
+    def _detach_child(self) -> None:
+        """Drop a child without awaiting its pipes (they may belong to another loop)."""
+        if self._idle_check_task and not self._idle_check_task.done():
+            self._idle_check_task.cancel()
+        self._idle_check_task = None
+        self._force_kill()
+        self._process = None
+        self._loop = None
+
     async def _ensure_child(self) -> bool:
         """Start the child process if not running. Returns True when ready."""
+        if self._needs_respawn_for_loop():
+            logger.warning(
+                "Plugin child %s started on another event loop — respawning on this loop",
+                self._plugin_name,
+            )
+            self._detach_child()
         if self.is_running:
             return True
 
@@ -297,6 +327,10 @@ class PluginProcessManager:
                 cwd=str(self._plugin_dir),
                 env=clean_env,
             )
+            try:
+                self._loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._loop = None
             logger.info(
                 "Plugin child started: %s (pid=%d)",
                 self._plugin_name, self._process.pid,
@@ -306,6 +340,7 @@ class PluginProcessManager:
         except Exception as exc:
             logger.exception("Failed to start plugin child: %s", self._plugin_name)
             self._process = None
+            self._loop = None
             return False
 
     async def invoke(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -329,8 +364,27 @@ class PluginProcessManager:
         try:
             self._process.stdin.write(req_line.encode())
             await self._process.stdin.drain()
+        except RuntimeError as exc:
+            if "different loop" not in str(exc).lower():
+                raise
+            logger.warning(
+                "Plugin child %s loop mismatch on write — respawning",
+                self._plugin_name,
+            )
+            self._detach_child()
+            if not await self._ensure_child():
+                return {
+                    "request_id": request.get("request_id", ""),
+                    "success": False,
+                    "result": None,
+                    "error": f"Failed to respawn subprocess for plugin '{self._plugin_name}'",
+                }
+            assert self._process is not None and self._process.stdin is not None
+            self._process.stdin.write(req_line.encode())
+            await self._process.stdin.drain()
         except (BrokenPipeError, ConnectionResetError, OSError) as exc:
             self._process = None
+            self._loop = None
             return {
                 "request_id": request.get("request_id", ""),
                 "success": False,
@@ -340,6 +394,28 @@ class PluginProcessManager:
 
         timeout = request.get("timeout_s", REQUEST_TIMEOUT_S)
         try:
+            raw_line = await asyncio.wait_for(
+                self._process.stdout.readline(), timeout=timeout
+            )
+        except RuntimeError as exc:
+            if "different loop" not in str(exc).lower():
+                raise
+            logger.warning(
+                "Plugin child %s loop mismatch on read — respawning",
+                self._plugin_name,
+            )
+            self._detach_child()
+            if not await self._ensure_child():
+                return {
+                    "request_id": request.get("request_id", ""),
+                    "success": False,
+                    "result": None,
+                    "error": f"Failed to respawn subprocess for plugin '{self._plugin_name}'",
+                }
+            assert self._process is not None and self._process.stdin is not None
+            assert self._process.stdout is not None
+            self._process.stdin.write(req_line.encode())
+            await self._process.stdin.drain()
             raw_line = await asyncio.wait_for(
                 self._process.stdout.readline(), timeout=timeout
             )
@@ -408,6 +484,7 @@ class PluginProcessManager:
             await self._kill_child()
 
         self._process = None
+        self._loop = None
         self._shutting_down = False
 
     async def _kill_child(self) -> None:
@@ -419,7 +496,11 @@ class PluginProcessManager:
             await self._process.wait()
         except (ProcessLookupError, OSError):
             pass
+        except RuntimeError:
+            self._detach_child()
+            return
         self._process = None
+        self._loop = None
 
     def _force_kill(self) -> None:
         """Synchronous force-kill for atexit handler."""

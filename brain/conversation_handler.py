@@ -98,6 +98,32 @@ def vision_reply_confabulates(caption: str, spoken: str) -> bool:
         return False
     return any(term in sp and term not in cap for term in _VISION_UNGROUNDED_CLAIMS)
 
+
+def _plugin_spoken_reply(result: Any) -> str:
+    """PLUGIN mouth: speak a sentence, never a Python dict dump."""
+    if result is None:
+        return ""
+    if isinstance(result, str):
+        return result.strip()
+    if not isinstance(result, dict):
+        return str(result)
+    payload: Any = result.get("output", result)
+    if isinstance(payload, str) and payload.strip():
+        return payload.strip()
+    if isinstance(payload, dict):
+        body = payload
+    else:
+        body = result
+    rolls = body.get("rolls") if isinstance(body, dict) else None
+    if isinstance(rolls, list) and rolls:
+        got = ", ".join(str(x) for x in rolls)
+        return f"I rolled the Dice, you got {got}"
+    if isinstance(body, dict) and body.get("ok") is False:
+        err = body.get("error")
+        if isinstance(err, str) and err.strip():
+            return err.strip()
+    return str(payload if payload is not None else result)
+
 _BRIEF_SIGNALS = re.compile(
     r"\b(keep it (short|brief|concise)|be (brief|concise|short)|shorter|less detail)\b", re.IGNORECASE)
 _DETAIL_SIGNALS = re.compile(
@@ -1271,6 +1297,19 @@ def _record_ambiguous_intent_probe(
 
 def _is_system_explanation_query(text: str) -> bool:
     return bool(_SYSTEM_EXPLANATION_RE.search(text or ""))
+
+
+async def _revoice_or_ground_codebase(answer: str, ollama) -> tuple[str, dict[str, Any]]:
+    """CODEBASE mouth: index text is authoritative. LLM may only revoice it."""
+    from cognition.self_view.revoice import revoice_code_answer
+
+    text = (answer or "").strip()
+    if not text:
+        return "I couldn't extract a codebase answer right now.", {
+            "used_revoice": False,
+            "reason": "empty",
+        }
+    return await revoice_code_answer(text, ollama)
 
 
 def _is_capability_status_query(text: str) -> bool:
@@ -3751,8 +3790,14 @@ async def handle_transcription(
             # OSV P1: self-referential questions answer from the Operational Self-View
             # (deterministic), never the codebase symbol search. classify returns None for
             # explicit code questions, so "search your code for X" still routes to CODEBASE.
+            # Lived 2026-09-06: "Learn a new skill …" was SKILL then stolen to
+            # recent_changes. Golden already skips this (golden_context). Natural
+            # SKILL must keep the skill tool — P1 is not a learning job.
             try:
-                if not routing.golden_context and routing.tool != ToolType.VISION:
+                if (
+                    not routing.golden_context
+                    and routing.tool not in {ToolType.VISION, ToolType.SKILL}
+                ):
                     from cognition.self_view.articulate import classify_self_question
                     _sv_kind = classify_self_question(text)
                     if _sv_kind:
@@ -5429,9 +5474,6 @@ async def handle_transcription(
             query_text = str(routing.extracted_args.get("golden_query_override") or text)
             answer = codebase_index.answer_query(query_text)
             stats_line = f"{stats.get('total_modules', 0)} modules, {stats.get('total_symbols', 0)} symbols indexed"
-            code_ctx = f"[Codebase: {stats_line}]\n\n{answer}"
-            full_reply = ""
-            chunks_sent = 0
             tone = engine.get_state()["tone"]
             _system_expl_payload = {
                 "title": "System explanation",
@@ -5458,32 +5500,22 @@ async def handle_transcription(
                     "native_used": True,
                     "safety_flags": ["grounded_codebase_answer"],
                 }
-            elif not ollama:
-                reply = _format_grounded_fallback("Codebase analysis", answer, max_lines=14, max_chars=1200)
+            else:
+                # Index is the eyes. LLM may only revoice the lookup (fail closed).
+                reply, _code_meta = await _revoice_or_ground_codebase(answer, ollama)
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
-            else:
-                async for sentence, is_final in response_gen.respond_stream(
-                    text,
-                    perception_context=code_ctx,
-                    cancel_check=_cancelled,
-                    speaker_name=speaker,
-                    user_emotion=emotion,
-                    conversation_id=conversation_id,
-                    style_instruction=_style_instruction,
-                ):
-                    if _cancelled():
-                        break
-                    if is_final:
-                        full_reply = sentence
-                        if chunks_sent == 0 and sentence:
-                            await _send_sentence(sentence, tone)
-                        await _flush_tts()
-                        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
-                        continue
-                    await _send_sentence(sentence, tone)
-                    chunks_sent += 1
-                reply = full_reply
+                _language_example_seed = {
+                    "route": routing.tool.value,
+                    "response_class": "system_explanation",
+                    "meaning_frame": {},
+                    "grounding_payload": _system_expl_payload,
+                    "teacher_answer": "",
+                    "provenance_verdict": "grounded_codebase_answer",
+                    "confidence": 0.9,
+                    "native_used": not bool(_code_meta.get("used_revoice")),
+                    "safety_flags": ["grounded_codebase_answer"],
+                }
         except Exception as exc:
             reply = _format_grounded_fallback(
                 "Codebase analysis",
@@ -6130,7 +6162,7 @@ async def handle_transcription(
                 )
                 _plug_resp = await _plug_reg.invoke(_plug_req)
                 if _plug_resp.success and _plug_resp.result:
-                    reply = str(_plug_resp.result.get("output", _plug_resp.result))
+                    reply = _plugin_spoken_reply(_plug_resp.result)
                 else:
                     reply = f"Plugin '{plugin_name}' could not process that request."
                     if _plug_resp.error:

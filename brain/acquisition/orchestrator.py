@@ -324,7 +324,10 @@ class AcquisitionOrchestrator:
         # evidence gate pass for ANY skill-bound capability, not just this one.
         prior_req = dict(prior.requested_by or {})
         new_req: dict[str, Any] = {"source": "operator_improvement", "improves": prior_acquisition_id}
-        for k in ("skill_id", "learning_job_id", "contract_id", "required_executor_kind"):
+        for k in (
+            "skill_id", "learning_job_id", "contract_id",
+            "required_executor_kind", "smoke_fixtures", "operator_trigger",
+        ):
             if prior_req.get(k):
                 new_req[k] = prior_req[k]
         if requested_by:
@@ -394,7 +397,22 @@ class AcquisitionOrchestrator:
                 return existing
 
         title = f"Build operational proof plugin for {skill_id}"
+        research = self._research_from_learning_job(learning_job)
         user_intent = self._build_skill_proof_intent(skill_id, contract, handoff)
+        if research:
+            contract_blob = {
+                "plugin_structure": research.get("plugin_structure") or [],
+                "technical_approach": research.get("technical_approach") or "",
+                "implementation_sketch": (research.get("implementation_sketch") or "")[:2500],
+                "test_cases": research.get("test_cases") or [],
+                "accepted_utterances": research.get("accepted_utterances") or [],
+                "required": research.get("required") or {},
+                "expected": research.get("expected") or {},
+            }
+            user_intent += (
+                "\n\nOPERATOR-REVIEWED RESEARCH CONTRACT — implement this, do not invent a competing API:\n"
+                + json.dumps(contract_blob, ensure_ascii=True)[:4000]
+            )
         job = CapabilityAcquisitionJob(
             title=title,
             user_intent=user_intent,
@@ -404,6 +422,10 @@ class AcquisitionOrchestrator:
                 "learning_job_id": learning_job_id,
                 "contract_id": getattr(contract, "contract_id", ""),
                 "required_executor_kind": getattr(contract, "required_executor_kind", ""),
+                "smoke_fixtures": self._contract_fixture_rows(contract),
+                "operator_trigger": str(
+                    ((getattr(learning_job, "plan", None) or {}).get("operator_trigger") or "")
+                ),
             },
         )
         job.outcome_class = "plugin_creation"
@@ -455,6 +477,96 @@ class AcquisitionOrchestrator:
             f"Smoke test name: {getattr(contract, 'smoke_test_name', '')}. "
             f"Fixtures: {fixture_text[:2000]}"
         )
+
+    @staticmethod
+    def _research_from_learning_job(learning_job: Any) -> dict[str, Any]:
+        """Load the operator-reviewed research_summary for a learning job."""
+        for art in getattr(learning_job, "artifacts", []) or []:
+            if not isinstance(art, dict) or art.get("type") != "research_summary":
+                continue
+            path = art.get("path") or ""
+            if not path:
+                continue
+            p = Path(path).expanduser()
+            if not p.is_file():
+                continue
+            try:
+                blob = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if isinstance(blob, dict) and blob.get("implementation_sketch"):
+                return blob
+        jid = str(getattr(learning_job, "job_id", "") or "")
+        if jid:
+            fallback = Path.home() / ".jarvis" / "learning_jobs" / jid / "research_summary.json"
+            if fallback.is_file():
+                try:
+                    blob = json.loads(fallback.read_text(encoding="utf-8"))
+                    if isinstance(blob, dict):
+                        return blob
+                except Exception:
+                    pass
+        return {}
+
+    def _load_learning_research(self, job: CapabilityAcquisitionJob) -> dict[str, Any]:
+        jid = str(getattr(job, "learning_job_id", "") or "")
+        if not jid:
+            return {}
+        ns = type("LJ", (), {"job_id": jid, "artifacts": []})()
+        return self._research_from_learning_job(ns)
+
+    def _apply_learning_research_contract(
+        self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan
+    ) -> bool:
+        """Operator-reviewed research wins over a competing planner design."""
+        research = self._load_learning_research(job)
+        if not research:
+            return False
+        sketch = str(research.get("implementation_sketch") or "").strip()
+        approach = str(research.get("technical_approach") or "").strip()
+        if not sketch or not approach:
+            return False
+        utterances = list(research.get("accepted_utterances") or [])
+        if not utterances and ("dice" in approach.lower() or "d20" in approach.lower() or "randbelow" in sketch):
+            utterances = [
+                "d20", "roll a d20", "roll d20",
+                "roll a 20-sided dice", "roll a 20 sided dice",
+                "roll a 20-sided die", "roll a 20 sided die",
+            ]
+        alias_line = ""
+        if utterances:
+            alias_line = " Honor operator phrasings (hyphen optional): " + ", ".join(utterances) + "."
+        plan.technical_approach = approach + alias_line
+        plan.implementation_sketch = sketch
+        tests = research.get("test_cases") or []
+        formatted: list[str] = []
+        for t in tests:
+            if isinstance(t, str):
+                formatted.append(t)
+            elif isinstance(t, dict):
+                formatted.append(
+                    f"{t.get('name', 'test')}: input={json.dumps(t.get('input', {}), ensure_ascii=True)} "
+                    f"expected={json.dumps(t.get('expected', {}), ensure_ascii=True)}"
+                )
+        for u in utterances:
+            line = f"alias: {u!r} -> ok=true honors_request=true"
+            if line not in formatted:
+                formatted.append(line)
+        if formatted:
+            plan.test_cases = formatted
+        structure = list(research.get("plugin_structure") or [])
+        if structure:
+            plan.required_artifacts = structure
+        story = str(research.get("approach") or "").strip()
+        if story:
+            plan.user_story = story
+        if (plan.risk_level or "").lower() == "high":
+            plan.risk_level = "low"
+        logger.info(
+            "Planning %s: applied operator-reviewed learning research contract (%d sketch chars)",
+            job.acquisition_id, len(sketch),
+        )
+        return True
 
     # ── tick (called from consciousness kernel) ────────────────────────
 
@@ -954,7 +1066,9 @@ class AcquisitionOrchestrator:
 
             plan = planner.synthesize(job, doc_artifacts=doc_artifacts)
 
+            self._apply_learning_research_contract(job, plan)
             self._enrich_plan_with_technical_design(job, plan)
+            self._apply_learning_research_contract(job, plan)
             quality_error = self._plan_quality_error(job, plan)
             if quality_error:
                 self._record_planning_diagnostics(job, plan, quality_error)
@@ -981,6 +1095,10 @@ class AcquisitionOrchestrator:
         """Ask the coder LLM to produce a technical design for the plan."""
         codegen = getattr(self, "_codegen_service", None)
         if codegen is None or not codegen.coder_available:
+            if self._apply_learning_research_contract(job, plan):
+                plan.governance = self._derive_governance(job, plan)
+                logger.info("Planning %s: coder unavailable — using operator-reviewed research", job.acquisition_id)
+                return
             plan.technical_approach = (
                 "Technical design unavailable — coder model not loaded. "
                 "Plan contains structural information only."
@@ -1007,6 +1125,13 @@ class AcquisitionOrchestrator:
             f"Risk tier: {job.risk_tier}\n"
             f"Required capabilities: {', '.join(plan.required_capabilities)}\n"
         )
+        if str(getattr(plan, "implementation_sketch", "") or "").strip():
+            user_prompt += (
+                "\nThe operator already reviewed a research contract. Keep its plugin path, "
+                "callable, RNG, output fields, and tests. You may only add hyphen-optional "
+                "aliases (d20, 20 sided die/dice) and plugin.json details. Do not invent a "
+                "competing handle() API.\n"
+            )
 
         # Include operator feedback from prior rejection(s) for revision
         revision_context = self._build_revision_context(job, plan)
@@ -1455,6 +1580,62 @@ class AcquisitionOrchestrator:
             and (getattr(d, "citations", None) or getattr(d, "relevance", 0.0) > 0)
         ]
 
+    def _load_learning_job(self, job: CapabilityAcquisitionJob) -> Any | None:
+        """Load the linked workshop learning job, if any.
+
+        Path is resolved at call time so tests can point HOME at a temp store.
+        """
+        jid = str(getattr(job, "learning_job_id", "") or "") or str(
+            (job.requested_by or {}).get("learning_job_id") or ""
+        )
+        if not jid:
+            return None
+        try:
+            from skills.learning_jobs import LearningJobStore
+            root = str(Path.home() / ".jarvis" / "learning_jobs")
+            return LearningJobStore(root=root).load(jid)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _contract_fixture_rows(contract: Any) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for fixture in getattr(contract, "smoke_fixtures", ()) or ():
+            if isinstance(fixture, dict):
+                rows.append(fixture)
+                continue
+            rows.append({
+                "name": getattr(fixture, "name", ""),
+                "input_type": getattr(fixture, "input_type", ""),
+                "input": getattr(fixture, "input", None),
+                "expected": getattr(fixture, "expected", {}) or {},
+            })
+        return rows
+
+    def _resolve_execution_contract(self, job: CapabilityAcquisitionJob) -> Any | None:
+        """Catalog contract, else workshop contract from the learning job / handoff."""
+        requested = job.requested_by or {}
+        skill_id = str(requested.get("skill_id") or "")
+        if not skill_id:
+            return None
+        from skills.execution_contracts import contract_from_plan, get_contract
+
+        learning_job = self._load_learning_job(job)
+        contract = get_contract(skill_id, learning_job)
+        if contract is not None:
+            return contract
+        if not requested.get("contract_id"):
+            return None
+        return contract_from_plan(skill_id, {
+            "capability_contract": {
+                "acquisition_eligible": True,
+                "execution_contract_id": requested.get("contract_id"),
+                "required_executor_kind": requested.get("required_executor_kind") or "plugin",
+                "smoke_fixtures": list(requested.get("smoke_fixtures") or []),
+            },
+            "operator_trigger": requested.get("operator_trigger") or skill_id,
+        })
+
     def _skill_contract_context(self, job: CapabilityAcquisitionJob) -> dict[str, Any]:
         requested = job.requested_by or {}
         skill_id = requested.get("skill_id", "")
@@ -1462,13 +1643,12 @@ class AcquisitionOrchestrator:
             return {}
         try:
             from dataclasses import asdict
-            from skills.execution_contracts import get_contract
-            contract = get_contract(skill_id)
+            contract = self._resolve_execution_contract(job)
             if contract is None:
                 return {"skill_id": skill_id, "contract_found": False}
             return {
                 "skill_id": skill_id,
-                "learning_job_id": requested.get("learning_job_id", ""),
+                "learning_job_id": requested.get("learning_job_id", "") or getattr(job, "learning_job_id", ""),
                 "contract_id": contract.contract_id,
                 "family": contract.family,
                 "required_executor_kind": contract.required_executor_kind,
@@ -1667,8 +1847,7 @@ class AcquisitionOrchestrator:
             skill_id = (job.requested_by or {}).get("skill_id", "")
             if not skill_id:
                 return True, []
-            from skills.execution_contracts import get_contract
-            contract = get_contract(skill_id)
+            contract = self._resolve_execution_contract(job)
             if contract is None or not contract.smoke_fixtures:
                 return True, []
             import types as _types
@@ -2002,31 +2181,18 @@ class AcquisitionOrchestrator:
         if not code_files:
             return None
 
-        if (job.requested_by or {}).get("source") == "skill_operational_handoff":
+        skill_bound = bool((job.requested_by or {}).get("skill_id"))
+        if skill_bound:
             self._ensure_skill_plugin_runtime_contract(code_files)
 
         # Synthesize __init__.py bridge if LLM only produced handler.py
         if "handler.py" in code_files and "__init__.py" not in code_files:
-            code_files["__init__.py"] = (
-                "PLUGIN_MANIFEST = {}\n\n\n"
-                "async def handle(text: str, context: dict) -> dict:\n"
-                "    try:\n"
-                "        from .handler import run\n"
-                "    except Exception:\n"
-                '        return {"output": "Plugin handler not available"}\n'
-                "    try:\n"
-                '        payload = {"text": text, "input": text, "request": text}\n'
-                '        if isinstance(context, dict) and context.get("input_type"):\n'
-                '            payload["input_type"] = context.get("input_type")\n'
-                '        return {"output": run(payload)}\n'
-                "    except Exception as exc:\n"
-                '        return {"output": f"Plugin execution failed: {exc}"}\n'
-            )
+            code_files["__init__.py"] = self._skill_plugin_handle_bridge()
 
         plugin_name = self._derive_plugin_name(job.title, job.acquisition_id)
-        if (job.requested_by or {}).get("source") == "skill_operational_handoff":
-            # Skill proof retries often share the same title. Include the acquisition
-            # suffix so a revised attempt cannot silently collide with stale packages.
+        if skill_bound:
+            # Skill proof retries and improvements share a title. Include the
+            # acquisition suffix so a revised attempt cannot collide with stale packages.
             plugin_name = f"{plugin_name}_{job.acquisition_id[-6:]}"
         intent_patterns = self._derive_intent_patterns(job, plan, code_files)
 
@@ -2070,29 +2236,83 @@ class AcquisitionOrchestrator:
         return bundle
 
     @staticmethod
+    def _module_with_callable(code_files: dict[str, str], name: str) -> str:
+        """Return source of the first non-init module that defines ``def <name>(``."""
+        needle = rf"^def {re.escape(name)}\("
+        for filename, src in code_files.items():
+            if filename in {"__init__.py", "plugin.json", "VERSION"}:
+                continue
+            if isinstance(src, str) and re.search(needle, src, re.M):
+                return src
+        return ""
+
+    @staticmethod
+    def _fixture_user_text(fixture: Any) -> str:
+        """Workshop fixtures store ``{request: str}``; catalog fixtures are already strings."""
+        raw = getattr(fixture, "input", None)
+        if isinstance(raw, dict):
+            for key in ("request", "text", "input"):
+                val = raw.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val
+            return ""
+        if isinstance(raw, str):
+            return raw
+        return "" if raw is None else str(raw)
+
+    @staticmethod
+    def _skill_plugin_handle_bridge() -> str:
+        return (
+            "PLUGIN_MANIFEST = {}\n\n\n"
+            "async def handle(text: str, context: dict) -> dict:\n"
+            "    try:\n"
+            "        from .handler import run\n"
+            "    except Exception:\n"
+            '        return {"output": "Plugin handler not available"}\n'
+            "    try:\n"
+            '        payload = {"text": text, "input": text, "request": text}\n'
+            '        if isinstance(context, dict) and context.get("input_type"):\n'
+            '            payload["input_type"] = context.get("input_type")\n'
+            '        return {"output": run(payload)}\n'
+            "    except Exception as exc:\n"
+            '        return {"output": f"Plugin execution failed: {exc}"}\n'
+        )
+
+    @staticmethod
     def _ensure_skill_plugin_runtime_contract(code_files: dict[str, str]) -> None:
         """Normalize generated skill plugins to the runtime + proof contract.
 
         Skill contract verification and the plugin bridge both expect a
-        synchronous ``run(args)`` callable in ``handler.py``. Coder output often
-        follows the user-facing plugin shape and emits ``handle(request)``
-        instead. That is a valid implementation body, but not a valid proof
-        callable until it is adapted.
+        synchronous ``run(args)`` callable in ``handler.py``. Research-shaped
+        plugins often emit ``roll.py`` with ``run()`` already defined, or
+        ``handle(request)`` without ``run``. Those are valid bodies; the proof
+        callable still has to live at handler.py.
         """
-        handler_src = code_files.get("handler.py", "")
-        if not handler_src or "def run(" in handler_src:
-            return
-        if "def handle(" not in handler_src:
-            return
+        handler_src = str(code_files.get("handler.py") or "")
+        if not handler_src:
+            handler_src = AcquisitionOrchestrator._module_with_callable(code_files, "run")
+            if not handler_src:
+                handler_src = AcquisitionOrchestrator._module_with_callable(code_files, "handle")
+            if handler_src:
+                code_files["handler.py"] = handler_src
 
-        code_files["handler.py"] = handler_src.rstrip() + (
-            "\n\n\n"
-            "def run(args):\n"
-            "    payload = dict(args) if isinstance(args, dict) else {\"request\": args, \"input\": args}\n"
-            "    if \"input\" not in payload and \"request\" in payload:\n"
-            "        payload[\"input\"] = payload[\"request\"]\n"
-            "    return handle(payload)\n"
-        )
+        if handler_src and "def run(" not in handler_src and "def handle(" in handler_src:
+            code_files["handler.py"] = handler_src.rstrip() + (
+                "\n\n\n"
+                "def run(args):\n"
+                "    payload = dict(args) if isinstance(args, dict) else {\"request\": args, \"input\": args}\n"
+                "    if \"input\" not in payload and \"request\" in payload:\n"
+                "        payload[\"input\"] = payload[\"request\"]\n"
+                "    return handle(payload)\n"
+            )
+
+        if "handler.py" not in code_files:
+            return
+        init_src = str(code_files.get("__init__.py") or "")
+        if "def handle(" in init_src:
+            return
+        bridge = AcquisitionOrchestrator._skill_plugin_handle_bridge()
+        code_files["__init__.py"] = (init_src.rstrip() + "\n\n" + bridge) if init_src.strip() else bridge
 
     def _run_environment_setup(self, job: CapabilityAcquisitionJob) -> None:
         """Environment setup: create venv and install pinned deps for isolated plugins.
@@ -2375,15 +2595,15 @@ class AcquisitionOrchestrator:
             import importlib.util
             import tempfile
             from pathlib import Path as _Path
-            from skills.execution_contracts import get_contract
-
             skill_id = (job.requested_by or {}).get("skill_id", "")
-            contract = get_contract(skill_id) if skill_id else None
+            contract = self._resolve_execution_contract(job) if skill_id else None
             if contract is None or not contract.smoke_fixtures:
                 bundle.risk_assessment["skill_contract_status"] = "missing_contract_or_fixture"
                 return False
 
             handler_src = code_bundle.code_files.get("handler.py", "")
+            if not handler_src:
+                handler_src = self._module_with_callable(code_bundle.code_files or {}, "run")
             if not handler_src:
                 bundle.risk_assessment["skill_contract_status"] = "missing_handler"
                 return False
@@ -2404,10 +2624,11 @@ class AcquisitionOrchestrator:
 
                 results = []
                 for fixture in contract.smoke_fixtures:
+                    user_text = self._fixture_user_text(fixture)
                     actual = run({
-                        "text": fixture.input,
-                        "input": fixture.input,
-                        "request": fixture.input,
+                        "text": user_text,
+                        "input": user_text,
+                        "request": user_text,
                         "input_type": fixture.input_type,
                     })
                     if isinstance(actual, dict) and "output" in actual and isinstance(actual["output"], dict):
@@ -2515,11 +2736,10 @@ class AcquisitionOrchestrator:
         try:
             import asyncio
             import uuid
-            from skills.execution_contracts import get_contract
             from tools.plugin_registry import PluginRequest, get_plugin_registry
 
             skill_id = (job.requested_by or {}).get("skill_id", "")
-            contract = get_contract(skill_id) if skill_id else None
+            contract = self._resolve_execution_contract(job) if skill_id else None
             if contract is None or not contract.smoke_fixtures:
                 diagnostics.update({
                     "passed": False,
@@ -2529,14 +2749,15 @@ class AcquisitionOrchestrator:
                 return False, "shadow_runtime_smoke_failed"
 
             fixture = contract.smoke_fixtures[0]
+            user_text = self._fixture_user_text(fixture)
             request = PluginRequest(
                 request_id=f"shadow_smoke_{uuid.uuid4().hex[:10]}",
                 plugin_name=rec.name,
-                user_text=fixture.input,
+                user_text=user_text,
                 context={
-                    "text": fixture.input,
-                    "input": fixture.input,
-                    "request": fixture.input,
+                    "text": user_text,
+                    "input": user_text,
+                    "request": user_text,
                     "input_type": fixture.input_type,
                     "origin": "acquisition_shadow_smoke",
                     "acquisition_id": job.acquisition_id,

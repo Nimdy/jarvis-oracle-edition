@@ -427,9 +427,7 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
 
     <div class="a-endpoint" id="ep-skill-delete" data-method="DELETE" data-path="/api/skills/{skill_id}" data-desc="Remove skill" data-cat="skills">
       <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-delete">DELETE</span><span class="a-path">/api/skills/<span class="a-path-param">{skill_id}</span></span><span class="a-ep-desc">Remove a skill record</span><span class="a-ep-lock">🔒</span></div>
-      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
-        <tr><td class="a-param-name">confirm_default</td><td class="a-param-type">bool</td><td>false</td><td>Must be true to delete default skills (returns 409 otherwise)</td></tr>
-      </tbody></table></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Learned skills only. Baseline skills shipped with JARVIS return 409 and cannot be deleted.</p></div>
     </div>
 
     <div class="a-endpoint" id="ep-job-delete" data-method="DELETE" data-path="/api/learning-jobs/{job_id}" data-desc="Delete learning job" data-cat="skills">

@@ -462,6 +462,28 @@ def test_golden_research_web_exact_route():
     assert result.extracted_args.get("golden_operation") == "research_web"
 
 
+def test_golden_learn_skill_captures_argument_and_stays_skill():
+    """Golden LEARN SKILL XYZ is exact-match + trailing intent. Not a fuzzy synonym."""
+    result = router.route(
+        "Jarvis, GOLDEN COMMAND LEARN SKILL roll a 20-sided dice"
+    )
+    assert result.tool == ToolType.SKILL
+    assert result.extracted_args.get("tier") == "golden"
+    assert result.extracted_args.get("golden_status") == "executed"
+    assert result.golden_context is not None
+    assert result.golden_context.command_id == "GW_LEARN_SKILL"
+    assert result.golden_context.argument_text.lower() == "roll a 20-sided dice"
+
+
+def test_natural_learn_a_new_skill_routes_skill():
+    """Lived 2026-09-06: natural learn-skill (not golden) still routes SKILL."""
+    result = router.route(
+        "Learn a new skill to play D&D. I need you to roll a 20-sided dice "
+        "when I ask you to."
+    )
+    assert result.tool == ToolType.SKILL
+
+
 def test_golden_prefix_normalization():
     result = router.route("  Jarvis...   golden   command   status!!! ")
     assert result.tool == ToolType.STATUS
@@ -663,6 +685,47 @@ def test_system_status_vs_status_disambiguation():
             f"System/Status disambiguation fail: {text!r}\n"
             f"  expected {expected.value}, got {result.tool.value}"
         )
+
+
+def test_phatic_greeting_is_status_not_none_pref_dump():
+    """Lived 2026-09-05: 'Yeah, good morning, Jarvis.' → NONE invented a finished morning."""
+    assert router.route("Yeah, good morning, Jarvis.").tool == ToolType.STATUS
+    assert router.route("Good morning, Jarvis.").tool == ToolType.STATUS
+    # Real content stays off STATUS
+    conscience = router.route("Good morning, say something. This is my digital conscience.")
+    assert conscience.tool != ToolType.STATUS
+    tanya = router.route("Jarvis, what's up? I'm just sitting here talking with my wife, Tanya.")
+    assert tanya.tool != ToolType.STATUS
+
+
+def test_stt_split_where_is_handle_transcription_is_codebase():
+    """Lived 2026-09-04: STT 'handle transcription' fell to NONE → Qwen theater."""
+    from tools.codebase_tool import CodeSymbol, codebase_index
+
+    old = codebase_index._symbols
+    codebase_index._symbols = {
+        "conversation_handler.handle_transcription": CodeSymbol(
+            fqn="conversation_handler.handle_transcription",
+            kind="function",
+            file="conversation_handler.py",
+            line=3017,
+            end_line=3100,
+            signature="async def handle_transcription(text)",
+            docstring="Mind-path entry for spoken turns and TAP.",
+        )
+    }
+    try:
+        hit = router.route("Jarvis, where is handle transcription?")
+        assert hit.tool == ToolType.CODEBASE, hit.tool
+        snake = router.route("Where is handle_transcription?")
+        assert snake.tool == ToolType.CODEBASE, snake.tool
+        household = router.route("Where is Tonya?")
+        assert household.tool != ToolType.CODEBASE, household.tool
+        concept = router.route("Where is the function that handles my voice?")
+        # still CODEBASE via 'where is the function' keyword — not via allowlist
+        assert concept.tool == ToolType.CODEBASE
+    finally:
+        codebase_index._symbols = old
 
 
 # ---------------------------------------------------------------------------

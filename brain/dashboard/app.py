@@ -1240,10 +1240,16 @@ def _create_app() -> FastAPI:
 
     @app.get("/api/skills")
     async def api_skills():
+        try:
+            from skills.registry import get_default_skill_ids
+            default_ids = sorted(get_default_skill_ids())
+        except Exception:
+            default_ids = []
         return {
             "registry": _cache.get("skills", {}),
             "learning_jobs": _cache.get("learning_jobs", {}),
             "capability_gate": _cache.get("capability_gate", {}),
+            "default_skill_ids": default_ids,
         }
 
     @app.get("/api/language")
@@ -1286,7 +1292,16 @@ def _create_app() -> FastAPI:
             audit_packet = build_skill_audit_packet(skill_id, skill_registry, orch, acq_orch)
         except Exception as exc:
             audit_packet = {"error": f"skill audit packet unavailable: {type(exc).__name__}: {str(exc)[:160]}"}
-        return {"skill": rec.to_dict(), "learning_job": job_detail, "audit_packet": audit_packet}
+        try:
+            from skills.registry import get_default_skill_ids
+            is_default = skill_id in get_default_skill_ids()
+        except Exception:
+            is_default = False
+        skill_dict = rec.to_dict()
+        skill_dict["is_default"] = is_default
+        skill_dict["deletable"] = not is_default
+        skill_dict["origin"] = "baseline" if is_default else "learned"
+        return {"skill": skill_dict, "learning_job": job_detail, "audit_packet": audit_packet}
 
     @app.post("/api/skills/{skill_id}/handoff/approve", dependencies=[Depends(_require_api_key)])
     async def api_skill_handoff_approve(skill_id: str, request: Request):
@@ -1431,16 +1446,17 @@ def _create_app() -> FastAPI:
         return {"status": "recovered", "skill_id": skill_id, "job_id": job_id}
 
     @app.delete("/api/skills/{skill_id}", dependencies=[Depends(_require_api_key)])
-    async def api_skill_remove(skill_id: str, confirm_default: bool = False):
-        """Remove a skill record from the registry.
-
-        Default system skills require ``?confirm_default=true`` to delete.
-        """
+    async def api_skill_remove(skill_id: str):
+        """Remove a learned skill. Bootstrap/default skills cannot be deleted."""
         try:
             from skills.registry import skill_registry, get_default_skill_ids
-            if skill_id in get_default_skill_ids() and not confirm_default:
+            if skill_id in get_default_skill_ids():
                 return JSONResponse(
-                    {"error": f"'{skill_id}' is a default system skill. Pass ?confirm_default=true to delete.", "is_default": True},
+                    {
+                        "error": f"'{skill_id}' is a baseline skill shipped with JARVIS and cannot be deleted.",
+                        "is_default": True,
+                        "deletable": False,
+                    },
                     status_code=409,
                 )
             removed = skill_registry.remove(skill_id)

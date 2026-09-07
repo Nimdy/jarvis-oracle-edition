@@ -140,6 +140,25 @@ class TestCreateJobRejection:
             assert result is not None
             assert result.skill_id == "camera_control"
 
+    def test_accepts_user_requested_dice_skill(self):
+        from skills.learning_jobs import LearningJobOrchestrator, LearningJobStore
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            store = LearningJobStore(root=tmp)
+            orch = LearningJobOrchestrator(store=store, registry=None)
+
+            result = orch.create_job(
+                skill_id="roll_20sided_dice_v1",
+                capability_type="procedural",
+                requested_by={
+                    "source": "user",
+                    "user_text": "Learn a skill to roll a 20-sided dice.",
+                },
+            )
+            assert result is not None
+            assert result.skill_id == "roll_20sided_dice_v1"
+            assert result.matrix_protocol is False
+
 
 class TestVerifyExecutorFix:
     """ProceduralVerifyExecutor fail-fast for auto-generated skills."""

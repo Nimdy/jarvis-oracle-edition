@@ -52,6 +52,9 @@ _KIND_PATTERNS: list[tuple[re.Pattern[str], str | None]] = [
     # consciousness / inner-state (specific, first)
     (re.compile(r"\b(are you|do you become|becoming|you'?re)\b.{0,12}\b(conscious|self[- ]aware|sentient|alive)\b", re.I), "consciousness_query"),
     (re.compile(r"\b(conscious|sentien|self[- ]aware)\b|\bdo you have (a soul|feelings|emotions|desires|fears|hopes|consciousness|awareness)\b|\bdo you feel\b", re.I), "consciousness_query"),
+    # Lived 2026-09-06: "Learn a new skill … d20" stolen by recent_changes
+    # (`\bnew (feature|capabilit|skill)`). Explicit learn-skill is SKILL, not OSV.
+    (re.compile(r"\blearn\b.{0,40}\bskill\b", re.I), None),
     # recent changes / what's new
     (re.compile(r"\bwhat('?s| is| are| has)?\s*(new|changed|different)\b|\bnew (feature|capabilit|skill)|\bwhat.{0,20}(recently )?(changed|learned|added)\b", re.I), "recent_changes"),
     # gated / not allowed yet
@@ -78,6 +81,18 @@ _KIND_PATTERNS: list[tuple[re.Pattern[str], str | None]] = [
         r"|\bhow do you (get|reach|produce|generate|come up with|arrive at) an? answer\b"
         r"|\bhow you (get|reach|produce|generate|come up with|arrive at) an? answer\b"
         r"|\btell me how you (get|reach|produce|generate|come up with|arrive at) an? answer\b",
+        re.I,
+    ), "answer_path"),
+    # Lived 2026-09-04: "baseline LLM thinks for you / Quinn only speaks" fell
+    # to NONE and Qwen denied being the mouth. Class = who-is-thinking, not a
+    # model-name allowlist. User's "LLM generated video" must not match.
+    (re.compile(
+        r"\b(?:you|your|jarvis)\b.{0,90}\b(?:baseline|language model|\bllm\b)\b.{0,70}\b(?:think|thinking|speak)"
+        r"|\b(?:think|thinking) for you\b"
+        r"|\b(?:the |your )?(?:llm|language model|baseline(?:\s+\w+)?\s+model)\b.{0,40}\bonly speaks\b"
+        r"|\bwho(?:'?s| is) thinking\b"
+        r"|\b(?:llm|language model) is (?:the )?voice\b"
+        r"|\bvoice not (?:the )?brain\b",
         re.I,
     ), "answer_path"),
     # Memory HOW stays INTROSPECTION (sqlite-vec from introspection_tool).
@@ -369,7 +384,13 @@ def _answer_path(model: dict[str, Any]) -> str:
         sentences.append(mem_line)
     if gate:
         sentences.append(
-            "Other routes may use the language model as voice only, under the capability gate."
+            "Other routes may use the language model as mouth only, under the capability gate — "
+            "not the brain, and it must not author your life or a day I did not live."
+        )
+    else:
+        sentences.append(
+            "The conversation language model is the mouth, not the brain. "
+            "It must not author your life or a day I did not live."
         )
     return " ".join(sentences)
 

@@ -1178,6 +1178,18 @@ _MILD_SELF_REF_EXCLUDE = re.compile(
     re.I,
 )
 
+# Lived 2026-09-05: "Yeah, good morning, Jarvis." → NONE + prefs spoken as
+# completed chores (coffee ordered, Skylar's walk done). Phatic-only greeting
+# is STATUS (native mode line). Not a coffee/Skylar allowlist.
+_PHATIC_GREETING_RE = re.compile(
+    r"^(?:(?:yeah|yes|ok|okay|hey|hi|hello)[,.]?\s+)*"
+    r"(?:jarvis[,.]?\s+)*"
+    r"(?:good\s+(?:morning|afternoon|evening|night)|morning|afternoon|evening)"
+    r"(?:[,.]?\s+jarvis)?"
+    r"[.!?]*$",
+    re.I,
+)
+
 _SELF_RESEARCH_HISTORY_TOPIC_RE = re.compile(
     r"\b(?:research(?:ed|ing)?|stud(?:y|ied|ying)|journal|peer.?review(?:ed)?|"
     r"scholarly|paper|source|doi|article)\b",
@@ -1486,6 +1498,27 @@ def is_mildly_self_referential(text: str) -> bool:
     return True
 
 
+def _codebase_stt_locate(text: str) -> str | None:
+    """If the AST index has an exact name for a where-is (including STT-split snake_case), use it.
+
+    Does not build the index. Empty table → no route steal.
+    """
+    try:
+        from tools.codebase_tool import codebase_index
+    except Exception:
+        return None
+    if not getattr(codebase_index, "_symbols", None):
+        return None
+    try:
+        hit = codebase_index.resolve_stt_locate(text or "")
+    except Exception:
+        logger.debug("CODEBASE STT-locate failed", exc_info=True)
+        return None
+    if hit is None:
+        return None
+    return hit.fqn.split(".")[-1]
+
+
 class ToolRouter:
     """Routes user queries to tools via keyword + semantic intent patterns.
 
@@ -1639,6 +1672,27 @@ class ToolRouter:
                 synthetic=synthetic,
             )
 
+        if _PHATIC_GREETING_RE.match(user_message.strip()):
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=ToolType.STATUS,
+                    confidence=0.9,
+                    extracted_args={"tier": "phatic_greeting"},
+                ),
+                synthetic=synthetic,
+            )
+
+        # Tier 0: core intent verbs (learn X, train X, teach yourself X).
+        # Lived 2026-09-06: "Learn a new skill … when I ask you to" was eaten
+        # by the preference catch ("when I ask") before this verb could fire.
+        core = _match_core_intent(lower)
+        if core is not None:
+            resolved = _disambiguate(lower, core.tool)
+            core = RoutingResult(tool=resolved, confidence=core.confidence,
+                                 extracted_args=core.extracted_args)
+            return self._finalize(user_message, core, synthetic=synthetic)
+
         if _is_response_preference_instruction(lower):
             logger.info("Tier 0 preference-instruction catch: NONE for: %s", lower[:60])
             return self._finalize(
@@ -1662,14 +1716,6 @@ class ToolRouter:
                 ),
                 synthetic=synthetic,
             )
-
-        # Tier 0: core intent verbs (learn X, train X, teach yourself X)
-        core = _match_core_intent(lower)
-        if core is not None:
-            resolved = _disambiguate(lower, core.tool)
-            core = RoutingResult(tool=resolved, confidence=core.confidence,
-                                 extracted_args=core.extracted_args)
-            return self._finalize(user_message, core, synthetic=synthetic)
 
         # Tier 0.5: persistent user routing corrections
         correction = _match_user_corrections(lower)
@@ -1759,6 +1805,19 @@ class ToolRouter:
                     tool=ToolType.INTROSPECTION,
                     confidence=0.82,
                     extracted_args={"tier": "self_research_history_catch"},
+                ),
+                synthetic=synthetic,
+            )
+
+        stt_locate = _codebase_stt_locate(user_message)
+        if stt_locate:
+            logger.info("CODEBASE STT-locate: %s for: %s", stt_locate, lower[:60])
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=ToolType.CODEBASE,
+                    confidence=0.86,
+                    extracted_args={"tier": "stt_locate", "symbol": stt_locate},
                 ),
                 synthetic=synthetic,
             )

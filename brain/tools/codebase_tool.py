@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import time
+import re
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,111 @@ WRITE_BOUNDARIES: dict[str, list[str]] = {
 }
 
 _APPROX_CHARS_PER_TOKEN = 4
+
+_TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
+_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+_INDEX_CAPABILITY_RE = re.compile(
+    r"\b(?:can you read|do you (?:read|index|inspect)|"
+    r"read (?:your |my |the )?(?:own )?code|"
+    r"inspect (?:your |my |the )?code|"
+    r"how many (?:modules|symbols|files)|"
+    r"how (?:big|large) is (?:your |the )?(?:code|codebase))\b",
+    re.I,
+)
+_LOCATE_RE = re.compile(
+    r"\b(?:where(?:'s| is)|which (?:file|module|function|class|method)|"
+    r"(?:what|which) function|show (?:me )?(?:the )?(?:file|function)|"
+    r"look(?:ing)? up where|find (?:the )?(?:function|file|class))\b",
+    re.I,
+)
+_SCAFFOLD = {
+    "where", "wheres", "which", "what", "show", "find", "look", "looking",
+    "the", "a", "an", "my", "your", "you", "me", "that", "this", "jarvis",
+    "function", "functions", "file", "files", "module", "modules", "class",
+    "method", "code", "codebase", "source", "defined", "definition",
+    "handles", "handle", "handling", "is", "are", "does", "do", "can",
+    "own", "in", "of", "for", "to", "and", "or", "with", "from", "about",
+    "read", "summarize", "explain", "describe", "work", "have", "has",
+    "when", "its", "it", "overall", "current", "known", "key", "all",
+    "each", "their", "please", "tell", "something",
+}
+# STT often splits snake_case ("handle transcription"). Keep "handle" here so
+# two content words can join to handle_transcription. Verbs stay stop-words.
+_JOIN_STOP = _SCAFFOLD - {"handle"}
+_HOUSEHOLD_LOCATE_RE = re.compile(
+    r"\b(tanya|tonya|lily|owen|skyler|skylar|family|remember|kitchen)\b",
+    re.I,
+)
+
+
+def _tokens(text: str) -> set[str]:
+    return {t for t in _TOKEN_SPLIT.split((text or "").lower()) if t}
+
+
+def _locate_name_candidates(query: str) -> list[str]:
+    """Symbol-name guesses, including STT-split snake_case joins."""
+    raw = _IDENT.findall(query or "")
+    content = [w for w in raw if w.lower() not in _JOIN_STOP and len(w) >= 3]
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def add(name: str) -> None:
+        low = name.lower()
+        if low and low not in seen:
+            seen.add(low)
+            out.append(low)
+
+    if len(content) >= 2:
+        add("_".join(w.lower() for w in content))
+        for i in range(len(content) - 1):
+            add(f"{content[i].lower()}_{content[i + 1].lower()}")
+    for w in content:
+        add(w)
+    return out
+
+
+def _query_terms(query: str) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for w in _IDENT.findall(query or ""):
+        low = w.lower()
+        if low in _SCAFFOLD or len(low) < 3:
+            continue
+        if low in seen:
+            continue
+        seen.add(low)
+        out.append(w)
+    return out
+
+
+def _score_symbol(sym: CodeSymbol, keyword: str) -> int:
+    kw = keyword.lower()
+    if not kw:
+        return 0
+    name = sym.fqn.split(".")[-1].lower()
+    name_tokens = _tokens(name)
+    file_tokens = _tokens(sym.file.replace("/", " ").replace(".", " "))
+    sig_tokens = _tokens(sym.signature)
+    doc_tokens = _tokens(sym.docstring)
+    if name == kw:
+        score = 100
+    elif kw in name_tokens:
+        score = 80
+    elif kw in file_tokens:
+        score = 50
+    elif kw in sig_tokens:
+        score = 40
+    elif kw in doc_tokens:
+        score = 10
+    else:
+        score = 0
+    if 0 < score < 100:
+        if "tests/" in sym.file.replace("\\", "/") or Path(sym.file).name.startswith("test_"):
+            score -= 30
+        if sym.kind == "constant":
+            score -= 5
+    return score
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -370,14 +476,18 @@ class CodebaseIndex:
 
     def search(self, keyword: str, limit: int = 20) -> list[CodeSymbol]:
         """Search symbols by keyword in fqn, signature, or docstring."""
-        kw = keyword.lower()
-        results: list[CodeSymbol] = []
+        ranked = self.search_ranked(keyword, limit=limit)
+        return [sym for sym, _score in ranked]
+
+    def search_ranked(self, keyword: str, limit: int = 20) -> list[tuple[CodeSymbol, int]]:
+        """Ranked locate. Name/FQN token beats path beats signature beats docstring."""
+        scored: list[tuple[CodeSymbol, int]] = []
         for sym in self._symbols.values():
-            if kw in sym.fqn.lower() or kw in sym.signature.lower() or kw in sym.docstring.lower():
-                results.append(sym)
-                if len(results) >= limit:
-                    break
-        return results
+            score = _score_symbol(sym, keyword)
+            if score > 0:
+                scored.append((sym, score))
+        scored.sort(key=lambda item: (-item[1], item[0].fqn))
+        return scored[:limit]
 
     def get_symbol(self, fqn: str) -> CodeSymbol | None:
         return self._symbols.get(fqn)
@@ -648,89 +758,148 @@ class CodebaseIndex:
         """Answer a natural-language question about the codebase.
 
         Used by ToolType.CODEBASE in the conversation handler and autonomy
-        self-study queries. Handles both precise symbol lookups and broad
-        natural-language questions.
+        self-study queries. Locate intent is ranked (name/FQN token first).
+        Weak docstring bags abstain instead of dumping walk-order hits.
         """
-        q = query.lower()
+        q = (query or "").lower()
+        stats = self.get_stats()
 
-        # "where is X defined"
+        if _INDEX_CAPABILITY_RE.search(query or ""):
+            return self._speak_index_capability(stats)
+
+        # "where is X defined" with a CamelCase or dotted name
         if "where" in q and "defined" in q:
-            words = query.split()
-            for w in words:
-                if "." in w or w[0].isupper():
-                    results = self.search(w, limit=5)
-                    if results:
-                        lines = [f"Found {len(results)} match(es) for '{w}':"]
-                        for sym in results:
-                            importers = ", ".join(sym.imported_by[:5]) if sym.imported_by else "none"
-                            lines.append(f"  - {sym.fqn} ({sym.kind}) at {sym.file}:{sym.line}")
-                            lines.append(f"    signature: {sym.signature}")
-                            lines.append(f"    imported by: {importers}")
-                        return "\n".join(lines)
+            for w in query.split():
+                token = w.strip("?.,!:;()\"'")
+                if not token or token.lower() in _SCAFFOLD:
+                    continue
+                if "." in token or token[0].isupper():
+                    ranked = self.search_ranked(token, limit=3)
+                    hits = [sym for sym, score in ranked if score >= 100]
+                    if hits:
+                        return self._speak_hits(hits, token)
 
         # "what calls X" / "who imports X"
         if "call" in q or "import" in q or "uses" in q:
-            words = query.split()
-            for w in words:
-                if "." in w or (len(w) > 3 and w[0].isupper()):
-                    results = self.search(w, limit=3)
+            for w in query.split():
+                token = w.strip("?.,!:;()\"'")
+                if token and ("." in token or (len(token) > 3 and token[0].isupper())):
+                    results = self.search(token, limit=3)
                     if results:
                         sym = results[0]
-                        importers = self.get_importers_of(sym.imports[0]) if sym.imports else []
                         lines = [f"'{sym.fqn}' is in module '{sym.file}'"]
                         if sym.imported_by:
                             lines.append(f"Imported by: {', '.join(sym.imported_by[:10])}")
                         return "\n".join(lines)
 
-        # NL keyword extraction: split query into meaningful words and search each
-        stop_words = {
-            "what", "how", "does", "do", "is", "are", "my", "the", "a", "an",
-            "and", "or", "in", "of", "to", "for", "with", "from", "about",
-            "read", "summarize", "explain", "describe", "work", "have", "has",
-            "can", "when", "where", "which", "its", "it", "this", "that",
-            "overall", "current", "known", "key", "all", "each", "their",
-        }
-        keywords = [
-            w.strip("?.,!:;()\"'")
-            for w in query.split()
-            if len(w.strip("?.,!:;()\"'")) > 2
-            and w.strip("?.,!:;()\"'").lower() not in stop_words
-        ]
-
-        all_results: dict[str, CodeSymbol] = {}
-        for kw in keywords:
-            for sym in self.search(kw, limit=5):
-                all_results[sym.fqn] = sym
-
-        if all_results:
-            syms = list(all_results.values())[:15]
-            lines = [f"Found {len(syms)} symbol(s) related to query:"]
-            for sym in syms:
-                lines.append(f"  - {sym.fqn} ({sym.kind}) at {sym.file}:{sym.line}")
-                lines.append(f"    {sym.signature}")
-                if sym.docstring:
-                    lines.append(f"    doc: {sym.docstring[:100]}")
-            return "\n".join(lines)
-
-        # Module-level search: match query keywords against module docstrings and paths
-        module_matches: list[ModuleInfo] = []
-        for kw in keywords:
-            kw_lower = kw.lower()
-            for info in self._modules.values():
-                if kw_lower in info.module_fqn.lower() or kw_lower in info.docstring.lower():
-                    if info not in module_matches:
-                        module_matches.append(info)
-
-        if module_matches:
-            lines = [f"Found {len(module_matches)} module(s) related to query:"]
-            for info in module_matches[:10]:
-                lines.append(f"  - {info.module_fqn} ({info.file}, {info.line_count} lines, {len(info.symbols)} symbols)")
-                if info.docstring:
-                    lines.append(f"    doc: {info.docstring[:120]}")
-                lines.append(f"    imports: {', '.join(info.imports[:8])}")
-            return "\n".join(lines)
-
+        locate = bool(_LOCATE_RE.search(query or "")) or bool(
+            re.search(r"\bwhere(?:'s| is)\b", query or "", re.I)
+        )
+        stt_hit = self.resolve_stt_locate(query or "")
+        if stt_hit:
+            return self._speak_hits([stt_hit], stt_hit.fqn.split(".")[-1])
+        terms = _query_terms(query or "")
+        if locate:
+            return self._speak_ranked(terms, stats, locate=True, original=query or "")
+        if terms:
+            return self._speak_ranked(terms, stats, locate=False, original=query or "")
         return f"No symbols found matching '{query}'. Try a class or function name."
+
+    def _exact_short_name(self, name: str) -> CodeSymbol | None:
+        want = (name or "").lower()
+        if not want:
+            return None
+        hits = [
+            sym for sym in self._symbols.values()
+            if sym.fqn.split(".")[-1].lower() == want
+        ]
+        if not hits:
+            return None
+        live = [
+            sym for sym in hits
+            if "tests/" not in sym.file.replace("\\", "/")
+            and not Path(sym.file).name.startswith("test_")
+        ]
+        pool = live or hits
+        pool.sort(key=lambda s: (s.file, s.line))
+        return pool[0]
+
+    def resolve_stt_locate(self, query: str) -> CodeSymbol | None:
+        """Exact symbol hit from a where-is question, including STT-split snake_case.
+
+        Authority is the index, not an allowlist. Household where-is stays out.
+        Plain single words (voice, memory, tonya) do not count — need a joined
+        or already-snake name.
+        """
+        if not re.search(r"\bwhere(?:'s| is)\b", query or "", re.I):
+            return None
+        if _HOUSEHOLD_LOCATE_RE.search(query or ""):
+            return None
+        if not self._symbols:
+            return None
+        for cand in _locate_name_candidates(query or ""):
+            if "_" not in cand:
+                continue
+            hit = self._exact_short_name(cand)
+            if hit:
+                return hit
+        return None
+
+    def _speak_index_capability(self, stats: dict[str, Any]) -> str:
+        n_mod = int(stats.get("total_modules") or 0)
+        n_sym = int(stats.get("total_symbols") or 0)
+        return (
+            f"Yes. I keep an AST index of my own tree — {n_mod} modules, "
+            f"{n_sym} symbols. I can look up a name or a file. I don't dump a "
+            "whole file into the mouth unless you ask for a specific symbol."
+        )
+
+    def _speak_ranked(
+        self,
+        terms: list[str],
+        stats: dict[str, Any],
+        *,
+        locate: bool,
+        original: str,
+    ) -> str:
+        best: dict[str, tuple[CodeSymbol, int]] = {}
+        for term in terms:
+            for sym, score in self.search_ranked(term, limit=40):
+                prev = best.get(sym.fqn)
+                if prev is None or score > prev[1]:
+                    best[sym.fqn] = (sym, score)
+        ranked = sorted(best.values(), key=lambda item: (-item[1], item[0].fqn))
+        # Locate needs an exact symbol-name hit. Token-in-name (voice inside
+        # voice_drop) is not a location for "the function that handles X".
+        min_score = 100 if locate else 40
+        hits = [sym for sym, score in ranked if score >= min_score][:3]
+        if hits:
+            return self._speak_hits(hits, terms[0] if terms else original)
+        if locate:
+            term = terms[0] if terms else "that"
+            n_mod = int(stats.get("total_modules") or 0)
+            n_sym = int(stats.get("total_symbols") or 0)
+            return (
+                f"I don't have a clean location for '{term}'. Name a function or "
+                f"file and I'll look it up. I index {n_mod} modules and {n_sym} symbols."
+            )
+        return f"No symbols found matching '{original}'. Try a class or function name."
+
+    @staticmethod
+    def _speak_hits(hits: list[CodeSymbol], term: str) -> str:
+        if not hits:
+            return f"No symbols found matching '{term}'. Try a class or function name."
+        if len(hits) == 1:
+            sym = hits[0]
+            return (
+                f"I found {sym.fqn.split('.')[-1]} — a {sym.kind} in {sym.file} "
+                f"at line {sym.line}."
+            )
+        parts = [
+            f"{sym.fqn.split('.')[-1]} ({sym.kind}) in {sym.file}"
+            for sym in hits
+        ]
+        return f"I found {len(hits)} close hits: " + "; ".join(parts) + "."
 
 
 # ---------------------------------------------------------------------------

@@ -874,7 +874,9 @@ class ContextBuilder:
             if active:
                 parts.append(
                     "These personal facts belong to the current human user, not to you. "
-                    "Never restate them as your own identity, birthday, origin, traits, or preferences."
+                    "Never restate them as your own identity, birthday, origin, traits, or preferences. "
+                    "They are facts about their life, not chores you completed — "
+                    "do not claim you performed their morning, meals, or errands."
                 )
                 parts.append("What you know about this user: " + "; ".join(active[:8]))
             if thirdparty:

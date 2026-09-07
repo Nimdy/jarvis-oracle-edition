@@ -137,6 +137,7 @@ _CAPABILITY_VERBS = frozenset({
     "control", "zoom", "pan", "tilt", "grab", "move", "pick",
     "detect", "recognize", "identify", "track", "analyze",
     "translate", "transcribe", "summarize", "search",
+    "roll", "quiz",
 })
 
 _CAPABILITY_NOUNS = frozenset({
@@ -144,6 +145,7 @@ _CAPABILITY_NOUNS = frozenset({
     "camera", "arm", "robot", "speaker", "voice", "face",
     "emotion", "language", "code", "document", "file",
     "data", "csv", "json", "xml", "text", "api", "web",
+    "dice", "quiz", "task", "tasks", "list",
 })
 
 

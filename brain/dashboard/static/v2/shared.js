@@ -105,7 +105,16 @@ window.V2 = (function(){
     }
     return r;
   }
-  function modal(title, bodyHtml){ var r=_ensureModalRoot(); r.querySelector('#v2-modal-title').textContent=title; r.querySelector('#v2-modal-bd').innerHTML=bodyHtml; r.style.display='flex'; return r.querySelector('#v2-modal-bd'); }
+  function modal(title, bodyHtml, opts){
+    opts=opts||{};
+    var r=_ensureModalRoot();
+    var box=r.querySelector('.v2-modal');
+    if(box) box.classList.toggle('wide', !!opts.wide);
+    r.querySelector('#v2-modal-title').textContent=title;
+    r.querySelector('#v2-modal-bd').innerHTML=bodyHtml;
+    r.style.display='flex';
+    return r.querySelector('#v2-modal-bd');
+  }
   function closeModal(){ var r=document.getElementById('v2-overlay'); if(r) r.style.display='none'; }
 
   // ---- confirm (danger gate; opts.typed = word the operator must type) ----

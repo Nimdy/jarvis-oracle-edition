@@ -840,6 +840,439 @@ window.V2D = (function(){
     });
   }
 
+  // =====================================================================
+  // Skill audit packet — ports v1 openSkillDetail (interactives.js).
+  // Same GET /api/skills/{id}. Wide modal so evidence / artifacts / timeline
+  // and operator review inputs fit. Does not invent metrics.
+  // =====================================================================
+  function _jcompact(value){
+    if(value==null) return '';
+    if(typeof value==='string') return value;
+    try{ return JSON.stringify(value, null, 2); }catch(e){ return String(value); }
+  }
+  function _skRow(label, value){
+    if(value==null || value==='') return '';
+    return '<div class="sk-aud-row"><span class="k">'+esc(label)+'</span><span class="v">'+esc(String(value).substring(0,400))+'</span></div>';
+  }
+  function _skRows(pairs){
+    var h=pairs.map(function(p){ return _skRow(p[0], p[1]); }).join('');
+    return h || '<div style="font-size:10.5px;color:var(--muted)">No data.</div>';
+  }
+  function _skSec(title, body){
+    if(!body) body='<div style="font-size:10.5px;color:var(--muted)">No data.</div>';
+    return '<div class="sk-aud-sec"><div class="sk-aud-h">'+esc(title)+'</div>'+body+'</div>';
+  }
+  function _skCard(label, value, color){
+    return '<div class="sk-aud-card"><div class="k">'+esc(label)+'</div><div class="v"'+(color?' style="color:'+color+'"':'')+'>'+esc(value==null?'—':String(value))+'</div></div>';
+  }
+  function _renderHandoff(handoff){
+    if(!handoff || !handoff.status){
+      return '<div style="font-size:10.5px;color:var(--muted)">No operational handoff request.</div>';
+    }
+    return _skRows([
+      ['Status', handoff.status],
+      ['Approval required', handoff.approval_required ? 'yes' : 'no'],
+      ['Contract ID', handoff.contract_id],
+      ['Required executor', handoff.required_executor_kind],
+      ['Acquisition ID', handoff.acquisition_id],
+      ['Outcome class', handoff.outcome_class],
+      ['Risk tier', handoff.risk_tier],
+      ['Approved by', handoff.approved_by],
+      ['Approved at', handoff.approved_at],
+      ['Rejected by', handoff.rejected_by],
+      ['Rejected at', handoff.rejected_at],
+      ['Rejection reason', handoff.rejection_reason],
+      ['Last error type', handoff.last_error_type],
+      ['Last error', handoff.last_error],
+      ['Updated', handoff.updated_at]
+    ]);
+  }
+  function _renderAcqChain(chain){
+    if(!chain || !chain.acquisition_id){
+      return '<div style="font-size:10.5px;color:var(--muted)">No linked acquisition proof job.</div>';
+    }
+    var plugin=chain.plugin||{};
+    var verification=chain.verification||{};
+    var html=_skRows([
+      ['Acquisition ID', chain.acquisition_id],
+      ['Exists', chain.exists===false ? 'no' : 'yes'],
+      ['Status', chain.status],
+      ['Outcome class', chain.outcome_class],
+      ['Risk tier', chain.risk_tier],
+      ['Plugin', chain.plugin_name],
+      ['Plugin state', plugin.state],
+      ['Execution mode', plugin.execution_mode],
+      ['Verification ID', chain.verification_id],
+      ['Sandbox ref', verification.sandbox_result_ref],
+      ['Verification passed', verification.overall_passed===true?'yes':(verification.overall_passed===false?'no':'')]
+    ]);
+    var lanes=chain.lanes||{};
+    var laneNames=Object.keys(lanes);
+    if(laneNames.length){
+      html += '<div style="margin-top:6px;">'+laneNames.map(function(name){
+        var lane=lanes[name]||{};
+        var st=lane.status||'—';
+        var color=st==='completed'?'var(--green)':(st==='failed'||st==='blocked')?'var(--red)':'var(--amber)';
+        return '<span class="sk-aud-tag" style="border-color:'+color+';color:'+color+'">'+esc(name+': '+st)+'</span>';
+      }).join('')+'</div>';
+    }
+    if(verification.lane_verdicts){
+      html += '<pre class="sk-aud-pre">'+esc(_jcompact(verification.lane_verdicts))+'</pre>';
+    }
+    return html;
+  }
+  function _renderEvidence(history){
+    if(!history || !history.length) return '<div style="font-size:10.5px;color:var(--muted)">No evidence recorded yet.</div>';
+    var html='';
+    history.slice(-12).forEach(function(ev){
+      html += '<div style="border:1px solid var(--line);border-radius:4px;padding:6px 8px;margin-bottom:6px;background:rgba(0,0,0,.18);">'+
+        '<div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--muted);margin-bottom:4px;">'+
+        '<span>'+esc(ev.evidence_id||ev.source||'evidence')+'</span>'+
+        '<span>'+esc((ev.is_current?'current':'historical')+' · '+(ev.result||'—'))+'</span></div>';
+      (ev.tests||[]).forEach(function(t){
+        html += '<div class="sk-aud-test"><span class="'+(t.passed?'sk-aud-pass':'sk-aud-fail')+'">'+(t.passed?'PASS':'FAIL')+'</span>'+
+          '<span style="flex:1">'+esc(t.name||'')+'<br><span style="color:var(--muted)">'+esc(t.details||'')+'</span></span></div>';
+        if(t.expected!=null || t.actual!=null){
+          html += '<pre class="sk-aud-pre">expected: '+esc(_jcompact(t.expected))+'\nactual: '+esc(_jcompact(t.actual))+'</pre>';
+        }
+      });
+      html += '</div>';
+    });
+    return html;
+  }
+  function _renderArtifacts(artifacts){
+    if(!artifacts || !artifacts.length) return '<div style="font-size:10.5px;color:var(--muted)">No artifacts recorded yet.</div>';
+    return artifacts.slice(-12).map(function(a){
+      var preview=a.preview!=null ? _jcompact(a.preview).substring(0,800) : '';
+      return '<div style="border-bottom:1px solid var(--line);padding:5px 0;font-size:10.5px;">'+
+        '<div style="display:flex;justify-content:space-between;gap:8px;">'+
+        '<span>'+esc(a.type||a.id||'artifact')+'</span>'+
+        '<span style="color:'+(a.exists?'var(--green)':'var(--amber)')+'">'+(a.exists?'exists':'missing')+(a.is_current_job?' · current':' · historical')+'</span></div>'+
+        (a.path?'<div style="color:var(--muted);word-break:break-all">'+esc(a.path)+'</div>':'')+
+        (preview?'<pre class="sk-aud-pre">'+esc(preview)+'</pre>':'')+
+        '</div>';
+    }).join('');
+  }
+  function _renderTimeline(timeline){
+    if(!timeline || !timeline.length) return '<div style="font-size:10.5px;color:var(--muted)">No timeline events yet.</div>';
+    return timeline.slice(-40).map(function(e){
+      return '<div style="display:grid;grid-template-columns:148px 130px 1fr;gap:6px;font-size:10px;border-bottom:1px solid var(--line);padding:3px 0;">'+
+        '<span style="color:var(--cyan)">'+esc(e.ts||'')+'</span>'+
+        '<span style="color:'+(e.is_current_job?'var(--cyan)':'var(--muted)')+'">'+esc(e.type||'')+'</span>'+
+        '<span>'+esc(e.message||'')+'</span></div>';
+    }).join('');
+  }
+
+  var BASELINE_IDS={
+    speech_output:1, memory_search:1, introspection:1, codebase_analysis:1,
+    academic_search:1, web_search:1, speaker_identification:1, emotion_detection:1,
+    face_identification:1, vision_analysis:1, hemisphere_training:1,
+    self_improvement:1, camera_control:1
+  };
+  function _skIsDefault(sk, audit){
+    if(audit && (audit.is_default===true || audit.origin==='baseline')) return true;
+    if(sk && (sk.is_default===true || sk.origin==='baseline')) return true;
+    var id=(sk && sk.skill_id) || '';
+    return !!BASELINE_IDS[id];
+  }
+  function _renderDesign(design){
+    design=design||{};
+    if(!(design.technical_approach||design.implementation_sketch||(design.plugin_structure||[]).length||(design.design_notes||[]).length)){
+      return '<div style="font-size:10.5px;color:var(--muted)">No plugin design drafted in this phase yet.</div>';
+    }
+    var dnotes=(design.design_notes||[]).map(function(n){
+      return '<div style="font-size:10.5px;line-height:1.45;margin:2px 0">• '+esc(n)+'</div>';
+    }).join('');
+    var dfiles=(design.plugin_structure||[]).map(function(f){
+      return '<div class="sk-aud-row"><span class="v" style="font-family:var(--mono,monospace)">'+esc(f)+'</span></div>';
+    }).join('');
+    var dtests=(design.test_cases||[]).map(function(t){
+      var name=typeof t==='string'?t:(t.name||'test');
+      var exp=t&&t.expected!=null?_jcompact(t.expected):'';
+      return '<div style="font-size:10.5px;margin:3px 0"><b>'+esc(name)+'</b>'+(exp?'<pre class="sk-aud-pre">'+esc(exp)+'</pre>':'')+'</div>';
+    }).join('');
+    return (design.thin?'<div style="color:var(--amber);font-size:10px;margin-bottom:6px">Thin template — bounce so research can draft the real plugin design. Do not approve codegen from this packet.</div>':'')+
+      _skRows([
+        ['Trigger', design.trigger],
+        ['How it should work', design.approach||design.technical_approach],
+        ['Awaiting', design.awaiting]
+      ])+
+      (dnotes?('<div class="sk-aud-h" style="margin-top:8px">Internal planning</div>'+dnotes):'')+
+      (dfiles?('<div class="sk-aud-h" style="margin-top:8px">Plugin structure</div>'+dfiles):'')+
+      (design.implementation_sketch?('<div class="sk-aud-h" style="margin-top:8px">Implementation sketch</div><pre class="sk-aud-pre">'+esc(design.implementation_sketch)+'</pre>'):'')+
+      (dtests?('<div class="sk-aud-h" style="margin-top:8px">Test cases</div>'+dtests):'')+
+      _skRows([
+        ['Required', _jcompact(design.required).substring(0,900)],
+        ['Expected', _jcompact(design.expected).substring(0,900)]
+      ]);
+  }
+  function _renderPhasePane(phase){
+    phase=phase||{};
+    var st=phase.state||'pending';
+    var empty = st==='pending'
+      ? '<div style="font-size:10.5px;color:var(--muted)">This station has not run yet. Empty is honest — not a missing organ.</div>'
+      : '<div style="font-size:10.5px;color:var(--muted)">No glass-box rows recorded for this phase.</div>';
+    var html=_skRows([
+      ['State', st],
+      ['Exit', (phase.exit_conditions||[]).join(', ')]
+    ]);
+    if((phase.gates||[]).length){
+      html += '<div class="sk-aud-h" style="margin-top:8px">Gates</div>'+(phase.gates||[]).map(function(g){
+        return '<div class="sk-aud-row"><span class="k">'+esc(g.id||g.name||'gate')+'</span><span class="v">'+esc(g.state||g.details||'')+'</span></div>';
+      }).join('');
+    }
+    if(phase.design) html += '<div class="sk-aud-h" style="margin-top:8px">Proposed plugin design</div>'+_renderDesign(phase.design);
+    if(phase.handoff && phase.handoff.status) html += _skSec('Operational handoff', _renderHandoff(phase.handoff));
+    if(phase.latest_evidence && (phase.latest_evidence.tests||[]).length){
+      html += _skSec('Evidence', _renderEvidence([phase.latest_evidence]));
+    }
+    if((phase.artifacts||[]).length){
+      html += '<div class="sk-aud-h" style="margin-top:8px">Artifacts</div>'+_renderArtifacts(phase.artifacts);
+    }
+    if((phase.events||[]).length){
+      html += '<div class="sk-aud-h" style="margin-top:8px">Phase events</div>'+_renderTimeline(phase.events);
+    }
+    var hasBody=(phase.gates||[]).length||phase.design||(phase.handoff&&phase.handoff.status)||(phase.latest_evidence&&(phase.latest_evidence.tests||[]).length)||(phase.artifacts||[]).length||(phase.events||[]).length||(phase.exit_conditions||[]).length;
+    if(!hasBody && st==='pending') return empty;
+    return html || empty;
+  }
+  function _wireSkillTabs(root, initial){
+    if(!root) return;
+    var tabs=root.querySelectorAll('.sk-tab');
+    var panes=root.querySelectorAll('.sk-pane');
+    function show(id){
+      tabs.forEach(function(t){ t.classList.toggle('on', t.getAttribute('data-tab')===id); });
+      panes.forEach(function(p){ p.classList.toggle('on', p.getAttribute('data-pane')===id); });
+    }
+    tabs.forEach(function(t){
+      t.addEventListener('click', function(){ show(t.getAttribute('data-tab')); });
+    });
+    var start=initial;
+    if(!start || !root.querySelector('.sk-pane[data-pane="'+start+'"]')){
+      var cur=root.querySelector('.sk-tab.cur');
+      start=cur?cur.getAttribute('data-tab'):'overview';
+    }
+    show(start);
+  }
+
+  function skillDetail(skillId, opts){
+    opts=opts||{};
+    if(!skillId){ V.modal('Skill audit', unknownBox('No skill id supplied.')); return; }
+    V.modal('Skill: '+String(skillId).substring(0,48),
+      '<div id="v2d-skill-body" style="font-size:11px;color:var(--muted)">Loading audit packet…</div>',
+      {wide:true});
+    V.fetchJSON('/api/skills/'+encodeURIComponent(skillId)).then(function(data){
+      var body=document.getElementById('v2d-skill-body');
+      if(!body) return;
+      if(!data || data.error){
+        body.innerHTML=unknownBox(data&&data.error ? data.error : 'Skill not found.');
+        return;
+      }
+      var sk=data.skill||{};
+      var jb=data.learning_job||{};
+      var audit=data.audit_packet||{};
+      var decision=audit.decision_summary||{};
+      var request=audit.request_context||{};
+      var contract=audit.resolver_contract||{};
+      var classes=audit.evidence_classes||{};
+      var handoff=audit.operational_handoff||{};
+      var missing=audit.missing_proof||[];
+      var cap=contract.capability_contract||{};
+      var matrixOn=!!(request.matrix_protocol || jb.matrix_protocol);
+      var isDefault=_skIsDefault(sk, audit);
+      var origin=audit.origin||sk.origin||(isDefault?'baseline':'learned');
+      var deletable=audit.deletable===false||sk.deletable===false||isDefault?false:true;
+      var glass=audit.phase_glass||{};
+      var html='';
+
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap">'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+        (isDefault?'<span class="sk-base">BASELINE</span>':'')+
+        (matrixOn?'<span class="sk-mx">MATRIX</span>':'')+
+        '<span style="font-size:14px;font-weight:700;color:var(--text)">'+esc(sk.name||sk.skill_id||skillId)+'</span>'+
+        '<span style="font-size:10px;color:var(--muted);font-family:var(--mono,monospace)">'+esc(sk.skill_id||skillId)+'</span></div>'+
+        '<span style="font-size:9px;color:var(--dim)">'+esc(origin)+' · audit v'+esc(audit.schema_version||1)+'</span></div>';
+
+      if(isDefault){
+        html += '<div class="sk-banner-base"><b>Baseline skill.</b> Shipped with JARVIS and wired in the codebase. It has no learn-X pipeline — the phase tabs below are wiring and bootstrap evidence, not a plugin job. Baseline skills cannot be deleted.</div>';
+      } else if(glass.note){
+        html += '<div class="sk-aud-msg">'+esc(glass.note)+'</div>';
+      }
+      if(decision.message){
+        html += '<div class="sk-aud-msg">'+esc(decision.message)+'</div>';
+      }
+      html += '<div class="sk-aud-grid">'+
+        _skCard('Status', sk.status||audit.status||'—')+
+        _skCard('Origin', origin, isDefault?'var(--cyan)':'var(--text)')+
+        _skCard(isDefault?'Wiring':'Phase', isDefault?( ((glass.wiring||{}).verification_method)||'codebase' ):(decision.current_phase||jb.phase||'—'))+
+        _skCard(isDefault?'Deletable':'Missing proof', isDefault?'no':String(decision.missing_count||0), isDefault?'var(--muted)':((decision.missing_count||0)?'var(--amber)':'var(--green)'))+
+        '</div>';
+
+      var overview=''+
+        _skSec('Request context', _skRows([
+          ['Job', request.job_id||jb.job_id],
+          ['User text', request.user_text],
+          ['Speaker', request.speaker],
+          ['Risk', request.risk_level||jb.risk_level],
+          ['Matrix', matrixOn ? ('yes '+(request.protocol_id||jb.protocol_id||'')) : 'no'],
+          ['Claimability', jb.claimability_status||request.claimability_status],
+          ['Created', request.created_at||jb.created_at]
+        ]) || (isDefault?'<div style="font-size:10.5px;color:var(--muted)">No operator learn-X job. This skill was seeded at birth.</div>':''))+
+        (matrixOn?'<div style="font-size:10px;color:var(--muted);margin:0 0 10px;line-height:1.45">Matrix Protocol on this <b>LearningJob</b> is not specialist promotion. Specialist lifecycle is <a href="/static/v2/matrix.html" style="color:var(--cyan)">/v2/matrix</a>.</div>':'')+
+        _skSec('Contract / resolver', _skRows([
+          ['Capability type', contract.capability_type||sk.capability_type],
+          ['Required evidence', (contract.required_evidence||[]).join(', ')],
+          ['Contract ID', cap.execution_contract_id],
+          ['Required executor', cap.required_executor_kind],
+          ['Acquisition eligible', cap.acquisition_eligible===true?'yes':'no'],
+          ['Plan', contract.plan_summary||(jb.plan&&jb.plan.summary)]
+        ]))+
+        (function(){
+          var classKeys=Object.keys(classes||{});
+          return _skSec('Evidence classes', classKeys.length
+            ? classKeys.map(function(k){
+                var val=!!classes[k];
+                return '<span class="sk-aud-tag" style="border-color:'+(val?'var(--green)':'var(--line)')+';color:'+(val?'var(--green)':'var(--muted)')+'">'+esc(k)+': '+(val?'yes':'no')+'</span>';
+              }).join('')
+            : '<div style="font-size:10.5px;color:var(--muted)">No evidence-class flags yet.</div>');
+        })()+
+        (missing.length?_skSec('Why this is not verified yet', missing.map(function(m){
+          return '<div style="font-size:10.5px;color:var(--red);margin:2px 0"><b>'+esc(m.name||'')+'</b>: '+esc(m.reason||'')+'</div>';
+        }).join('')):'')+
+        ((audit.integrity_notes||[]).length?_skSec('Integrity notes', (audit.integrity_notes||[]).map(function(n){
+          return '<div style="font-size:10.5px;color:var(--muted);line-height:1.4;margin:2px 0">'+esc(n)+'</div>';
+        }).join('')):'');
+
+      var wiring=glass.wiring||{};
+      var wiringPane=_skSec('Wiring', _skRows([
+        ['Tools', ((wiring.interfaces||{}).tools||[]).join(', ')],
+        ['Events', ((wiring.interfaces||{}).events||[]).join(', ')],
+        ['Endpoints', ((wiring.interfaces||{}).endpoints||[]).join(', ')],
+        ['Keywords', (wiring.keywords||[]).join(', ')],
+        ['Verification method', wiring.verification_method],
+        ['Verified by', wiring.verified_by],
+        ['Required tests', (wiring.verification_required||[]).join(', ')],
+        ['Notes', wiring.notes]
+      ])+(wiring.summary?'<div style="font-size:10.5px;margin-top:8px;line-height:1.45">'+esc(wiring.summary)+'</div>':'')+
+        ((wiring.known_limitations||[]).length?'<div class="sk-aud-h" style="margin-top:8px">Known limitations</div>'+(wiring.known_limitations||[]).map(function(n){ return '<div style="font-size:10.5px;color:var(--amber);margin:2px 0">• '+esc(n)+'</div>'; }).join(''):''));
+
+      var evidencePane=_skSec('Evidence checks', _renderEvidence(audit.evidence_history||[]))+
+        _skSec('Artifacts', _renderArtifacts(audit.artifacts||[]))+
+        _skSec('Timeline', _renderTimeline(audit.timeline||[]));
+
+      var reviewPane='<div class="sk-aud-sec"><div class="sk-aud-h">Operator review</div>';
+      if(isDefault){
+        reviewPane += '<div class="sk-locked">Baseline skills cannot be deleted. They are the floor JARVIS boots with — removing them would punch holes in speech, memory, vision, and identity.</div></div>';
+      } else {
+        reviewPane += '<div style="font-size:10px;color:var(--muted);margin-bottom:6px">Notes go on approve / retry / reject. Reject needs a reason (min 5 chars). Nothing here auto-fires. Only learned skills can be deleted.</div>'+
+          '<input id="v2d-skill-notes" class="v2-field" autocomplete="off" placeholder="notes or rejection reason">'+
+          '<div class="sk-aud-acts">';
+        if(handoff.status==='acquisition_failed' || handoff.status==='acquisition_cancelled'){
+          reviewPane += '<button class="btn-act" id="v2d-skill-retry">Retry operational build</button>';
+        } else if(handoff.acquisition_id){
+          reviewPane += '<button type="button" class="btn-act" id="v2d-skill-open-acq">Open acquisition review</button>';
+        } else if(handoff.status==='awaiting_operator_approval'){
+          reviewPane += '<button class="btn-act" id="v2d-skill-approve">Approve operational build</button>'+
+            '<button class="btn-danger" id="v2d-skill-reject">Reject operational build</button>';
+        }
+        if(deletable){
+          reviewPane += '<button class="btn-danger" id="v2d-skill-delete">Delete learned skill</button>';
+        }
+        reviewPane += '</div></div>';
+        reviewPane += _skSec('Operational handoff', _renderHandoff(handoff));
+        reviewPane += _skSec('Acquisition proof chain', _renderAcqChain(audit.acquisition_chain||{}));
+      }
+
+      var tabs=[{id:'overview', label:'Overview', cls:''}];
+      if(isDefault || glass.kind==='baseline'){
+        tabs.push({id:'wiring', label:'Wiring', cls:''});
+        tabs.push({id:'evidence', label:'Evidence', cls:''});
+      } else {
+        (glass.phases||[]).forEach(function(p){
+          var cls=p.state==='current'?'cur':(p.state==='done'?'done':'');
+          tabs.push({id:'phase-'+p.name, label:p.name, cls:cls});
+        });
+        if(!(glass.phases||[]).length){
+          tabs.push({id:'wiring', label:'Wiring', cls:''});
+        }
+        tabs.push({id:'evidence', label:'Ledger', cls:''});
+        tabs.push({id:'review', label:'Review', cls:''});
+      }
+      html += '<div class="sk-tabs" role="tablist">'+tabs.map(function(t){
+        return '<button type="button" class="sk-tab '+t.cls+'" data-tab="'+esc(t.id)+'">'+esc(t.label)+
+          (t.cls==='cur'?'<span class="sk-phase-st">now</span>':'')+'</button>';
+      }).join('')+'</div>';
+      html += '<div class="sk-pane on" data-pane="overview">'+overview+'</div>';
+      if(isDefault || glass.kind==='baseline'){
+        html += '<div class="sk-pane" data-pane="wiring">'+wiringPane+'</div>';
+        html += '<div class="sk-pane" data-pane="evidence">'+evidencePane+'</div>';
+      } else {
+        (glass.phases||[]).forEach(function(p){
+          html += '<div class="sk-pane" data-pane="phase-'+esc(p.name)+'">'+
+            '<div class="sk-aud-h">Phase · '+esc(p.name)+'</div>'+_renderPhasePane(p)+'</div>';
+        });
+        html += '<div class="sk-pane" data-pane="evidence">'+evidencePane+'</div>';
+        html += '<div class="sk-pane" data-pane="review">'+reviewPane+'</div>';
+      }
+      if(!isDefault && !(glass.phases||[]).length && glass.kind!=='baseline'){
+        html += '<div class="sk-pane" data-pane="wiring">'+wiringPane+'</div>';
+      }
+
+      body.innerHTML=html;
+      _wireSkillTabs(body, opts.tab || (glass.current_phase?('phase-'+glass.current_phase):'overview'));
+
+      function notes(){ var n=document.getElementById('v2d-skill-notes'); return n?n.value.trim():''; }
+      function after(){
+        var onTab=body.querySelector('.sk-tab.on');
+        var tab=onTab?onTab.getAttribute('data-tab'):opts.tab;
+        if(typeof opts.onDone==='function') opts.onDone();
+        skillDetail(skillId, Object.assign({}, opts, {tab:tab}));
+      }
+      var ap=document.getElementById('v2d-skill-approve');
+      if(ap) ap.addEventListener('click', function(){
+        V.act(V.post('/api/skills/'+encodeURIComponent(skillId)+'/handoff/approve', {
+          approved_by:'dashboardV2', notes:notes()||'Operator approved operational proof build.'
+        }), 'handoff approved').then(after).catch(function(){});
+      });
+      var rj=document.getElementById('v2d-skill-reject');
+      if(rj) rj.addEventListener('click', function(){
+        var reason=notes();
+        if(reason.length<5){ V.toast('rejection reason is required (type it in notes)', false); return; }
+        V.act(V.post('/api/skills/'+encodeURIComponent(skillId)+'/handoff/reject', {
+          rejected_by:'dashboardV2', reason:reason
+        }), 'handoff rejected').then(after).catch(function(){});
+      });
+      var rt=document.getElementById('v2d-skill-retry');
+      if(rt) rt.addEventListener('click', function(){
+        V.act(V.post('/api/skills/'+encodeURIComponent(skillId)+'/handoff/retry', {
+          approved_by:'dashboardV2', notes:notes()||'Retry with a concrete implementation plan and sandbox-backed proof.'
+        }), 'handoff retried').then(after).catch(function(){});
+      });
+      var del=document.getElementById('v2d-skill-delete');
+      if(del) del.addEventListener('click', function(){
+        V.confirm('Delete skill', 'Forget <b>'+esc(skillId)+'</b> and its learning job? Typed gate.', function(){
+          V.act(V.del('/api/skills/'+encodeURIComponent(skillId)), 'skill deleted').then(function(){
+            V.closeModal();
+            if(typeof opts.onDone==='function') opts.onDone();
+          }).catch(function(){});
+        }, {typed:'DELETE', yesLabel:'Delete skill'});
+      });
+      var oa=document.getElementById('v2d-skill-open-acq');
+      if(oa) oa.addEventListener('click', function(){
+        var id=handoff.acquisition_id;
+        V.closeModal();
+        if(typeof window.openAcquisitionReview==='function'){
+          window.openAcquisitionReview(id);
+        } else {
+          location.href='/static/v2/capability.html#acquisition:'+encodeURIComponent(id);
+        }
+      });
+    }).catch(function(e){
+      var body=document.getElementById('v2d-skill-body');
+      if(body) body.innerHTML=unknownBox('Error loading audit packet: '+esc(e.message));
+    });
+  }
+
   // expose every modal at the end
   return {
     thoughtDetail: thoughtDetail,
@@ -851,6 +1284,7 @@ window.V2D = (function(){
     debugSnapshot: debugSnapshot,
     evalDetail: evalDetail,
     memoryDetail: memoryDetail,
-    memorySearch: memorySearch
+    memorySearch: memorySearch,
+    skillDetail: skillDetail
   };
 })();

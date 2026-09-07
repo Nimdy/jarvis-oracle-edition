@@ -44,8 +44,8 @@ ALWAYS_ALLOWED_IMPORTS = frozenset({
     "json", "re", "datetime", "pathlib", "os.path", "typing", "dataclasses",
     "collections", "math", "hashlib", "base64", "urllib.parse", "html", "csv",
     "io", "time", "functools", "itertools", "enum", "abc", "logging",
-    "random", "string", "textwrap", "copy", "operator", "decimal", "fractions",
-    "statistics", "uuid",
+    "random", "secrets", "string", "textwrap", "copy", "operator", "decimal",
+    "fractions", "statistics", "uuid",
 })
 
 TIER1_IMPORTS = frozenset({

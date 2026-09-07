@@ -1778,7 +1778,7 @@ function _jsonCompact(value) {
 }
 
 window._deleteSkill = function(skillId) {
-  if (!confirm('Delete skill "' + skillId + '"?')) return;
+  if (!confirm('Delete learned skill "' + skillId + '"? Baseline skills cannot be deleted.')) return;
   _apiDelete('/api/skills/' + encodeURIComponent(skillId)).then(function(r) {
     _toast(r.ok ? 'Skill deleted' : 'Failed', r.ok ? '#0f9' : '#f44');
     if (r.ok) window.closeModal();

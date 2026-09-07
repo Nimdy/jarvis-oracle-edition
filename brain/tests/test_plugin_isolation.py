@@ -805,3 +805,35 @@ class TestExecutionModeElection:
             {"__init__.py": "from .handler import run\nimport json\n"}
         )
         assert mode == "in_process"
+
+    def test_secrets_stdlib_stays_in_process(self):
+        mode, allowed, pinned = self._elect(
+            {"handler.py": "import secrets\ndef run(p): return {'ok': True}\n"}
+        )
+        assert mode == "in_process"
+        assert allowed == [] and pinned == []
+
+
+def test_plugin_child_respawns_when_event_loop_differs():
+    """Hot-loaded isolated plugins cannot keep pipes from the acquisition loop."""
+    from types import SimpleNamespace
+    from tools.plugin_process import PluginProcessManager
+
+    killed = []
+
+    async def _go():
+        mgr = PluginProcessManager("loop_mismatch", Path("/tmp/jarvis_no_plugin"))
+        mgr._process = SimpleNamespace(
+            returncode=None,
+            pid=1,
+            kill=lambda: killed.append(1),
+        )
+        mgr._loop = object()
+        assert mgr._needs_respawn_for_loop() is True
+        mgr._detach_child()
+        assert killed == [1]
+        assert mgr._process is None
+        assert mgr._loop is None
+        assert mgr._needs_respawn_for_loop() is False
+
+    asyncio.run(_go())
