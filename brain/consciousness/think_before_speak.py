@@ -120,8 +120,19 @@ class PreSpeechReader:
             negative = user_emotion in _NEGATIVE_EMOTIONS
 
             evidence: list = [["user_emotion", user_emotion], ["verbosity_pref", verbosity or "forming"]]
+            phatic = False
+            try:
+                from reasoning.bounded_response import is_phatic_status_ask
+                phatic = is_phatic_status_ask(user_text)
+            except Exception:
+                phatic = False
             # Priority: distress/withdrawal first, then the LEARNED concise preference, then warmth.
-            if negative or responsiveness == "withdrawn":
+            # Lived 2026-09-07: wav2vec2 tagged "good afternoon" / hello as frustrated and
+            # stamped give_space. A phatic hello is not withdrawal. Sensor noise must not
+            # beat the utterance. Real distress text ("ugh") still wins.
+            if phatic:
+                evidence.append(["phatic_hello", True])
+            if (negative or responsiveness == "withdrawn") and not phatic:
                 stance, conf = "give_space", 0.4
                 would = ("Internal read: they may be frustrated or pulling back — soften, give space, "
                          "keep it brief.")

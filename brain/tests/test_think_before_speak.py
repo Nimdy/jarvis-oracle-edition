@@ -35,6 +35,22 @@ def test_give_space_on_negative(tmp_path, monkeypatch):
     assert s.stance == "give_space"               # distress takes priority
 
 
+def test_phatic_hello_does_not_give_space_on_noisy_emotion(tmp_path, monkeypatch):
+    """Lived: good-afternoon / how-are-you tagged frustrated → false give_space."""
+    _reset(tmp_path, monkeypatch)
+    r = tbs.PreSpeechReader.get_instance()
+    s = r.read_before_speak(
+        speaker="David", user_text="Jarvis, good afternoon.",
+        user_emotion="frustrated", person_model={})
+    assert s.stance == "none"
+    assert s.injected is False
+    s2 = r.read_before_speak(
+        speaker="David", user_text="Jarvis, how are you feeling?",
+        user_emotion="sad", person_model={})
+    assert s2.stance == "none"
+    assert s2.injected is False
+
+
 def test_match_warmth(tmp_path, monkeypatch):
     _reset(tmp_path, monkeypatch)
     s = tbs.PreSpeechReader.get_instance().read_before_speak(

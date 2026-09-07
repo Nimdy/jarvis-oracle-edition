@@ -258,6 +258,21 @@ _DEMO_INVITE_RE = re.compile(
     re.I,
 )
 
+
+def _sentence_around(text: str, pos: int) -> str:
+    """Slice the sentence containing pos. Used so demo-invite + blocked verb
+    must share a sentence (same contract as residual sweep)."""
+    low = (text or "").lower()
+    start = -1
+    for delim in ".!?;:\n":
+        start = max(start, low.rfind(delim, 0, pos))
+    end = len(text or "")
+    for delim in ".!?;:\n":
+        found = low.find(delim, pos)
+        if found != -1:
+            end = min(end, found + 1)
+    return (text or "")[start + 1:end]
+
 # ── Three-tier safe verb system ─────────────────────────────────────────────
 #
 # Tier 1: PURELY CONVERSATIONAL — auto-pass when leading verb, no further check
@@ -1774,10 +1789,20 @@ class CapabilityGate:
         return text
 
     def _scan_demo_invites(self, text: str) -> str:
+        # Lived 2026-09-07: about-me lead "Here's what I remember about you"
+        # plus a later "electronic dance music" sentence rewrote the lead
+        # into a demo decline. Invite + blocked verb must share a sentence.
+        # Do not drop music/dance from the blocked set.
+        def _invite_sentence_has_blocked_verb(match) -> bool:
+            sentence = _sentence_around(text, match.start())
+            return bool(_BLOCKED_VERB_RE.search(_strip_diacritics(sentence.lower())))
+
         if not self._registry:
             text_lower = _strip_diacritics(text.lower())
             if _BLOCKED_VERB_RE.search(text_lower):
                 for match in list(_DEMO_INVITE_RE.finditer(text)):
+                    if not _invite_sentence_has_blocked_verb(match):
+                        continue
                     self._record_block(f"demo:{match.group(0)[:40]}")
                     logger.info("Gate blocked demo invite (no registry): '%s'", match.group(0))
                     text = self._replace_through_sentence_end(
@@ -1802,6 +1827,8 @@ class CapabilityGate:
             return text
 
         for match in list(_DEMO_INVITE_RE.finditer(text)):
+            if not _invite_sentence_has_blocked_verb(match):
+                continue
             self._record_block(f"demo:{match.group(0)[:40]}")
             logger.info("Gate blocked demo invite: '%s'", match.group(0))
             text = self._replace_through_sentence_end(

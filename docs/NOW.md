@@ -17,14 +17,14 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/project-2-oneshot` (cut from `feat/nn-fleet-consume` `a98f018` so a bad slice can be dropped) |
-| **HEAD (committed)** | `feat/project-2-oneshot`. **Skill learning pipeline lived 2026-09-07:** GOLDEN learn-X → research contract → plan review → codegen → quarantine → verify → deploy. Sit `Hey Jarvis, roll a D20.` → PLUGIN → `I rolled the Dice, you got 1`. P4/TBS-2 still gated. **#26** soaked. **#5** WR lived. **#23** Later. |
+| **HEAD (committed)** | `feat/project-2-oneshot`. Skill learning pipeline lived (d20). **Companion mouth lived 2026-09-07:** phatic STATUS, TBS hello not `give_space`, about-me native recap. P4/TBS-2 still gated. **#26** soaked. **#5** WR lived. **#23** Later. |
 | **vs origin** | Pushing this branch; operator asked **2026-09-07** to merge up to GitHub/`main`. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
 | **Board** | **Only board:** [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8) (sort by Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. North star **#42**. **#83** is frozen notes — do not execute those checkboxes. |
 | **Merge `main`** | **Yes — operator asked 2026-09-07** (skill-learning pipeline lived). |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
 | **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
-| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** **Milestone lived:** off-catalog skill learning. d20 plugin `operational_proof_plugin_for_r_2174a7` **active**. Do **not** Improve unless named. Do not TAP. Do not close #42/#83. |
+| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** Companion mouth lived 2026-09-07: STATUS `I'm here with you.`; TBS hello not `give_space`; about-me recap (EDM / workday / engineer / brief / blue). **TBS-2 / P4 still gated.** Do not close #42/#83. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
@@ -218,7 +218,7 @@ If fractal did not fire, dream did not speak, HRR is PRE-MATURE — **that is su
 
 TAP-lived 2026-08-31 (operator-proxy, `follow_up=false` new sits). Do not “fix” these by weakening L0 or L3.
 
-1. **About-me ranking** — Pi sit 2026-08-31 16:57 STT **“Jarvis, what do you remember about me?”** conv=`48687d54` **route=MEMORY**. Greeting recap **gone**. Mouth: same-session closer “everything is indeed going well / feel free to reach out” (from follow-up “Yes, everything's going well”) + 6am coffee + software-engineer career mash. No pizza/brief/EDM. **Coupled (needs bounce):** skip session closers + phatic user-turns from about-me. Ranker still scores. Store keeps the rows. Re-sit after bounce. Do not stack a follow-up smalltalk before the about-me question.
+1. **About-me ranking** — **Lived 2026-09-07 15:05** STT **“What do you remember about me?”** conv=`ea757493` **route=MEMORY** `ranker_used=true`. Mouth: you-addressed recap (EDM, workday, software engineer, brief, blue). Observations out. L0 demo-invite is same-sentence (dance stays blocked). Family names stay on the family question. Pizza not in this window — ranker+fill, not an allowlist. Do not steal onto the LLM.
 2. **EDM** — TAP mouth **named electronic dance music**. L0 same-sentence couple lived. Keep verbs blocked.
 3. **Family** — MEMORY native (stop LLM inventing Emily/Mike). Pi sit omitted Skyler because a **kinship-word filter** dropped pet facts. That filter is the cousin/great-great hack. **Removed:** wife/son/dog ontology on family recall. Family = taught prefs the ranker scores; conversation recaps still out. Plastic teach, not a relation list. Needs bounce.
 4. **Job TAP** `tap_42d4f124d180` — **software engineer LIVE** (NONE + inject). After-work walk / Skylar padding leftover. Do not grind STT Skylar vs stored Skyler. Same class as Tanya vs Tonya.
@@ -264,7 +264,7 @@ Do not skip ranker. Do not treat 9 `consumed_now` as “she routes with NNs.” 
 | **WS2** VQA #24 | Coupled (`vqa_prompt` wraps the spoken question) | Lived |
 | **WS2** TTS markdown | Coupled (`BrainTTS._clean_for_speech`) | Lived |
 | **WS2** OSV P2 | Coupled **pre-TTS** in `_gate_text` when `p2_active_default()`. Env still default **off**. | Mouth does not cut until `OSV_P2_ACTIVE=true` on the process. **Ask before that bounce.** |
-| **WS2** TBS-0 | Lived on `How are you?` flight `pre_speech` (stance=none, `injected=false`). | Do not concat into `_style_instruction` (TBS-2 / P4) |
+| **WS2** TBS-0 | Lived. Hello / how-are-you no longer stamp `give_space` from noisy emotion. `injected=false`. | Do not concat into `_style_instruction` (TBS-2 / P4) |
 | **WS2** thin soul STATUS/MEMORY | Lived soul-dial log. Phatic how-are-you stays STATUS. Articulator no longer speaks this-turn `STATUS` or cortex pair HUD. Persist spoken STATUS. | `native_voice` stays `not_born`. |
 | **WS3** WR P1 | SI snapshot now shows `signals_lived` / `signals_synthetic`; `live_shadow_accuracy=None` until scored inference | **`enforces=False`** |
 | **WS3** claim_classifier friction | Pairing prefers `origin==friction_correction` | Shadow student |

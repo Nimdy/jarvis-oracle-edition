@@ -31,7 +31,12 @@ from reasoning.tool_router import (
     vision_retry_followup, record_voice_intent_teacher_signal,
 )
 from reasoning.context import context_builder
-from reasoning.bounded_response import articulate_meaning_frame, build_meaning_frame
+from reasoning.bounded_response import (
+    articulate_meaning_frame,
+    articulate_phatic_self_status,
+    build_meaning_frame,
+    is_phatic_status_ask,
+)
 from reasoning.language_runtime_bridge import (
     decide_runtime_consumption,
     load_runtime_language_policy,
@@ -43,6 +48,10 @@ from tools.memory_tool import (
     get_memory_summary,
     _is_session_bookkeeping_text,
     is_household_self_fact_recall,
+    is_about_me_recall,
+    native_memory_recall_lead,
+    join_about_me_recap,
+    ABOUT_ME_SPOKEN_ITEMS,
 )
 from tools.vision_tool import (
     describe_scene, describe_scene_stream, describe_jpeg, fetch_snapshot,
@@ -607,6 +616,7 @@ def _derive_memory_summary_from_context(memory_ctx: str) -> dict[str, Any] | Non
                 "types": {memory_type: count} if count > 0 else {},
                 "route_type": route_type,
                 "search_scope": search_scope,
+                "ranker_used": False,
             }
     return None
 
@@ -1087,12 +1097,13 @@ def _format_personal_activity_memory_reply(
     lead: str = "Here's what I remember from that time.",
     empty_msg: str = "I couldn't find matching memories for that time window.",
     speaker: str = "",
+    preserve_ranker_order: bool = False,
 ) -> str:
     if not memory_ctx.strip():
         return empty_msg
 
-    ranked_items: list[tuple[int, float, str]] = []
-    for raw_line in memory_ctx.splitlines():
+    ranked_items: list[tuple[int, int, float, str]] = []
+    for idx, raw_line in enumerate(memory_ctx.splitlines()):
         match = _MEMORY_RESULT_LINE_RE.match(raw_line.strip())
         if not match:
             continue
@@ -1106,15 +1117,20 @@ def _format_personal_activity_memory_reply(
             score = 0.0
         if _is_session_bookkeeping_text(normalized):
             continue
-        ranked_items.append((_memory_priority(memory_type, normalized), score, normalized))
+        ranked_items.append(
+            (idx, _memory_priority(memory_type, normalized), score, normalized)
+        )
 
     if not ranked_items:
         return empty_msg
 
-    ranked_items.sort(key=lambda item: (item[0], -item[1]))
+    if preserve_ranker_order:
+        ranked_items.sort(key=lambda item: item[0])
+    else:
+        ranked_items.sort(key=lambda item: (item[1], -item[2]))
     selected: list[str] = []
     seen: set[str] = set()
-    for _, _, normalized in ranked_items:
+    for _, _, _, normalized in ranked_items:
         sentence = _to_speakable_memory_sentence(normalized, speaker=speaker)
         if not sentence:
             continue
@@ -1129,6 +1145,12 @@ def _format_personal_activity_memory_reply(
             break
 
     if not selected:
+        return empty_msg
+
+    if preserve_ranker_order:
+        recap = join_about_me_recap(selected, speaker)
+        if recap:
+            return f"{lead} {recap}".strip()
         return empty_msg
 
     parts = [lead]
@@ -4297,13 +4319,31 @@ async def handle_transcription(
         tone = engine.get_state()["tone"]
         _status_gate.set_status_mode(True)
         try:
-            _meaning_frame = build_meaning_frame(
-                response_class="self_status",
-                grounding_payload=tool_data,
-            )
-            reply = _status_gate.sanitize_self_report_reply(
-                articulate_meaning_frame(_meaning_frame)
-            )
+            if is_phatic_status_ask(text):
+                _snap = None
+                try:
+                    from consciousness.affect_state import affect_state as _affect
+                    _snap = _affect.snapshot()
+                except Exception:
+                    _snap = None
+                _traits = list((engine.get_state() or {}).get("traits") or [])
+                reply = _status_gate.sanitize_self_report_reply(
+                    articulate_phatic_self_status(
+                        text, affect_snapshot=_snap, traits=_traits,
+                    )
+                )
+                _meaning_frame = build_meaning_frame(
+                    response_class="self_status",
+                    grounding_payload=tool_data,
+                )
+            else:
+                _meaning_frame = build_meaning_frame(
+                    response_class="self_status",
+                    grounding_payload=tool_data,
+                )
+                reply = _status_gate.sanitize_self_report_reply(
+                    articulate_meaning_frame(_meaning_frame)
+                )
             _shadow_language_compare(conversation_id, text, reply, _meaning_frame, "self_status")
             await _broadcast_chunk_sync(reply, tone)
             _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
@@ -4409,12 +4449,17 @@ async def handle_transcription(
                 _memory_provenance = "grounded_memory_context_native"
                 _memory_confidence = 0.9
                 _memory_safety_flags.append("deterministic_grounded_recall")
+                _about_me = is_about_me_recall(text)
                 reply = _format_personal_activity_memory_reply(
                     memory_ctx,
-                    max_items=4 if is_household_self_fact_recall(text) else 3,
-                    lead="Here's what I remember about that.",
+                    max_items=(
+                        ABOUT_ME_SPOKEN_ITEMS if _about_me
+                        else (4 if is_household_self_fact_recall(text) else 3)
+                    ),
+                    lead=native_memory_recall_lead(text),
                     empty_msg="I don't have any memories matching that.",
                     speaker=speaker,
+                    preserve_ranker_order=_about_me,
                 )
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
@@ -6902,6 +6947,7 @@ async def handle_transcription(
             "types": {},
             "route_type": "no_retrieval",
             "search_scope": "none",
+            "ranker_used": False,
         }
         try:
             from reasoning.response import get_last_retrieval_summary
