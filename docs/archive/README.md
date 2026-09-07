@@ -4,7 +4,7 @@ These files are **historical and no longer active.** They are preserved for the
 record (and for JARVIS's self-knowledge of its own past planning), not as a plan to
 execute. **The single source of truth is now GitHub:**
 
-- **Forward roadmap** → [GitHub Issues](https://github.com/Nimdy/jarvis-oracle-edition/issues) + [project board](https://github.com/users/Nimdy/projects/2)
+- **Forward roadmap** → [Project 8](https://github.com/users/Nimdy/projects/8) (sort by Sequence) + `docs/NOW.md`. [Project 2](https://github.com/users/Nimdy/projects/2) is a closed archive.
 - **Shipped changelog** → [GitHub Releases](https://github.com/Nimdy/jarvis-oracle-edition/releases) + [`docs/BUILD_HISTORY.md`](../BUILD_HISTORY.md)
 - **Design/doctrine** → the `docs/*_DESIGN.md` / `*_GUIDE.md` files (still authoritative)
 

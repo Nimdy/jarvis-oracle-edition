@@ -28,7 +28,7 @@ def test_provenance_type_values():
     expected = {
         "observed", "user_claim", "conversation", "model_inference",
         "external_source", "web_scrap", "experiment_result", "derived_pattern",
-        "seed", "unknown",
+        "seed", "unknown", "casual_conversation", "operator_proxy",
     }
     assert set(PROVENANCE_BOOST.keys()) == expected
     assert set(PROVENANCE_ORDINAL.keys()) == expected

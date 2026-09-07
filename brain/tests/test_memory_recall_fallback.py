@@ -28,14 +28,28 @@ def test_none_route_has_personal_activity_memory_fallback() -> None:
     assert "NONE route: personal activity recall native fallback applied" in body
 
 
+def test_about_x_introspection_steal_is_overridden_to_memory() -> None:
+    """Lived 09:38: 'know about Skyler from before' hit Tier 3 self-ref
+    INTROSPECTION and dumped OSV stats. About-X subjects must route MEMORY
+    unless P1 already classified a self-view kind.
+    """
+    src = _source()
+    body = _function_body(src, "handle_transcription")
+    assert "_extract_about_subjects" in body
+    assert "topical about-X recall" in body
+    assert "ToolType.MEMORY" in body
+    search_fn = _function_body(src, "_should_use_memory_search")
+    assert "about_subjects" in search_fn
+
+
 def test_memory_route_uses_search_for_personal_activity_queries() -> None:
     src = _source()
     body = _function_body(src, "handle_transcription")
     assert "_should_use_memory_search(text, extracted_args=routing.extracted_args)" in body
     assert "deterministic_personal_activity_recall" in body
     assert "_is_personal_activity_recall_query(text)" in body
-    assert "_format_personal_activity_memory_reply(memory_ctx)" in body
-    assert "_format_personal_activity_memory_reply(_memory_ctx)" in body
+    assert "_format_personal_activity_memory_reply(memory_ctx, speaker=speaker)" in body
+    assert "_format_personal_activity_memory_reply(_memory_ctx, speaker=speaker)" in body
 
 
 def test_personal_activity_regex_covers_tell_me_what_i_did() -> None:
@@ -51,6 +65,25 @@ def test_personal_activity_formatter_helpers_exist() -> None:
     assert "def _format_personal_activity_memory_reply(" in src
 
 
+def test_speakable_memory_uses_this_turn_speaker_not_user() -> None:
+    """Store stays 'User\\'s …'; mouth uses this-turn speaker. No hardcoded name."""
+    import re
+    src = _source()
+    body = _function_body(src, "_to_speakable_memory_sentence")
+    assert "speaker: str = \"\"" in body or "speaker: str = ''" in body
+    assert 'r"^User' in body and "count=1" in body and "re.sub" in body
+    # Same rewrite rule the mouth uses — pin the behavior without importing
+    # conversation_handler (ollama/aiohttp not on the WSL pin env).
+    def rewrite(text: str, speaker: str) -> str:
+        name = str(speaker or "").strip()
+        if name and name.lower() not in {"", "unknown", "user"}:
+            text = re.sub(r"^User\b", name, text, count=1)
+        return text
+    assert rewrite("User's wife is Tanya", "David") == "David's wife is Tanya"
+    assert rewrite("User enjoys pizza", "David") == "David enjoys pizza"
+    assert rewrite("User's wife is Tanya", "unknown") == "User's wife is Tanya"
+
+
 def test_personal_activity_formatter_uses_conversational_memory_voice() -> None:
     src = _source()
     body = _function_body(src, "_format_personal_activity_memory_reply")
@@ -58,6 +91,8 @@ def test_personal_activity_formatter_uses_conversational_memory_voice() -> None:
     assert "Most relevant" not in body
     assert "_memory_priority(" in body
     assert "_to_speakable_memory_sentence(" in body
+    assert "I can pull more details if you want." not in body
+    assert "_is_session_bookkeeping_text(" in body
 
 
 def test_none_route_fragment_noise_guard_present() -> None:
@@ -76,4 +111,30 @@ def test_negative_identity_fact_guard_present() -> None:
     assert "category != \"personal_fact\"" in guard_body
     assert "startswith(\"user is not \")" in guard_body
     assert "if _is_unstable_personal_fact(payload, category):" in collect_body
+
+
+def test_unvalidated_learning_golden_persists_and_does_not_llm() -> None:
+    src = _source()
+    body = _function_body(src, "handle_transcription")
+    at = body.find('golden_op == "unvalidated_learning"')
+    assert at > 0
+    chunk = body[at:at + 900]
+    assert "_format_unvalidated_learning_reply()" in chunk
+    assert "_persist_spoken_turn(text, reply)" in chunk
+    assert "_broadcast_chunk_sync" in chunk
+    fmt = _function_body(src, "_format_unvalidated_learning_reply")
+    assert "GroundingQueue" in fmt
+    assert "ranked_pending" in fmt
+    assert "ollama" not in fmt.lower()
+
+
+def test_status_native_persists_spoken_turn() -> None:
+    """Lived 2026-09-01: STATUS how-are-you was in flight but not conversation_history."""
+    src = _source()
+    body = _function_body(src, "handle_transcription")
+    status_at = body.find("routing.tool == ToolType.STATUS")
+    assert status_at > 0
+    next_elif = body.find("elif routing.tool == ToolType.MEMORY", status_at)
+    chunk = body[status_at:next_elif if next_elif > 0 else status_at + 2500]
+    assert "_persist_spoken_turn(text, reply)" in chunk
 

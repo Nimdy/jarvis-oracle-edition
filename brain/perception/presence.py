@@ -18,14 +18,19 @@ logger = logging.getLogger(__name__)
 
 PRESENCE_USER_ARRIVED = "presence:user_arrived"
 _MIN_ABSENCE_FOR_GREETING_S = 600.0
+# Pi PersonTracker already waits max_absent_s=5s, then sends one person_lost
+# edge. Requiring 3 present=False events here meant departed never latched
+# (lived: zero "Proactive arrival greeting" lines in brain.log since 2026-07-02).
+_ABSENT_EVENTS_TO_DEPART = 1
 
 
 class PresenceTracker:
-    """Single canonical authority for user presence (with hysteresis).
+    """Single canonical authority for user presence.
 
-    Subscribes to raw PERCEPTION_USER_PRESENT events and emits
-    PERCEPTION_USER_PRESENT_STABLE after applying 3-consecutive-absent
-    hysteresis. All downstream consumers should subscribe to the stable event.
+    Subscribes to raw PERCEPTION_USER_PRESENT events. The Pi already applies
+    track-loss hysteresis before emitting person_lost, so one present=False
+    is departure. Emits PERCEPTION_USER_PRESENT_STABLE on the edge.
+    All downstream consumers should subscribe to the stable event.
     """
 
     def __init__(self, engine: ConsciousnessEngine) -> None:
@@ -65,13 +70,14 @@ class PresenceTracker:
                 self._consecutive_absent = 0
             else:
                 self._consecutive_absent += 1
-                if self._consecutive_absent >= 3:
+                if self._consecutive_absent >= _ABSENT_EVENTS_TO_DEPART:
                     self._is_present = False
                     self._confidence = confidence
 
             changed = was_present != self._is_present
             now_present = self._is_present
             now_confidence = self._confidence
+            first_seen_this_process = self._last_departed <= 0
             absence_s = time.time() - self._last_departed if self._last_departed > 0 else 0
             if changed and not now_present:
                 self._last_departed = time.time()
@@ -85,17 +91,34 @@ class PresenceTracker:
                     type="observation", payload="User returned to desk", weight=0.3,
                     tags=["presence", "return"], provenance="observed",
                 ))
-                if absence_s >= _MIN_ABSENCE_FOR_GREETING_S:
+                # Boot/bounce: _last_departed is 0 so absence_s was 0 and the
+                # 10-minute floor swallowed the first sit-down, including when
+                # the Pi re-fires person_detected after a brain bounce.
+                should_greet = (
+                    first_seen_this_process
+                    or absence_s >= _MIN_ABSENCE_FOR_GREETING_S
+                )
+                if should_greet:
+                    logger.info(
+                        "PRESENCE_USER_ARRIVED absent=%.0fs first_seen=%s",
+                        absence_s, first_seen_this_process,
+                    )
                     event_bus.emit(
                         PRESENCE_USER_ARRIVED,
                         absence_duration_s=absence_s,
                         confidence=confidence,
+                    )
+                else:
+                    logger.info(
+                        "Presence return without greeting (absent %.0fs < %.0fs)",
+                        absence_s, _MIN_ABSENCE_FOR_GREETING_S,
                     )
             else:
                 self._engine.remember(CreateMemoryData(
                     type="observation", payload="User left desk", weight=0.2,
                     tags=["presence", "departure"], provenance="observed",
                 ))
+                logger.info("Presence departed")
 
     def _on_attention(self, level: float, **_) -> None:
         with self._lock:

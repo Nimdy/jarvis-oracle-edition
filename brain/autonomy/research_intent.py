@@ -241,6 +241,19 @@ def emit_thought_validation_outcome(
     except Exception:
         pass
 
+    # Dead-wire close (#83 WS3): thought_trigger_selector 24→13 teacher pair.
+    # Shadow collector only. Does not add the focus to _TIER1_FOCUSES and does
+    # not lift Weight-Room blocked_by_design (Thought Maturity P3 stays parked).
+    try:
+        from hemisphere.thought_trigger_encoder import record_teacher_pair
+        record_teacher_pair(
+            thought_id=payload.get("intent_id") or belief_id,
+            trigger_name="belief_validation_curiosity",
+            grounded=bool(grounded),
+        )
+    except Exception:
+        pass
+
     return payload
 
 

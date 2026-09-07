@@ -88,6 +88,7 @@ Only the commands below are supported in runtime:
 - `Jarvis, GOLDEN COMMAND ACQUIRE <intent text>`
 - `Jarvis, GOLDEN COMMAND ACQUISITION STATUS`
 - `Jarvis, GOLDEN COMMAND LEARN SKILL <intent text>`
+- `Jarvis, GOLDEN COMMAND UNVALIDATED LEARNING`
 
 ## Skill Learning
 

@@ -64,6 +64,14 @@ from reasoning.voice_policy import OracleVoicePolicy, VoicePolicyConfig
 
 logger = logging.getLogger("jarvis.perception")
 
+# Spoken invite only — not every closer. TAP must not treat "Have a great day"
+# as expecting a follow-on sit.
+_TAP_FOLLOW_UP_INVITE_RE = re.compile(
+    r"\b(?:what(?:'s| is) on your mind|let me know|would you like|"
+    r"want me to|shall i|your thoughts|anything else)\b",
+    re.I,
+)
+
 
 # Negation / absence markers. If one appears in the same CLAUSE as an object, the VLM
 # is reporting that object's ABSENCE — crediting it as present would be a perception
@@ -91,7 +99,12 @@ def _object_present_in_description(obj: str, desc_lower: str) -> bool:
     desc = desc_lower.replace("'", "").replace("’", "")
     for clause in _VLM_CLAUSE_SPLIT_RE.split(desc):
         tokens = re.findall(r"[a-z]+", clause)
-        if obj not in tokens:               # whole-token match (not substring)
+        forms = {obj}
+        if not obj.endswith("s"):
+            forms.add(obj + "s")
+        if obj == "mouse":
+            forms.add("mice")
+        if not forms.intersection(tokens):  # whole-token match (not substring); plurals count
             continue
         if any(tok in _VLM_ABSENCE_MARKERS for tok in tokens):
             continue                        # object is negated in this clause -> absent
@@ -163,6 +176,35 @@ def _build_scene_block() -> dict[str, Any]:
     return block
 
 
+_ECHO_SENTENCE_SPLIT_RE = re.compile(r"[.!?]+")
+
+
+def echo_reference_spans(response_text: str) -> list[str]:
+    """Full reply plus last sentence. Echo STT often captures only the tail."""
+    full = (response_text or "").strip().lower()
+    if not full:
+        return []
+    spans = [full]
+    parts = [p.strip() for p in _ECHO_SENTENCE_SPLIT_RE.split(full) if p.strip()]
+    if parts:
+        last = parts[-1]
+        if last not in spans:
+            spans.append(last)
+    return spans
+
+
+def echo_best_similarity(heard: str, response_text: str) -> float:
+    """Max SequenceMatcher ratio of heard text against echo reference spans."""
+    from difflib import SequenceMatcher
+    h = (heard or "").strip().lower()
+    if not h:
+        return 0.0
+    best = 0.0
+    for span in echo_reference_spans(response_text):
+        best = max(best, SequenceMatcher(None, span, h).ratio())
+    return best
+
+
 class PerceptionOrchestrator:
     """Encapsulates all perception wiring so main.py stays clean."""
 
@@ -220,6 +262,8 @@ class PerceptionOrchestrator:
         self._speaking_safety_timer: threading.Timer | None = None
         self._SPEAKING_SAFETY_TIMEOUT_S = 60.0
         self._speaking_conv_id: str = ""
+        self._last_tap_conversation_id: str = ""
+        self._last_spoken_invites_follow_up: bool = False
 
         # Unknown speaker tracking for curiosity system
         self._unknown_speaker_events: deque[dict[str, Any]] = deque(maxlen=10)
@@ -283,10 +327,12 @@ class PerceptionOrchestrator:
         self._last_scene_analysis_time: float = 0.0
         self._scene_interval_away: float = 300.0
         self._scene_interval_present: float = 1800.0
+        # Watchdog: a hung Ollama describe used to freeze this loop overnight.
+        self._scene_analyze_timeout_s: float = 90.0
         self._object_memory: dict[str, dict] = {}
         self._last_scene_description: str = ""
         self._last_edge_caption_ts: float = 0.0  # when the Pi edge VLM last supplied a caption
-        self._last_scene_source: str = ""        # "edge_vlm" (Pi Hailo) | "desktop_gpu" (qwen2.5vl)
+        self._last_scene_source: str = ""        # "edge_vlm" (Pi Hailo) | "desktop_gpu" (qwen3-vl)
         self._last_scene_ts: float = 0.0         # when _last_scene_description was last set (either path)
         self._scene_analysis_in_progress: bool = False
         self._gestation_active: bool = False
@@ -1283,9 +1329,28 @@ class PerceptionOrchestrator:
 
     def _on_scene_summary(self, detections=None, frame_size=None, scene_change_score=0.0, person_bboxes=None, **_):
         """Handle scene_summary events from the Pi aggregator."""
-        if not detections:
-            return
         fw, fh = (frame_size or [640, 480])[:2]
+
+        # Transient occlusion GEOMETRY only, from the Pi (same frame as detections):
+        # where a body blocks the view this frame. Used solely by scene_tracker ->
+        # estimate_region_visibility (occluded-vs-removed). NEVER tracked as an entity,
+        # persisted, or tied to identity — persons are already filtered out of scene_dets.
+        # Record even when the object list is empty: Hailo is person-only on this
+        # rig, so most summaries carry 0 objects + 1 person. Dropping the empty
+        # list used to drop the person boxes too, starving fusion + the dashboard.
+        person_boxes = [tuple(b) for b in (person_bboxes or []) if b and len(b) == 4]
+        self._last_person_bboxes = person_boxes      # transient, read-only, for fusion yaw cal
+
+        if not detections:
+            # Pi sent a frame-summary with no objects (Hailo is person-only).
+            # Room inventory is a BRAIN VLM read of the Pi snapshot, not Pi CPU YOLO.
+            # Still refresh person-occlusion so region vis / later HRR see the body,
+            # without decaying VLM-seeded objects as "gone".
+            self._last_scene_snapshot = self._scene_tracker.refresh_person_occlusion(
+                person_boxes, fw, fh,
+            )
+            self._maybe_request_first_look()
+            return
 
         scene_dets: list[SceneDetection] = []
         for d in detections:
@@ -1298,13 +1363,6 @@ class PerceptionOrchestrator:
                 source="pi",
                 hit_count=d.get("hit_count", 1),
             ))
-
-        # Transient occlusion GEOMETRY only, from the Pi (same frame as detections):
-        # where a body blocks the view this frame. Used solely by scene_tracker ->
-        # estimate_region_visibility (occluded-vs-removed). NEVER tracked as an entity,
-        # persisted, or tied to identity — persons are already filtered out of scene_dets.
-        person_boxes = [tuple(b) for b in (person_bboxes or []) if b and len(b) == 4]
-        self._last_person_bboxes = person_boxes      # transient, read-only, for fusion yaw cal
 
         snapshot = self._scene_tracker.update(scene_dets, fw, fh, person_boxes)
         self._last_scene_snapshot = snapshot
@@ -1367,14 +1425,10 @@ class PerceptionOrchestrator:
         text = self._strip_person_clauses(text)
         if not text:
             return
-        self._last_scene_description = text
         self._last_edge_caption_ts = time.time()
-        self._last_scene_source = "edge_vlm"
-        self._last_scene_ts = self._last_edge_caption_ts
         logger.info("Edge scene caption (%s, %sms): %s", model, latency_ms, text[:120])
         try:
-            self._update_object_memory(text)
-            self._feed_vlm_to_tracker(text)
+            self.ingest_scene_description(text, source="edge_vlm")
         except Exception:
             logger.debug("edge caption tracker-feed failed", exc_info=True)
 
@@ -1962,9 +2016,11 @@ class PerceptionOrchestrator:
         if any(marker in lower for marker in self._ECHO_CONVERSATIONAL_MARKERS):
             return False
 
-        ref_lower = self._last_response_text.strip().lower()
+        refs = echo_reference_spans(self._last_response_text)
+        if not refs:
+            return False
 
-        is_substring = lower in ref_lower and len(lower) >= 10
+        is_substring = any(lower in span and len(lower) >= 10 for span in refs)
         if is_substring:
             gap = time.monotonic() - self._playback_complete_time if self._playback_complete_time else -1
             logger.warning("Echo detected (substring match, gap=%.1fs) — discarding: %s",
@@ -1976,11 +2032,13 @@ class PerceptionOrchestrator:
                 pass
             return True
 
-        from difflib import SequenceMatcher
-        similarity = SequenceMatcher(None, ref_lower, lower).ratio()
-
+        similarity = echo_best_similarity(lower, self._last_response_text)
+        shortest = min(len(span) for span in refs)
         threshold = self._ECHO_SIMILARITY_THRESHOLD
-        if len(lower) < len(ref_lower) * 0.5 and len(lower) >= 10:
+        if len(lower) < shortest * 0.5 and len(lower) >= 10:
+            threshold = self._ECHO_PARTIAL_THRESHOLD
+        elif len(refs) > 1 and len(lower) <= len(refs[-1]) + 8:
+            # Tail STT vs last sentence: full-reply 0.70 is the miss class.
             threshold = self._ECHO_PARTIAL_THRESHOLD
 
         if similarity >= threshold:
@@ -2014,10 +2072,29 @@ class PerceptionOrchestrator:
         if is_known and speaker != "unknown":
             return False
 
-        ref_lower = self._last_response_text.strip().lower()
-        lower = text.strip().lower()
+        is_follow_up = bool(
+            self.audio_stream and getattr(self.audio_stream, "was_follow_up", False)
+        )
+        # Identity floor: follow-up is continuation of the owner's sit.
+        # Unknown speaker in the echo window is not a David turn.
+        # Lived: TTS tail STT as speaker_3 "we're engineers."
+        if is_follow_up:
+            logger.warning(
+                "ECHO-GUARD: unknown speaker on follow-up in echo window — blocking: %s",
+                text[:80],
+            )
+            try:
+                event_bus.emit(
+                    "echo:detected", text=text[:80], similarity=0.0,
+                    speaker=speaker, guard="unknown_follow_up",
+                )
+            except Exception:
+                pass
+            return True
 
-        if lower in ref_lower and len(lower) >= 8:
+        refs = echo_reference_spans(self._last_response_text)
+        lower = text.strip().lower()
+        if any(lower in span and len(lower) >= 8 for span in refs):
             logger.warning(
                 "ECHO-GUARD: unknown speaker substring match — blocking: %s", text[:80],
             )
@@ -2028,8 +2105,7 @@ class PerceptionOrchestrator:
                 pass
             return True
 
-        from difflib import SequenceMatcher
-        similarity = SequenceMatcher(None, ref_lower, lower).ratio()
+        similarity = echo_best_similarity(lower, self._last_response_text)
         if similarity >= self._SPEAKER_ECHO_SIMILARITY:
             logger.warning(
                 "ECHO-GUARD: unknown speaker (%.0f%% match to last response) — blocking: %s",
@@ -2171,6 +2247,7 @@ class PerceptionOrchestrator:
                         follow_up=is_follow_up,
                         enroll_callback=self.enroll_current_user,
                         identity_callback=self.get_identity_status,
+                        scene_ingest_callback=self.ingest_scene_description,
                     ),
                     timeout=_HANDLE_TIMEOUT_S,
                 )
@@ -2211,6 +2288,339 @@ class PerceptionOrchestrator:
                 )
 
         asyncio.get_event_loop().create_task(_safe_handle())
+
+    def _voice_turn_busy(self) -> bool:
+        """True while TTS/STT capture is in flight. FOLLOW_UP is not busy —
+        that window is how a continuation reaches her without a wake."""
+        if self._speaking_conv_id:
+            return True
+        if self.audio_stream and getattr(self.audio_stream, "is_speaking", False):
+            return True
+        if self.audio_stream and self.audio_stream.stream_state_name() == "LISTENING":
+            return True
+        return False
+
+    def tap_ear_status(self) -> dict[str, Any]:
+        """What an agent must read before a TAP: new sit vs continuation."""
+        ear = "NONE"
+        remaining = 0.0
+        speaking = bool(self._speaking_conv_id)
+        if self.audio_stream:
+            ear = self.audio_stream.stream_state_name()
+            remaining = self.audio_stream.follow_up_remaining_s()
+            speaking = speaking or bool(self.audio_stream.is_speaking)
+        return {
+            "speaking": speaking,
+            "busy": self._voice_turn_busy(),
+            "ear": ear,
+            "follow_up_listening": ear == "FOLLOW_UP" and remaining > 0,
+            "follow_up_remaining_s": round(remaining, 2),
+            "follow_up_timeout_s": float(
+                getattr(self.audio_stream, "_follow_up_timeout_s", 4.0)
+                if self.audio_stream else 4.0
+            ),
+            "last_conversation_id": getattr(self, "_last_tap_conversation_id", "") or "",
+            "last_spoken_invites_follow_up": bool(
+                getattr(self, "_last_spoken_invites_follow_up", False)
+            ),
+        }
+
+    def _resolve_tap_follow_up(self, explicit: bool | None) -> tuple[bool, str]:
+        """New sit vs continuation. TAP skip-wake is NOT the same as follow_up.
+
+        follow_up=True on handle_transcription enables yes→enroll/camera,
+        research continuation, anaphora. Only when she is actually waiting
+        or the agent asked to continue.
+        """
+        if explicit is True:
+            return True, "client_continue"
+        if explicit is False:
+            return False, "client_new_sit"
+        st = self.tap_ear_status()
+        if st["follow_up_listening"]:
+            return True, "ear_follow_up_window"
+        if st["last_spoken_invites_follow_up"] and st["follow_up_remaining_s"] > 0:
+            return True, "spoken_invite"
+        return False, "new_sit"
+
+    @staticmethod
+    def spoken_invites_follow_up(spoken: str) -> bool:
+        """True only if the mouth asked for a continuation. Most replies do not."""
+        text = (spoken or "").strip()
+        if not text:
+            return False
+        if text.endswith("?"):
+            return True
+        return bool(_TAP_FOLLOW_UP_INVITE_RE.search(text))
+
+    def inject_operator_turn(
+        self,
+        text: str,
+        *,
+        speaker: str = "David",
+        follow_up: bool | None = None,
+    ) -> dict[str, Any]:
+        """Second ear: text TAP into handle_transcription. Not /api/chat.
+
+        David for L3 scope. Provenance operator_proxy. Does not forge fusion.
+        """
+        import json
+        import os
+        import uuid
+        from pathlib import Path
+
+        from consciousness.events import operator_proxy_turn
+
+        cleaned = (text or "").strip()
+        speaker_name = (speaker or "David").strip() or "David"
+        if not cleaned:
+            return {"ok": False, "refused": "empty_text", "spoken": "", "route": ""}
+        try:
+            from memory.gate import memory_gate
+            if memory_gate.synthetic_session_active():
+                return {
+                    "ok": False,
+                    "refused": "synthetic_session_active",
+                    "spoken": "",
+                    "route": "",
+                }
+        except Exception:
+            pass
+        if self._voice_turn_busy():
+            return {
+                "ok": False,
+                "refused": "voice_busy",
+                "spoken": "",
+                "route": "",
+                **self.tap_ear_status(),
+            }
+
+        use_follow_up, follow_reason = self._resolve_tap_follow_up(follow_up)
+        last_id = str(getattr(self, "_last_tap_conversation_id", "") or "")
+        conversation_id = (
+            last_id if (use_follow_up and last_id.startswith("tap_"))
+            else f"tap_{uuid.uuid4().hex[:12]}"
+        )
+        speaker_snapshot = {
+            "name": speaker_name,
+            "method": "operator_proxy",
+            "identity_method": "operator_proxy",
+            "operator_proxy": True,
+            "is_known": True,
+            "confidence": 1.0,
+        }
+        emotion_snapshot = dict(self._current_emotion) if self._current_emotion else {
+            "emotion": "neutral", "trusted": False,
+        }
+        with self._conv_lock:
+            cancel_state = {"id": conversation_id, "cancelled": False}
+            self._active_conversation = cancel_state
+        if self.audio_stream:
+            self.audio_stream.set_speaking(True)
+        self._speaking_conv_id = conversation_id
+        logger.info(
+            "OPERATOR-PROXY TAP speaker=%s conv=%s follow_up=%s (%s) text=%s",
+            speaker_name, conversation_id, use_follow_up, follow_reason, cleaned[:80],
+        )
+        result: dict[str, Any] = {}
+        try:
+            # TAP skip-wake is this inject, not follow_up=True.
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Caller must await inject_operator_turn_async.
+                raise RuntimeError("use inject_operator_turn_async from async callers")
+            result = loop.run_until_complete(handle_transcription(
+                cleaned, self.engine, self.response_gen, self.claude, self.perception,
+                self.episodes, speaker_snapshot, emotion_snapshot,
+                conversation_id=conversation_id,
+                cancel_flag=cancel_state,
+                ollama=self._ollama,
+                pi_snapshot_url=self._pi_snapshot_url,
+                brain_tts=self.brain_tts,
+                scene_context=self.get_scene_context(),
+                follow_up=use_follow_up,
+                enroll_callback=self.enroll_current_user,
+                identity_callback=self.get_identity_status,
+                scene_ingest_callback=self.ingest_scene_description,
+            )) or {}
+        finally:
+            self._cancel_speaking_safety_timer()
+            self._speaking_conv_id = ""
+            if self.audio_stream:
+                self.audio_stream.set_speaking(False)
+            with self._conv_lock:
+                if (self._active_conversation or {}).get("id") == conversation_id:
+                    self._active_conversation = {"id": "", "cancelled": True}
+            try:
+                operator_proxy_turn.set(False)
+            except Exception:
+                pass
+        spoken = result.get("spoken", "") if isinstance(result, dict) else ""
+        invites = self.spoken_invites_follow_up(spoken)
+        self._last_tap_conversation_id = conversation_id
+        self._last_spoken_invites_follow_up = invites
+        payload = {
+            "ok": True,
+            "refused": "",
+            "conversation_id": conversation_id,
+            "route": result.get("route", "") if isinstance(result, dict) else "",
+            "spoken": spoken,
+            "speaker": speaker_name,
+            "provenance": "operator_proxy",
+            "follow_up": use_follow_up,
+            "follow_up_reason": follow_reason,
+            "expects_follow_up": invites,
+            **self.tap_ear_status(),
+        }
+        try:
+            ledger = Path(os.path.expanduser("~/.jarvis/operator_tap.jsonl"))
+            ledger.parent.mkdir(parents=True, exist_ok=True)
+            rec = {
+                "ts": time.time(),
+                "text": cleaned[:500],
+                **payload,
+            }
+            with ledger.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, default=str) + "\n")
+        except Exception:
+            logger.debug("operator tap ledger write skipped", exc_info=True)
+        return payload
+
+    async def inject_operator_turn_async(
+        self,
+        text: str,
+        *,
+        speaker: str = "David",
+        follow_up: bool | None = None,
+    ) -> dict[str, Any]:
+        """Async TAP for the dashboard. Same contract as inject_operator_turn."""
+        import json
+        import os
+        import uuid
+        from pathlib import Path
+
+        from consciousness.events import operator_proxy_turn
+
+        cleaned = (text or "").strip()
+        speaker_name = (speaker or "David").strip() or "David"
+        if not cleaned:
+            return {"ok": False, "refused": "empty_text", "spoken": "", "route": ""}
+        try:
+            from memory.gate import memory_gate
+            if memory_gate.synthetic_session_active():
+                return {
+                    "ok": False,
+                    "refused": "synthetic_session_active",
+                    "spoken": "",
+                    "route": "",
+                }
+        except Exception:
+            pass
+        if self._voice_turn_busy():
+            return {
+                "ok": False,
+                "refused": "voice_busy",
+                "spoken": "",
+                "route": "",
+                **self.tap_ear_status(),
+            }
+
+        use_follow_up, follow_reason = self._resolve_tap_follow_up(follow_up)
+        last_id = str(getattr(self, "_last_tap_conversation_id", "") or "")
+        conversation_id = (
+            last_id if (use_follow_up and last_id.startswith("tap_"))
+            else f"tap_{uuid.uuid4().hex[:12]}"
+        )
+        speaker_snapshot = {
+            "name": speaker_name,
+            "method": "operator_proxy",
+            "identity_method": "operator_proxy",
+            "operator_proxy": True,
+            "is_known": True,
+            "confidence": 1.0,
+        }
+        emotion_snapshot = dict(self._current_emotion) if self._current_emotion else {
+            "emotion": "neutral", "trusted": False,
+        }
+        with self._conv_lock:
+            cancel_state = {"id": conversation_id, "cancelled": False}
+            self._active_conversation = cancel_state
+        if self.audio_stream:
+            self.audio_stream.set_speaking(True)
+        self._speaking_conv_id = conversation_id
+        logger.info(
+            "OPERATOR-PROXY TAP speaker=%s conv=%s follow_up=%s (%s) text=%s",
+            speaker_name, conversation_id, use_follow_up, follow_reason, cleaned[:80],
+        )
+        result: dict[str, Any] = {}
+        try:
+            result = await asyncio.wait_for(
+                handle_transcription(
+                    cleaned, self.engine, self.response_gen, self.claude, self.perception,
+                    self.episodes, speaker_snapshot, emotion_snapshot,
+                    conversation_id=conversation_id,
+                    cancel_flag=cancel_state,
+                    ollama=self._ollama,
+                    pi_snapshot_url=self._pi_snapshot_url,
+                    brain_tts=self.brain_tts,
+                    scene_context=self.get_scene_context(),
+                    follow_up=use_follow_up,
+                    enroll_callback=self.enroll_current_user,
+                    identity_callback=self.get_identity_status,
+                    scene_ingest_callback=self.ingest_scene_description,
+                ),
+                timeout=120.0,
+            ) or {}
+        except asyncio.TimeoutError:
+            result = {"spoken": "", "route": "", "operator_proxy": True}
+            payload = {
+                "ok": False,
+                "refused": "timeout",
+                "conversation_id": conversation_id,
+                "route": "",
+                "spoken": "",
+                "speaker": speaker_name,
+                "provenance": "operator_proxy",
+            }
+            return payload
+        finally:
+            self._cancel_speaking_safety_timer()
+            self._speaking_conv_id = ""
+            if self.audio_stream:
+                self.audio_stream.set_speaking(False)
+            with self._conv_lock:
+                if (self._active_conversation or {}).get("id") == conversation_id:
+                    self._active_conversation = {"id": "", "cancelled": True}
+            try:
+                operator_proxy_turn.set(False)
+            except Exception:
+                pass
+        spoken = result.get("spoken", "") if isinstance(result, dict) else ""
+        invites = self.spoken_invites_follow_up(spoken)
+        self._last_tap_conversation_id = conversation_id
+        self._last_spoken_invites_follow_up = invites
+        payload = {
+            "ok": True,
+            "refused": "",
+            "conversation_id": conversation_id,
+            "route": result.get("route", "") if isinstance(result, dict) else "",
+            "spoken": spoken,
+            "speaker": speaker_name,
+            "provenance": "operator_proxy",
+            "follow_up": use_follow_up,
+            "follow_up_reason": follow_reason,
+            "expects_follow_up": invites,
+            **self.tap_ear_status(),
+        }
+        try:
+            ledger = Path(os.path.expanduser("~/.jarvis/operator_tap.jsonl"))
+            ledger.parent.mkdir(parents=True, exist_ok=True)
+            rec = {"ts": time.time(), "text": cleaned[:500], **payload}
+            with ledger.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, default=str) + "\n")
+        except Exception:
+            logger.debug("operator tap ledger write skipped", exc_info=True)
+        return payload
 
     # ------------------------------------------------------------------
     # Identity enrollment & query
@@ -2470,6 +2880,7 @@ class PerceptionOrchestrator:
             else:
                 msg = f"{time_greeting}!"
 
+        proactive_behavior.mark_greeting_today()
         logger.info("Proactive arrival greeting (absent %.0fs): %s", absence_duration_s, msg)
         self._speak_proactive(msg)
 
@@ -2537,44 +2948,65 @@ class PerceptionOrchestrator:
     # Scene analysis
     # ------------------------------------------------------------------
 
+    def _scene_analysis_interval(self, user_here: bool) -> float:
+        """Cadence for the GPU room-read.
+
+        The 30-minute present interval is a *refresh* once a caption exists.
+        After bounce the caption is RAM-empty — use the short away interval
+        even if someone is sitting here, or the first look waits half an hour
+        (and a conversation-skip used to burn that slot entirely).
+        """
+        if not self._last_scene_description:
+            return self._scene_interval_away
+        return self._scene_interval_present if user_here else self._scene_interval_away
+
     async def _periodic_scene_analysis(self) -> None:
         await asyncio.sleep(30)
         while True:
             try:
                 now = time.time()
-                user_here = self.engine._is_user_present
-                interval = self._scene_interval_present if user_here else self._scene_interval_away
-                if now - self._last_scene_analysis_time >= interval:
-                    self._last_scene_analysis_time = now
-                    await self._analyze_scene()
+                user_here = bool(getattr(self.engine, "_is_user_present", False))
+                if now - self._last_scene_analysis_time >= self._scene_analysis_interval(user_here):
+                    outcome = await self._analyze_scene()
+                    if outcome in ("ok", "empty", "no_backend", "timeout"):
+                        self._last_scene_analysis_time = now
             except Exception as exc:
                 logger.debug("Scene analysis error: %s", exc)
             await asyncio.sleep(60)
 
-    async def _analyze_scene(self) -> None:
+    async def _analyze_scene(self) -> str:
         if not self._pi_snapshot_url or not self._ollama:
-            return
+            return "no_backend"
         # Defer to the Pi's edge VLM when it's actively supplying captions: if a fresh
         # edge caption arrived recently, skip the desktop-GPU round-trip entirely (no
-        # frame fetch, no qwen2.5vl load/unload). The edge path captions idle scenes;
+        # frame fetch, no qwen3-vl load/unload). The edge path captions idle scenes;
         # the GPU path resumes if the edge stream goes quiet (>150s stale).
         if self._last_edge_caption_ts and (time.time() - self._last_edge_caption_ts) < 150.0:
             logger.debug("Scene analysis: deferring to fresh edge VLM caption (skipping GPU path)")
-            return
+            return "deferred"
         with self._conv_lock:
             conv_active = self._active_conversation.get("id") and not self._active_conversation.get("cancelled")
         if conv_active:
             logger.debug("Skipping scene analysis — active conversation in progress")
-            return
+            return "busy"
 
         self._scene_analysis_in_progress = True
         try:
             from tools.vision_tool import describe_scene
-            description = await describe_scene(
-                self._pi_snapshot_url,
-                ollama_client=self._ollama,
-                prompt="Describe what you see briefly. List any people, objects, or activities. Be factual.",
+            description = await asyncio.wait_for(
+                describe_scene(
+                    self._pi_snapshot_url,
+                    ollama_client=self._ollama,
+                    prompt="Describe what you see briefly. List any people, objects, or activities. Be factual.",
+                ),
+                timeout=getattr(self, "_scene_analyze_timeout_s", 90.0),
             )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Scene analysis timed out after %.0fs — GPU look will retry on cadence",
+                getattr(self, "_scene_analyze_timeout_s", 90.0),
+            )
+            return "timeout"
         finally:
             self._scene_analysis_in_progress = False
             try:
@@ -2583,20 +3015,50 @@ class PerceptionOrchestrator:
                 pass
 
         if not description or "can't see" in description.lower():
-            return
-        self._last_scene_description = description
-        self._last_scene_source = "desktop_gpu"
-        self._last_scene_ts = time.time()
+            return "empty"
+        self.ingest_scene_description(description, source="desktop_gpu")
         logger.info("Scene analysis: %s", description[:100])
+        return "ok"
 
-        self._update_object_memory(description)
-        self._feed_vlm_to_tracker(description)
+    def ingest_scene_description(self, description: str, source: str = "desktop_gpu") -> None:
+        """Brain-side room inventory from a Pi-captured frame.
 
+        The Pi ships pixels (and Hailo persons). Naming monitors/desk/chair is
+        this GPU VLM parse — not a second detector on the Pi.
+        """
+        text = (description or "").strip()
+        if not text or "can't see" in text.lower() or "aren't available" in text.lower():
+            return
+        self._last_scene_description = text
+        self._last_scene_source = source or "desktop_gpu"
+        self._last_scene_ts = time.time()
+        self._update_object_memory(text)
+        self._feed_vlm_to_tracker(text)
         if self._last_scene_snapshot and self._last_scene_snapshot.display_surfaces:
             content = self._display_classifier.classify_from_description(
-                description, self._last_scene_snapshot.display_surfaces,
+                text, self._last_scene_snapshot.display_surfaces,
             )
             self._last_scene_snapshot.display_content = content
+
+    def _maybe_request_first_look(self) -> None:
+        """When the tracker is empty, pull one Pi snapshot on the brain GPU."""
+        if self._last_scene_description or self._scene_analysis_in_progress:
+            return
+        now = time.time()
+        if now - self._last_scene_analysis_time < 20.0:
+            return
+        loop = getattr(self, "_loop", None)
+        if loop is None:
+            return
+        try:
+            loop.create_task(self._first_look())
+        except Exception:
+            logger.debug("first-look schedule failed", exc_info=True)
+
+    async def _first_look(self) -> None:
+        outcome = await self._analyze_scene()
+        if outcome in ("ok", "empty", "no_backend", "timeout"):
+            self._last_scene_analysis_time = time.time()
 
     def _update_object_memory(self, description: str) -> None:
         common_objects = [
@@ -2630,14 +3092,17 @@ class PerceptionOrchestrator:
                 enrichments.append(SceneDetection(
                     label=obj, confidence=0.5, bbox=None, source="vlm",
                 ))
-        if enrichments and self._last_scene_snapshot:
-            fw = 640
-            fh = 480
+        if not enrichments:
+            return
+        # VLM captions are an independent seed from Pi object detections. Requiring
+        # an existing snapshot was a chicken-egg: empty Hailo object lists never
+        # created one, so GPU room-reads never reached the tracker.
+        fw, fh = 640, 480
+        if self._last_scene_snapshot is not None:
             fs = self._last_scene_snapshot.to_dict().get("region_visibility")
             if fs:
-                fw = 1920
-                fh = 1080
-            self._scene_tracker.update(enrichments, fw, fh)
+                fw, fh = 1920, 1080
+        self._last_scene_snapshot = self._scene_tracker.update(enrichments, fw, fh)
 
     # --- Camera control ---
 
@@ -2722,7 +3187,8 @@ class PerceptionOrchestrator:
         snap = self._last_scene_snapshot
         if snap is not None:
             physical = [e for e in snap.entities
-                        if not e.is_display_surface and e.state in ("visible", "occluded")]
+                        if not e.is_display_surface
+                        and e.state in ("visible", "occluded", "candidate")]
             if physical:
                 labels = sorted({e.label for e in physical})
                 parts.append(f"Physical: {', '.join(labels)}")
@@ -2740,7 +3206,7 @@ class PerceptionOrchestrator:
                                  for dc in activities]
                     parts.append(f"Display content: {', '.join(act_parts)}")
 
-        if not parts and self._last_scene_description:
+        if self._last_scene_description:
             parts.append(f"Visual: {self._last_scene_description[:150]}")
 
         if not parts and self._object_memory:

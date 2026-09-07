@@ -85,8 +85,13 @@ class GroundingResult:
 
 
 def p2_active_default() -> bool:
-    """Whether P2 applies repairs live. Default OFF (shadow). Flip via OSV_P2_ACTIVE."""
-    return os.environ.get("OSV_P2_ACTIVE", "false").strip().lower() in ("1", "true", "yes", "on")
+    """Whether P2 applies repairs live.
+
+    feat/project-2-oneshot: default ON so self-talk is bound to the OSV.
+    Kill-switch: OSV_P2_ACTIVE=false|0|off|no.
+    """
+    raw = os.environ.get("OSV_P2_ACTIVE", "true")
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
 # -- sentence segmentation ---------------------------------------------------

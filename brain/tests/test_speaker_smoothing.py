@@ -178,12 +178,38 @@ class TestVoiceSmoothingDampening:
         assert r["is_known"] is False, \
             f"Sustained low scores should eventually flip: smoothed={r['confidence']:.3f}"
 
+    def test_near_zero_raw_does_not_write_ema(self):
+        """Lived: empty/VAD-fail clip raw=0.000 must not zero a good smoother."""
+        profile_emb = _unit_vec(seed=1)
+        sid = _make_speaker_id({"dave": profile_emb})
+
+        def _mock_embed(emb_val):
+            sid._model.encode_batch = MagicMock(
+                return_value=MagicMock(squeeze=MagicMock(return_value=MagicMock(
+                    cpu=MagicMock(return_value=MagicMock(
+                        numpy=MagicMock(return_value=emb_val)
+                    ))
+                )))
+            )
+
+        _mock_embed(profile_emb.copy())
+        r1 = sid.identify(np.zeros(16000, dtype=np.float32))
+        assert r1["is_known"] is True
+        ema_before = sid._score_ema["dave"]
+
+        junk = _unit_vec(seed=999)
+        _mock_embed(junk)
+        r0 = sid.identify(np.zeros(16000, dtype=np.float32))
+        if r0["raw_score"] < sid.SCORE_EMA_MIN_RAW:
+            assert sid._score_ema["dave"] == ema_before
+            assert r0["is_known"] is True
+
 
 class TestEMAClearingOnLifecycle:
     """EMA is cleared on enrollment, removal, and merge to prevent stale state."""
 
     def test_enrollment_clears_ema(self):
-        """Enrolling a speaker resets their score EMA."""
+        """First enroll of a new name resets EMA. Re-enroll must not (lived 0.000 poison)."""
         sid = _make_speaker_id({"dave": _unit_vec(seed=1)})
         sid._score_ema["dave"] = 0.95
 
@@ -191,7 +217,12 @@ class TestEMAClearingOnLifecycle:
             with patch.object(sid, "_save_profiles"):
                 sid.enroll_speaker("dave", [np.zeros(16000, dtype=np.float32)])
 
-        assert "dave" not in sid._score_ema
+        assert sid._score_ema["dave"] == 0.95
+
+        with patch.object(sid, "_extract_embedding", return_value=_unit_vec(seed=3)):
+            with patch.object(sid, "_save_profiles"):
+                sid.enroll_speaker("newperson", [np.zeros(16000, dtype=np.float32)])
+        assert "newperson" not in sid._score_ema
 
     def test_removal_clears_ema(self):
         """Removing a speaker profile clears their score EMA."""

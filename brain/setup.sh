@@ -929,10 +929,17 @@ for e in engines:
     print(f'  {e}')
 " 2>/dev/null || echo "  Could not check engines"
 
-# --- Launch ----------------------------------------------------------------
+# --- Next step -------------------------------------------------------------
+# Do not exec main.py here. That skips the supervisor (no crash-restart)
+# and on a first install it can look like "setup is still running" when
+# gestation has already started. Operator starts the brain themselves.
 echo ""
-echo -e "${CYAN}=== Starting Jarvis Brain ===${NC}"
-LOG_FILE="/tmp/jarvis-brain.log"
-echo -e "  Logging to: ${CYAN}${LOG_FILE}${NC}"
+echo -e "${GREEN}=== Setup complete ===${NC}"
+echo -e "  Do ${CYAN}not${NC} leave this script running the brain."
+echo -e "  Start with supervisor:"
 echo ""
-exec python -u main.py 2>&1 | tee -a "$LOG_FILE"
+echo -e "    ${CYAN}./jarvis-brain.sh${NC}"
+echo ""
+echo -e "  First boot with an empty ~/.jarvis enters ${CYAN}gestation${NC}."
+echo -e "  Enrollment (name / face / voice) is ${CYAN}after${NC} gestation completes."
+echo ""

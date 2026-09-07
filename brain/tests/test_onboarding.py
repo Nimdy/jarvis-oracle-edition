@@ -36,6 +36,11 @@ from personality.onboarding import (
     READINESS_WEIGHTS,
     OnboardingManager,
     OnboardingState,
+    _LOWER_IS_BETTER,
+    _checkpoint_passed,
+    correction_training_metrics,
+    count_conversation_exchanges,
+    count_preference_memories,
 )
 
 
@@ -236,6 +241,143 @@ class TestCheckpointEvaluation:
         assert mgr.current_day == 3
 
 
+def test_count_conversation_exchanges_uses_stored_sits_not_episode_bags() -> None:
+    """Lived: 24 conversation memories, dashboard conversation_count=3 (episodes)."""
+    class _Mem:
+        def __init__(self, typ, tags=()):
+            self.type = typ
+            self.tags = tags
+
+    memories = [
+        _Mem("conversation"),
+        _Mem("conversation"),
+        _Mem("user_preference", ("personal_preference",)),
+        _Mem("factual_knowledge"),
+        {"type": "conversation"},
+    ]
+    assert count_conversation_exchanges(memories) == 3
+    assert count_conversation_exchanges([]) == 0
+
+
+def test_correction_training_metrics_blocks_vacuous_and_chips_from_friction(tmp_path):
+    """Lived: Stage 5 stayed empty because a missing singleton never set the metric."""
+    empty = correction_training_metrics(stage5_started_at=100.0, live_stats={})
+    assert empty["correction_accuracy"] == 0.0
+    assert empty["total_corrections"] == 0
+
+    path = tmp_path / "friction_events.jsonl"
+    path.write_text(
+        json.dumps({
+            "friction_type": "correction",
+            "timestamp": 50.0,
+            "user_text": "That's wrong. sqlite-vec",
+        })
+        + "\n"
+        + json.dumps({
+            "friction_type": "correction",
+            "timestamp": 150.0,
+            "user_text": "Jarvis, that is wrong. I do not work as a plumber.",
+        })
+        + "\n"
+        + json.dumps({
+            "friction_type": "rephrase",
+            "timestamp": 160.0,
+            "user_text": "Jarvis, I said good morning.",
+        })
+        + "\n",
+        encoding="utf-8",
+    )
+    before = correction_training_metrics(
+        stage5_started_at=100.0, friction_path=path,
+    )
+    assert before["total_corrections"] == 1
+    assert before["correction_accuracy"] == 1.0
+    assert before["repeated_mistakes"] == 0
+
+    ram_only = correction_training_metrics(
+        stage5_started_at=100.0,
+        live_stats={"total_corrections": 2, "total_checks": 9},
+        friction_path=tmp_path / "missing.jsonl",
+    )
+    assert ram_only["total_corrections"] == 2
+    assert ram_only["correction_accuracy"] == 1.0
+
+
+def test_checkpoint_orphan_high_is_not_a_pass():
+    """Lived: 0.46 greened vs target 0.30 because eval used >=."""
+    assert _checkpoint_passed("belief_orphan_rate", 0.46, 0.30) is False
+    assert _checkpoint_passed("belief_orphan_rate", 0.20, 0.30) is True
+    assert _checkpoint_passed("repeated_mistakes", 2, 0) is False
+    assert _checkpoint_passed("repeated_mistakes", 0, 0) is True
+    assert _checkpoint_passed("memory_recall_precision", 0.54, 0.90) is False
+    assert _checkpoint_passed("face_confidence", 0.70, 0.60) is True
+
+
+def test_stage6_does_not_graduate_on_orphan():
+    assert "belief_orphan_rate" not in DAY_CHECKPOINT_MAP[6].metrics
+    assert "memory_recall_precision" in DAY_CHECKPOINT_MAP[6].metrics
+    assert "1-orphan" in DAY_CHECKPOINT_MAP[6].working
+    assert "failed install" in DAY_CHECKPOINT_MAP[6].working.lower() or "unset is expected" in DAY_CHECKPOINT_MAP[6].working.lower()
+
+
+def test_stage6_exercises_are_not_inverted_pop_quiz():
+    """Lived: she asked him for family names. user_lines are him asking her."""
+    joined = " ".join(DAY_CHECKPOINT_MAP[6].exercises).lower()
+    assert "pop quiz" not in joined
+    assert "tell me the names of my family" not in joined
+    assert "ask me" in joined
+
+
+def test_inverted_orphan_checkpoint_is_retracted():
+    mgr = _make_manager()
+    mgr.start()
+    mgr._state.current_day = 6
+    mgr._state.checkpoints_met[6] = {"belief_orphan_rate": True}
+    # Stage 6 no longer lists orphan; retract path still covers lower-is-better
+    # if a leftover target is evaluated. Simulate day 6 with orphan in metrics
+    # dict by calling the helper on a synthetic checkpoint.
+    from personality.onboarding import DayCheckpoint
+    fake = DayCheckpoint(
+        day=6, label="Memory Validation", theme="Reinforcement",
+        metrics={"belief_orphan_rate": 0.30},
+        exercises=[],
+    )
+    mgr._evaluate_checkpoint(6, fake, {"belief_orphan_rate": 0.46})
+    assert mgr._state.checkpoints_met[6].get("belief_orphan_rate") is False
+
+
+def test_count_preference_memories_includes_intel_tags():
+    """Lived: I prefer / I really like stored as personal_preference, not tag 'preference'."""
+    class M:
+        def __init__(self, typ, tags):
+            self.type = typ
+            self.tags = tags
+    mems = [
+        M("user_preference", ("personal_preference", "speaker:david")),
+        M("user_preference", ("personal_interest",)),
+        M("conversation", ("preference",)),
+        M("observation", ("unrelated",)),
+    ]
+    assert count_preference_memories(mems) == 3
+
+
+def test_status_exposes_user_lines_for_dashboard():
+    mgr = _make_manager()
+    mgr.start()
+    st = mgr.get_status()
+    s2 = st["stages"][2]
+    assert any("I really like" in line for line in s2["user_lines"])
+    s3 = st["stages"][3]
+    assert not any("Sarah" in line for line in s3["user_lines"])
+    assert any("[Name] is my wife" in line for line in s3["user_lines"])
+    s5 = st["stages"][5]
+    assert any("favorite color" in line.lower() for line in s5["user_lines"])
+    assert any("who is Sarah" in line for line in s5["user_lines"])
+    assert any("plumber" in line.lower() for line in s5["user_lines"])
+    assert s2["checkpoint_targets"]["preference_memories"] == 15
+    assert "Stored personal intel" in s2["working"]
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Exercise Prompts
 # ═══════════════════════════════════════════════════════════════════════
@@ -373,7 +515,9 @@ class TestGraduation:
             checkpoint = DAY_CHECKPOINT_MAP[day]
             passing_metrics = {}
             for k, v in checkpoint.metrics.items():
-                if isinstance(v, int):
+                if k in _LOWER_IS_BETTER:
+                    passing_metrics[k] = v
+                elif isinstance(v, int):
                     passing_metrics[k] = v + 1
                 else:
                     passing_metrics[k] = v + 0.05

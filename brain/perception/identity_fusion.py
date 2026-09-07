@@ -401,6 +401,25 @@ class IdentityFusion:
             return False
         return True
 
+    def _can_preserve_on_solo_wake(self, now: float) -> bool:
+        """Keep last-known when one occupant is present and no other live face.
+
+        Corner-camera office: Hailo pose can be live with **no face crop**
+        while the operator looks at the desk. Fusion rule is already
+        voice + face=unknown → ACCEPT voice. Wake must not wipe that.
+        Still clear on a live face **mismatch** or two people in frame.
+        """
+        if not self._user_present:
+            return False
+        if self._visible_person_count > 1:
+            return False
+        if self._last_known is None or self._last_known.name == "unknown":
+            return False
+        # Do not use PERSIST_MAX_S here. That window only decays the
+        # persisted *method*. Sitting at the desk for >3 min with no face
+        # is the office case; presence-lost is the leave signal.
+        return True
+
     def _can_graceful_degrade_voice_drop(self, face_name: str, voice_confidence: float, now: float) -> bool:
         """Allow brief continuity when voice confidence drops unexpectedly."""
         if self._visible_person_count > 1:
@@ -431,20 +450,33 @@ class IdentityFusion:
             and self._face.timestamp
             and (now - self._face.timestamp) < STALE_FACE_S
         )
+        face_mismatch = bool(
+            face_live
+            and self._last_known
+            and self._last_known.name != self._face.name
+        )
         if face_live and self._last_known and self._last_known.name == self._face.name:
             logger.info("Wake word — keeping persisted identity '%s' (face confirmed)",
                         self._last_known.name)
+        elif face_mismatch:
+            logger.info("Wake word — clearing persisted identity '%s' (face mismatch)",
+                        self._last_known.name)
+            self._last_known = None
+            self._persist_cleared_at = now
         elif self._can_preserve_on_boundary_wake(now):
             logger.info(
                 "Wake word — keeping persisted identity '%s' (conversation-boundary grace)",
                 self._last_known.name,
             )
+        elif self._can_preserve_on_solo_wake(now):
+            logger.info(
+                "Wake word — keeping persisted identity '%s' (solo occupant, no conflicting face)",
+                self._last_known.name,
+            )
         else:
             if self._last_known:
-                logger.info("Wake word — clearing persisted identity '%s'%s",
-                            self._last_known.name,
-                            " (face mismatch)" if face_live and self._last_known and self._last_known.name != self._face.name
-                            else " (no face confirmation)")
+                logger.info("Wake word — clearing persisted identity '%s' (no face confirmation)",
+                            self._last_known.name)
                 self._last_known = None
                 self._persist_cleared_at = now
         self._resolve()

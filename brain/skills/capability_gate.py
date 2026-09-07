@@ -179,6 +179,52 @@ _UNBACKED_TOOL_ACTION_REWRITE = (
     "background research or retrieval task."
 )
 
+# Live visual/caretaking attendance of a named being. Memory of a name is
+# not eyes. Lived: NONE job reply invented "keeping an eye on Skylar"
+# with no pet ID and no visual enrollment.
+_UNGROUNDED_VISUAL_ATTENDANCE_RE = re.compile(
+    r"\bI(?:['\u2019]m| am)\s+(?:also\s+)?"
+    r"(?:keeping an eye on|keeping watch (?:on|over)|watching over|looking after)\s+"
+    r"([A-Za-z][A-Za-z'-]{1,30})\b",
+    re.I,
+)
+_ATTENDANCE_OBJECT_SKIP = frozenset({
+    "that", "this", "you", "it", "them", "him", "her", "things",
+    "everything", "stuff", "work", "things", "everyone",
+})
+_UNGROUNDED_VISUAL_ATTENDANCE_REWRITE = (
+    "I don't have a visual identification for that."
+)
+
+# Personal-store mutation claims. Distinct from job commitments
+# ("I'll get back to you") and from conversational reflections
+# ("I'll remember that"). Lived theater: "I've updated my records" /
+# "I'll make sure to keep those names" with no this-turn write.
+_MEMORY_WRITE_CLAIM_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(
+        r"\bI(?:['\u2019]ve| have| just)\s+"
+        r"(?:updated|added|saved|stored|recorded|written|wrote)\b"
+        r".{0,48}?\b(?:records?|memory|memories|roster|notes?)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\bI(?:['\u2019]ve| have| just)\s+added\s+"
+        r"(?:them|those names)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\bI(?:['\u2019]ll| will)\s+(?:make sure to |ensure (?:the |that )?)?"
+        r"(?:update|keep|add|save|store)\b"
+        r".{0,48}?\b(?:records?|names?|roster|memory|memories)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\bI(?:['\u2019]ll| will)\s+(?:make sure|ensure)\b"
+        r".{0,56}?\brecords?\b",
+        re.I,
+    ),
+]
+
 # ── Soft-signal patterns ────────────────────────────────────────────────────
 _OFFER_PATTERNS: list[re.Pattern[str]] = [
     re.compile(
@@ -541,7 +587,7 @@ _AFFECT_CLAIMS: list[tuple[re.Pattern, str]] = [
     (re.compile(
         r"\bI(?:'m| am) (?:really )?(?:happy|excited|thrilled|delighted|glad) (?:to|about|that)\b",
         re.I,
-    ), "I'm active and listening."),
+    ), ""),
     # ── Interior-experience fabrication: progressive/autobiographical desire ──
     # "I've been hoping/wanting/wishing/thinking/wondering" — the core confabulation
     (re.compile(
@@ -659,7 +705,7 @@ _SELF_STATE_CLAIMS: list[tuple[re.Pattern, str]] = [
         r"\bI(?:'m| am) (?:ready|prepared|available|equipped|standing by) to "
         r"(?:assist|help|support|serve) (?:you|in any way)\b",
         re.I,
-    ), "I'm active and listening"),
+    ), ""),
     (re.compile(
         r"\bbetter (?:understand|serve|support|assist|help)(?: your| you with| your)? needs\b",
         re.I,
@@ -678,12 +724,12 @@ _SELF_STATE_CLAIMS: list[tuple[re.Pattern, str]] = [
         r"(?:(?: you)? with (?:whatever|anything|everything) (?:you )?(?:need|want|require))?"
         r"(?: you)?\b",
         re.I,
-    ), "I'm active and listening"),
+    ), ""),
     # "I'm here for you"
     (re.compile(
         r"\bI(?:'m| am) here for you\b",
         re.I,
-    ), "I'm active and listening"),
+    ), ""),
     # "just like I've been" / "just as I have been" — continuity rhetoric
     (re.compile(
         r",? ?just (?:like|as) I(?:'ve| have) been\b",
@@ -1500,6 +1546,8 @@ class CapabilityGate:
         modified = self._rewrite_ungrounded_affect(modified)
         modified = self._rewrite_ungrounded_self_state(modified)
         modified = self._rewrite_ungrounded_learning(modified)
+        modified = self._rewrite_ungrounded_visual_attendance(modified)
+        modified = self._strip_active_listening_tic(modified)
 
         for pat_idx, (pattern, is_readiness) in enumerate(_CLAIM_PATTERNS):
             for match in list(pattern.finditer(modified)):
@@ -1530,7 +1578,7 @@ class CapabilityGate:
         modified = self._scan_offer_patterns(modified)
         modified = self._scan_demo_invites(modified)
         modified = self._sweep_blocked_verb_residual(modified)
-        return modified
+        return self._strip_active_listening_tic(modified)
 
     # ── Intention infrastructure Stage 0: backed-commitment evaluation ────
 
@@ -1611,6 +1659,54 @@ class CapabilityGate:
                     changed = True
                     self._commitments_rewritten_unbacked += 1
                     self._record_block(f"unbacked_commitment:{m.commitment_type}:{phrase[:60]}")
+        return modified, changed
+
+    def evaluate_memory_write(
+        self,
+        text: str,
+        backing_write_ids: list[str] | tuple[str, ...] | None,
+    ) -> tuple[str, bool]:
+        """Rewrite unbacked personal-store mutation claims.
+
+        Class-level, not a verb whitelist. If outgoing text claims this turn
+        updated records / kept names / added people AND no personal-intel
+        write actually fired, rewrite the committing sentence. Backed writes
+        (created / reinforced / extended this turn) pass through.
+
+        Conversational reflections ("I'll remember that", "I'll keep that in
+        mind") do not match — they are not store-mutation claims.
+        """
+        if not text or len(text) < 4:
+            return text, False
+
+        hits: list[str] = []
+        for pattern in _MEMORY_WRITE_CLAIM_PATTERNS:
+            for match in pattern.finditer(text):
+                phrase = match.group(0).strip()
+                if phrase:
+                    hits.append(phrase)
+        if not hits:
+            return text, False
+        if backing_write_ids:
+            return text, False
+
+        modified = text
+        changed = False
+        rewrite_phrase = "I did not write a new fact."
+        seen: set[str] = set()
+        for phrase in hits:
+            if phrase in seen:
+                continue
+            seen.add(phrase)
+            if phrase not in modified:
+                continue
+            modified = self._replace_through_sentence_end(
+                modified, phrase, rewrite_phrase,
+            )
+            changed = True
+            self._record_block(f"unbacked_memory_write:{phrase[:60]}")
+            self._record_claim_signal(phrase, "blocked")
+            logger.info("Gate rewrote unbacked memory-write claim: %r", phrase[:80])
         return modified, changed
 
     def _scan_system_action_narration(self, text: str) -> str:
@@ -1768,6 +1864,16 @@ class CapabilityGate:
             sentence_lower = text_lower[max(0, sent_start):sent_end + 1]
             if _REFLECTIVE_EXCLUSION_RE.search(sentence_lower):
                 continue
+            # Lived 2026-08-31: "I'm here" in a closer poisoned a later
+            # "you enjoy electronic dance music" sentence. Contract is
+            # blocked-verb + first-person/self-ref IN THE SAME SENTENCE.
+            # Do not drop music/dance from the blocked set.
+            if not (
+                _FIRST_PERSON_RE.search(sentence_lower)
+                or _SELF_NAME_RE.search(sentence_lower)
+                or _SELF_REFERENCE_RE.search(sentence_lower)
+            ):
+                continue
 
             _block_eid = self._record_block(f"sweep:{verb}")
             logger.info("Gate blocked (residual sweep): verb=%s in '%s'", verb, sentence[:80])
@@ -1802,6 +1908,21 @@ class CapabilityGate:
         return "I don't have that capability yet."
 
     @staticmethod
+    def _strip_active_listening_tic(text: str) -> str:
+        """Lived: L0 rewrote 'I'm here to help' into this closer on every turn."""
+        if not text:
+            return text
+        out = re.sub(
+            r"(?:[,;:—–-]\s*)?(?:\band\s+)?I(?:'m| am) active and listening\.?\s*",
+            "",
+            text,
+            flags=re.I,
+        )
+        out = re.sub(r"\s{2,}", " ", out)
+        out = re.sub(r"\s+([.!?])", r"\1", out)
+        return out.strip()
+
+    @staticmethod
     def _rewrite_at_match(text: str, match: re.Match, replacement: str) -> str:
         """Replace matched text, consuming orphaned clause tail through sentence end.
 
@@ -1813,32 +1934,30 @@ class CapabilityGate:
         """
         start, end = match.start(), match.end()
         after = text[end:]
+        if after and after[0] not in '.!?\n' and after.lstrip():
+            starts_new_clause = bool(re.match(
+                r'^[\s,;—–-]*\b(?:but|so|yet|while|because|since|when|if|'
+                r'though|although|which|that|who|I|you|we|they|he|she|it|'
+                r'my|the|this|there|here)\b',
+                after, re.I,
+            ))
+            if not starts_new_clause:
+                sent_end = end
+                for i in range(end, len(text)):
+                    if text[i] in '.!?\n':
+                        sent_end = i + 1
+                        break
+                else:
+                    sent_end = len(text)
+                end = sent_end
 
-        if not after or after[0] in '.!?\n':
-            return text[:start] + replacement + text[end:]
-
-        first_non_space = after.lstrip()
-        if not first_non_space:
-            return text[:start] + replacement + text[end:]
-
-        starts_new_clause = bool(re.match(
-            r'^[\s,;—–-]*\b(?:but|so|yet|while|because|since|when|if|'
-            r'though|although|which|that|who|I|you|we|they|he|she|it|'
-            r'my|the|this|there|here)\b',
-            after, re.I,
-        ))
-
-        if not starts_new_clause:
-            sent_end = end
-            for i in range(end, len(text)):
-                if text[i] in '.!?\n':
-                    sent_end = i + 1
-                    break
-            else:
-                sent_end = len(text)
-            end = sent_end
-
-        return text[:start] + replacement + text[end:]
+        prefix = text[:start]
+        if not (replacement or "").strip():
+            prefix = re.sub(r"[,;]?\s*(?:and\s+)?$", "", prefix)
+        out = prefix + replacement + text[end:]
+        out = re.sub(r"\s{2,}", " ", out)
+        out = re.sub(r"\s+([.!?])", r"\1", out)
+        return out.strip()
 
     def _rewrite_ungrounded_self_state(self, text: str) -> str:
         """Rewrite vague self-assessment rhetoric to telemetry-grounded language.
@@ -2075,6 +2194,29 @@ class CapabilityGate:
                 self._learning_rewrites += 1
                 logger.debug("Learning rewrite: '%s' → '%s'", original, replacement)
         return text
+
+    def _rewrite_ungrounded_visual_attendance(self, text: str) -> str:
+        """Block live 'watching / keeping an eye on <Name>' without sensor evidence.
+
+        A taught name in memory is not a visual ID. Scene must ground the claim.
+        """
+        if not text:
+            return text
+        modified = text
+        for match in list(_UNGROUNDED_VISUAL_ATTENDANCE_RE.finditer(modified)):
+            obj = (match.group(1) or "").strip()
+            if obj.lower() in _ATTENDANCE_OBJECT_SKIP:
+                continue
+            claimed = match.group(0)
+            if self._is_grounded_observation(claimed, modified):
+                continue
+            self._record_block(f"ungrounded_visual_attendance:{obj[:40]}")
+            self._record_claim_signal(claimed, "blocked")
+            logger.info("Gate blocked ungrounded visual attendance: '%s'", claimed[:80])
+            modified = self._replace_through_sentence_end(
+                modified, claimed, _UNGROUNDED_VISUAL_ATTENDANCE_REWRITE,
+            )
+        return modified
 
     def gate_identity_mention(self, text: str, confirmed_name: str | None) -> str:
         """Replace user-name mentions with neutral address when identity unconfirmed.

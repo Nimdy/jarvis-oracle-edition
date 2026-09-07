@@ -14,6 +14,7 @@ from consciousness.engine import ConsciousnessEngine
 from consciousness.events import (
     event_bus, CONVERSATION_USER_MESSAGE, CONVERSATION_RESPONSE,
     resolve_write_provenance, SOFT_CLAIM_CATEGORIES,
+    operator_proxy_turn,
 )
 from consciousness.release_validation import output_release_validator
 from consciousness.trace_context import build_trace_context
@@ -25,7 +26,10 @@ from reasoning.golden_words import (
     GoldenCommandContext, list_canonical_commands, with_golden_outcome,
     parse_golden_command,
 )
-from reasoning.tool_router import tool_router, ToolType, RoutingResult
+from reasoning.tool_router import (
+    tool_router, ToolType, RoutingResult, is_targeted_visual_question,
+    vision_retry_followup, record_voice_intent_teacher_signal,
+)
 from reasoning.context import context_builder
 from reasoning.bounded_response import articulate_meaning_frame, build_meaning_frame
 from reasoning.language_runtime_bridge import (
@@ -34,8 +38,16 @@ from reasoning.language_runtime_bridge import (
 )
 from tools.time_tool import get_current_time
 from tools.system_tool import get_system_status
-from tools.memory_tool import search_memory, get_memory_summary
-from tools.vision_tool import describe_scene, describe_scene_stream
+from tools.memory_tool import (
+    search_memory,
+    get_memory_summary,
+    _is_session_bookkeeping_text,
+    is_household_self_fact_recall,
+)
+from tools.vision_tool import (
+    describe_scene, describe_scene_stream, describe_jpeg, fetch_snapshot,
+    GENERIC_SCENE_PROMPT, vqa_prompt,
+)
 from tools.introspection_tool import (
     get_grounded_learning_job_status_answer,
     get_grounded_learning_job_status_record,
@@ -66,6 +78,51 @@ from reasoning.response import _score_complexity
 from reasoning.search_route_guard import guard_search_tool_reply
 
 logger = logging.getLogger("jarvis.conversation")
+
+# Lived miss 2026-08-24: VISION asked "what do you see in the room?" while the
+# live caption was desk/monitors; the mouth said kitchen/stove/dinner from
+# earlier cooking-chat memories. These claims are visual location — they may
+# be spoken only if the live caption actually contains them.
+_VISION_UNGROUNDED_CLAIMS = (
+    "kitchen", "stove", "oven", "fridge", "refrigerator",
+    "bedroom", "bathroom", "garage", "basement",
+    "cutting board", "pot on the stove",
+)
+
+
+def vision_reply_confabulates(caption: str, spoken: str) -> bool:
+    """True when the mouth names a place/object the live frame did not."""
+    cap = (caption or "").lower()
+    sp = (spoken or "").lower()
+    if not sp:
+        return False
+    return any(term in sp and term not in cap for term in _VISION_UNGROUNDED_CLAIMS)
+
+
+def _plugin_spoken_reply(result: Any) -> str:
+    """PLUGIN mouth: speak a sentence, never a Python dict dump."""
+    if result is None:
+        return ""
+    if isinstance(result, str):
+        return result.strip()
+    if not isinstance(result, dict):
+        return str(result)
+    payload: Any = result.get("output", result)
+    if isinstance(payload, str) and payload.strip():
+        return payload.strip()
+    if isinstance(payload, dict):
+        body = payload
+    else:
+        body = result
+    rolls = body.get("rolls") if isinstance(body, dict) else None
+    if isinstance(rolls, list) and rolls:
+        got = ", ".join(str(x) for x in rolls)
+        return f"I rolled the Dice, you got {got}"
+    if isinstance(body, dict) and body.get("ok") is False:
+        err = body.get("error")
+        if isinstance(err, str) and err.strip():
+            return err.strip()
+    return str(payload if payload is not None else result)
 
 _BRIEF_SIGNALS = re.compile(
     r"\b(keep it (short|brief|concise)|be (brief|concise|short)|shorter|less detail)\b", re.IGNORECASE)
@@ -955,7 +1012,9 @@ def _memory_priority(memory_type: str, normalized_preview: str) -> int:
     return 1
 
 
-def _to_speakable_memory_sentence(preview: str, max_chars: int = 170) -> str:
+def _to_speakable_memory_sentence(
+    preview: str, max_chars: int = 170, *, speaker: str = "",
+) -> str:
     text = re.sub(r"\s+", " ", str(preview or "")).strip()
     if not text:
         return ""
@@ -964,11 +1023,61 @@ def _to_speakable_memory_sentence(preview: str, max_chars: int = 170) -> str:
     if not text:
         return ""
     text = text.replace(" | ", ". ")
+    # Store templates are speaker-agnostic ("User's wife is Tanya") so L3
+    # can scope the row. The mouth uses this-turn speaker, not a hardcoded name.
+    name = str(speaker or "").strip()
+    if name and name.lower() not in {"", "unknown", "user"}:
+        text = re.sub(r"^User\b", name, text, count=1)
     if len(text) > max_chars:
         text = text[: max_chars - 3].rstrip() + "..."
     if text and text[-1] not in ".!?":
         text = f"{text}."
     return text
+
+
+def _format_unvalidated_learning_reply() -> str:
+    """Golden UNVALIDATED LEARNING — spark queue + OSV gaps. No LLM. No new facts."""
+    parts: list[str] = []
+    try:
+        from autonomy.grounding_queue import GroundingQueue
+        q = GroundingQueue.get_instance()
+        q.expire_stale()
+        n = q.pending_count()
+        if n <= 0:
+            parts.append("I don't have any grounding questions waiting for you.")
+        else:
+            parts.append(
+                f"I have {n} grounding question{'s' if n != 1 else ''} you haven't validated."
+            )
+            top = q.ranked_pending(limit=1)
+            if top:
+                claim = (top[0].rendered_claim or top[0].question_text or "").strip()
+                claim = re.sub(r"\s+", " ", claim)[:180].rstrip(" ,;:-")
+                if claim.count("(") > claim.count(")"):
+                    claim = claim.rstrip("(").strip()
+                    if claim.count("(") > claim.count(")"):
+                        claim += ")"
+                if claim:
+                    if claim[-1] not in ".!?":
+                        claim += "."
+                    parts.append(f"Highest leverage: {claim}")
+    except Exception:
+        logger.debug("unvalidated-learning queue read failed", exc_info=True)
+        parts.append("I couldn't read the grounding queue just now.")
+    try:
+        from cognition.self_view import load_self_view
+        model = load_self_view() or {}
+        gaps = model.get("gaps") or []
+        if gaps:
+            g0 = gaps[0]
+            area = g0.get("area") if isinstance(g0, dict) else str(g0)
+            if area:
+                parts.append(f"On my self-view, a current gap is {area}.")
+    except Exception:
+        logger.debug("unvalidated-learning OSV read failed", exc_info=True)
+    if not parts:
+        return "I don't have unvalidated learning to report right now."
+    return " ".join(parts)
 
 
 def _format_personal_activity_memory_reply(
@@ -977,14 +1086,10 @@ def _format_personal_activity_memory_reply(
     *,
     lead: str = "Here's what I remember from that time.",
     empty_msg: str = "I couldn't find matching memories for that time window.",
+    speaker: str = "",
 ) -> str:
     if not memory_ctx.strip():
         return empty_msg
-
-    total = 0
-    header = re.search(r"Found\s+(\d+)\s+relevant memory\(ies\)", memory_ctx, re.IGNORECASE)
-    if header:
-        total = int(header.group(1))
 
     ranked_items: list[tuple[int, float, str]] = []
     for raw_line in memory_ctx.splitlines():
@@ -999,17 +1104,21 @@ def _format_personal_activity_memory_reply(
             score = float(match.group("score"))
         except Exception:
             score = 0.0
+        if _is_session_bookkeeping_text(normalized):
+            continue
         ranked_items.append((_memory_priority(memory_type, normalized), score, normalized))
 
     if not ranked_items:
-        return _format_grounded_fallback("Memory recall", memory_ctx, max_lines=8, max_chars=560)
+        return empty_msg
 
     ranked_items.sort(key=lambda item: (item[0], -item[1]))
     selected: list[str] = []
     seen: set[str] = set()
     for _, _, normalized in ranked_items:
-        sentence = _to_speakable_memory_sentence(normalized)
+        sentence = _to_speakable_memory_sentence(normalized, speaker=speaker)
         if not sentence:
+            continue
+        if _is_session_bookkeeping_text(sentence):
             continue
         key = sentence.lower()
         if key in seen:
@@ -1020,13 +1129,10 @@ def _format_personal_activity_memory_reply(
             break
 
     if not selected:
-        return _format_grounded_fallback("Memory recall", memory_ctx, max_lines=8, max_chars=560)
+        return empty_msg
 
-    total = total or len(ranked_items)
     parts = [lead]
     parts.extend(selected)
-    if total > len(selected):
-        parts.append("I can pull more details if you want.")
     return " ".join(parts)
 
 
@@ -1193,6 +1299,19 @@ def _is_system_explanation_query(text: str) -> bool:
     return bool(_SYSTEM_EXPLANATION_RE.search(text or ""))
 
 
+async def _revoice_or_ground_codebase(answer: str, ollama) -> tuple[str, dict[str, Any]]:
+    """CODEBASE mouth: index text is authoritative. LLM may only revoice it."""
+    from cognition.self_view.revoice import revoice_code_answer
+
+    text = (answer or "").strip()
+    if not text:
+        return "I couldn't extract a codebase answer right now.", {
+            "used_revoice": False,
+            "reason": "empty",
+        }
+    return await revoice_code_answer(text, ollama)
+
+
 def _is_capability_status_query(text: str) -> bool:
     raw = (text or "").strip()
     if not raw:
@@ -1240,6 +1359,10 @@ def _should_use_memory_search(
         return False
     lower = (text or "").lower()
     if any(token in lower for token in ("search", "remember", "recall")):
+        return True
+    if extracted_args and extracted_args.get("about_subjects"):
+        return True
+    if is_household_self_fact_recall(text):
         return True
     return _is_personal_activity_recall_query(text)
 
@@ -1400,7 +1523,12 @@ def _apply_inline_preferences(text: str, engine: ConsciousnessEngine) -> None:
 _DOI_PREF_TOKEN_RE = re.compile(r"\bdoi\b", re.I)
 
 
-def _build_preference_instruction_ack(text: str, stored_count: int) -> str:
+def _build_preference_instruction_ack(
+    text: str,
+    stored_count: int,
+    *,
+    matched: int = 0,
+) -> str:
     """Return deterministic acknowledgement text for preference-instruction turns."""
     if _DOI_PREF_TOKEN_RE.search(text):
         if stored_count > 0:
@@ -1408,13 +1536,19 @@ def _build_preference_instruction_ack(text: str, stored_count: int) -> str:
                 "Understood. Preference saved. DOI is omitted in research answers "
                 "unless explicitly requested."
             )
+        if matched > 0:
+            return (
+                "Understood. Preference already stored. DOI is omitted in research "
+                "answers unless explicitly requested."
+            )
         return (
-            "Understood. Preference already stored. DOI is omitted in research "
-            "answers unless explicitly requested."
+            "I heard a response-style request. I did not store a new preference."
         )
     if stored_count > 0:
         return "Understood. Preference saved and active for future responses."
-    return "Understood. Preference already stored and still active."
+    if matched > 0:
+        return "Understood. Preference already stored and still active."
+    return "I heard a response-style request. I did not store a new preference."
 
 
 # ---------------------------------------------------------------------------
@@ -1440,7 +1574,7 @@ _DISLIKE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
 ]
 
 _FACT_PATTERNS: list[tuple[re.Pattern, str, str]] = [
-    (re.compile(r"\bi (?:work as|work in|am) (?:a |an )?(\w[\w\s]{2,40}?)(?:\.|,|!|$)", re.I),
+    (re.compile(r"\bi (?:work as|work in|am) (?:a |an )?(\w[\w\s]{2,80}?)(?:\.|,|!|$)", re.I),
      "User is {0}", "personal_fact"),
     (re.compile(r"\bi'?m from\s+(.{3,40}?)(?:\.|,|!|$)", re.I),
      "User is from {0}", "personal_fact"),
@@ -1458,15 +1592,53 @@ _FACT_PATTERNS: list[tuple[re.Pattern, str, str]] = [
      "User wants to be called {0}", "personal_fact"),
     (re.compile(r"\bmy (?:wife|husband|partner|spouse)(?:'?s name)? is\s+(\w+)", re.I),
      "User's partner is {0}", "personal_fact"),
+    # Lived: "Tanya is my wife, Lily is my daughter" did not match "my wife is".
+    (re.compile(
+        r"\b([A-Z][a-z]{1,})\s+is my\s+"
+        r"(wife|husband|partner|spouse|daughter|son|dog|cat|pet)(?:\s+dog)?\b"
+    ),
+     "User's {1} is {0}", "personal_fact"),
+    # Lived: "You missed my son, Owen" routed NONE and never reached the store.
+    # Class: operator names a missed household role + person. Not a name list.
+    (re.compile(
+        r"\byou (?:missed|forgot|left out)\s+my\s+"
+        r"(wife|husband|partner|spouse|daughter|son|dog|cat|pet)"
+        r"\s*[,:]?\s+([A-Za-z][A-Za-z'\-]{1,39})\b",
+        re.I,
+    ),
+     "User's {0} is {1}", "personal_fact"),
 ]
 
 _PREFERENCE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
-    (re.compile(r"\bi prefer\b(.{5,60}?)(?:\.|,|!|$)", re.I),
+    # Lived: "I prefer … to not say, I am active and listening" stopped at the
+    # comma and stored "to not say", then "I am …" became User is active and listening.
+    (re.compile(r"\bi prefer\b(.{5,200}?)(?:[.!?]|$)", re.I),
      "User prefers {0}", "personal_preference"),
+    (re.compile(
+        r"\b(?:don'?t|do not|never)\s+(?:always\s+)?(?:have to\s+)?"
+        r"(?:tell me|say)\s+(.{3,160}?)(?:[.!?]|$)",
+        re.I,
+    ),
+     "User prefers not to hear: {0}", "response_style"),
+    (re.compile(
+        r"\bi(?:'d| would) like help with\s+(.{5,200}?)(?:\.|,|!|$)",
+        re.I,
+    ),
+     "User wants help with {0}", "personal_preference"),
     (re.compile(r"\bmy favo(?:u)?rite (.{3,50}?) (?:is|are)\s+(.{3,50}?)(?:\.|,|!|$)", re.I),
      "User's favorite {0} is {1}", "personal_preference"),
     (re.compile(r"\bkeep it (short|brief|concise)\b", re.I),
      "User prefers concise responses", "response_style"),
+    (re.compile(
+        r"\bwhen i say (?:brief|short|concise)\b[, ]*(?:i mean\s+)?(.{3,80}?)(?:\.|,|!|$)",
+        re.I,
+    ),
+     "User brief means {0}", "response_style"),
+    (re.compile(
+        r"\b(?:don'?t|do not)\s+bring up\s+(.{3,80}?)(?:\s+proactively)?(?:\.|,|!|$)",
+        re.I,
+    ),
+     "User prefers not to discuss {0} proactively", "personal_preference"),
     (re.compile(r"\b(?:be )?more (detailed|thorough|verbose)\b", re.I),
      "User prefers detailed responses", "response_style"),
     (re.compile(
@@ -1500,7 +1672,7 @@ _PREFERENCE_PATTERNS: list[tuple[re.Pattern, str, str]] = [
 ]
 
 _ROUTINE_PRIORITY_PATTERNS: list[tuple[re.Pattern, str, str]] = [
-    (re.compile(r"\bmy (?:typical )?morning routine (?:is|includes?)\s+(.{3,90}?)(?:\.|,|!|$)", re.I),
+    (re.compile(r"\bmy (?:typical )?morning routine (?:is|includes?)\s+(.{3,90}?)(?:[.!?]|$)", re.I),
      "User morning routine: {0}", "routine_priority"),
     (re.compile(r"\bmy (?:daily|workday|work day) routine (?:is|includes?)\s+(.{3,90}?)(?:\.|,|!|$)", re.I),
      "User daily routine: {0}", "routine_priority"),
@@ -1565,6 +1737,34 @@ _CORRECTION_PATTERNS: list[re.Pattern] = [
     re.compile(r"\bthat(?:'s| is) not what i said\b", re.I),
     re.compile(r"\bforget (?:that|what i said)\b", re.I),
 ]
+# Same payload shape as the existing inverted household / partner templates.
+# Not a new kinship list. Spouse aliases because "my wife is X" stores
+# "User's partner is X" while "X is my wife" stores "User's wife is X".
+_ROLE_SLOT_FACT_RE = re.compile(
+    r"^user's (wife|husband|partner|spouse|daughter|son|dog|cat|pet) is (\w+)$",
+    re.I,
+)
+_SPOUSE_ROLES = frozenset({"wife", "husband", "partner", "spouse"})
+_HOUSEHOLD_ROLE = r"(wife|husband|partner|spouse|daughter|son|dog|cat|pet)"
+# Lived: "Also in my family is Lily, my daughter, Owen, my son" — comma
+# appositive, not "X is my daughter". Gated on family/household in the
+# utterance so "Well, my son" does not store.
+_HOUSEHOLD_APPOSITIVE_RE = re.compile(
+    r"\b([A-Za-z][A-Za-z'\-]{1,39})\s*,\s*my\s+" + _HOUSEHOLD_ROLE + r"\b",
+    re.I,
+)
+_HOUSEHOLD_TEACH_CUE_RE = re.compile(r"\b(?:family|household)\b", re.I)
+_APPOSITIVE_SKIP_NAMES = frozenset({
+    "well", "so", "anyway", "sorry", "oh", "hey", "yes", "yeah",
+    "ok", "okay", "please", "also", "and", "but",
+})
+
+
+def _role_slot_key(role: str) -> str:
+    r = (role or "").strip().lower()
+    if r in _SPOUSE_ROLES:
+        return "spouse"
+    return r
 
 _ALL_PERSONAL_PATTERNS = (
     _INTEREST_PATTERNS
@@ -1648,6 +1848,11 @@ def _derive_personal_memory_metadata(payload: str, category: str) -> tuple[str, 
         tags.extend(["preference_kind:response_style", "high_confidence_fact"])
     elif category == "personal_interest":
         tags.append("interest_kind:positive")
+        if re.search(r"\b(?:food|eats?|eating)\b", lower) or (
+            re.search(r"\benjoys?\s+[a-z][a-z'-]{1,24}$", lower)
+            and not re.search(r"\bcolou?r\b", lower)
+        ):
+            tags.append("fact_kind:food")
     elif category == "personal_dislike":
         tags.append("interest_kind:negative")
     elif category == "personal_habit":
@@ -1843,7 +2048,17 @@ def _is_unstable_personal_fact(payload: str, category: str) -> bool:
         # Block self-references ("jarvis", "the brain", "an ai")
         if captured in ("jarvis", "ai", "bot", "assistant", "robot"):
             return True
+        # Lived: "do not say, I am active and listening" stored as a core claim.
+        if "active and listening" in lower or captured in ("active", "here"):
+            return True
     return False
+
+
+_NOT_SAY_UTTERANCE_RE = re.compile(
+    r"(?:don'?t|do not|never|not)\s+(?:always\s+)?(?:have to\s+)?"
+    r"(?:tell me|say)\b",
+    re.I,
+)
 
 
 def _collect_personal_intel_matches(
@@ -1854,19 +2069,42 @@ def _collect_personal_intel_matches(
     thirdparty: list[tuple[str, str, str]] = []
 
     for pattern, template, category in _ALL_PERSONAL_PATTERNS:
-        match = pattern.search(text)
-        if not match:
-            continue
-        groups = match.groups()
-        if len(groups) >= 2 and "{1}" in template:
-            payload = template.format(groups[0].strip(), groups[1].strip())
-        elif groups:
-            payload = template.format(groups[0].strip())
-        else:
-            payload = template.format(match.group(0).strip())
-        if _is_unstable_personal_fact(payload, category):
-            continue
-        personal.append((payload, category))
+        for match in pattern.finditer(text):
+            groups = match.groups()
+            if len(groups) >= 2 and "{1}" in template:
+                payload = template.format(groups[0].strip(), groups[1].strip())
+            elif groups:
+                payload = template.format(groups[0].strip())
+            else:
+                payload = template.format(match.group(0).strip())
+            if _is_unstable_personal_fact(payload, category):
+                continue
+            if (
+                category == "personal_fact"
+                and payload.lower().startswith("user is ")
+                and _NOT_SAY_UTTERANCE_RE.search(text or "")
+            ):
+                continue
+            slot = _ROLE_SLOT_FACT_RE.match(payload.strip())
+            if slot:
+                from identity.name_validator import is_valid_person_name
+                if not is_valid_person_name(slot.group(2)):
+                    continue
+            personal.append((payload, category))
+
+    if _HOUSEHOLD_TEACH_CUE_RE.search(text or ""):
+        from identity.name_validator import is_valid_person_name
+        for match in _HOUSEHOLD_APPOSITIVE_RE.finditer(text or ""):
+            name = (match.group(1) or "").strip()
+            role = (match.group(2) or "").strip().lower()
+            if name.lower() in _APPOSITIVE_SKIP_NAMES:
+                continue
+            if not is_valid_person_name(name):
+                continue
+            payload = f"User's {role} is {name}"
+            if _is_unstable_personal_fact(payload, "personal_fact"):
+                continue
+            personal.append((payload, "personal_fact"))
 
     for pattern, template, category in _THIRDPARTY_PATTERNS:
         match = pattern.search(text)
@@ -1882,9 +2120,29 @@ def _collect_personal_intel_matches(
             payload = template.format(relation, groups[1].strip())
         else:
             payload = template.format(relation, match.group(0).strip())
+        if category == "thirdparty_fact":
+            from identity.name_validator import is_valid_person_name
+            name_slot = ""
+            if len(groups) >= 2 and groups[1]:
+                name_slot = str(groups[1]).strip()
+            if (
+                name_slot
+                and " " not in name_slot
+                and not is_valid_person_name(name_slot)
+            ):
+                continue
         thirdparty.append((payload, category, relation))
 
-    return personal, thirdparty
+    seen_personal: set[str] = set()
+    unique_personal: list[tuple[str, str]] = []
+    for payload, category in personal:
+        key = payload.strip().lower()
+        if key in seen_personal:
+            continue
+        seen_personal.add(key)
+        unique_personal.append((payload, category))
+
+    return unique_personal, thirdparty
 
 
 def _store_personal_memory(
@@ -1894,11 +2152,15 @@ def _store_personal_memory(
     *,
     extra_tags: list[str] | None = None,
     provenance: str = "user_claim",
-) -> bool:
-    """Create a user_preference memory through the unified write path."""
+) -> str:
+    """Write a user_preference through the unified path.
+
+    Returns ``created``, ``reinforced``, or ``extended`` on success, or
+    ``""`` when nothing was written. Truthy means the store mutated.
+    """
     payload, metadata_tags = _derive_personal_memory_metadata(payload, category)
     if not payload:
-        return False
+        return ""
 
     tags = ["user_preference", category, *metadata_tags]
     if extra_tags:
@@ -1907,16 +2169,47 @@ def _store_personal_memory(
         tags.append(f"speaker:{speaker.lower().strip()}")
 
     existing = memory_storage.get_by_tag("user_preference")
-    payload_lower = payload.lower()
-    for m in existing:
-        if isinstance(m.payload, str) and payload_lower in m.payload.lower():
-            return False
-        if isinstance(m.payload, str) and m.payload.lower() in payload_lower:
-            return False
-
+    payload_lower = payload.lower().strip()
     weight = 0.70 if category in ("personal_interest", "personal_fact") else 0.65
     if extra_tags and "explicit_core_memory" in extra_tags:
         weight = max(weight, 0.8 if category == "personal_fact" else 0.75)
+    for m in existing:
+        if not isinstance(m.payload, str):
+            continue
+        old = m.payload.lower().strip()
+        if not old:
+            continue
+        if payload_lower == old:
+            # Lived: restating "Tanya is my wife" no-op'd because the 0.07
+            # corrected row already existed. Same payload is reinforcement.
+            kept = (set(getattr(m, "tags", ()) or ()) | set(tags)) - {
+                "corrected", "fact_check_rejected",
+            }
+            updated = replace(
+                m,
+                weight=max(float(getattr(m, "weight", 0) or 0), weight),
+                tags=tuple(sorted(kept)),
+                last_validated=time.time(),
+            )
+            if not memory_storage.add(updated):
+                logger.warning("Reinforce add failed [%s]: %s", category, payload)
+                return ""
+            logger.info("Reinforced restated personal intel [%s]: %s", category, payload)
+            if category == "personal_fact":
+                _try_set_relationship_from_fact(payload, speaker)
+            return "reinforced"
+        if payload_lower in old:
+            return ""
+        if old in payload_lower:
+            # Lived: truncated "…to not say" blocked the complete restatement.
+            updated = replace(
+                m,
+                payload=payload,
+                weight=max(float(getattr(m, "weight", 0) or 0), weight),
+            )
+            memory_storage.add(updated)
+            logger.info("Extended truncated personal intel [%s]: %s", category, payload)
+            return "extended"
     identity_kwargs = _build_user_claim_identity_kwargs(payload, speaker, memory_type="user_preference")
     from memory.core import canonical_remember
     mem = canonical_remember(CreateMemoryData(
@@ -1929,8 +2222,10 @@ def _store_personal_memory(
     ))
     if mem:
         logger.info("Stored personal intel [%s]: %s", category, payload)
-        return True
-    return False
+        if category == "personal_fact":
+            _try_set_relationship_from_fact(payload, speaker)
+        return "created"
+    return ""
 
 
 from consciousness.soul import _preference_key  # normalized relationship-preference key (soul owns it)
@@ -1995,25 +2290,143 @@ def _retire_matching_preferences(text: str, speaker: str) -> None:
         return
 
 
+_NEGATED_JOB_RE = re.compile(
+    r"\bi (?:do not|don't)\s+work as (?:a |an )?([\w][\w\s]{1,40}?)(?:\.|,|!|$)",
+    re.I,
+)
+
+
+def _downweight_payload_exact(payload: str, *, reason: str) -> int:
+    """Downweight stored memories whose payload equals *payload* (case-insensitive)."""
+    target = (payload or "").strip().lower()
+    if not target:
+        return 0
+    n = 0
+    try:
+        memories = list(memory_storage.get_all())
+    except Exception:
+        return 0
+    for m in memories:
+        p = m.payload if isinstance(getattr(m, "payload", None), str) else ""
+        if p.strip().lower() != target:
+            continue
+        if float(getattr(m, "weight", 1.0) or 0) < 0.2:
+            continue
+        updated = replace(
+            m,
+            weight=max(0.05, float(m.weight) * 0.1),
+            tags=tuple(sorted(set(m.tags) | {"corrected", "fact_check_rejected"})),
+        )
+        memory_storage.add(updated)
+        n += 1
+        logger.info(
+            "Downweighted stored claim (%s, weight→%.2f): %s",
+            reason, updated.weight, p[:80],
+        )
+    return n
+
+
+_CORRECTION_STOPWORDS = frozenset({
+    "user", "that", "this", "than", "with", "from", "have", "just", "about",
+    "wrong", "incorrect", "actually", "really", "jarvis", "work",
+})
+
+
+def _content_tokens(text: str) -> set[str]:
+    return {
+        t for t in re.findall(r"[a-z]{4,}", (text or "").lower())
+        if t not in _CORRECTION_STOPWORDS
+    }
+
+
+def _downweight_conflicting_role_slots(asserted: set[str]) -> int:
+    """If correction asserts User's wife is Tanya, downweight User's wife is She.
+
+    Same-slot conflict, like job fact-check. Not a kinship list.
+    Lived: overlap needed two 4+ letter tokens so 'not she' never hit 'wife is She'.
+    """
+    n = 0
+    slots: list[tuple[str, str]] = []
+    for payload in asserted:
+        m = _ROLE_SLOT_FACT_RE.match((payload or "").strip())
+        if m:
+            slots.append((m.group(1).lower(), m.group(2).lower()))
+    if not slots:
+        return 0
+    try:
+        memories = list(memory_storage.get_all())
+    except Exception:
+        return 0
+    for m in memories:
+        p = m.payload if isinstance(getattr(m, "payload", None), str) else ""
+        sm = _ROLE_SLOT_FACT_RE.match(p.strip())
+        if not sm:
+            continue
+        role, name = sm.group(1).lower(), sm.group(2).lower()
+        stored_key = _role_slot_key(role)
+        if any(_role_slot_key(r) == stored_key and name != nm for r, nm in slots):
+            n += _downweight_payload_exact(p, reason="role-slot-conflict")
+    return n
+
+
 def _correct_recent_facts(text: str) -> None:
-    """Detect user corrections ("that's wrong", "no I'm not X") and downweight
-    recently captured user_preference memories that might be wrong."""
+    """Downweight only memories the correction actually names or conflicts with.
+
+    Lived: 'That's wrong. I work as a software engineer' shotgun-downweighted
+    every user_preference in 5 minutes (household rows included). That is a
+    bad teacher for ranker/salience — not a missing NN, and not a name list.
+    """
     is_correction = any(p.search(text) for p in _CORRECTION_PATTERNS)
     if not is_correction:
         return
 
+    for match in _NEGATED_JOB_RE.finditer(text or ""):
+        job = (match.group(1) or "").strip()
+        if job:
+            _downweight_payload_exact(f"User is {job}", reason="negated-job")
+
+    personal, thirdparty = _collect_personal_intel_matches(text or "")
+    asserted = {
+        payload.strip().lower()
+        for payload, category in personal
+        if category == "personal_fact" and isinstance(payload, str)
+    }
+    for payload, _category, _relation in thirdparty:
+        if isinstance(payload, str) and _ROLE_SLOT_FACT_RE.match(payload.strip()):
+            asserted.add(payload.strip().lower())
+    _downweight_conflicting_role_slots(asserted)
+    held_jobs = _held_biographical_jobs()
+    for payload, category in personal:
+        if category != "personal_fact":
+            continue
+        held = _fact_check_conflict(payload, held_jobs)
+        if held:
+            _downweight_payload_exact(held, reason="correction-conflict")
+
     recent_prefs = memory_storage.get_by_tag("user_preference")
     if not recent_prefs:
+        if asserted or any(_NEGATED_JOB_RE.finditer(text or "")):
+            logger.info("User correction detected — targeted biographical downweight")
         return
 
     now = time.time()
-    _RECENT_WINDOW_S = 300.0  # 5 min — corrections likely target recent captures
+    _RECENT_WINDOW_S = 300.0
+    corr_tok = _content_tokens(text)
     corrected_any = False
     for m in recent_prefs:
-        age = now - m.timestamp
+        age = now - getattr(m, "timestamp", 0.0)
         if age > _RECENT_WINDOW_S:
             continue
         if not isinstance(m.payload, str):
+            continue
+        payload_l = m.payload.strip().lower()
+        if payload_l in asserted:
+            continue
+        tags = set(getattr(m, "tags", ()) or ())
+        if tags & {"corrected", "former"}:
+            continue
+        overlap = _content_tokens(m.payload) & corr_tok
+        if len(overlap) < 2:
             continue
         updated = replace(
             m,
@@ -2022,11 +2435,13 @@ def _correct_recent_facts(text: str) -> None:
         )
         memory_storage.add(updated)
         corrected_any = True
-        logger.info("Correction downweighted recent fact (weight→%.2f): %s",
-                     updated.weight, m.payload[:60])
+        logger.info(
+            "Correction downweighted overlapping fact (weight→%.2f overlap=%s): %s",
+            updated.weight, sorted(overlap)[:6], m.payload[:60],
+        )
 
-    if corrected_any:
-        logger.info("User correction detected — downweighted recent preference memories")
+    if corrected_any or asserted:
+        logger.info("User correction detected — overlap/conflict only, not a 5-min shotgun")
 
 
 _NAME_FROM_PAYLOAD_RE = re.compile(
@@ -2034,8 +2449,26 @@ _NAME_FROM_PAYLOAD_RE = re.compile(
 )
 
 
+def _try_set_relationship_from_fact(payload: str, speaker: str) -> None:
+    """Register 'User's wife is Tanya' / inverted household facts on the Relationship."""
+    m = re.search(r"User's (\w+) is (\w+)$", str(payload).strip(), re.I)
+    if not m:
+        return
+    role, person_name = m.group(1).strip().lower(), m.group(2).strip()
+    if not person_name or role not in (
+        "wife", "husband", "partner", "spouse", "daughter", "son", "dog", "cat", "pet",
+    ):
+        return
+    try:
+        from identity.resolver import identity_resolver
+        if identity_resolver.set_relationship_role(person_name, role):
+            logger.info("Registered relationship: %s = %s (via %s)", person_name, role, speaker)
+    except Exception:
+        pass
+
+
 def _try_set_relationship_name(payload: str, relation: str, speaker: str) -> None:
-    """When the user says "My wife's name is Sarah", register the role on the Relationship."""
+    """When the user says "My wife's name is …", register the role on the Relationship."""
     try:
         m = _NAME_FROM_PAYLOAD_RE.search(payload)
         if not m:
@@ -2281,11 +2714,134 @@ def _try_identity_enrollment_from_answer(text: str, engine: Any) -> None:
     logger.info("Curiosity answer: detected name '%s', enrollment available via voice command", name)
 
 
+_CONFIRM_SEEK_RE = re.compile(
+    r"(?:\bright\??|\bcorrect\??|\bisn'?t it\??)\s*[.!]?\s*$",
+    re.I,
+)
+
+
+def _is_confirmation_seek(text: str) -> bool:
+    """'I work as a plumber, right?' is a check, not a new biographical write."""
+    return bool(text and _CONFIRM_SEEK_RE.search(text.strip()))
+
+
+_DANGLING_JOB_RE = re.compile(
+    r"(?:\b(?:a|an|the|that is|basically|essentially)\s*)$",
+    re.I,
+)
+
+
+def _held_biographical_jobs() -> list[str]:
+    """Existing job/identity-role facts the confirmation should be checked against.
+
+    Rank complete jobs first. Lived native No quoted the 60-char chop
+    'research and development person that is basically' ahead of software engineer.
+    """
+    scored: list[tuple[int, float, int, str]] = []
+    try:
+        for m in memory_storage.get_by_tag("fact_kind:biographical"):
+            weight = float(getattr(m, "weight", 1.0) or 0)
+            if weight < 0.2:
+                continue
+            tags = set(getattr(m, "tags", ()) or ())
+            if tags & {"fact_kind:name", "fact_kind:preferred_name", "fact_kind:birthday"}:
+                continue
+            payload = m.payload if isinstance(m.payload, str) else ""
+            if not payload.lower().startswith("user is "):
+                continue
+            dangling = 1 if _DANGLING_JOB_RE.search(payload.strip()) else 0
+            scored.append((dangling, -weight, -len(payload), payload))
+    except Exception:
+        pass
+    scored.sort()
+    return [payload for _, _, _, payload in scored]
+
+
+def _fact_check_conflict(proposed: str, held: list[str]) -> str | None:
+    """Return the held payload if proposed biographical 'User is X' disagrees."""
+    pl = proposed.lower().strip()
+    if not pl.startswith("user is "):
+        return None
+    new = pl[8:].strip()
+    for h in held:
+        old = h.lower().strip()
+        if not old.startswith("user is "):
+            continue
+        old_job = old[8:].strip()
+        if not old_job or new in old_job or old_job in new:
+            continue
+        return h
+    return None
+
+
+def _build_fact_check_conflict_reply(conflicts: list[dict[str, str]]) -> str:
+    if not conflicts:
+        return "That doesn't match what I already have recorded about you."
+    held = conflicts[0].get("held") or "a different fact"
+    job = held[8:].strip() if held.lower().startswith("user is ") else held
+    return f"No. I have you as {job}, not what you just said. I did not overwrite that."
+
+
+def _household_write_outcomes(
+    write_outcomes: list[dict[str, str]] | None,
+) -> list[dict[str, str]]:
+    """Role-slot facts this turn actually created or reinforced."""
+    out: list[dict[str, str]] = []
+    for item in write_outcomes or []:
+        if item.get("outcome") not in ("created", "reinforced", "extended"):
+            continue
+        payload = (item.get("payload") or "").strip()
+        if not _ROLE_SLOT_FACT_RE.match(payload):
+            continue
+        out.append(item)
+    return out
+
+
+def _build_household_write_ack(write_outcomes: list[dict[str, str]]) -> str:
+    """Native mouth bound to this-turn store outcome. No LLM. No capability line."""
+    created: list[tuple[str, str]] = []
+    reinforced: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for item in write_outcomes:
+        payload = (item.get("payload") or "").strip()
+        slot = _ROLE_SLOT_FACT_RE.match(payload)
+        if not slot:
+            continue
+        role = slot.group(1).strip().lower()
+        name = slot.group(2).strip()
+        key = f"{role}:{name.lower()}"
+        if key in seen:
+            continue
+        seen.add(key)
+        if item.get("outcome") == "reinforced":
+            reinforced.append((name, role))
+        else:
+            created.append((name, role))
+    parts: list[str] = []
+    if created:
+        bits = [f"{name} is your {role}" for name, role in created]
+        if len(bits) == 1:
+            parts.append(f"Got it. {bits[0]}.")
+        else:
+            parts.append("Got it. " + "; ".join(bits) + ".")
+    if reinforced:
+        if len(reinforced) == 1:
+            name, role = reinforced[0]
+            parts.append(
+                f"{name} is already registered as your {role}. I missed that."
+            )
+        else:
+            names = " and ".join(name for name, _role in reinforced)
+            parts.append(f"{names} are already registered. I missed that.")
+    return " ".join(parts).strip()
+
+
 def _extract_personal_intel(
     text: str,
     speaker: str = "unknown",
     *,
     suppress_write: bool = False,
+    operator_proxy: bool = False,
 ) -> dict[str, Any]:
     """Scan user message for personal information and build a HUMINT profile.
 
@@ -2300,6 +2856,20 @@ def _extract_personal_intel(
     personal, thirdparty = _collect_personal_intel_matches(text)
     personal_categories = sorted({category for _, category in personal})
     thirdparty_categories = sorted({category for _, category, _ in thirdparty})
+    confirm = _is_confirmation_seek(text)
+    held_jobs = _held_biographical_jobs() if confirm else []
+    conflicts: list[dict[str, str]] = []
+    if confirm:
+        for payload, category in personal:
+            if category != "personal_fact":
+                continue
+            held = _fact_check_conflict(payload, held_jobs)
+            if held:
+                conflicts.append({"proposed": payload, "held": held})
+                logger.info(
+                    "Fact-check conflict: confirmation seek proposed=%r held=%r — not stored",
+                    payload, held,
+                )
     if suppress_write:
         return {
             "personal_matches": len(personal),
@@ -2308,7 +2878,17 @@ def _extract_personal_intel(
             "personal_categories": personal_categories,
             "thirdparty_categories": thirdparty_categories,
             "stored_categories": [],
+            "fact_check_conflicts": conflicts,
+            "confirmation_seek": confirm,
+            "write_outcomes": [],
         }
+    for conflict in conflicts:
+        _downweight_payload_exact(conflict["proposed"], reason="fact-check-conflict")
+    for payload, category in personal:
+        if "not to hear" in payload.lower() or "to not say" in payload.lower():
+            _downweight_payload_exact(
+                "User is active and listening", reason="not-say-closer",
+            )
 
     # Banter firewall (David's golden-command authority model): a golden command
     # is the write-authority (authoritative even mid-banter); otherwise soft
@@ -2318,27 +2898,43 @@ def _extract_personal_intel(
     _is_golden = parse_golden_command(text) is not None
 
     def _write_prov(category: str) -> str:
+        base = "operator_proxy" if operator_proxy else "user_claim"
         return resolve_write_provenance(
-            "user_claim",
+            base,
             is_golden_command=_is_golden,
             is_soft_claim=category in SOFT_CLAIM_CATEGORIES,
         )
 
     stored = 0
     stored_categories: list[str] = []
+    write_outcomes: list[dict[str, str]] = []
+    skip_facts = confirm
     for payload, category in personal:
+        if skip_facts and category == "personal_fact":
+            continue
         _prov = _write_prov(category)
-        if _store_personal_memory(payload, category, speaker, provenance=_prov):
+        outcome = _store_personal_memory(payload, category, speaker, provenance=_prov)
+        if outcome:
             if _prov != "casual_conversation":
                 _update_relationship(speaker, payload, category)
             stored += 1
             stored_categories.append(category)
+            write_outcomes.append({
+                "payload": payload,
+                "category": category,
+                "outcome": outcome,
+            })
 
     for payload, category, relation in thirdparty:
         if _store_thirdparty_memory(payload, category, speaker, relation,
                                     provenance=_write_prov(category)):
             stored += 1
             stored_categories.append(category)
+            write_outcomes.append({
+                "payload": payload,
+                "category": category,
+                "outcome": "created",
+            })
 
     return {
         "personal_matches": len(personal),
@@ -2347,6 +2943,9 @@ def _extract_personal_intel(
         "personal_categories": personal_categories,
         "thirdparty_categories": thirdparty_categories,
         "stored_categories": sorted(set(stored_categories)),
+        "fact_check_conflicts": conflicts,
+        "confirmation_seek": confirm,
+        "write_outcomes": write_outcomes,
     }
 
 
@@ -2382,13 +2981,45 @@ _ENROLL_NAME_RE = re.compile(
     r"(\b[A-Z]?\w{2,}\b)",
     re.IGNORECASE,
 )
+# Self-enroll only. "This is David" is household/confirmation, not enroll.
 _ENROLL_NAME_WEAK_RE = re.compile(
-    r"(?:[Ii]'m|[Ii] am|[Tt]his is)"
+    r"(?:[Ii]'m|[Ii] am)"
     r"\s+([A-Z][a-z]{1,})\b",
 )
 _ENROLL_NAME_INVERTED_RE = re.compile(
     r"\b([A-Z][a-z]{1,})\s+is\s+my\s+name\b",
 )
+_THIS_IS_NAME_RE = re.compile(
+    r"\b[Tt]his is\s+([A-Z][a-z]{1,})\b",
+)
+_BIOMETRIC_ENROLL_INTENT_RE = re.compile(
+    r"\b(?:my name is|call me|enroll me as|register me as|"
+    r"(?:learn|remember|record|register|enroll|save)\s+my\s+(?:face|voice))\b",
+    re.I,
+)
+
+
+def _identity_name_intent(text: str) -> tuple[str, str]:
+    """Return (enroll_name, check_name). At most one is set.
+
+    `my name is David` / `I'm David` / `This is David. Learn my face` → enroll.
+    Bare `This is David` → identity check (household introducer), not re-enroll.
+    """
+    name_match = _ENROLL_NAME_RE.search(text)
+    if not name_match:
+        name_match = _ENROLL_NAME_WEAK_RE.search(text)
+    if not name_match:
+        name_match = _ENROLL_NAME_INVERTED_RE.search(text)
+    enroll = name_match.group(1).strip().title() if name_match else ""
+    this_is = _THIS_IS_NAME_RE.search(text)
+    this_name = this_is.group(1).strip().title() if this_is else ""
+    if enroll:
+        return enroll, ""
+    if this_name:
+        if _BIOMETRIC_ENROLL_INTENT_RE.search(text):
+            return this_name, ""
+        return "", this_name
+    return "", ""
 
 _IDENTITY_QUERY_RE = re.compile(
     r"\b(who am i|do you (?:know|recognize) (?:me|who)|who(?:'s| is) (?:speaking|talking))\b",
@@ -2440,6 +3071,7 @@ async def handle_transcription(
     follow_up: bool = False,
     enroll_callback=None,
     identity_callback=None,
+    scene_ingest_callback=None,
 ) -> None:
     import time as _time
     import re as _re_tts_est
@@ -2455,8 +3087,20 @@ async def handle_transcription(
     # outgoing response are backed by a real job. Stays empty for
     # synchronous routes — commitments on those routes are confabulation.
     _backing_job_ids: list[str] = []
+    _backing_memory_writes: list[str] = []
     _intention_registered_turn: dict[str, bool] = {"done": False}
     speaker = (speaker_state or {}).get("name", "unknown")
+    _operator_proxy = bool(
+        (speaker_state or {}).get("operator_proxy")
+        or str((speaker_state or {}).get("method") or "").strip().lower() == "operator_proxy"
+    )
+    _proxy_tok = operator_proxy_turn.set(_operator_proxy)
+    reply = ""
+    routing = None
+    try:
+        engine._current_speaker = speaker if speaker and speaker != "unknown" else ""
+    except Exception:
+        pass
     _emo = emotion_state or {}
     emotion = _emo.get("emotion", "neutral") if _emo.get("trusted", False) else "neutral"
     conv_tag = f" [conv:{conversation_id[:8]}]" if conversation_id else ""
@@ -2484,6 +3128,34 @@ async def handle_transcription(
         if cancel_flag.get("id") != conversation_id:
             return False
         return bool(cancel_flag.get("cancelled"))
+
+    def _persist_spoken_turn(user_text: str, spoken: str) -> None:
+        """Persist the reply that was actually spoken — never a discarded LLM draft.
+
+        Rides engine.remember (synthetic sessions still cannot write). The
+        continuity guard inside _finalize_response refuses OSV-contradicted
+        wipe claims. Callers pass the broadcast text, not the stream buffer.
+        """
+        if _cancelled():
+            return
+        if not (user_text or "").strip() or not (spoken or "").strip():
+            return
+        try:
+            context_builder.add_user_message(user_text, conversation_id=conversation_id)
+        except Exception:
+            logger.debug("spoken-turn user persist skipped", exc_info=True)
+        try:
+            response_gen._finalize_response(
+                user_text,
+                spoken,
+                _conv_start,
+                conversation_id=conversation_id,
+                speaker_name=speaker,
+                user_emotion=emotion,
+                persist_response=True,
+            )
+        except Exception:
+            logger.debug("spoken-turn persist skipped", exc_info=True)
 
     def _broadcast(msg: dict) -> None:
         if conversation_id:
@@ -2565,6 +3237,30 @@ async def handle_transcription(
                     _intention_registered_turn["done"] = True
         except Exception:
             logger.debug("Intention hook skipped (non-critical)", exc_info=True)
+
+        try:
+            from skills.capability_gate import capability_gate
+            rewritten, changed = capability_gate.evaluate_memory_write(
+                gated, list(_backing_memory_writes),
+            )
+            if changed:
+                _gate_rewrite_buffer.append((gated, rewritten))
+                gated = rewritten
+        except Exception:
+            logger.debug("Memory-write honesty hook skipped (non-critical)", exc_info=True)
+
+        # OSV P2 — bind self-claims to the measured self-view before TTS.
+        # P2 default ON this branch (bound the mouth). Kill-switch OSV_P2_ACTIVE=false.
+        try:
+            from cognition.self_view.grounding import p2_active_default, ground_self_claims
+            from cognition.self_view import load_self_view
+            if p2_active_default() and gated:
+                _p2 = ground_self_claims(gated, load_self_view(), active=True)
+                if _p2.changed and _p2.grounded:
+                    logger.info("OSV P2 repaired self-claim before TTS")
+                    gated = _p2.grounded
+        except Exception:
+            logger.debug("OSV P2 gate skipped", exc_info=True)
 
         return gated
 
@@ -2660,6 +3356,15 @@ async def handle_transcription(
         ~500 chars per batch) so the Pi receives continuous audio blocks.
         """
         nonlocal _playback_estimate_s, _sync_chunk_count
+        # Thin soul on the native/tool mouth only (STATUS/MEMORY/VISION/P1).
+        # LLM streaming uses _send_sentence → _broadcast_chunk and already logs
+        # soul_dims in response.py. Fail-closed; no LLM; no TBS inject.
+        try:
+            from personality.thin_soul import thin_soul_native
+            _route = routing.tool.value if routing else ""
+            text_str = thin_soul_native(text_str, route=_route)
+        except Exception:
+            logger.debug("thin-soul native pass skipped", exc_info=True)
         text_str = _gate_text(text_str)
         _update_echo_ref(text_str)
         if text_str.strip():
@@ -2883,21 +3588,37 @@ async def handle_transcription(
         text,
         speaker=speaker,
         suppress_write=bool(explicit_core_memory_payload),
+        operator_proxy=_operator_proxy,
     )
+    for _wo in (_personal_intel_result or {}).get("write_outcomes") or []:
+        if _wo.get("outcome") in ("created", "reinforced", "extended"):
+            _payload = str(_wo.get("payload") or "").strip()
+            if _payload:
+                _backing_memory_writes.append(_payload)
     _apply_inline_preferences(text, engine)
 
     if speaker != "unknown" and (speaker_state or {}).get("first_this_session"):
         try:
             import datetime as _dt
             _session_ts = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-            engine.remember(
-                f"{speaker} started a conversation at {_session_ts}. "
-                f"First words this session: \"{text[:100]}\"",
-                memory_type="interaction",
-                tags=["session_start", f"speaker:{speaker.lower()}", "conversation_milestone"],
+            engine.remember(CreateMemoryData(
+                type="conversation",
+                payload={
+                    "user_message": text[:100],
+                    "response": (
+                        f"{speaker} started a conversation at {_session_ts}. "
+                        f"First words this session: \"{text[:100]}\""
+                    ),
+                    "speaker": speaker,
+                },
                 weight=0.45,
+                tags=["session_start", f"speaker:{speaker.lower()}", "conversation_milestone"],
                 provenance="observed",
-            )
+                identity_owner=speaker.lower(),
+                identity_owner_type="person",
+                identity_subject=speaker.lower(),
+                identity_subject_type="person",
+            ))
         except Exception:
             pass
 
@@ -2951,13 +3672,52 @@ async def handle_transcription(
     # Think-before-speak TBS-0 (SHADOW pre-speech read): read THIS user turn BEFORE the reply is generated
     # + emit a stance — LOGGED only, injected into NOTHING (docs/THINK_BEFORE_SPEAK.md). Fires here, BEFORE
     # the routing branches, so it covers EVERY speaking turn; cheap, no LLM, fail-open (no-op on any error).
+    # Capture onto the flight episode so person-aware labels accrue on the same turn
+    # as the mouth. Do NOT concat the stance prompt-line into _style_instruction (TBS-2).
+    _tbs_stance = None
     try:
         from consciousness.think_before_speak import pre_speech_reader as _tbs
         from consciousness.theory_of_mind import theory_of_mind_engine as _tbs_tom
-        _tbs.read_before_speak(speaker=speaker, user_text=text, user_emotion=emotion,
-                               person_model=_tbs_tom.get_model(speaker))
+        _tbs_stance = _tbs.read_before_speak(
+            speaker=speaker, user_text=text, user_emotion=emotion,
+            person_model=_tbs_tom.get_model(speaker),
+        )
     except Exception:
         logger.debug("think-before-speak TBS-0 pre-speech read failed (no-op)", exc_info=True)
+
+    def _run_companion_post_hoc() -> None:
+        """P0/P1/P3 + TBS-1. Shadow only. Safe on native early returns.
+
+        STATUS/MEMORY/P1 fall through to the end; INTROSPECTION emergence
+        used to `return` after persist and skip this. Injects nothing.
+        """
+        try:
+            from consciousness.situational_read import situational_read_engine as _sit_read
+            from consciousness.affect_state import affect_state as _sit_affect
+            _read = _sit_read.observe_turn(
+                speaker=speaker,
+                user_text=text,
+                response_text=reply,
+                user_emotion=emotion,
+                follow_up=follow_up,
+                latency_ms=int((_time.time() - _conv_start) * 1000),
+                complexity=_score_complexity(text),
+                route=(routing.tool.value if routing else ""),
+                affect=_sit_affect.snapshot(),
+            )
+            if _read is not None:
+                from consciousness.theory_of_mind import theory_of_mind_engine as _tom
+                _person_model = _tom.observe(speaker, _read)
+                from consciousness.behavior_advisory import behavior_advisory_engine as _adv
+                _adv_out = _adv.propose(_read, _person_model)
+                try:
+                    if _tbs_stance is not None:
+                        from consciousness.think_before_speak import pre_speech_reader as _tbs1
+                        _tbs1.score_against_post_hoc(_tbs_stance, _read, _adv_out)
+                except Exception:
+                    logger.debug("TBS-1 post-hoc score skipped", exc_info=True)
+        except Exception:
+            logger.debug("Situational read / theory-of-mind / advisory (companion P0/P1/P3) failed", exc_info=True)
 
     if _guided_collect_struct is not None:
         routing = RoutingResult(
@@ -2994,6 +3754,17 @@ async def handle_transcription(
             # addressee checks, so we can safely allow a bare "GOLDEN COMMAND ..."
             # prefix without weakening exact command-body matching.
             routing = tool_router.route(text, golden_allow_bare_prefix=True)
+            if (
+                routing
+                and not routing.golden_context
+                and routing.tool in {ToolType.NONE, ToolType.INTROSPECTION}
+                and is_household_self_fact_recall(text)
+            ):
+                routing = RoutingResult(
+                    tool=ToolType.MEMORY,
+                    confidence=0.94,
+                    extracted_args={"household_self_fact": True},
+                )
             _route_ms = (_time.monotonic() - _conv_mono_start) * 1000
             logger.info("[LATENCY] route_complete=%.0fms route=%s (conv=%s)",
                         _route_ms, routing.tool.value if routing else "?",
@@ -3019,8 +3790,14 @@ async def handle_transcription(
             # OSV P1: self-referential questions answer from the Operational Self-View
             # (deterministic), never the codebase symbol search. classify returns None for
             # explicit code questions, so "search your code for X" still routes to CODEBASE.
+            # Lived 2026-09-06: "Learn a new skill …" was SKILL then stolen to
+            # recent_changes. Golden already skips this (golden_context). Natural
+            # SKILL must keep the skill tool — P1 is not a learning job.
             try:
-                if not routing.golden_context:
+                if (
+                    not routing.golden_context
+                    and routing.tool not in {ToolType.VISION, ToolType.SKILL}
+                ):
                     from cognition.self_view.articulate import classify_self_question
                     _sv_kind = classify_self_question(text)
                     if _sv_kind:
@@ -3033,14 +3810,55 @@ async def handle_transcription(
             except Exception:
                 logger.debug("self-view route probe failed", exc_info=True)
 
+            # Lived 09:38: "What do you know about Skyler from before?" hit
+            # Tier 3 self-ref INTROSPECTION ("you know") and dumped OSV stats.
+            # An about-X subject (pet, person, topic) is MEMORY recall, not a
+            # self-view kind. P1 kinds (continuity/identity/capabilities) already
+            # won above. "about yourself/your architecture" extracts empty
+            # (stopwords) so those stay introspection. Does not enroll names.
+            try:
+                _sv_already = bool(
+                    routing.extracted_args
+                    and routing.extracted_args.get("self_view_kind")
+                )
+                if (
+                    not routing.golden_context
+                    and not _sv_already
+                    and routing.tool in {ToolType.INTROSPECTION, ToolType.NONE}
+                ):
+                    from tools.memory_tool import _extract_about_subjects
+                    _about = _extract_about_subjects(text, speaker=speaker)
+                    if _about:
+                        routing = RoutingResult(
+                            tool=ToolType.MEMORY,
+                            confidence=0.93,
+                            extracted_args={"about_subjects": sorted(_about)},
+                        )
+                        logger.info(
+                            "Routing override: topical about-X recall (subjects=%s)",
+                            sorted(_about),
+                        )
+            except Exception:
+                logger.debug("about-X memory route probe failed", exc_info=True)
+
             # Matrix v2: topic-triggered Capability Domain recall. If the query is
             # clearly ABOUT a learned domain, answer from that domain's ISOLATED store
             # ("I know about X"), grounded — never confabulated, never "I can do X".
             # Only fires on a clear topic match; otherwise normal routing continues.
+            # Lived 2026-08-24: must not steal about-X MEMORY (pet/person recall).
             try:
+                _sv_kind = bool(
+                    routing.extracted_args
+                    and routing.extracted_args.get("self_view_kind")
+                )
+                _about_x = bool(
+                    routing.extracted_args
+                    and routing.extracted_args.get("about_subjects")
+                )
                 if (not routing.golden_context
-                        and not (routing.extracted_args
-                                 and routing.extracted_args.get("self_view_kind"))):
+                        and not _sv_kind
+                        and not _about_x
+                        and routing.tool != ToolType.MEMORY):
                     from cognition.capability_domains import (
                         get_capability_domain_registry, recall_answer,
                     )
@@ -3066,6 +3884,34 @@ async def handle_transcription(
             _prev_tool_route = str((_flight_recorder[-1] or {}).get("tool_route", "")) if _flight_recorder else ""
         except Exception:
             _prev_tool_route = ""
+        _prev_tool_route = str(getattr(engine, "_last_tool", "") or _prev_tool_route or "")
+        _last_vision_query = str(getattr(engine, "_last_vision_query", "") or "")
+        _last_vision_ts = float(getattr(engine, "_last_vision_ts", 0.0) or 0.0)
+        _vision_age = (_time.time() - _last_vision_ts) if _last_vision_ts else None
+        _vr = vision_retry_followup(
+            text,
+            current_tool=routing.tool,
+            prev_tool=_prev_tool_route,
+            last_vision_query=_last_vision_query,
+            last_vision_age_s=_vision_age,
+            last_user_text=_prev_user_text,
+        )
+        if _vr:
+            routing = RoutingResult(
+                tool=ToolType.VISION,
+                confidence=0.92,
+                extracted_args=_vr,
+            )
+            try:
+                record_voice_intent_teacher_signal(
+                    text, routing, origin="follow_up_retry",
+                )
+            except Exception:
+                logger.debug("vision-retry teacher signal failed", exc_info=True)
+            logger.info(
+                "Follow-up override: vision retry → VISION (prev=%s query=%s)",
+                _prev_tool_route, (_vr.get("vision_retry_query") or "")[:80],
+            )
         if (
             follow_up
             and _prev_tool_route == ToolType.ACADEMIC_SEARCH.value
@@ -3331,6 +4177,47 @@ async def handle_transcription(
             await _broadcast_chunk_sync(reply, tone)
             _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
             _golden_short_circuit = True
+        elif golden_op == "vision_status":
+            # Informational floor: speak the live frame, never LLM theater
+            # ("running the golden command vision protocol").
+            if ollama and pi_snapshot_url:
+                try:
+                    scene_desc = await describe_scene(
+                        pi_snapshot_url, ollama, claude, fresh=True,
+                    )
+                except Exception:
+                    logger.exception("Golden VISION STATUS snapshot failed")
+                    scene_desc = ""
+                if scene_desc and "aren't available" not in scene_desc and "can't see" not in scene_desc.lower():
+                    if scene_ingest_callback:
+                        try:
+                            scene_ingest_callback(scene_desc)
+                        except Exception:
+                            logger.debug("golden vision ingest failed", exc_info=True)
+                    _set_golden_outcome("executed")
+                    reply = scene_desc
+                    try:
+                        engine._last_vision_query = "What do you currently see?"
+                        engine._last_vision_ts = _time.time()
+                    except Exception:
+                        pass
+                else:
+                    _set_golden_outcome("blocked", "camera_unavailable")
+                    reply = "Golden VISION STATUS: I can't see the camera right now."
+            else:
+                _set_golden_outcome("blocked", "perception_unavailable")
+                reply = "Golden VISION STATUS: camera path unavailable."
+            await _broadcast_chunk_sync(reply, tone)
+            _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+            _persist_spoken_turn(text, reply)
+            _golden_short_circuit = True
+        elif golden_op == "unvalidated_learning":
+            _set_golden_outcome("executed")
+            reply = _format_unvalidated_learning_reply()
+            await _broadcast_chunk_sync(reply, tone)
+            _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+            _persist_spoken_turn(text, reply)
+            _golden_short_circuit = True
         elif golden_op == "self_improve_execute" and golden_requires_confirmation:
             _set_golden_outcome("unauthorized", "confirmation_required")
             reply = (
@@ -3365,6 +4252,9 @@ async def handle_transcription(
         # OSV P1: deterministic self-introspection from the Operational Self-View.
         # No LLM authors the self-facts; we render the persisted self-model (kept fresh by
         # the dashboard cache timer). Sanitized by the capability gate as a final firewall.
+        # This path SPEAKS THE GROUNDED FLOOR ON PURPOSE. Warm gist is revoice/voice_seed
+        # (native_voice not_born). Do not add classify_register / exec-tech-ops / briefing_register
+        # here — that was lived miss 2026-08-24, reverted 69d7819. See AGENTS.md STOP section.
         from cognition.self_view import load_self_view
         from cognition.self_view.articulate import articulate_self_view
         from skills.capability_gate import capability_gate as _sv_gate
@@ -3383,6 +4273,7 @@ async def handle_transcription(
             logger.debug("self-view sanitize failed", exc_info=True)
         await _broadcast_chunk_sync(reply, tone)
         _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+        _persist_spoken_turn(text, reply)
         # OSV voice distillation SEED (shadow): after the deterministic grounded reply is spoken,
         # log a VERIFIED teacher (grounded->warm) pair for a future NATIVE voice NN to distill from.
         # The baseline LLM is only the teacher here — it never speaks live; this never changes the
@@ -3400,6 +4291,7 @@ async def handle_transcription(
     elif routing.tool == ToolType.STATUS:
         from tools.introspection_tool import get_structured_status
         from skills.capability_gate import capability_gate as _status_gate
+        reply = ""
         tool_data = get_structured_status(engine)
         engine.set_phase("PROCESSING")
         tone = engine.get_state()["tone"]
@@ -3429,6 +4321,8 @@ async def handle_transcription(
             _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
         finally:
             _status_gate.set_status_mode(False)
+        if reply:
+            _persist_spoken_turn(text, reply)
         _status_runtime_policy = _runtime_decide(
             "self_status",
             native_candidate=True,
@@ -3495,7 +4389,7 @@ async def handle_transcription(
                 _memory_provenance = "grounded_memory_context_native"
                 _memory_confidence = 0.93
                 _memory_safety_flags.append("deterministic_personal_activity_recall")
-                reply = _format_personal_activity_memory_reply(memory_ctx)
+                reply = _format_personal_activity_memory_reply(memory_ctx, speaker=speaker)
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                 print(f"  [Brain] Memory deterministic recall reply ({len(reply)} chars)")
@@ -3517,9 +4411,10 @@ async def handle_transcription(
                 _memory_safety_flags.append("deterministic_grounded_recall")
                 reply = _format_personal_activity_memory_reply(
                     memory_ctx,
-                    max_items=3,
+                    max_items=4 if is_household_self_fact_recall(text) else 3,
                     lead="Here's what I remember about that.",
                     empty_msg="I don't have any memories matching that.",
+                    speaker=speaker,
                 )
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
@@ -3578,6 +4473,8 @@ async def handle_transcription(
             logger.exception("Memory route error: %s", exc)
             await _broadcast_chunk_sync(reply, engine.get_state()["tone"])
             _broadcast({"type": "response_end", "text": "", "tone": engine.get_state()["tone"], "phase": "LISTENING"})
+        if _memory_native_used and reply:
+            _persist_spoken_turn(text, reply)
         if routing.extracted_args.get("action") != "store":
             _memory_payload = {
                 "mode": memory_mode,
@@ -3656,46 +4553,111 @@ async def handle_transcription(
     elif routing.tool == ToolType.VISION:
         engine.set_phase("PROCESSING")
         tone = engine.get_state()["tone"]
+        _vision_args = routing.extracted_args or {}
+        retry_q = str(_vision_args.get("vision_retry_query") or "").strip()
+        retry_corr = str(_vision_args.get("vision_retry_correction") or "").strip()
+        look_text = retry_q or text
+        targeted = is_targeted_visual_question(look_text) or bool(retry_q)
+        look_prompt = (
+            vqa_prompt(look_text, correction=retry_corr or None)
+            if targeted
+            else GENERIC_SCENE_PROMPT
+        )
+        try:
+            engine._last_vision_query = look_text
+            engine._last_vision_ts = _time.time()
+        except Exception:
+            pass
         if ollama and pi_snapshot_url:
             try:
                 # Honest "warming up" while the VLM cold-loads: the vision model shares VRAM
                 # with the chat model, so the first look after a chat turn swaps it in (~seconds).
                 # Say what's actually happening — never a guessed scene while the eyes load.
+                # Grab the frame at end-of-speech BEFORE warming TTS. Lived
+                # 2026-08-25: snapshot ran ~3s after STT (hands already down)
+                # and /snapshot was a frozen last_frame (identical JPEG md5).
+                jpeg_bytes = await fetch_snapshot(pi_snapshot_url, fresh=True)
                 await _broadcast_chunk_sync("One moment — focusing my vision.", tone)
-                scene_desc = await describe_scene(pi_snapshot_url, ollama, claude)
+                if jpeg_bytes is None:
+                    scene_desc = "I can't see anything right now — the camera isn't reachable."
+                else:
+                    scene_desc = await describe_jpeg(
+                        jpeg_bytes, ollama, claude, prompt=look_prompt,
+                    )
                 # Do NOT force-unload: keep_alive (5m) keeps the eyes warm for follow-up looks;
                 # Ollama manages the VRAM swap with the chat model on demand (fewer cold-loads).
                 if scene_desc and "aren't available" not in scene_desc and "can't see" not in scene_desc:
-                    # The FRESH frame caption is the SOLE authority for "what do you see".
-                    # Deliberately do NOT prepend the ambient/cached scene_context: its
-                    # "Physical: person / user present" claims can contradict the live frame
-                    # and are exactly the stale material that drove the original confab.
-                    vision_ctx = f"[Live camera view]\n{scene_desc}"
-                    full_reply = ""
-                    chunks_sent = 0
-                    async for sentence, is_final in response_gen.respond_stream(
-                        text,
-                        perception_context=vision_ctx,
-                        cancel_check=_cancelled,
-                        speaker_name=speaker,
-                        user_emotion=emotion,
-                        conversation_id=conversation_id,
-                        tool_hint="vision",
-                        style_instruction=_style_instruction,
-                    ):
-                        if _cancelled():
-                            break
-                        if is_final:
-                            full_reply = sentence
-                            if chunks_sent == 0 and sentence:
-                                await _send_sentence(sentence, tone)
+                    # Targeted VQA answers are not room inventory (a finger-count
+                    # must not become a scene entity). Generic looks still ingest.
+                    if (not targeted) and scene_ingest_callback:
+                        try:
+                            scene_ingest_callback(scene_desc)
+                        except Exception:
+                            logger.debug("scene ingest from live look failed", exc_info=True)
+                    if targeted:
+                        # VLM answer is the mouth. Text LLM does not count fingers.
+                        logger.info("VISION VQA: speaking VLM answer (no text-LLM scene)")
+                        reply = scene_desc
+                        await _broadcast_chunk_sync(reply, tone)
+                        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                        _persist_spoken_turn(text, reply)
+                    else:
+                        # The FRESH frame caption is the SOLE authority for "what do you see".
+                        # Deliberately do NOT prepend the ambient/cached scene_context: its
+                        # "Physical: person / user present" claims can contradict the live frame
+                        # and are exactly the stale material that drove the original confab.
+                        vision_ctx = f"[Live camera view]\n{scene_desc}"
+                        full_reply = ""
+                        chunks_sent = 0
+                        left_frame = False
+                        async for sentence, is_final in response_gen.respond_stream(
+                            text,
+                            perception_context=vision_ctx,
+                            cancel_check=_cancelled,
+                            speaker_name=speaker,
+                            user_emotion=emotion,
+                            conversation_id=conversation_id,
+                            tool_hint="vision",
+                            style_instruction=_style_instruction,
+                            persist_response=False,
+                        ):
+                            if _cancelled():
+                                break
+                            if is_final:
+                                if left_frame:
+                                    full_reply = scene_desc
+                                else:
+                                    full_reply = sentence
+                                    if chunks_sent == 0 and sentence:
+                                        if vision_reply_confabulates(scene_desc, sentence):
+                                            logger.warning(
+                                                "Vision mouth left the live frame; speaking caption"
+                                            )
+                                            full_reply = scene_desc
+                                            await _send_sentence(scene_desc, tone)
+                                        else:
+                                            await _send_sentence(sentence, tone)
+                                await _flush_tts()
+                                _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                                continue
+                            if vision_reply_confabulates(scene_desc, sentence):
+                                logger.warning(
+                                    "Vision mouth left the live frame; speaking caption"
+                                )
+                                left_frame = True
+                                await _send_sentence(scene_desc, tone)
+                                chunks_sent += 1
+                                break
+                            await _send_sentence(sentence, tone)
+                            chunks_sent += 1
+                        if left_frame:
+                            full_reply = scene_desc
                             await _flush_tts()
                             _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
-                            continue
-                        await _send_sentence(sentence, tone)
-                        chunks_sent += 1
-                    reply = full_reply
-                    print("  [Vision→LLM] Scene-aware response complete")
+                        reply = full_reply
+                        if reply:
+                            _persist_spoken_turn(text, reply)
+                        print("  [Vision→LLM] Scene-aware response complete")
                 else:
                     reply = scene_desc
                     await _broadcast_chunk_sync(reply, tone)
@@ -3706,7 +4668,9 @@ async def handle_transcription(
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
         else:
-            reply = await describe_scene(pi_snapshot_url, ollama, claude)
+            reply = await describe_scene(
+                pi_snapshot_url, ollama, claude, prompt=look_prompt, fresh=True,
+            )
             await _broadcast_chunk_sync(reply, engine.get_state()["tone"])
             _broadcast({"type": "response_end", "text": "", "tone": engine.get_state()["tone"], "phase": "LISTENING"})
     elif routing.tool == ToolType.CAMERA_CONTROL:
@@ -3866,6 +4830,8 @@ async def handle_transcription(
                     "safety_flags": ["bounded_emergence_evidence", "no_sentience_claim"],
                 }
                 _set_golden_outcome("executed")
+                _persist_spoken_turn(introspection_query, reply)
+                _run_companion_post_hoc()
                 return
             introspection_data, intro_meta = get_introspection(engine, query=introspection_query)
             logger.info(
@@ -3922,7 +4888,7 @@ async def handle_transcription(
                 else:
                     _preferred_fact_categories: list[str] = []
                     _topic_category_order = {
-                        "memory": ["memory", "architecture"],
+                        "memory": ["architecture", "memory"],
                         "architecture": ["architecture", "memory"],
                         "health": ["health", "current_state"],
                         "policy": ["other", "health"],
@@ -4190,6 +5156,7 @@ async def handle_transcription(
                         user_emotion=emotion,
                         conversation_id=conversation_id,
                         tool_hint="introspection",
+                        persist_response=False,
                         style_instruction=_style_instruction,
                     ):
                         if _cancelled():
@@ -4263,6 +5230,7 @@ async def handle_transcription(
                 logger.exception("Introspection response error: %s", exc)
                 await _broadcast_chunk_sync(reply, engine.get_state()["tone"])
                 _broadcast({"type": "response_end", "text": "", "tone": engine.get_state()["tone"], "phase": "LISTENING"})
+        _persist_spoken_turn(introspection_query, reply)
     elif routing.tool == ToolType.ACADEMIC_SEARCH:
         engine.set_phase("PROCESSING")
         academic_results = []
@@ -4506,9 +5474,6 @@ async def handle_transcription(
             query_text = str(routing.extracted_args.get("golden_query_override") or text)
             answer = codebase_index.answer_query(query_text)
             stats_line = f"{stats.get('total_modules', 0)} modules, {stats.get('total_symbols', 0)} symbols indexed"
-            code_ctx = f"[Codebase: {stats_line}]\n\n{answer}"
-            full_reply = ""
-            chunks_sent = 0
             tone = engine.get_state()["tone"]
             _system_expl_payload = {
                 "title": "System explanation",
@@ -4535,32 +5500,22 @@ async def handle_transcription(
                     "native_used": True,
                     "safety_flags": ["grounded_codebase_answer"],
                 }
-            elif not ollama:
-                reply = _format_grounded_fallback("Codebase analysis", answer, max_lines=14, max_chars=1200)
+            else:
+                # Index is the eyes. LLM may only revoice the lookup (fail closed).
+                reply, _code_meta = await _revoice_or_ground_codebase(answer, ollama)
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
-            else:
-                async for sentence, is_final in response_gen.respond_stream(
-                    text,
-                    perception_context=code_ctx,
-                    cancel_check=_cancelled,
-                    speaker_name=speaker,
-                    user_emotion=emotion,
-                    conversation_id=conversation_id,
-                    style_instruction=_style_instruction,
-                ):
-                    if _cancelled():
-                        break
-                    if is_final:
-                        full_reply = sentence
-                        if chunks_sent == 0 and sentence:
-                            await _send_sentence(sentence, tone)
-                        await _flush_tts()
-                        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
-                        continue
-                    await _send_sentence(sentence, tone)
-                    chunks_sent += 1
-                reply = full_reply
+                _language_example_seed = {
+                    "route": routing.tool.value,
+                    "response_class": "system_explanation",
+                    "meaning_frame": {},
+                    "grounding_payload": _system_expl_payload,
+                    "teacher_answer": "",
+                    "provenance_verdict": "grounded_codebase_answer",
+                    "confidence": 0.9,
+                    "native_used": not bool(_code_meta.get("used_revoice")),
+                    "safety_flags": ["grounded_codebase_answer"],
+                }
         except Exception as exc:
             reply = _format_grounded_fallback(
                 "Codebase analysis",
@@ -4634,22 +5589,22 @@ async def handle_transcription(
             logger.info("Identity forget: %s (%s)", _forget_name, _forgotten)
         else:
             is_query = bool(_IDENTITY_QUERY_RE.search(text))
-            name_match = _ENROLL_NAME_RE.search(text)
-            if not name_match:
-                name_match = _ENROLL_NAME_WEAK_RE.search(text)
-            if not name_match:
-                name_match = _ENROLL_NAME_INVERTED_RE.search(text)
-            extracted_name = name_match.group(1).strip().title() if name_match else ""
+            extracted_name, intro_check_name = _identity_name_intent(text)
 
-            if extracted_name:
+            if extracted_name or intro_check_name:
                 from identity.name_validator import is_valid_person_name, rejection_reason
-                if not is_valid_person_name(extracted_name):
+                if extracted_name and not is_valid_person_name(extracted_name):
                     _reason = rejection_reason(extracted_name)
                     logger.info("Rejected enrollment name %r: %s", extracted_name, _reason)
                     extracted_name = ""
+                if intro_check_name and not is_valid_person_name(intro_check_name):
+                    logger.info("Rejected identity-check name %r", intro_check_name)
+                    intro_check_name = ""
 
             check_match = _IDENTITY_CHECK_RE.search(text)
             check_name = check_match.group(1).strip().title() if check_match else ""
+            if not check_name and intro_check_name:
+                check_name = intro_check_name
             is_identity_check = bool(check_name) and not extracted_name
 
             if is_query or is_identity_check:
@@ -4732,6 +5687,21 @@ async def handle_transcription(
                     except Exception:
                         logger.debug("Evidence accumulator update failed", exc_info=True)
 
+                    parts = []
+                    if voice_ok:
+                        parts.append("voice")
+                    if face_ok:
+                        parts.append("face")
+                    enrolled_str = " and ".join(parts) if parts else "nothing"
+                    _crop_n = 0
+                    try:
+                        _po = getattr(engine, "_perception_orchestrator", None)
+                        _fid = getattr(_po, "face_id", None) if _po else None
+                        if _fid and face_ok:
+                            _crop_n = len(_fid.get_recent_crops(max_crops=3) or [])
+                    except Exception:
+                        _crop_n = 0
+
                     try:
                         import datetime as _dt
                         _now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -4741,69 +5711,49 @@ async def handle_transcription(
                         if face_ok:
                             _modalities.append("face")
                         _mod_str = " and ".join(_modalities) if _modalities else "identity"
-                        engine.remember(
-                            f"First met {enroll_name} on {_now}. "
-                            f"Enrolled their {_mod_str} profile during a live conversation. "
-                            f"This was the first time I heard {enroll_name}'s voice and learned their name.",
-                            memory_type="milestone",
-                            tags=["identity_enrollment", "first_contact", f"speaker:{enroll_name.lower()}",
-                                  "milestone", "voice_recognition", "memorable_moment"],
+                        engine.remember(CreateMemoryData(
+                            type="observation",
+                            payload=(
+                                f"Updated {enroll_name}'s {_mod_str} biometric record on {_now}."
+                            ),
                             weight=0.80,
+                            tags=["identity_enrollment", "biometric_refresh",
+                                  f"speaker:{enroll_name.lower()}",
+                                  "milestone", "voice_recognition"],
                             provenance="observed",
-                        )
+                            identity_owner=enroll_name.lower(),
+                            identity_owner_type="primary_user",
+                            identity_subject=enroll_name.lower(),
+                            identity_subject_type="primary_user",
+                        ))
                     except Exception:
                         logger.debug("Enrollment memory creation failed", exc_info=True)
 
-                    parts = []
-                    if voice_ok:
-                        parts.append("voice")
-                    if face_ok:
-                        parts.append("face")
-                    enrolled_str = " and ".join(parts) if parts else "nothing"
-
-                    enroll_ctx = (
-                        f"[ENROLLMENT ALREADY COMPLETE for '{enroll_name}']\n"
-                        f"Voice: {'SAVED SUCCESSFULLY' if voice_ok else 'not available'}\n"
-                        f"Face: {'SAVED SUCCESSFULLY' if face_ok else 'not available'}\n"
-                        f"Result: {enrolled_str} enrolled and stored.\n"
-                        "CRITICAL INSTRUCTION: The enrollment is ALREADY FINISHED. Use PAST TENSE ONLY.\n"
-                        f"Good: 'Done, {enroll_name} — I've saved your {enrolled_str}.' or "
-                        f"'Got it, {enroll_name}, you're registered.'\n"
-                        "BAD (do NOT say): 'Let me record' / 'I will store' / 'I can save' — "
-                        "the action is COMPLETE. Do NOT describe future actions.\n"
-                        "Keep your response to 1-2 short sentences confirming what was saved."
-                    )
-
-                    try:
-                        full_reply = ""
-                        chunks_sent = 0
-                        async for sentence, is_final in response_gen.respond_stream(
-                            text,
-                            perception_context=enroll_ctx,
-                            cancel_check=_cancelled,
-                            speaker_name=enroll_name, user_emotion=emotion,
-                            conversation_id=conversation_id,
-                            style_instruction=_style_instruction,
-                        ):
-                            if _cancelled():
-                                break
-                            if is_final:
-                                full_reply = sentence
-                                if chunks_sent == 0 and sentence:
-                                    await _send_sentence(sentence, tone)
-                                await _flush_tts()
-                                _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
-                                continue
-                            await _send_sentence(sentence, tone)
-                            chunks_sent += 1
-                        reply = full_reply
-                    except Exception:
-                        if parts:
-                            reply = f"Got it, {enroll_name}! I've saved your {enrolled_str}. I'll recognize you next time."
+                    # Native finish: store then tell. Do not LLM-narrate a future
+                    # "let me take a snapshot" after the crops are already saved.
+                    if parts:
+                        if face_ok:
+                            reply = (
+                                f"Done, {enroll_name}. I took this look and stored it "
+                                f"in your face record"
+                                + (f" from {_crop_n} crop(s)" if _crop_n else "")
+                                + (f", and refreshed your voice." if voice_ok else ".")
+                                + " I'll use it to recognize you."
+                            )
                         else:
-                            reply = f"I heard you, {enroll_name}, but I wasn't able to save your biometrics right now. Try again."
-                        await _broadcast_chunk_sync(reply, tone)
-                        _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                            reply = (
+                                f"Got it, {enroll_name}. I saved your {enrolled_str}. "
+                                f"I didn't get a usable face crop — stay in the camera "
+                                f"and ask me to look at your face again."
+                            )
+                    else:
+                        reply = (
+                            f"I looked, {enroll_name}, but I wasn't able to save "
+                            f"voice or face right now. Try again in the camera."
+                        )
+                    await _broadcast_chunk_sync(reply, tone)
+                    _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                    _persist_spoken_turn(text, reply)
         print(f"  [Identity] {routing.tool.value} handled")
     elif routing.tool == ToolType.SELF_IMPROVE:
         engine.set_phase("PROCESSING")
@@ -5212,7 +6162,7 @@ async def handle_transcription(
                 )
                 _plug_resp = await _plug_reg.invoke(_plug_req)
                 if _plug_resp.success and _plug_resp.result:
-                    reply = str(_plug_resp.result.get("output", _plug_resp.result))
+                    reply = _plugin_spoken_reply(_plug_resp.result)
                 else:
                     reply = f"Plugin '{plugin_name}' could not process that request."
                     if _plug_resp.error:
@@ -5297,11 +6247,45 @@ async def handle_transcription(
             ops_tracker.advance_stage("reason", "active", "Generating response")
 
             _none_route_handled = False
-            if routing.extracted_args.get("tier") == "preference_instruction":
-                _stored_count = int((_personal_intel_result or {}).get("stored", 0) or 0)
-                reply = _build_preference_instruction_ack(text, _stored_count)
+            if (_personal_intel_result or {}).get("fact_check_conflicts"):
+                reply = _build_fact_check_conflict_reply(
+                    list((_personal_intel_result or {}).get("fact_check_conflicts") or []),
+                )
                 await _broadcast_chunk_sync(reply, tone)
                 _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                _persist_spoken_turn(text, reply)
+                _none_route_handled = True
+                logger.info(
+                    "NONE route: fact-check conflict native reply (TBS-0 stays shadow; "
+                    "confirmation did not overwrite held biographical fact)"
+                )
+            elif _household_write_outcomes(
+                list((_personal_intel_result or {}).get("write_outcomes") or []),
+            ):
+                _hh = _household_write_outcomes(
+                    list((_personal_intel_result or {}).get("write_outcomes") or []),
+                )
+                reply = _build_household_write_ack(_hh)
+                if reply:
+                    await _broadcast_chunk_sync(reply, tone)
+                    _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                    _persist_spoken_turn(text, reply)
+                    _none_route_handled = True
+                    logger.info(
+                        "NONE route: household write native reply outcomes=%s",
+                        [item.get("outcome") for item in _hh],
+                    )
+            elif routing.extracted_args.get("tier") == "preference_instruction":
+                _stored_count = int((_personal_intel_result or {}).get("stored", 0) or 0)
+                _matched = int((_personal_intel_result or {}).get("personal_matches", 0) or 0) + int(
+                    (_personal_intel_result or {}).get("thirdparty_matches", 0) or 0
+                )
+                reply = _build_preference_instruction_ack(
+                    text, _stored_count, matched=_matched,
+                )
+                await _broadcast_chunk_sync(reply, tone)
+                _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
+                _persist_spoken_turn(text, reply)
                 _none_route_handled = True
                 logger.info(
                     "NONE route: preference-instruction acknowledgement applied "
@@ -5323,7 +6307,7 @@ async def handle_transcription(
                         native_candidate=True,
                         strict_native=True,
                     )
-                    reply = _format_personal_activity_memory_reply(_memory_ctx)
+                    reply = _format_personal_activity_memory_reply(_memory_ctx, speaker=speaker)
                     await _broadcast_chunk_sync(reply, tone)
                     _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                     _language_example_seed = {
@@ -5669,6 +6653,14 @@ async def handle_transcription(
                     _cg.record_friction_correction(_friction_event.timestamp)
                 except Exception:
                     pass
+                try:
+                    from consciousness.theory_of_mind import theory_of_mind_engine as _tom
+                    _tom.observe_correction(
+                        speaker,
+                        was_wrong=_friction_event.friction_type == "correction",
+                    )
+                except Exception:
+                    pass
     except Exception:
         pass
 
@@ -5941,9 +6933,11 @@ async def handle_transcription(
             if reply:
                 from cognition.self_view import load_self_view
                 from cognition.self_view.grounding import ground_self_claims
-                _gr = ground_self_claims(reply, load_self_view(), active=False)
+                from cognition.self_view.grounding import p2_active_default
+                _p2_on = p2_active_default()
+                _gr = ground_self_claims(reply, load_self_view(), active=_p2_on)
                 _self_grounding = _gr.to_log()
-                _p2_grounding_stats["active"] = False
+                _p2_grounding_stats["active"] = _p2_on
                 _p2_grounding_stats["turns_checked"] += 1
                 if _gr.findings:
                     _p2_grounding_stats["turns_with_self_claims"] += 1
@@ -5984,6 +6978,7 @@ async def handle_transcription(
             "response_latency_ms": _latency_ms,
             "response_text": reply[:500] if reply else "",
             "self_grounding": _self_grounding,
+            "pre_speech": _tbs_stance.to_dict() if _tbs_stance is not None else None,
             "memories_retrieved": _retrieval_summary,
             "epistemic_flags": _epi_flags,
             "identity_state": _id_state,
@@ -6004,6 +6999,11 @@ async def handle_transcription(
         _save_flight_recorder()
     except Exception:
         logger.debug("Flight recorder episode failed", exc_info=True)
+
+    try:
+        engine._last_tool = routing.tool.value if routing else ""
+    except Exception:
+        pass
 
     engine.record_interaction_outcome(
         completed=not was_cancelled and not had_error,
@@ -6037,37 +7037,18 @@ async def handle_transcription(
         except Exception:
             logger.debug("Meta-learning reflection failed", exc_info=True)
 
-    # ─── Companion Cognition P0: situational read (LOGGED-ONLY / shadow) ───
-    # Observe the just-completed exchange and log JARVIS's internal read of it:
-    # what it thinks is happening, why, how confident, what evidence contributed,
-    # and what it WOULD have done if it had the authority.  Zero behavior — no
-    # tone change, no belief write, no ask.  The salience/affect gate is recorded
-    # but never acted on (the anti-chatterbox spine, validated before it steers).
-    # Runs last so it can never perturb the turn.  See
-    # docs/COMPANION_COGNITION_DESIGN.md (P0).
+    # Companion P0/P1/P3 + TBS-1. Native STATUS/MEMORY/P1 fall through to here.
+    # Emergence INTROSPECTION calls the same helper before its early return.
+    _run_companion_post_hoc()
+
     try:
-        from consciousness.situational_read import situational_read_engine as _sit_read
-        from consciousness.affect_state import affect_state as _sit_affect
-        _read = _sit_read.observe_turn(
-            speaker=speaker,
-            user_text=text,
-            response_text=reply,
-            user_emotion=emotion,
-            follow_up=follow_up,
-            latency_ms=latency_ms,
-            complexity=complexity,
-            route=(routing.tool.value if routing else ""),
-            affect=_sit_affect.snapshot(),
-        )
-        # Companion P1: fold the read into the per-person theory-of-mind (SHADOW —
-        # hypotheses only, gates nothing, never persisted to identity).
-        if _read is not None:
-            from consciousness.theory_of_mind import theory_of_mind_engine as _tom
-            _person_model = _tom.observe(speaker, _read)
-            # Companion P3: join the read + learned person-model into a narrate-only
-            # behavior advisory ("would have softened / wrapped up / asked"). SHADOW —
-            # applies nothing; only logged for operator review + the P3->P4 earn-gate.
-            from consciousness.behavior_advisory import behavior_advisory_engine as _adv
-            _adv.propose(_read, _person_model)
+        operator_proxy_turn.reset(_proxy_tok)
     except Exception:
-        logger.debug("Situational read / theory-of-mind / advisory (companion P0/P1/P3) failed", exc_info=True)
+        pass
+    return {
+        "spoken": (reply or "")[:4000],
+        "route": routing.tool.value if routing else "",
+        "conversation_id": conversation_id,
+        "speaker": speaker,
+        "operator_proxy": _operator_proxy,
+    }

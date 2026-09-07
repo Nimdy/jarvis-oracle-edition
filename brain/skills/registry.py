@@ -364,7 +364,10 @@ class SkillRegistry:
         return list(self._skills.values())
 
     def remove(self, skill_id: str) -> bool:
-        """Remove a skill record entirely. Returns True if found and removed."""
+        """Remove a learned skill. Bootstrap/default skills cannot be deleted."""
+        if skill_id in get_default_skill_ids():
+            logger.warning("Refused to remove default skill '%s'", skill_id)
+            return False
         if skill_id not in self._skills:
             return False
         del self._skills[skill_id]

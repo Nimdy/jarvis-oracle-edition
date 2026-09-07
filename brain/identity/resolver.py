@@ -67,6 +67,22 @@ class IdentityResolver:
         if self._soul_identity and hasattr(self._soul_identity, "relationships"):
             for key in self._soul_identity.relationships:
                 self._known_names.add(key.lower().strip())
+        # Enrolled voices — she already knows these people. Names only;
+        # does not read embeddings or mint a match. Lived TAP: empty soul
+        # keys + unknown crop stamped guest while speakers.json still had David.
+        try:
+            import json
+            import os
+            from pathlib import Path
+            path = Path(os.environ.get("JARVIS_HOME", Path.home() / ".jarvis")) / "speakers.json"
+            if path.exists():
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    for name in data:
+                        if isinstance(name, str) and name.strip():
+                            self._known_names.add(name.lower().strip())
+        except Exception:
+            pass
 
     def get_known_names(self) -> set[str]:
         self._refresh_known_names()
@@ -97,36 +113,73 @@ class IdentityResolver:
                 resolved_by="actor",
             )
 
+        # This-turn voice beats sticky face persist only when the names DIFFER.
+        # Lived 2026-08-24 17:40: skipping fusion entirely stamped David as
+        # guest (soul known_names empty) and Layer 3 blocked his Skyler memories.
+        speaker_s = (speaker or "").lower().strip()
+        speaker_known = bool(speaker_s) and speaker_s != "unknown"
+        _STICKY_FUSION = frozenset({
+            "persisted", "face_only", "face_present_voice_unknown",
+            "face_voice_drop_grace", "tentative_bridge",
+        })
+
         if self._fusion is not None:
             resolved = getattr(self._fusion, "current", None)
             if resolved and getattr(resolved, "name", "unknown") != "unknown":
                 fusion_conf = getattr(resolved, "confidence", 0.0)
                 fusion_name = getattr(resolved, "name", "unknown").lower().strip()
                 is_known = getattr(resolved, "is_known", False)
-                method = getattr(resolved, "method", "none")
-
+                method = str(getattr(resolved, "method", "none") or "none")
                 self._refresh_known_names()
-                id_type: IdentityType = "primary_user" if is_known or fusion_name in self._known_names else "guest"
-                if fusion_conf < CONFIDENCE_THRESHOLDS["soft"]:
-                    id_type = "guest"
-
-                return IdentityContext(
-                    identity_id=fusion_name,
-                    identity_type=id_type,
-                    confidence=fusion_conf,
-                    signals=(IdentitySignal(source="speaker", name=fusion_name, confidence=fusion_conf, is_known=is_known),),
-                    resolved_by=f"fusion:{method}",
+                speaker_enrolled = speaker_known and speaker_s in self._known_names
+                fusion_unknown_crop = (
+                    (not is_known)
+                    or fusion_conf < CONFIDENCE_THRESHOLDS["soft"]
+                    or fusion_name not in self._known_names
                 )
+                # This-turn speaker she already enrolled (ear voice OR TAP
+                # name David) is who she is. Unknown live crop is expected
+                # (Face 0.55). Same law as 17:40 speaker vs persist — not a
+                # TAP login flag, not a hardcoded "david" string.
+                enrolled_speaker_beats_unknown_crop = (
+                    speaker_enrolled and fusion_unknown_crop
+                )
+                sticky_other = (
+                    speaker_known
+                    and fusion_name != speaker_s
+                    and method in _STICKY_FUSION
+                )
+                if not sticky_other and not enrolled_speaker_beats_unknown_crop:
+                    id_type: IdentityType = (
+                        "primary_user"
+                        if is_known or fusion_name in self._known_names
+                        else "guest"
+                    )
+                    if fusion_conf < CONFIDENCE_THRESHOLDS["soft"]:
+                        id_type = "guest"
 
-        if speaker and speaker.lower().strip() != "unknown":
-            s = speaker.lower().strip()
+                    return IdentityContext(
+                        identity_id=fusion_name,
+                        identity_type=id_type,
+                        confidence=fusion_conf,
+                        signals=(IdentitySignal(
+                            source="speaker", name=fusion_name,
+                            confidence=fusion_conf, is_known=is_known,
+                        ),),
+                        resolved_by=f"fusion:{method}",
+                    )
+
+        if speaker_known:
             self._refresh_known_names()
-            id_type = "primary_user" if s in self._known_names else "guest"
+            id_type = "primary_user" if speaker_s in self._known_names else "guest"
             return IdentityContext(
-                identity_id=s,
+                identity_id=speaker_s,
                 identity_type=id_type,
                 confidence=0.6,
-                signals=(IdentitySignal(source="speaker", name=s, confidence=0.6, is_known=s in self._known_names),),
+                signals=(IdentitySignal(
+                    source="speaker", name=speaker_s, confidence=0.6,
+                    is_known=speaker_s in self._known_names,
+                ),),
                 resolved_by="speaker_tag",
             )
 

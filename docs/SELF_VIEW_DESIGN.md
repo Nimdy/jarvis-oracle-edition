@@ -156,7 +156,18 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
 - Deterministic articulation first (like `bounded_response` self_status/self_introspection),
   drawing capabilities + honest performance + recent changes + known gaps. Answer `kind`s:
   identity / capabilities / recent_changes / health / weaknesses / gated_capabilities /
-  unknowns / consciousness_query.
+  unknowns / consciousness_query / **continuity** (process-restart vs wipe: measured
+  memory count + store span; never a blank-slate claim; does **not** steal
+  `what do you remember about X` from MEMORY retrieval) / **answer_path**
+  (how a spoken answer is produced: perception → heuristic router live /
+  voice-intent shadow → OSV P1 or memory stack or LLM-as-voice under L0;
+  designed-maturity labeled as such; no inner-parse theater).
+  **Write-path (lived 2026-08-24):** persist the *spoken* reply, never a discarded
+  LLM draft. An OSV-contradicted wipe/blank-slate claim is not stored as
+  autobiography (`engine.remember` still rides the synthetic-session block).
+  **Recall-path:** MEMORY may not present that contradicted claim as
+  "Jarvis recalled" — the scar stays in the store (never discard), it is not
+  declared as fact. Not a P2 flip; not a wipe.
 - **Strict in claims, rich in capture** (see §6): user-facing answers are conservative and
   non-suppressing; the language guard is regression-tested; "Are you conscious?" uses the §6
   balanced template; P1 may *record* a self-referential anomaly via `observer.observe_emergence`
@@ -165,6 +176,12 @@ New package `brain/cognition/self_view/` (or `brain/self_model/`):
   + provenance + gaps), not a symbol dump; explicit code/source questions still route to
   CODEBASE; dormant/gated render as such; gaps → "I don't know / can't measure yet"; the
   language guard holds; deterministic answer path needs no LLM; tests pin routing + content.
+- **Mouth (do not invent a second one).** Live P1 speech is the deterministic articulator.
+  Warm gist ("lead with the gist; offer to go deeper") is `cognition/self_view/revoice.py`,
+  teacher-only via `voice_seed.py` until `native_voice` is born (`not_born` in
+  `nn_fleet_registry.json`). Verbosity/detail already live in `response_style`,
+  `_policy_response_length`, and ToM `verbosity_pref`. Do not add a briefing register
+  or exec/tech/ops articulators. Lived miss 2026-08-24 reverted `69d7819`.
 
 ### P2 — Voice Grounding / Bounding  *(SHIPPED shadow-first — detect+log live; active gated behind `OSV_P2_ACTIVE`)*
 

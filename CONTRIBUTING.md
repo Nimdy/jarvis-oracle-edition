@@ -8,7 +8,9 @@ We welcome contributions that preserve and strengthen that north star.
 
 ---
 
-## Before You Contribute: The Two Rules
+**Agents: read [docs/NOW.md](docs/NOW.md), then [docs/AGENT_MAP.md](docs/AGENT_MAP.md) before any conversation / OSV / memory / routing change.** NOW is branch/stage/leftovers. AGENT_MAP is the turn-flow contract. This page is how to contribute.
+
+## Before You Contribute: The Three Rules
 
 Read these twice. Most rejected PRs violate one of these.
 
@@ -24,6 +26,18 @@ Concretely:
 - Do not route a weakly-verified fact through prose layers so it appears as a strong claim.
 
 If your change makes the system *look* more capable without making it *measurably* more capable on the dashboard, that is verb-hacking. It belongs in a fork.
+
+### The Do-Not-Parallel-a-Gated-Path Rule
+
+**If the capability already exists and is shadow / `PRE-MATURE` / `not_born`, do not implement a second one so the demo sounds better.** Report the gate. Use the store and the mouth that are already wired.
+
+Concretely:
+
+- Do not add `briefing_register`, exec/tech/ops articulators, or a new verbosity classifier. Those already live in `response_style`, `_policy_response_length`, ToM `verbosity_pref`, TBS-0, and `cognition/self_view/revoice.py`.
+- P1 self-view speaking a spec sheet is the deterministic floor until `native_voice` is born (`voice_seed.py` is teacher-only on purpose). That is not a missing renderer.
+- Do not shrink the grounded source of truth to fake a warm mouth. That poisons the teacher pair.
+
+Lived miss 2026-08-24: an agent did exactly this; reverted in `69d7819`. See the STOP section in [AGENTS.md](AGENTS.md).
 
 ### The Restart Continuity Rule
 

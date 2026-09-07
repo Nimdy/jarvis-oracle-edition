@@ -13,6 +13,8 @@ It runs on hardware you already own, using a Raspberry Pi 5 and a desktop GPU. I
 **Not a cloud LLM wrapper.**  
 **Not a benchmark-chasing model.**
 
+**Agents:** [docs/NOW.md](docs/NOW.md) is current branch / stage / leftovers. [docs/AGENT_MAP.md](docs/AGENT_MAP.md) is mandatory before you edit conversation, OSV, memory, routing, TTS, or preferences. Do not skip it. Roster (Grok 4.6 in-chair codes and directs; Shockwave debug/docs; Megatron manages Shockwave’s pulse). Frozen snapshot: [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md).
+
 This is a raw prototype workshop for building toward higher forms of artificial intelligence, designed from first principles with strong epistemic governance, governed recursive self-improvement, and honest maturity labeling.
 
 ---
@@ -113,7 +115,7 @@ The system has been running continuously since the March 2026 brain reset. It ha
 | Local-first operation | Fully operational | Pi 5 senses + desktop GPU brain, zero cloud required |
 | Consciousness maturation | Integrative stage | Highest evolution stage reached post-gestation |
 | Oracle Benchmark | 96.0 Gold / Ascendant | 7 benchmark domains green — does NOT imply every internal maturity gate is green; several subsystems below are intentionally shadow/dormant |
-| Epistemic stack | 13 layers, all shipped | Capability Gate, truth calibration, belief graph, soul integrity, contradiction engine |
+| Epistemic stack | 15-entry (L0–L12 + L3A/L3B), all shipped | Capability Gate, truth calibration, belief graph, soul integrity, contradiction engine, intention truth |
 | World Model | **Shadow** (L1-gated) | The pooled ~99.8% is dominated by tautological *persistence* rules ("a stable thing stays stable"); the real *predictive* signal is **4 validations @ 0.25**. Promotion needs ≥50 preds @ ≥0.65 (`cognition/promotion.py`). `jarvis_eval` itself flags the pooled number as "context only — not the score." |
 | Neural Policy | **Shadow, frozen at v10** | Critic diagnostic (2026-06): (state,action)→reward Spearman **~0.06**, R²~0 on 838 live tuples — signal too weak to grow on. 342 versions trained on a synthetic distribution; **0/8 features promoted** to live control. See `docs/AUTONOMOUS_GROWTH_STRATEGY.md`. |
 | Hemisphere NNs | 12+ Tier-1 specialists | Speaker, face, emotion, voice, diarize, plan, diagnostic, code_quality, claim_classifier, dream_synthesis, skill_acquisition, and more |
@@ -323,7 +325,7 @@ Pi 5 (Senses)  <-> WebSocket :9100  <->  Desktop Brain (Consciousness)
 - Memory System: vector + graph + cortex NNs + fractal recall
 - Hemisphere NNs: self-designing, neuroevolution, distillation
 - Policy NN: shadow A/B evaluation
-- Epistemic Stack: 13 layers
+- Epistemic Stack: 15-entry (L0–L12 + L3A/L3B)
 - Autonomy Pipeline: 7 drives, research loop
 - Governed Self-Improvement: scanner, codegen, sandbox, approval
 - Capability Acquisition: 10-lane pipeline
@@ -343,7 +345,7 @@ Non-negotiable:
 - Strong epistemic integrity
 - Budget-aware consciousness
 - Governed self-modification
-- No verb-hacking
+- No verb-hacking (includes: do not build a parallel mouth/register for a gated path — see AGENTS.md STOP)
 - Honest maturity signaling
 
 ---
@@ -367,13 +369,15 @@ Most subsystem dashboards will show red/zero metrics on a fresh brain. This is c
 ## Development & Contributing
 
 - All Python, 3.11+
-- Tests:
+- Tests (contract pins — not spoken sits):
 
 ```bash
 cd brain && python -m pytest
 ```
 
-- Synthetic exercises for safe training
+Verbal conversation testing is Pi voice or `POST /api/operator/tap` into `handle_transcription`. Do not use `/api/chat` (retired). See `docs/OPERATOR_PROXY_TAP.md` and `docs/NOW.md` § How we test.
+
+- Synthetic exercises for safe training (telemetry only — never a sit)
 - Validation pack + truth probe for regression safety
 
 Before opening a PR, ask:
@@ -432,7 +436,8 @@ JARVIS only works if we stay grounded.
 | [GitHub Issues](https://github.com/Nimdy/jarvis-oracle-edition/issues) + [Releases](https://github.com/Nimdy/jarvis-oracle-edition/releases) | Forward roadmap + shipped changelog (single source of truth) |
 | `docs/BUILD_HISTORY.md` | Local changelog mirror (read by the self-view) |
 | `docs/SyntheticSoul.md` | Design principles paper |
-| `AGENTS.md` | AI agent guidance (architecture, patterns, constraints) |
+| `docs/AGENT_MAP.md` | **Mandatory** agent turn-flow / authority map (read before conversation/OSV/memory/routing edits) |
+| `AGENTS.md` | AI agent field manual (architecture, patterns, constraints) |
 | `CONTRIBUTING.md` | Contribution guidelines |
 
 ---

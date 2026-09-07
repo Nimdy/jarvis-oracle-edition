@@ -99,6 +99,7 @@
     <section id="nn-policy" class="d-section">
       <h2>Policy Neural Network (Reinforcement Learning)</h2>
       <p>Three architecture variants compete via shadow A/B evaluation. The active model controls kernel parameters (thought weights, tick budget, mode suggestion) through a feature-gated interface. All output activations are $\tanh$ producing values in $[-1, 1]$.</p>
+      <p style="color:var(--amber);font-size:0.88rem;"><strong>Live honesty (do not promote from this page):</strong> the policy NN is currently <em>shadow / untrained</em> on the long-lived brain (<code>default_untrained</code>, 0 of 8 feature flags, <code>train_enabled=false</code>). A 2026-06 critic found the (state, action)→reward estimand non-causal (Spearman ~0.06). The math below is the <em>designed</em> gate. Meeting sample counts on a broken estimand is not promotion evidence. Do not lower the 55% win-rate / 100-decision floors.</p>
 
       <div class="s-section" id="arch-mlp2">
         <div class="s-card-header" onclick="toggleSection(this)">
@@ -1063,6 +1064,7 @@
     <section id="world-model" class="d-section">
       <h2>World Model Promotion</h2>
       <p>3-level promotion system: Shadow → Advisory → Active, accuracy-gated with auto-demotion.</p>
+      <p style="color:var(--amber);font-size:0.88rem;"><strong>Live honesty:</strong> this operator's brain persists <code>world_model_promotion.json</code> at <em>level 2</em> with tens of thousands of validated outcomes. That badge can be dominated by tautological persistence rules ("a stable thing stays stable"). Self-sensing skill-vs-persistence is the honest spatial predictor. Do not treat WM L2 as "it understands the room," and do not lower the 65% / 50-prediction floors.</p>
 
       <table class="s-params">
         <thead><tr><th>Level</th><th>Min Validated</th><th>Min Accuracy</th><th>Min Runtime</th><th>Behavior</th></tr></thead>

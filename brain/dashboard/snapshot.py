@@ -27,6 +27,26 @@ class SnapshotContext:
     health_counters: Any = None
 
 
+def _decorate_scene_payload(scene: dict[str, Any], perc_orch: Any) -> dict[str, Any]:
+    """Attach operator-facing reads that are not tracker entities.
+
+    `/api/scene` is the Layer 3B tracker. The GPU/edge caption and Hailo person
+    boxes are independent senses — the old dashboard showed them; v2 camera
+    was tracker-only and read as empty on a person-only Hailo rig.
+    """
+    out = dict(scene or {})
+    try:
+        out["caption"] = perc_orch.get_scene_caption_state() if perc_orch else {}
+    except Exception:
+        out.setdefault("caption", {})
+    try:
+        boxes = perc_orch.get_person_bboxes() if perc_orch else []
+        out["person_bbox_count"] = len(boxes or [])
+    except Exception:
+        out.setdefault("person_bbox_count", 0)
+    return out
+
+
 def _build_trace_explorer_snapshot(
     entries: list[dict[str, Any]],
     *,
@@ -1454,9 +1474,10 @@ def build_cache(ctx: SnapshotContext) -> tuple[dict[str, Any], str]:
             snapshot["scene"] = cs._scene_continuity_module.get_state()
         else:
             snapshot["scene"] = {}
+        snapshot["scene"] = _decorate_scene_payload(snapshot.get("scene") or {}, ctx.perc_orch)
     except Exception:
         logger.warning("Snapshot: scene continuity failed", exc_info=True)
-        snapshot["scene"] = {}
+        snapshot["scene"] = _decorate_scene_payload({}, ctx.perc_orch)
 
     # What JARVIS "sees" — latest scene caption + which path produced it (edge VLM on
     # the Pi Hailo vs desktop GPU). Lets the operator watch the edge-VLM room reads.
@@ -2594,6 +2615,15 @@ def _build_si_specialists(engine: Any) -> dict[str, Any]:
             "signals_labels": label_count,
             "signals_quarantined": feature_quarantined + label_quarantined,
             "signals_buffer": feature_buffer + label_buffer,
+            # Weight-Room P1: origin split is observable. live_shadow_accuracy
+            # stays None until scored lived inference exists (honesty floor).
+            "signals_lived": int(feature_stats.get("lived", 0) or 0)
+            + int(label_stats.get("lived", 0) or 0),
+            "signals_synthetic": int(feature_stats.get("synthetic", 0) or 0)
+            + int(label_stats.get("synthetic", 0) or 0),
+            "live_shadow_accuracy": None,
+            "live_accuracy_status": "unmeasured_no_live_inference_scoring",
+            "last_lived_signal_s": feature_stats.get("last_lived_seen_s") or label_stats.get("last_lived_seen_s"),
             "last_signal_s": last_signal_s,
             "failure_count": failure_counts.get(focus, 0),
             "disabled": focus in disabled,
@@ -2602,6 +2632,16 @@ def _build_si_specialists(engine: Any) -> dict[str, Any]:
             "shadow_only": focus in _SHADOW_ONLY_SPECIALIST_FOCUSES,
             "live_influence": False if focus in _SHADOW_ONLY_SPECIALIST_FOCUSES else None,
         }
+        try:
+            from hemisphere.distillation import DistillationCollector
+            acc = DistillationCollector.instance().live_shadow_accuracy(label_key)
+            if acc is None:
+                acc = DistillationCollector.instance().live_shadow_accuracy(feature_key)
+            if acc is not None:
+                specialist_entry["live_shadow_accuracy"] = acc
+                specialist_entry["live_accuracy_status"] = "lived_scored"
+        except Exception:
+            pass
 
         if focus == "claim_classifier":
             try:

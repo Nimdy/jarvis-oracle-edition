@@ -362,6 +362,76 @@ class SkillToolStructuredTests(unittest.TestCase):
         self.assertEqual(artifacts[0]["details"]["class_label"], "calm")
         self.assertEqual(artifacts[0]["details"]["utterance"], "this is a sample")
 
+    def _start_advisory_job(self, user_text: str) -> dict:
+        from tools import skill_tool
+
+        fake_registry = SimpleNamespace(
+            get=lambda skill_id: None,
+            register=lambda record: None,
+            remove=lambda skill_id: None,
+        )
+        fake_job = SimpleNamespace(
+            job_id="job-advisory-1",
+            status="active",
+            phase="assess",
+            created_at=1.0,
+            events=[],
+            protocol_id="",
+        )
+        create_calls: list[dict] = []
+
+        def _create_job(**kwargs):
+            create_calls.append(kwargs)
+            return fake_job
+
+        fake_orch = SimpleNamespace(
+            get_active_jobs=lambda: [],
+            create_job=_create_job,
+            store=SimpleNamespace(save=lambda job: None),
+        )
+        with patch.object(skill_tool, "_skill_registry", fake_registry), \
+             patch.object(skill_tool, "_learning_job_orch", fake_orch):
+            result = skill_tool.handle_skill_request_structured(
+                user_text,
+                speaker="David",
+            )
+        result["_create_calls"] = create_calls
+        return result
+
+    def test_explicit_non_template_learn_starts_advisory_job(self) -> None:
+        """Lived 2026-09-06: dice/quiz/tasks were catalog-blocked, no LearningJob."""
+        from skills.resolver import is_generic_fallback_resolution, resolve_skill
+
+        lived = (
+            "Learn a skill to roll a 20-sided dice.",
+            "Learn a skill to quiz me on large language models.",
+            "Learn a skill to keep a list of tasks for me",
+            "roll a 20-sided dice",
+        )
+        for text in lived:
+            resolution = resolve_skill(text)
+            self.assertIsNotNone(resolution, text)
+            self.assertTrue(is_generic_fallback_resolution(resolution), text)
+            result = self._start_advisory_job(text)
+            self.assertEqual(result["outcome"], "job_started", text)
+            self.assertFalse(result["matrix_protocol"], text)
+            self.assertEqual(result["job_id"], "job-advisory-1", text)
+            message = result["message"].lower()
+            self.assertIn("started a learning job", message, text)
+            self.assertIn("won't claim", message, text)
+            self.assertIn("approval", message, text)
+            self.assertIn("plugin", message, text)
+            self.assertNotIn("i can currently learn:", message, text)
+            self.assertEqual(len(result["_create_calls"]), 1, text)
+            plan = result["_create_calls"][0]["plan"]
+            self.assertTrue(plan["capability_contract"]["acquisition_eligible"], text)
+
+    def test_generic_fallback_does_not_unpark_matrix(self) -> None:
+        result = self._start_advisory_job("Learn a skill to roll a 20-sided dice.")
+        self.assertEqual(result["outcome"], "job_started")
+        self.assertFalse(result["matrix_protocol"])
+        self.assertFalse(result.get("protocol_id"))
+
 
 if __name__ == "__main__":
     unittest.main()

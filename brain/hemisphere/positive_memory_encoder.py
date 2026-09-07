@@ -6,10 +6,12 @@ for the rest of the Tier-2 ladder (P3.7-P3.10). It is **derived-only** and
 
   * It writes nothing — no memories, beliefs, identity, autonomy, policy
     authority, HRR/P5 state, or events. It is pure feature engineering.
-  * It enters CANDIDATE_BIRTH only. Promotion to BROADCAST_ELIGIBLE / PROMOTED
-    is gated by the standard Matrix Protocol lifecycle in
-    ``HemisphereOrchestrator._check_specialist_promotions``; this module
-    does not bypass any of it.
+  * Birth is CANDIDATE_BIRTH. Promotion to BROADCAST_ELIGIBLE / PROMOTED is
+    gated by the Matrix Protocol lifecycle in
+    ``HemisphereOrchestrator._check_specialist_promotions`` (advisory only).
+    Process restart reloads weights but resets authority to
+    PROBATIONARY_TRAINING (asymmetric firewall). This module does not
+    self-promote.
   * It produces a real-time inferable scalar in ``[0, 1]`` from current
     perception/memory/mood state. It does NOT fall back to
     accuracy-as-proxy. That is the explicit P3.6 contract: a Tier-2

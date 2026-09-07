@@ -89,10 +89,17 @@ def _articulate_self_status(frame: MeaningFrame) -> str:
         if "current activity" in title_lower:
             state = kv.get("state", "").strip()
             detail = kv.get("detail", "").strip()
+            tool_name = ""
+            if "tool:" in detail.lower():
+                tool_name = detail.split("tool:", 1)[-1].strip().split(".")[0].strip()
+            # Lived 2026-09-01: "How are you?" spoke "handling a request — STATUS".
+            # That is this-turn routing, not how she is. Inner HUD is not the mouth.
+            if tool_name.upper() in {"STATUS", "SYSTEM_STATUS", "INTROSPECTION"}:
+                continue
             if state.lower() in ("standing by", "idle", "unknown") and not detail:
                 rendered.append("I'm standing by right now, nothing actively processing.")
-            elif detail and "tool" in detail.lower():
-                rendered.append(f"I'm currently handling a request — {detail.split('tool:', 1)[-1].strip().split('.')[0] if 'tool:' in detail.lower() else detail}.")
+            elif tool_name:
+                rendered.append("I'm currently handling a request.")
             elif state:
                 rendered.append(f"Right now I'm {state.lower()}.")
             continue
@@ -116,7 +123,8 @@ def _articulate_self_status(frame: MeaningFrame) -> str:
             mode_value = kv.get("mode", "unknown")
             dwell = kv.get("dwell", "")
             dwell_phrase = _humanize_dwell(dwell) if dwell else ""
-            if dwell_phrase:
+            # "just switched" is bounce noise, not how she is.
+            if dwell_phrase and dwell_phrase != "just switched":
                 rendered.append(f"I'm in {mode_value} mode, {dwell_phrase}.")
             else:
                 rendered.append(f"I'm in {mode_value} mode.")
@@ -149,11 +157,7 @@ def _articulate_self_status(frame: MeaningFrame) -> str:
             continue
 
         if "cortex training" in title_lower:
-            ranker = kv.get("ranker", "")
-            ready = kv.get("ready", "no")
-            if ranker:
-                ranker_clean = ranker.replace("training pairs", "").strip()
-                rendered.append(f"My memory cortex has collected {ranker_clean} training pairs{', and is ready to train' if ready.lower() == 'yes' else ''}.")
+            # Ranker pair counts are dashboard HUD, not a greeting.
             continue
 
         if "emotion sensor" in title_lower:
@@ -277,8 +281,29 @@ def _rank_and_select_facts(
             rank_order.append(cat)
 
     selected: list[str] = []
+    # Round-robin preferred cats so a fat memory dump cannot starve sqlite-vec.
+    preferred = [c for c in (preferred_categories or []) if c in by_cat]
+    if preferred:
+        idx = {c: 0 for c in preferred}
+        while len(selected) < max_facts:
+            progressed = False
+            for cat in preferred:
+                lines = by_cat.get(cat, [])
+                i = idx[cat]
+                if i < len(lines):
+                    selected.append(lines[i])
+                    idx[cat] = i + 1
+                    progressed = True
+                    if len(selected) >= max_facts:
+                        return selected
+            if not progressed:
+                break
     for cat in rank_order:
-        for fact in by_cat.get(cat, []):
+        if cat in preferred:
+            start = idx.get(cat, 0)
+        else:
+            start = 0
+        for fact in by_cat.get(cat, [])[start:]:
             if len(selected) >= max_facts:
                 return selected
             selected.append(fact)

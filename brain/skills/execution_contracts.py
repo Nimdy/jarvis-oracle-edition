@@ -140,12 +140,51 @@ _CONTRACTS: tuple[SkillExecutionContract, ...] = (
 )
 
 
-def get_contract(skill_id: str) -> SkillExecutionContract | None:
+def contract_from_plan(skill_id: str, plan: dict[str, Any] | None) -> SkillExecutionContract | None:
+    """Rebuild a workshop contract from a learning-job plan (off-catalog learn-X)."""
+
+    cap = (plan or {}).get("capability_contract") or {}
+    if not cap.get("acquisition_eligible"):
+        return None
+    fixtures_raw = cap.get("smoke_fixtures") or []
+    fixtures: list[SkillSmokeFixture] = []
+    for item in fixtures_raw:
+        if not isinstance(item, dict):
+            continue
+        fixtures.append(SkillSmokeFixture(
+            name=str(item.get("name") or "operator_request_smoke"),
+            input_type=str(item.get("input_type") or "operator_request"),
+            input=item.get("input"),
+            expected=item.get("expected") if isinstance(item.get("expected"), dict) else {},
+        ))
+    if not fixtures:
+        trigger = str((plan or {}).get("operator_trigger") or skill_id)
+        fixtures.append(SkillSmokeFixture(
+            name="operator_request_smoke",
+            input_type="operator_request",
+            input={"request": trigger[:200]},
+            expected={"ok": True, "honors_request": True},
+        ))
+    return SkillExecutionContract(
+        contract_id=str(cap.get("execution_contract_id") or f"{skill_id}_plugin"),
+        family="user_requested_tool",
+        skill_ids=(skill_id,),
+        required_executor_kind=str(cap.get("required_executor_kind") or "plugin"),
+        smoke_test_name="test:procedure_smoke",
+        requires_sandbox=True,
+        acquisition_eligible=True,
+        smoke_fixtures=tuple(fixtures),
+    )
+
+
+def get_contract(skill_id: str, job: Any = None) -> SkillExecutionContract | None:
     """Return the operational contract for a skill, if one exists."""
 
     for contract in _CONTRACTS:
         if skill_id in contract.skill_ids:
             return contract
+    if job is not None:
+        return contract_from_plan(skill_id, getattr(job, "plan", None) or {})
     return None
 
 
@@ -166,7 +205,7 @@ def run_contract_smoke(
     no production callable path, the operational smoke test fails.
     """
 
-    contract = get_contract(job.skill_id)
+    contract = get_contract(job.skill_id, job)
     if contract is None:
         return [], {}
 

@@ -36,6 +36,8 @@
     .gridkv .k{color:var(--muted);}
     .gridkv b{color:var(--text);font-variant-numeric:tabular-nums;}
     .idleblock{font-size:11px;color:var(--dim);font-style:italic;padding:14px 4px;text-align:center;border:1px dashed var(--line);border-radius:5px;}
+    #mi-recent .mi-row{display:flex;gap:10px;align-items:flex-start;font-size:9.5px;padding:3px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;}
+    #mi-recent .mi-payload{flex:1;color:var(--text);white-space:normal;overflow-wrap:anywhere;line-height:1.35;}
   </style>
 </head>
 <body>
@@ -366,11 +368,11 @@
     }).join('') : '<div style="color:var(--dim)">no memories yet</div>';
     el('mi-recent').innerHTML = recent.length ? recent.map(function(r){
       var prot=r.provenance==='casual_conversation';
-      return '<div style="display:flex;gap:10px;font-size:9.5px;padding:2px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;">'+
-        '<span style="width:130px;color:'+(prot?'#f0a500':'var(--cyan)')+'">'+r.provenance+(prot?' 🛡':'')+'</span>'+
-        '<span style="width:38px;color:var(--muted)">w'+(r.weight!=null?Number(r.weight).toFixed(2):'—')+'</span>'+
-        '<span style="width:42px;color:var(--muted)">'+miAge(r.age_s)+'</span>'+
-        '<span style="flex:1;color:var(--text)">'+String(r.payload_preview||'').replace(/</g,'&lt;')+'</span></div>';
+      return '<div class="mi-row">'+
+        '<span style="width:130px;flex-shrink:0;color:'+(prot?'#f0a500':'var(--cyan)')+'">'+r.provenance+(prot?' 🛡':'')+'</span>'+
+        '<span style="width:38px;flex-shrink:0;color:var(--muted)">w'+(r.weight!=null?Number(r.weight).toFixed(2):'—')+'</span>'+
+        '<span style="width:42px;flex-shrink:0;color:var(--muted)">'+miAge(r.age_s)+'</span>'+
+        '<span class="mi-payload">'+String(r.payload_preview||'').replace(/</g,'&lt;')+'</span></div>';
     }).join('') : '<div style="color:var(--dim)">no recent writes</div>';
     el('mi-asof').textContent='live';
   }

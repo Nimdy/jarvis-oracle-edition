@@ -1,11 +1,14 @@
 # JARVIS Architecture
 
+> **Agents start here:** [docs/NOW.md](docs/NOW.md) (branch / stage / leftovers), then [docs/AGENT_MAP.md](docs/AGENT_MAP.md) (one spoken turn, authority, do-not-invent). This essay is the long architecture. Line numbers drift; the map is the contract.
+>
 > **Validated 2026-06-09** by a multi-agent investigation of the live code (18 subsystem deep-readers + adversarial verifiers). Each section was re-checked against the source; maturity is labeled honestly — **SHIPPED** (live), **SHADOW** (computes, zero authority by design), **GATED** (earned-not-yet), **DESIGNED** (not built). *Gate-blocked ≠ broken.* Supersedes the April data-flow reference.
 >
 > **Post-snapshot deltas (since 2026-06-09) — read alongside the sections below:**
 > - **Policy NN reframed from "gated-not-broken" to a measurement/SIGNAL FAILURE.** An offline critic diagnostic on 838 live experience tuples found (state,action)→reward Spearman **~0.06 / R²~0**; the trained 342 versions were competence on a synthetic distribution that does not predict reality, and the shadow-A/B win-signal was non-causal (`nn_reward=kernel_reward=actual_reward`). **Part A** shipped (commit `ee0caa7`): flat health rewards no longer flood the A/B — only varied interaction outcomes score it. Full analysis: `docs/AUTONOMOUS_GROWTH_STRATEGY.md`.
 > - **Vision grounding firewall shipped** (v1.3.0, commit `63c3eca`): "what do you see" is grounded in the real camera frame or honestly withheld — no cold-load confabulation.
 > - **Line numbers below have drifted ~10–15 lines** from later edits; every cited symbol still exists. A mechanical refresh is pending.
+> - **2026-08-24 doc catch-up (do not treat the June body as the count source):** integrity stack is **15 entries (L0–L12 + L3A/L3B)** locked in `brain/subsystem_registry.json` + `docs_truth_audit.py`. Brain API inventory is **172** routes (`/api-reference`). Vision model in `hardware_profile.py` is **qwen3-vl:8b**, not qwen2.5vl. A process restart is **not** a wipe — Matrix Tier-2 *authority* resets to probationary; weights/memories/promotion JSON persist; `current_ok` stays live-sourced. Policy NN remains a **measurement failure** (shadow, untrained). `python -m brain.scripts.docs_truth_audit` is PASS (172/172, PVL 114).
 
 
 ---
@@ -159,7 +162,7 @@ Legend: **SHIPPED** = live with real authority · **SHADOW** = computes, zero au
 | Library | sqlite-vec semantic index; retrieval telemetry | SHADOW | no `init()` caller in snapshot; telemetry collects future reranker pairs |
 | Dashboard / API | snapshot cache + ~179 routes + WS push + SSE ring + API-key gate + 5-state trust derivation | SHIPPED | 52 destructive routes gated |
 | Dashboard / API | /api/matrix, /api/grounding/queue read | SHADOW | zero-authority observability |
-| Dashboard / API | /api/domains, /api/chat (writes); telemetry_api.py | GATED / DORMANT | telemetry_api unimported contract |
+| Dashboard / API | /api/domains (writes); telemetry_api.py | GATED / DORMANT | telemetry_api unimported contract. `/api/chat` is **retired 410** — TAP is the write. |
 | Governance | 5 promotion state machines + synthetic-origin firewall + quarantine-pressure friction + maturity catalog | SHIPPED | no central manager (cross-cutting discipline) |
 | Governance | Weight-Room lived-baseline firewall (P2) | SHADOW | enforces nothing; P3-P5 DESIGNED |
 | Growth Loop | Goal Continuity Layer (signal→goal→dispatch) + #9.3-A churn dampening | SHIPPED | throttles creation only, no authority change |
@@ -765,7 +768,7 @@ The OSV is a P0 substrate (`brain/cognition/self_view/`) that assembles a fused 
 
 - **Subsystem adapters (ADAPTERS registry)** — `brain/cognition/self_view/adapters.py:48-338`. **18 bespoke read-only adapters** (world_model, policy, hemisphere, self_improve, skills, autonomy, grounding_ring, companion_read, belief_graph, truth_calibration, reflective_audit, contradiction, soul_integrity, quarantine, memory, evolution, observer, consciousness — registry at adapters.py:319-338) **plus `read_simulator`** which is special-cased from inside the `world_model` blob (gather.py:56-62). Each knows its cache shape and refuses to guess — e.g. `soul_integrity.current_index=self_scored` while `brier_score=measured` (242-253); `grounding_ring` zero-authority → `shadow_only` (172); `consciousness.stage=self_scored` (307-314).
 
-- **articulate (P1 self-introspection)** — `brain/cognition/self_view/articulate.py:59-255`. Deterministic, no-LLM rendering. `classify_self_question(text)` routes self-referential questions to **8 kinds** (identity / capabilities / recent_changes / health / weaknesses / gated_capabilities / unknowns / consciousness_query) via regex that requires self-reference (59-66, patterns 30-48). `articulate_self_view(model, kind)` renders the persisted model; output is guarded by `contains_unqualified_claim` (69-74) — any unqualified consciousness/sentient/alive/soul/becoming claim triggers an emergence *observation* (confidence 0.0) and a safe qualified fallback (236-239).
+- **articulate (P1 self-introspection)** — `brain/cognition/self_view/articulate.py:59-255`. Deterministic, no-LLM rendering. `classify_self_question(text)` routes self-referential questions to **10 kinds** (identity / capabilities / recent_changes / health / weaknesses / gated_capabilities / unknowns / consciousness_query / continuity / answer_path) via regex that requires self-reference (59-66, patterns 30-48). `articulate_self_view(model, kind)` renders the persisted model; output is guarded by `contains_unqualified_claim` (69-74) — any unqualified consciousness/sentient/alive/soul/becoming claim triggers an emergence *observation* (confidence 0.0) and a safe qualified fallback (236-239).
 
 - **grounding (P2 voice grounding)** — `brain/cognition/self_view/grounding.py:209-255`. `ground_self_claims(text, model, active=False)` verifies DESCRIPTIVE self-claims in a generated reply against the OSV. **Shadow by default** (active=False → text unchanged). Verdicts: ORDINARY (never touched), SUPPORTED, CONTRADICTED, DANGER (unqualified consciousness), UNVERIFIED (flagged, never cut). Active mode (gated behind `OSV_P2_ACTIVE`, grounding.py:87-89) repairs ONLY `_ACTABLE = {CONTRADICTED, DANGER}` (43); merely-unverifiable claims are never cut. Complements `skills.capability_gate` which owns action/commitment claims.
 
@@ -1099,7 +1102,7 @@ All four core stores share ONE SQLite file `~/.jarvis/library/library.db` and a 
 | /api/meta/status-markers (one-source-of-truth maturity map) | **shipped** | app.py:4090-4178 static `SHIPPED/PARTIAL/PRE-MATURE/DEFERRED` map; only `phase_e` auto-flips on the language-kernel registry state (:4111-4122). |
 | Code-freshness / "restart before trusting" banner | **shipped** | app.py:197 (`_scan_code_freshness`, `is_stale = newest_mtime > _PROCESS_STARTED_TS` :245), :4026 /api/system/code-freshness, static freshness-banner.js. |
 | /api/build-history + /api/maturity-gates (live doc parsers) | **shipped** | app.py:4314 parses docs/BUILD_HISTORY.md `##` headings + mtime; :4180 parses docs/MATURITY_GATES_REFERENCE.md with a live-values overlay from `/api/full-snapshot`. |
-| /api/chat (dashboard text chat) | **gated** (off by default) | app.py:1916-1922 hard-returns 403 unless `ENABLE_DASHBOARD_CHAT` env is set (default false, :33-35); routes response through `capability_gate.check_text` (:1932-1933, with a regex fallback :1936-1939) so even when on it cannot over-claim. |
+| /api/chat (dashboard text chat) | **retired (410)** | Bypassed `handle_transcription` (LLM + L0 only). Use `POST /api/operator/tap` or Pi voice. See `docs/OPERATOR_PROXY_TAP.md`. Do not set `ENABLE_DASHBOARD_CHAT`. |
 | `telemetry_api.py` shape contract | **designed / dormant** | Defines `TimeseriesPoint`/`Histogram`/`Heatmap`/`Topology` dataclasses + serializers, but NO import found anywhere in brain/ (`grep -rn telemetry_api` returns only the file itself) — documented/aspirational, not enforced in the current cache path. |
 
 

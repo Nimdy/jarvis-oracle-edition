@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import enum
 import logging
 import threading
@@ -9,6 +10,11 @@ import time as _time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
+
+# TAP sits: David for L3 scope, not ear-earned STT. handle_transcription sets this.
+operator_proxy_turn: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "operator_proxy_turn", default=False,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +52,7 @@ ProvenanceType = Literal[
     "casual_conversation",  # Playful/banter chatter — LOWEST trust; never asserted as fact
                             # unless a golden command authorizes it or curiosity validates it
     "seed",                 # Birth/gestation seed memories
+    "operator_proxy",       # Agent/operator TAP sit as David — not ear-earned
     "unknown",              # Legacy or unclassified
 ]
 
@@ -60,6 +67,7 @@ PROVENANCE_BOOST: dict[str, float] = {
     "casual_conversation": 0.0,  # banter earns NO trust — can't pollute beliefs
     "derived_pattern": 0.0,
     "seed": 0.0,
+    "operator_proxy": 0.04,  # same recall boost as user_claim; not ear-earned
     "unknown": 0.0,
 }
 
@@ -132,6 +140,7 @@ PROVENANCE_ORDINAL: dict[str, int] = {
     "observed": 0, "user_claim": 1, "conversation": 2, "model_inference": 3,
     "external_source": 4, "experiment_result": 5, "derived_pattern": 6,
     "seed": 7, "unknown": 8, "web_scrap": 9, "casual_conversation": 10,
+    "operator_proxy": 11,
 }
 
 
@@ -449,12 +458,12 @@ CURIOSITY_ANSWER_PROCESSED = "curiosity:answer_processed"
 # BELIEF_EXTERNALLY_CONFIRMED fires (P3+) when an external validator
 # (operator answer, world-model prediction validated, or source-cited
 # finding) touches a belief — the never-self-scored close at station 5.
-# THOUGHT_VALIDATION_OUTCOME fires (P3+) on ResearchIntent completion as
-# the missing teacher signal for the tension-thought selector.
-# Both are reserved here in P0 so the baselines can be observed before any
-# mechanism can move them. No subscriber, no emitter yet.
+# THOUGHT_VALIDATION_OUTCOME fires on tension-seeded ResearchIntent
+# completion (research_intent.emit_thought_validation_outcome). The
+# thought_trigger_selector collector feed is shadow; the NN stays out of
+# _TIER1_FOCUSES / blocked_by_design until Thought Maturity P3 is named.
 BELIEF_EXTERNALLY_CONFIRMED = "belief:externally_confirmed"  # reserved (P0): not emitted yet
-THOUGHT_VALIDATION_OUTCOME = "thought:validation_outcome"  # reserved (P0): not emitted yet
+THOUGHT_VALIDATION_OUTCOME = "thought:validation_outcome"
 
 # Fractal Recall events
 FRACTAL_RECALL_SURFACED = "fractal_recall:surfaced"

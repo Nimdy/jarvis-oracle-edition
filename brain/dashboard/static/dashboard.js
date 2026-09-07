@@ -752,12 +752,16 @@ function _renderStaleCodeBanner(data) {
   }
   var file = data.newest_file ? String(data.newest_file) : '';
   var age = _fmtStaleAge(data.stale_age_s);
+  var n = (data.stale_count != null) ? data.stale_count : ((data.stale_files || []).length || 1);
+  var extra = (data.stale_files || []).slice(0, 8).map(function(f) {
+    return (typeof f === 'string') ? f : (f && f.path) || '';
+  }).filter(Boolean).join(', ');
   banner.innerHTML =
     '<div class="j-stale-msg">' +
       '<span>\u26A0</span>' +
-      '<span><strong>Newer code on disk</strong> \u2014 edited ' + esc(age) +
+      '<span><strong>Newer code on disk</strong> \u2014 ' + n + ' .py file(s) edited ' + esc(age) +
       ', after this process started. Restart to load the new code.</span>' +
-      (file ? '<span class="j-stale-file" title="' + esc(file) + '">' + esc(file) + '</span>' : '') +
+      (extra ? '<span class="j-stale-file" title="' + esc(file) + '">' + esc(extra) + '</span>' : (file ? '<span class="j-stale-file" title="' + esc(file) + '">' + esc(file) + '</span>' : '')) +
     '</div>' +
     '<div class="j-stale-actions">' +
       '<button class="j-stale-restart" onclick="window._staleRestart && window._staleRestart()">Restart</button>' +
@@ -787,7 +791,7 @@ function _pollStaleCode() {
 
 // First check shortly after load, then every 60s.
 setTimeout(_pollStaleCode, 3000);
-setInterval(_pollStaleCode, 60000);
+setInterval(_pollStaleCode, 12000);
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4542,12 +4546,15 @@ function _renderRapport(snap) {
   }
 
   if (intel.length) {
-    html += '<div style="font-size:0.68rem;color:#6a6a80;margin-top:6px;margin-bottom:3px;">Personal Intel (' + intel.length + ')</div>';
+    html += '<div style="font-size:0.68rem;color:#6a6a80;margin-top:6px;margin-bottom:3px;">Personal Intel (' + intel.length + ') — forget a scar</div>';
     html += '<div style="max-height:250px;overflow-y:auto;">';
-    intel.slice(0, 20).forEach(function(i) {
-      html += '<div style="font-size:0.6rem;padding:2px 0;border-bottom:1px solid #1a1a2e;">' +
-        esc((i.payload || '').substring(0, 80)) +
-        ' <span style="color:#484860;">w:' + fmtNum(i.weight, 2) + '</span></div>';
+    intel.forEach(function(i) {
+      var mid = i.id || '';
+      html += '<div style="font-size:0.6rem;padding:2px 0;border-bottom:1px solid #1a1a2e;display:flex;gap:6px;align-items:center;">' +
+        '<span style="flex:1;">' + esc((i.payload || '').substring(0, 80)) +
+        ' <span style="color:#484860;">w:' + fmtNum(i.weight, 2) + '</span></span>' +
+        (mid ? '<button class="j-btn-xs j-btn-red" onclick="window.removePersonalIntel(\'' + esc(mid) + '\')">forget</button>' : '') +
+        '</div>';
     });
     html += '</div>';
   }

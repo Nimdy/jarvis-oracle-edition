@@ -3,8 +3,12 @@
 The static audit (``nn_fleet_registry.json``) holds the DESIGN facts (purpose, end_state, family, the
 validated as-designed classifications). This module overlays LIVE telemetry at request time — per-focus
 lifecycle/accuracy/broadcast from the matrix report, lived/synthetic sample counts from the
-DistillationCollector — so the fleet view is always current and **cannot drift green** as it scales toward
-hundreds of NNs.
+DistillationCollector, and **consumed_now** (is the consumer actually firing on this host) — so the
+fleet view is always current and **cannot drift green** as it scales toward hundreds of NNs.
+
+``inference_consumed`` = a consumer *wire* exists (design). ``consumed_now`` = that wire is firing
+here. A gated world-model inject at promotion level 0 is confirmed-live in the audit and still
+``consumed_now=False``.
 
 ``build_nn_universe`` shapes the same fused data as a cosmic-web graph: every NN + the baseline LLM(s) as
 NODES (clustered into family "galaxies"), connected by real data/signal-path EDGES (teacher->student
@@ -19,6 +23,12 @@ from pathlib import Path
 from typing import Any
 
 _REGISTRY = Path(__file__).resolve().parents[1] / "nn_fleet_registry.json"
+_JARVIS_HOME = Path.home() / ".jarvis"
+
+CONSUME_NOTE = (
+    "wiring_confirmed is the design audit. live_state + consumed_now are this host. "
+    "inference_consumed means a consumer wire exists, not that it is firing."
+)
 
 # Best-effort NN-type tagging (for legend/colour). Most of her specialists are small feedforward
 # encoders/approximators; the baseline LLM is a transformer teacher.
@@ -78,6 +88,152 @@ def _live_state(rec: dict, sp: dict | None) -> str:
     }.get(wc, "unknown")
 
 
+def _read_promotion_json(name: str) -> dict[str, Any] | None:
+    """Read a ~/.jarvis/*_promotion.json file. None if missing/unreadable. No side effects."""
+    path = _JARVIS_HOME / name
+    try:
+        if not path.is_file():
+            return None
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def _live_world_model() -> dict[str, Any] | None:
+    data = _read_promotion_json("world_model_promotion.json")
+    if not data:
+        return None
+    level = int(data.get("level") or 0)
+    return {
+        "promotion_level": level,
+        "promotion_level_name": {0: "shadow", 1: "advisory", 2: "active"}.get(level, "unknown"),
+        "total_validated": int(data.get("total_validated") or 0),
+        "synthetic_validated": int(data.get("synthetic_validated") or 0),
+    }
+
+
+def _live_simulator() -> dict[str, Any] | None:
+    data = _read_promotion_json("simulator_promotion.json")
+    if not data:
+        return None
+    level = int(data.get("level") or 0)
+    return {
+        "promotion_level": level,
+        "promotion_level_name": {0: "shadow", 1: "advisory"}.get(level, "unknown"),
+        "total_validated": int(data.get("total_validated") or 0),
+        "synthetic_validated": int(data.get("synthetic_validated") or 0),
+    }
+
+
+def _live_intent_shadow() -> dict[str, Any] | None:
+    """Runner state if the process has one. Fail-closed; never constructs a new live runner."""
+    try:
+        from reasoning import intent_shadow as _is
+        runner = getattr(_is, "_runner", None)
+        if runner is None:
+            return None
+        st = runner.get_state() or {}
+        return {
+            "level": st.get("level"),
+            "observations_total": st.get("observations_total"),
+            "nn_predictions_total": st.get("nn_predictions_total"),
+            "rolling_agreement": st.get("rolling_agreement"),
+            "rescues_applied": st.get("rescues_applied"),
+            "primary_overrides_applied": st.get("primary_overrides_applied"),
+            "ready_for_promotion": st.get("ready_for_promotion"),
+            "gates": st.get("gates"),
+        }
+    except Exception:
+        return None
+
+
+def _live_weight_room() -> dict[str, Any] | None:
+    try:
+        from hemisphere.weight_room_gate import weight_room_gate
+        st = weight_room_gate.get_status() or {}
+        return {
+            "enforces": bool(st.get("enforces")),
+            "phase": st.get("phase"),
+            "authority": st.get("authority"),
+        }
+    except Exception:
+        return None
+
+
+def _overlay_named_consume(rec: dict[str, Any]) -> None:
+    """Correct live_state / consumed_now for named records whose design wire is gated.
+
+    Does not flip any gate. Default consumed_now already equals inference_consumed.
+    """
+    name = rec.get("name")
+    live = rec.setdefault("live", {})
+
+    if name == "world_model":
+        st = _live_world_model()
+        if not st:
+            rec["consumed_now"] = False
+            rec["consumed_now_of"] = "llm_prompt_inject"
+            rec["live_state"] = "gated"
+            live["consume_note"] = "promotion file unread; mouth inject stays off until level>=1"
+            return
+        live.update(st)
+        firing = int(st.get("promotion_level") or 0) >= 1
+        rec["consumed_now"] = firing
+        rec["consumed_now_of"] = "llm_prompt_inject"
+        rec["live_state"] = "live-earning" if firing else "gated"
+        live["consume_note"] = (
+            "prompt inject on" if firing else "prompt inject OFF (promotion.level < 1)"
+        )
+        return
+
+    if name == "simulator":
+        st = _live_simulator()
+        if st:
+            live.update(st)
+            firing = int(st.get("promotion_level") or 0) >= 1
+            rec["consumed_now"] = firing
+            rec["consumed_now_of"] = "planner_advisory"
+            if not firing and rec.get("live_state") == "live-earning":
+                rec["live_state"] = "gated"
+        return
+
+    if name == "intent_shadow":
+        st = _live_intent_shadow()
+        if st:
+            live.update(st)
+            level = str(st.get("level") or "shadow")
+            firing = level in ("advisory", "primary")
+            rec["consumed_now"] = firing
+            rec["consumed_now_of"] = "router_rewrite"
+            rec["live_state"] = {
+                "shadow": "shadow",
+                "advisory": "advisory",
+                "primary": "live-earning",
+            }.get(level, rec.get("live_state") or "shadow")
+            preds = st.get("nn_predictions_total")
+            live["consume_note"] = (
+                f"NN predicting ({preds}) but pass-through at {level}"
+                if not firing else f"router rewrite at {level}"
+            )
+        else:
+            rec["consumed_now"] = False
+            rec["consumed_now_of"] = "router_rewrite"
+        return
+
+    if name == "weight_room_gate":
+        st = _live_weight_room()
+        if st:
+            live.update(st)
+        else:
+            live.setdefault("enforces", False)
+        rec["consumed_now"] = bool(live.get("enforces"))
+        rec["consumed_now_of"] = "promotion_authority"
+        rec["live_state"] = "shadow" if not rec["consumed_now"] else rec.get("live_state")
+        live["consume_note"] = "enforces=False (P2 would-block only)" if not rec["consumed_now"] else "enforcing"
+        return
+
+
 def build_fleet_view(engine: Any) -> dict[str, Any]:
     """Static design facts + live telemetry, fused. The trackable registry, self-updating."""
     reg = _load_registry()
@@ -88,17 +244,25 @@ def build_fleet_view(engine: Any) -> dict[str, Any]:
         nm = r.get("name")
         sp = matrix.get(nm)
         r["live_state"] = _live_state(r, sp)
-        by_state[r["live_state"]] += 1
         live: dict[str, Any] = {}
         if sp:
             live.update(stage=sp.get("lifecycle"), accuracy=sp.get("accuracy"),
                         in_broadcast=sp.get("in_broadcast"), impact=sp.get("impact_score"))
         if nm in samples:
             live["samples"] = samples[nm]
-        if live:
-            r["live"] = live
-    return {"generated_live": True, "total": len(records),
-            "by_state": dict(by_state), "records": records}
+        r["live"] = live
+        r["consumed_now"] = bool(r.get("inference_consumed"))
+        _overlay_named_consume(r)
+        by_state[r["live_state"]] += 1
+    by_consumed = Counter(bool(r.get("consumed_now")) for r in records)
+    return {
+        "generated_live": True,
+        "total": len(records),
+        "by_state": dict(by_state),
+        "by_consumed_now": {"true": int(by_consumed[True]), "false": int(by_consumed[False])},
+        "records": records,
+        "note": CONSUME_NOTE,
+    }
 
 
 _UNIVERSE_SNAPSHOT = Path.home() / ".jarvis" / "nn_universe_snapshot.json"

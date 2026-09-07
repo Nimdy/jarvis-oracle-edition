@@ -427,8 +427,7 @@ class TestClaimClassifierTensors:
         assert feat_tensor.shape[1] == FEATURE_DIM
 
     def test_friction_correction_overrides_original_verdict(self):
-        """When both a fidelity=1.0 and a fidelity=0.7 verdict exist for
-        the same claim_id, the higher fidelity one wins."""
+        """Lived: That's-wrong friction (0.7) lost to gate label (1.0)."""
         from hemisphere.data_feed import _prepare_claim_classifier_tensors
         from hemisphere.types import DISTILLATION_CONFIGS
         config = DISTILLATION_CONFIGS["claim_classifier"]
@@ -463,7 +462,7 @@ class TestClaimClassifierTensors:
                 verdicts.append(FakeSignal(
                     data=correction_label,
                     fidelity=0.7,
-                    metadata={"claim_id": cid},
+                    metadata={"claim_id": cid, "origin": "friction_correction"},
                 ))
 
         def get_training_batch(signal_type, limit=200, min_fidelity=0.0):
@@ -478,8 +477,9 @@ class TestClaimClassifierTensors:
         result = _prepare_claim_classifier_tensors(mock, config)
         assert result is not None
         _, labels, _ = result
-        # claim_0 should use the fidelity=1.0 label (blocked), not the 0.7 correction
-        assert labels[0][6].item() == pytest.approx(1.0)
+        # claim_0 uses the friction correction (class 0), not the gate blocked label
+        assert labels[0][0].item() == pytest.approx(1.0)
+        assert labels[0][6].item() == pytest.approx(0.0)
 
     def test_dispatched_via_prepare_distillation_tensors(self):
         from hemisphere.data_feed import prepare_distillation_tensors

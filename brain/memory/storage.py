@@ -33,6 +33,35 @@ _DREAM_ORIGIN_TAGS = frozenset({
 })
 
 _MAX_ASSOCIATIONS_PER_MEMORY = 30
+_RECENT_PAYLOAD_MAX = 2000
+
+
+def _format_recent_payload(memory: Any, limit: int = _RECENT_PAYLOAD_MAX) -> str:
+    """Dashboard recent-writes text. Do not 140-char chop stored facts.
+
+    Conversation dicts render as You:/Jarvis: so the panel is readable.
+    """
+    payload = getattr(memory, "payload", "")
+    if isinstance(payload, dict):
+        user = str(payload.get("user_message") or "").strip()
+        resp = str(payload.get("response") or "").strip()
+        if user or resp:
+            parts = []
+            if user:
+                parts.append("You: " + user)
+            if resp:
+                parts.append("Jarvis: " + resp)
+            text = "  |  ".join(parts)
+        else:
+            text = str(payload)
+    elif isinstance(payload, str):
+        text = payload
+    else:
+        text = str(payload)
+    text = " ".join(str(text).split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 
 class MemoryStorage:
@@ -50,6 +79,17 @@ class MemoryStorage:
         if cls._instance is None:
             cls._instance = MemoryStorage()
         return cls._instance
+
+    def _flush_to_disk(self) -> None:
+        """Immediate memories.json write so a bounce cannot drop tags/downweight.
+
+        Auto-save is 60s. Supervisor bounce before that interval is the lived miss.
+        """
+        try:
+            from memory.persistence import memory_persistence
+            memory_persistence.save()
+        except Exception:
+            pass
 
     # -- CRUD ---------------------------------------------------------------
 
@@ -82,21 +122,29 @@ class MemoryStorage:
             memory = Memory(**{**asdict(memory), "weight": weight})
 
         is_new = False
+        updated_existing = False
         trim_result = None
         with self._lock:
             for i, m in enumerate(self._memories):
                 if m.id == memory.id:
                     self._memories[i] = memory
-                    return True
-            self._memories.append(memory)
-            is_new = True
-            if len(self._memories) > self._max_capacity:
-                trim_result = self._auto_trim_unlocked()
+                    updated_existing = True
+                    break
+            else:
+                self._memories.append(memory)
+                is_new = True
+                if len(self._memories) > self._max_capacity:
+                    trim_result = self._auto_trim_unlocked()
 
         if trim_result:
             self._post_trim_cleanup(trim_result)
         if is_new:
             self._log_creation(memory, creation_context)
+        # Lived: reinforce logged but disk stayed 0.07 — in-place add
+        # returned inside the lock with no flush (autosave is 60s and was
+        # losing the update). Same bounce-durability as downweight().
+        if updated_existing or is_new:
+            self._flush_to_disk()
         return True
 
     def _log_creation(
@@ -152,12 +200,18 @@ class MemoryStorage:
             return [m for m in self._memories if tag in m.tags]
 
     def remove(self, memory_id: str) -> bool:
+        evicted = None
         with self._lock:
             for i, m in enumerate(self._memories):
                 if m.id == memory_id:
-                    self._memories.pop(i)
-                    return True
-        return False
+                    evicted = self._memories.pop(i)
+                    break
+        if evicted is None:
+            return False
+        self._clean_vector_store({memory_id})
+        self._clean_index({memory_id}, {memory_id: evicted})
+        self._flush_to_disk()
+        return True
 
     def count(self) -> int:
         with self._lock:
@@ -303,6 +357,8 @@ class MemoryStorage:
                         **{**asdict(m), "tags": new_tags, "weight": new_weight}
                     )
                     tagged += 1
+        if tagged:
+            self._flush_to_disk()
         return tagged
 
     def downweight(
@@ -311,7 +367,9 @@ class MemoryStorage:
         """Reduce a memory's weight and accelerate its decay (for superseded knowledge).
 
         Creates a replacement frozen Memory with updated fields.
+        Flushes to disk so a bounce cannot restore the old weight.
         """
+        changed = False
         with self._lock:
             for i, m in enumerate(self._memories):
                 if m.id == memory_id:
@@ -330,8 +388,11 @@ class MemoryStorage:
                         identity_needs_resolution=m.identity_needs_resolution,
                         access_count=m.access_count, last_accessed=m.last_accessed,
                     )
-                    return True
-        return False
+                    changed = True
+                    break
+        if changed:
+            self._flush_to_disk()
+        return changed
 
     def get_related(self, memory_id: str, depth: int = 2) -> list[Memory]:
         """Depth-first traversal of the association graph, capped at 50 results."""
@@ -602,6 +663,12 @@ class MemoryStorage:
                 elif m.weight < 0.2:
                     weak_count += 1
             total = len(self._memories)
+            oldest_ts = 0.0
+            newest_ts = 0.0
+            if self._memories:
+                ts_vals = [float(getattr(m, "timestamp", 0.0) or 0.0) for m in self._memories]
+                oldest_ts = min(ts_vals)
+                newest_ts = max(ts_vals)
 
             weight_bins = [0] * 10
             for w in weights:
@@ -621,6 +688,8 @@ class MemoryStorage:
             "weight_bins": weight_bins,
             "by_type": by_type,
             "by_provenance": by_provenance,
+            "oldest_timestamp": oldest_ts,
+            "newest_timestamp": newest_ts,
         }
 
     def get_recent_with_provenance(self, count: int = 20) -> list[dict[str, Any]]:
@@ -638,8 +707,7 @@ class MemoryStorage:
                 "provenance": getattr(m, "provenance", "unknown"),
                 "weight": round(m.weight, 3),
                 "age_s": round(_time.time() - m.timestamp),
-                "payload_preview": (m.payload[:140] if isinstance(m.payload, str)
-                                    else str(m.payload)[:140]),
+                "payload_preview": _format_recent_payload(m),
             }
             for m in reversed(recent)
         ]
@@ -700,6 +768,24 @@ class MemoryStorage:
                         item["associations"] = tuple(item["associations"])
                     mem = Memory(**item)
                     if mem.id in existing_ids:
+                        # Disk may hold tags/downweight RAM lost. Union tags;
+                        # keep the lower weight / faster decay. Never drop payload.
+                        for i, existing in enumerate(self._memories):
+                            if existing.id != mem.id:
+                                continue
+                            merged_tags = tuple(sorted(set(existing.tags) | set(mem.tags)))
+                            extra = set(mem.tags) - set(existing.tags)
+                            new_weight = min(existing.weight, mem.weight) if extra else existing.weight
+                            new_decay = max(existing.decay_rate, mem.decay_rate) if extra else existing.decay_rate
+                            if merged_tags != existing.tags or new_weight != existing.weight or new_decay != existing.decay_rate:
+                                self._memories[i] = Memory(**{
+                                    **asdict(existing),
+                                    "tags": merged_tags,
+                                    "weight": new_weight,
+                                    "decay_rate": new_decay,
+                                })
+                                loaded += 1
+                            break
                         continue
                     if memory_core.validate_memory(mem):
                         self._memories.append(mem)

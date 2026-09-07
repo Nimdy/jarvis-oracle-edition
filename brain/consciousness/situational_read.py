@@ -48,6 +48,10 @@ _P0P1_MIN_TURNS = 30
 
 # A long reply to a simple turn is the classic "am I overexplaining?" tell.
 _OVEREXPLAIN_WORDS = 90
+# Short user asks still count even if complexity was tagged moderate
+# (lived miss: "describe your architecture" → moderate → 91-word census
+# tagged proportionate, so ToM verbosity never saw the dump).
+_SHORT_USER_TURN = 8
 # A turn that took this long to answer is conversationally notable (the user waited).
 _SLOW_TURN_MS = 8000
 
@@ -242,7 +246,9 @@ class SituationalReadEngine:
         evidence.append(["complexity", complexity])
         if r_words >= _OVEREXPLAIN_WORDS * 2:
             self_check = "very long reply — watch for overexplaining"
-        elif r_words >= _OVEREXPLAIN_WORDS and complexity == "simple":
+        elif r_words >= _OVEREXPLAIN_WORDS and (
+            complexity == "simple" or u_words <= _SHORT_USER_TURN
+        ):
             self_check = "may be overexplaining (long reply to a simple turn)"
         else:
             self_check = "reply length proportionate"

@@ -95,13 +95,13 @@
 
     <section class="card col12">
       <h2>Shadow Grounding Questions <span class="asof" id="shadowqcount"></span></h2>
-      <div class="note">What the grounding drive <b>would ask the world</b>, selected in shadow — <b>never enqueued, never delivered to anyone</b>. The spark's outward curiosity made visible before it has any authority. Durable count: <b id="shadowqtot">—</b> selections shadowed (recent questions reset on restart; the count persists).</div>
+      <div class="note">What the grounding drive <b>would ask the world</b> in shadow. Would-haves are also copied onto the operator-pull queue below (no TTS). Durable count: <b id="shadowqtot">—</b> selections shadowed (recent questions reset on restart; the count persists).</div>
       <div class="qlist" id="shadowq" style="max-height:340px"></div>
     </section>
 
     <section class="card col12">
       <h2>Pending Validation Questions <span class="asof" id="pendcount"></span></h2>
-      <div class="note">Ranked highest-leverage first. Answering feeds the external-validation outcome (a "no/wrong" still counts as <b>grounded</b> — being corrected is the goal). The belief itself is <b>not</b> mutated here (view-only); recording the external touch is the advisory action. Synchronous TTS delivery is earned only by hub questions — this queue is for leisure review.</div>
+      <div class="note">Ranked highest-leverage first. Answering feeds the external-validation outcome (a "no/wrong" still counts as <b>grounded</b> — being corrected is the goal). Confirm or refute <b>does</b> re-stamp the belief as <code>user_claim</code> and nudge confidence — that is the intended closure, not view-only. Synchronous TTS delivery is earned only after promotion — this queue is for leisure review.</div>
       <div class="qlist" id="qlist"></div>
     </section>
 

@@ -259,6 +259,7 @@ def _record_voice_intent_teacher_signal(
     result: RoutingResult,
     *,
     synthetic: bool = False,
+    origin: str | None = None,
 ) -> None:
     """Persist tool-router intent labels AND text embeddings for voice_intent student.
 
@@ -268,10 +269,18 @@ def _record_voice_intent_teacher_signal(
     try:
         from hemisphere.distillation import distillation_collector
 
-        origin = "synthetic" if synthetic else "router"
+        try:
+            from consciousness.events import operator_proxy_turn
+            if operator_proxy_turn.get():
+                return
+        except Exception:
+            pass
+        origin = origin or ("synthetic" if synthetic else "router")
         fidelity = max(0.3, min(1.0, result.confidence))
         if synthetic:
             fidelity = min(fidelity, 0.7)
+        if origin == "follow_up_retry":
+            fidelity = 1.0
         bucket = _VOICE_INTENT_TOOL_BUCKET.get(result.tool, "general_chat")
         meta = {
             "tool": result.tool.value,
@@ -303,6 +312,9 @@ def _record_voice_intent_teacher_signal(
         logger.debug("Voice-intent teacher signal capture skipped", exc_info=True)
 
 
+record_voice_intent_teacher_signal = _record_voice_intent_teacher_signal
+
+
 _KEYWORD_PATTERNS: list[tuple[list[str], ToolType]] = [
     (["what time is it", "current time", "what's the time", "tell me the time", "what time right now",
       "what day is it", "what's the date", "what is the date", "today's date", "what date is it",
@@ -329,6 +341,16 @@ _KEYWORD_PATTERNS: list[tuple[list[str], ToolType]] = [
       "what was the first", "first memory", "earliest memory",
       "remember about me", "know about me", "what have i told you",
       "what did i say",
+      "who is in my family", "who's in my family", "tell me about my family",
+      "remember about my family",
+      "what are my kids' names", "what are my kids names",
+      "what are my children's names", "what is my morning routine",
+      "what's my morning routine", "when should you not interrupt",
+      "what is my job", "what's my job", "what do i do for work",
+      "what do i do for a living", "what do i work as",
+      "what's my occupation", "what is my career",
+      "what's my favorite food",
+      "what is my favorite food", "what food do i like",
       "about your memory", "about your memories", "your recent memories",
       "one of your memories", "share a memory", "a memory you have",
       "tell me a memory", "your favorite memory", "your oldest memory",
@@ -507,8 +529,9 @@ _KEYWORD_PATTERNS: list[tuple[list[str], ToolType]] = [
     (["my name is", "call me", "who am i", "do you know who i am",
       "do you recognize me", "remember my voice", "learn my voice",
       "remember my face", "learn my face", "enroll me", "register me",
+      "register my face", "register my voice", "enroll my face", "enroll my voice",
       "save my voice", "record my voice", "record my face",
-      "hear my voice", "look at my face",
+      "hear my voice", "look at my face", "see my face", "look at me",
       "who is speaking", "who's speaking",
       "do you know me", "recognize me",
       "who do you think i am", "who do you think this is",
@@ -556,6 +579,14 @@ _INTENT_PATTERNS: list[tuple[re.Pattern, ToolType, float]] = [
     (re.compile(r"\bfirst time you (heard|met|saw|spoke|talked)\b", re.I), ToolType.MEMORY, 0.9),
     (re.compile(r"\b(heard|recognized) my voice\b", re.I), ToolType.MEMORY, 0.85),
     (re.compile(r"\bwhat (do )?you (know|remember) about me\b", re.I), ToolType.MEMORY, 0.9),
+    (re.compile(
+        r"\b(?:who(?:'s|\s+is)\s+in\s+my\s+family|"
+        r"(?:tell\s+me|talk(?:\s+to\s+me)?)\s+about\s+my\s+family|"
+        r"what(?:'s|\s+are|\s+is)\s+my\s+(?:kids?|children)(?:'s?)?\s+names?|"
+        r"what(?:'s|\s+is)\s+my\s+morning\s+routine|"
+        r"when\s+should\s+you\s+not\s+interrupt)\b",
+        re.I,
+    ), ToolType.MEMORY, 0.91),
     (re.compile(r"\b(can you|could you|go ahead and|i want you to|please).{0,20}(modify|change|improve|fix|update|adjust|edit|patch|rewrite|upgrade|enhance|optimize).{0,20}(your |the )?(code|codebase|source|yourself|systems|memory|network|brain|processing|performance)\b", re.I), ToolType.SELF_IMPROVE, 0.9),
     (re.compile(r"\b(improve|upgrade|enhance|optimize|fix|rewrite)\s+your\s+\w+", re.I), ToolType.SELF_IMPROVE, 0.85),
     (re.compile(r"\b(make|suggest|propose).{0,15}(code|improvement|change|modification|suggestion|adjustment).{0,10}(to your|for your|yourself)?\b", re.I), ToolType.SELF_IMPROVE, 0.85),
@@ -857,8 +888,18 @@ _IDENTITY_ENROLLMENT_SIGNALS: frozenset[str] = frozenset({
     "my name is", "is my name", "record my voice", "record my face",
     "learn my voice", "learn my face", "save my voice", "save my face",
     "remember my voice", "remember my face", "hear my voice",
-    "look at my face", "enroll me", "register me",
+    "look at my face", "see my face", "look at me",
+    "enroll me", "register me",
+    "register my face", "register my voice", "enroll my face", "enroll my voice",
 })
+
+# Lived: "Register my face with the camera" matched VISION via the word
+# "camera" and the caption theater said it was registered. Enroll verbs
+# plus face/voice are IDENTITY even when the office geometry is named.
+_IDENTITY_BIOMETRIC_RE = re.compile(
+    r"\b(?:register|enroll|learn|remember|record|save)\b.{0,40}\b(?:my\s+)?(?:face|voice)\b",
+    re.I,
+)
 
 
 def _disambiguate_vision_vs_identity(lower: str, tier1_tool: ToolType) -> ToolType:
@@ -866,7 +907,13 @@ def _disambiguate_vision_vs_identity(lower: str, tier1_tool: ToolType) -> ToolTy
     signals are also present. 'Look at my face and record it' is identity work."""
     if tier1_tool != ToolType.VISION:
         return tier1_tool
+    if any(z in lower for z in (
+        "look at me closer", "zoom to me", "zoom in", "get closer", "zoom out",
+    )):
+        return ToolType.CAMERA_CONTROL
     if any(sig in lower for sig in _IDENTITY_ENROLLMENT_SIGNALS):
+        return ToolType.IDENTITY
+    if _IDENTITY_BIOMETRIC_RE.search(lower):
         return ToolType.IDENTITY
     return ToolType.VISION
 
@@ -945,6 +992,148 @@ _SELF_REF_QUESTIONS = re.compile(
     r"\b(you |your |yourself)\b",
     re.I,
 )
+# Present-tense visual field (camera now). Not "how do you see yourself".
+# Lived 2026-08-25: "Can you tell me what you currently see?" hit Tier 3
+# INTROSPECTION via "tell me what you" and dumped OSV stats. Adding
+# "camera" made VISION and the caption was solid. Class, not a one-off.
+_VISUAL_PRESENT_RE = re.compile(
+    r"\b(?:can you |could you |please )?(?:tell me )?"
+    r"what (?:do )?you (?:currently |right now |now )?(?:see|view)\b"
+    r"|\bwhat (?:are you|you'?re) (?:seeing|viewing|looking at)\b",
+    re.I,
+)
+_VISUAL_PRESENT_SELF_RE = re.compile(
+    r"\b(?:see|view) yourself\b"
+    r"|\bhow do you (?:see|view) yourself\b"
+    r"|\bsee your (?:code|architecture|status|self|soul|system|memory)\b",
+    re.I,
+)
+
+
+def _is_visual_present_query(text: str) -> bool:
+    if not text or _VISUAL_PRESENT_SELF_RE.search(text):
+        return False
+    return bool(_VISUAL_PRESENT_RE.search(text))
+
+
+# Targeted VQA (#24): a question about the CURRENT FRAME (count/color/holding/
+# on-off), not a generic "what do you see" and not about-X memory.
+# Class, not a per-utterance phrase hack. Golden VISION STATUS stays a caption.
+_VQA_PAST_RE = re.compile(
+    r"\b(?:remember when|do you remember|yesterday|last (?:time|night)|"
+    r"did i|was i|were we|used to)\b",
+    re.I,
+)
+_VQA_ATTR_RE = re.compile(
+    r"\b(?:how many|what colo(?:u)?r|what am i holding|what am i wearing|"
+    r"am i (?:holding|wearing)|what(?:'s| is) (?:this|that)|"
+    r"is (?:this|that) |"
+    r"is there (?:a |an |any )?\w+|"
+    r"is the \w[\w-]{0,20} (?:on|off|open|closed|lit))\b",
+    re.I,
+)
+_VQA_FIELD_RE = re.compile(
+    r"\b(?:this|that|these|those|here|in front|"
+    r"holding(?: up)?|wearing|"
+    r"my (?:shirt|hand|hands|finger|fingers|face|head|headphones?|glasses)|"
+    r"fingers?|monitors?|screens?|headphones?|stove|camera)\b",
+    re.I,
+)
+_VQA_NOT_FRAME_RE = re.compile(
+    r"\b(?:skyler|tanya|kids?|children|family|wife|husband|"
+    r"meeting|project|schedule|appointment)\b",
+    re.I,
+)
+
+
+def is_targeted_visual_question(text: str) -> bool:
+    """True when the utterance asks the camera a specific question.
+
+    Requires an attribute question (how many / what color / holding / on-off)
+    AND a present-field marker (deixis, body-in-frame, or in-room object).
+    Enrollment, self-view, past-tense memory, and about-X names stay out.
+    """
+    if not text:
+        return False
+    if _VISUAL_PRESENT_SELF_RE.search(text):
+        return False
+    lower = text.lower()
+    if any(sig in lower for sig in _IDENTITY_ENROLLMENT_SIGNALS):
+        return False
+    if _VQA_PAST_RE.search(text) or _VQA_NOT_FRAME_RE.search(text):
+        return False
+    if not _VQA_ATTR_RE.search(text):
+        return False
+    return bool(_VQA_FIELD_RE.search(text))
+
+
+# Lived 2026-08-25: after a VISION miss, "that is wrong … check again" routed
+# NONE and the text LLM agreed without a new JPEG. Retry/correction after a
+# look is the same class as the existing camera-offer follow-up override.
+_LOOK_RETRY_RE = re.compile(
+    r"\b(?:check|try|look)\s+again\b"
+    r"|\blook\s+(?:once\s+more|one\s+more\s+time)\b"
+    r"|\bdo\s+(?:it|that)\s+again\b",
+    re.I,
+)
+_TURN_CORRECTION_RE = re.compile(
+    r"\bthat(?:'s|\s+is|\s+was)\s+(?:wrong|incorrect|not\s+(?:right|correct|true|accurate))\b"
+    r"|\byou\s+(?:miscounted|counted\s+wrong|got\s+(?:it|that)\s+wrong|are\s+wrong)\b",
+    re.I,
+)
+_VISION_RETRY_WINDOW_S = 300.0
+
+
+def is_look_retry_followup(text: str) -> bool:
+    return bool(text and _LOOK_RETRY_RE.search(text))
+
+
+def is_turn_correction(text: str) -> bool:
+    return bool(text and _TURN_CORRECTION_RE.search(text))
+
+
+def vision_retry_followup(
+    text: str,
+    *,
+    current_tool: ToolType,
+    prev_tool: str = "",
+    last_vision_query: str = "",
+    last_vision_age_s: float | None = None,
+    last_user_text: str = "",
+) -> dict[str, Any] | None:
+    """If this turn is a correction/retry after a look, re-fire VISION.
+
+    Does not steal MEMORY ("remember when … that was a lie").
+    """
+    if current_tool != ToolType.NONE or not (text or "").strip():
+        return None
+    retry = is_look_retry_followup(text)
+    correction = is_turn_correction(text)
+    if not retry and not correction:
+        return None
+    prev = (prev_tool or "").upper()
+    look_q = (last_vision_query or "").strip()
+    vision_fresh = bool(
+        look_q
+        and last_vision_age_s is not None
+        and 0 <= float(last_vision_age_s) <= _VISION_RETRY_WINDOW_S
+    )
+    if prev == ToolType.VISION.value:
+        if not look_q:
+            look_q = (last_user_text or "").strip()
+        if not look_q:
+            return None
+    elif retry and vision_fresh:
+        pass
+    else:
+        return None
+    return {
+        "tier": "visual_retry",
+        "vision_retry_query": look_q,
+        "vision_retry_correction": " ".join(text.split()),
+    }
+
+
 # Exclusion: the user is asking Jarvis to do something for them, not about itself
 _SELF_REF_EXCLUDE = re.compile(
     r"\b(help me with|assist me with|for me to do|my homework|my code|my project|my file|"
@@ -986,6 +1175,18 @@ _MILD_SELF_REF_EXCLUDE = re.compile(
     r"hey|hi|hello|bye|see you|talk to you later|"
     r"okay|ok|sure|alright|got it|sounds good|"
     r"you too|you're welcome|you bet|bless you)\.?!?$",
+    re.I,
+)
+
+# Lived 2026-09-05: "Yeah, good morning, Jarvis." → NONE + prefs spoken as
+# completed chores (coffee ordered, Skylar's walk done). Phatic-only greeting
+# is STATUS (native mode line). Not a coffee/Skylar allowlist.
+_PHATIC_GREETING_RE = re.compile(
+    r"^(?:(?:yeah|yes|ok|okay|hey|hi|hello)[,.]?\s+)*"
+    r"(?:jarvis[,.]?\s+)*"
+    r"(?:good\s+(?:morning|afternoon|evening|night)|morning|afternoon|evening)"
+    r"(?:[,.]?\s+jarvis)?"
+    r"[.!?]*$",
     re.I,
 )
 
@@ -1165,6 +1366,10 @@ def _is_self_referential(lower: str) -> bool:
     """
     if _SELF_REF_EXCLUDE.search(lower):
         return False
+    if _is_visual_present_query(lower):
+        return False
+    if is_targeted_visual_question(lower):
+        return False
     hits = 0
     if _SELF_REF_VERBS.search(lower):
         hits += 1
@@ -1224,6 +1429,17 @@ def _is_response_preference_instruction(lower: str) -> bool:
     return False
 
 
+_USER_HELP_DAY_TO_DAY_RE = re.compile(
+    r"\b(i(?:'d| would) like help|help with day to day|day to day would)\b",
+    re.I,
+)
+
+
+def _is_user_help_or_day_to_day(lower: str) -> bool:
+    """Operator help-requests must not steal INTROSPECTION via 'your curiosity'."""
+    return bool(lower and _USER_HELP_DAY_TO_DAY_RE.search(lower))
+
+
 _GENERAL_KNOWLEDGE_RE = re.compile(
     r"(?:^|\b)(?:"
     r"who (?:wrote|is|was|invented|discovered|created|founded|directed|composed|painted|designed|built)\b"
@@ -1280,6 +1496,27 @@ def is_mildly_self_referential(text: str) -> bool:
     if _SELF_REF_EXCLUDE.search(lower):
         return False
     return True
+
+
+def _codebase_stt_locate(text: str) -> str | None:
+    """If the AST index has an exact name for a where-is (including STT-split snake_case), use it.
+
+    Does not build the index. Empty table → no route steal.
+    """
+    try:
+        from tools.codebase_tool import codebase_index
+    except Exception:
+        return None
+    if not getattr(codebase_index, "_symbols", None):
+        return None
+    try:
+        hit = codebase_index.resolve_stt_locate(text or "")
+    except Exception:
+        logger.debug("CODEBASE STT-locate failed", exc_info=True)
+        return None
+    if hit is None:
+        return None
+    return hit.fqn.split(".")[-1]
 
 
 class ToolRouter:
@@ -1435,6 +1672,27 @@ class ToolRouter:
                 synthetic=synthetic,
             )
 
+        if _PHATIC_GREETING_RE.match(user_message.strip()):
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=ToolType.STATUS,
+                    confidence=0.9,
+                    extracted_args={"tier": "phatic_greeting"},
+                ),
+                synthetic=synthetic,
+            )
+
+        # Tier 0: core intent verbs (learn X, train X, teach yourself X).
+        # Lived 2026-09-06: "Learn a new skill … when I ask you to" was eaten
+        # by the preference catch ("when I ask") before this verb could fire.
+        core = _match_core_intent(lower)
+        if core is not None:
+            resolved = _disambiguate(lower, core.tool)
+            core = RoutingResult(tool=resolved, confidence=core.confidence,
+                                 extracted_args=core.extracted_args)
+            return self._finalize(user_message, core, synthetic=synthetic)
+
         if _is_response_preference_instruction(lower):
             logger.info("Tier 0 preference-instruction catch: NONE for: %s", lower[:60])
             return self._finalize(
@@ -1447,13 +1705,17 @@ class ToolRouter:
                 synthetic=synthetic,
             )
 
-        # Tier 0: core intent verbs (learn X, train X, teach yourself X)
-        core = _match_core_intent(lower)
-        if core is not None:
-            resolved = _disambiguate(lower, core.tool)
-            core = RoutingResult(tool=resolved, confidence=core.confidence,
-                                 extracted_args=core.extracted_args)
-            return self._finalize(user_message, core, synthetic=synthetic)
+        if _is_user_help_or_day_to_day(lower):
+            logger.info("Tier 0 day-to-day help catch: NONE for: %s", lower[:60])
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=ToolType.NONE,
+                    confidence=0.84,
+                    extracted_args={},
+                ),
+                synthetic=synthetic,
+            )
 
         # Tier 0.5: persistent user routing corrections
         correction = _match_user_corrections(lower)
@@ -1508,6 +1770,29 @@ class ToolRouter:
             logger.debug("Intent route: %s (%.0f%%) for: %s", best_match.tool.value, best_conf * 100, lower[:60])
             return self._finalize(user_message, best_match, synthetic=synthetic)
 
+        if _is_visual_present_query(user_message):
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=ToolType.VISION,
+                    confidence=0.86,
+                    extracted_args={"tier": "visual_present"},
+                ),
+                synthetic=synthetic,
+            )
+
+        if is_targeted_visual_question(user_message):
+            resolved = _disambiguate_vision_vs_identity(lower, ToolType.VISION)
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=resolved,
+                    confidence=0.86,
+                    extracted_args={"tier": "visual_question"},
+                ),
+                synthetic=synthetic,
+            )
+
         # Tier 3: catch-all for self-referential queries.
         # Strong self-frame ("what was your...", "what did you...") needs only
         # 1 pattern hit. Weaker frames need 2-of-3. This biases toward
@@ -1520,6 +1805,19 @@ class ToolRouter:
                     tool=ToolType.INTROSPECTION,
                     confidence=0.82,
                     extracted_args={"tier": "self_research_history_catch"},
+                ),
+                synthetic=synthetic,
+            )
+
+        stt_locate = _codebase_stt_locate(user_message)
+        if stt_locate:
+            logger.info("CODEBASE STT-locate: %s for: %s", stt_locate, lower[:60])
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=ToolType.CODEBASE,
+                    confidence=0.86,
+                    extracted_args={"tier": "stt_locate", "symbol": stt_locate},
                 ),
                 synthetic=synthetic,
             )

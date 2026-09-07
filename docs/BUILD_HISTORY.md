@@ -1,7 +1,9 @@
 # Build History
 
 Shipped changelog extracted from TODO.md for documentation hygiene.
-Active priorities and runtime state remain in [TODO.md](../TODO.md).
+Forward work lives in GitHub Issues + milestones, not TODO.md (archived).
+This file is a dated log. At-ship "CANDIDATE_BIRTH only" rows are historical;
+Matrix lifecycle was later proven, and boot still resets Tier-2 authority.
 
 ---
 
@@ -707,11 +709,11 @@ writes from any new specialist.** Continuity preserving throughout.
 | --- | --- | --- | --- |
 | **P3.1** | TLA+ formal verification of Phase 6.5 invariants | SHIPPED | `tla_phase_65-2026-04-25.md` |
 | **P3.5** | M6 broadcast slot expansion — gate confirmation closeout | SHIPPED (closed) | `p3_5_m6_expansion_wiring-2026-04-25.md` |
-| **P3.6** | Tier-2 specialist `positive_memory` | SHIPPED (CANDIDATE_BIRTH only) | `p3_6_positive_memory-2026-04-25.md` |
-| **P3.7** | Tier-2 specialist `negative_memory` | SHIPPED (CANDIDATE_BIRTH only) | `p3_7_negative_memory-2026-04-25.md` |
-| **P3.8** | Tier-2 specialist `speaker_profile` | SHIPPED (CANDIDATE_BIRTH only) | `p3_8_speaker_profile-2026-04-25.md` |
-| **P3.9** | Tier-2 specialist `temporal_pattern` | SHIPPED (CANDIDATE_BIRTH only) | `p3_9_temporal_pattern-2026-04-25.md` |
-| **P3.10** | Tier-2 specialist `skill_transfer` | SHIPPED (CANDIDATE_BIRTH only) | `p3_10_skill_transfer-2026-04-25.md` |
+| **P3.6** | Tier-2 specialist `positive_memory` | SHIPPED (at-this-date: CANDIDATE_BIRTH only; lifecycle later proven, boot resets authority) | `p3_6_positive_memory-2026-04-25.md` |
+| **P3.7** | Tier-2 specialist `negative_memory` | SHIPPED (at-this-date: CANDIDATE_BIRTH only; lifecycle later proven, boot resets authority) | `p3_7_negative_memory-2026-04-25.md` |
+| **P3.8** | Tier-2 specialist `speaker_profile` | SHIPPED (at-this-date: CANDIDATE_BIRTH only; lifecycle later proven, boot resets authority) | `p3_8_speaker_profile-2026-04-25.md` |
+| **P3.9** | Tier-2 specialist `temporal_pattern` | SHIPPED (at-this-date: CANDIDATE_BIRTH only; lifecycle later proven, boot resets authority) | `p3_9_temporal_pattern-2026-04-25.md` |
+| **P3.10** | Tier-2 specialist `skill_transfer` | SHIPPED (at-this-date: CANDIDATE_BIRTH only; lifecycle later proven, boot resets authority) | `p3_10_skill_transfer-2026-04-25.md` |
 | **P3.11** | `dream_synthesis` Tier-2 promotion (Phase 1 feasibility) | DEFERRED — INSUFFICIENT | `p3_11_dream_synthesis_feasibility-2026-04-25.md` |
 | **P3.14** | Pi `/mind` consolidation → `consciousness_feed.scene` + particle visualizer | SHIPPED | `p3_14_pi_mind_merge-2026-04-25.md` |
 | **OBS** | Emergent addressee overreach (group-conversation turn-taking) | OBSERVATION (one instance) | `emergent_addressee_overreach_observation-2026-04-25.md` |

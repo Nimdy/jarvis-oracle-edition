@@ -198,49 +198,22 @@ _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 _PROCESS_STARTED_TS: float = time.time()
 _BRAIN_ROOT: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CODE_FRESHNESS_CACHE: dict[str, Any] = {"ts": 0.0, "data": {}}
-_CODE_FRESHNESS_TTL_S: float = 30.0
-_CODE_SCAN_SKIP_DIRS: frozenset[str] = frozenset({
-    "__pycache__", ".git", ".venv", "venv", "env", "node_modules",
-    ".pytest_cache", ".mypy_cache", ".ruff_cache",
-    "improvement_snapshots", "kernel_snapshots", "hemispheres",
-    "policy_models", "synthetic_exercise",
-})
-_CODE_SCAN_EXTENSIONS: tuple[str, ...] = (".py",)
+_CODE_FRESHNESS_TTL_S: float = 8.0
 
 
 def _scan_code_freshness() -> dict[str, Any]:
     """Walk the brain source tree, return newest-mtime metadata.
 
-    Cached for _CODE_FRESHNESS_TTL_S to keep cost bounded; the banner is a
-    low-stakes "you just synced, consider restarting" nudge, not a control
-    surface, so stale-within-30s is acceptable.
-
-    Never raises — on any error returns a safe "unknown" dict.
+    Cached for _CODE_FRESHNESS_TTL_S. Lists every .py newer than this PID
+    so the operator can Restart after sync-desktop.
     """
     now = time.time()
     cache = _CODE_FRESHNESS_CACHE
     if cache["data"] and (now - cache["ts"]) < _CODE_FRESHNESS_TTL_S:
         return cache["data"]
-
-    newest_mtime = 0.0
-    newest_file = ""
-    file_count = 0
     try:
-        for dirpath, dirnames, filenames in os.walk(_BRAIN_ROOT, followlinks=False):
-            dirnames[:] = [d for d in dirnames if not d.startswith(".") or d in (".jarvis",)]
-            dirnames[:] = [d for d in dirnames if d not in _CODE_SCAN_SKIP_DIRS]
-            for fname in filenames:
-                if not fname.endswith(_CODE_SCAN_EXTENSIONS):
-                    continue
-                full = os.path.join(dirpath, fname)
-                try:
-                    mtime = os.path.getmtime(full)
-                except OSError:
-                    continue
-                file_count += 1
-                if mtime > newest_mtime:
-                    newest_mtime = mtime
-                    newest_file = os.path.relpath(full, _BRAIN_ROOT)
+        from dashboard.code_freshness import scan_code_freshness
+        data = scan_code_freshness(_BRAIN_ROOT, _PROCESS_STARTED_TS)
     except Exception:
         logger.debug("code freshness scan failed", exc_info=True)
         data = {
@@ -248,25 +221,12 @@ def _scan_code_freshness() -> dict[str, Any]:
             "newest_mtime": 0.0,
             "newest_file": "",
             "file_count": 0,
+            "stale_count": 0,
+            "stale_files": [],
             "is_stale": False,
             "stale_age_s": 0.0,
             "scan_ok": False,
         }
-        cache["ts"] = now
-        cache["data"] = data
-        return data
-
-    is_stale = newest_mtime > _PROCESS_STARTED_TS
-    stale_age_s = max(0.0, newest_mtime - _PROCESS_STARTED_TS) if is_stale else 0.0
-    data = {
-        "process_started_ts": _PROCESS_STARTED_TS,
-        "newest_mtime": newest_mtime,
-        "newest_file": newest_file,
-        "file_count": file_count,
-        "is_stale": is_stale,
-        "stale_age_s": stale_age_s,
-        "scan_ok": True,
-    }
     cache["ts"] = now
     cache["data"] = data
     return data
@@ -530,10 +490,10 @@ def _create_app() -> FastAPI:
 
         Records the operator's answer as an external-validation outcome (never
         self-scored): a "no/wrong" still counts as grounded=True (being corrected
-        is success). View-only on the belief graph — the belief mutation is the
-        P5 active closure; here we only record the external touch on the durable
-        queue + the external-only promotion gates. Never auto-fired: this runs
-        only on an explicit operator POST with the api_key.
+        is success). Closure re-stamps the belief provenance to user_claim and
+        nudges confidence — intended, not a silent extra writer. Also records
+        the durable queue + the external-only promotion gates. Never auto-fired:
+        this runs only on an explicit operator POST with the api_key.
 
         Body JSON: {"question_id": str, "answer": str}
         """
@@ -738,8 +698,11 @@ def _create_app() -> FastAPI:
                                      "fix": r.get("fix_needed")})
         return {
             "total": view.get("total"),
+            "generated_live": view.get("generated_live"),
+            "note": view.get("note"),
             "by_wiring": dict(by_wiring),
             "by_live_state": view.get("by_state"),
+            "by_consumed_now": view.get("by_consumed_now"),
             "orphan_alarm": orphan_alarm,
             "records": records,
         }
@@ -1277,10 +1240,16 @@ def _create_app() -> FastAPI:
 
     @app.get("/api/skills")
     async def api_skills():
+        try:
+            from skills.registry import get_default_skill_ids
+            default_ids = sorted(get_default_skill_ids())
+        except Exception:
+            default_ids = []
         return {
             "registry": _cache.get("skills", {}),
             "learning_jobs": _cache.get("learning_jobs", {}),
             "capability_gate": _cache.get("capability_gate", {}),
+            "default_skill_ids": default_ids,
         }
 
     @app.get("/api/language")
@@ -1323,7 +1292,16 @@ def _create_app() -> FastAPI:
             audit_packet = build_skill_audit_packet(skill_id, skill_registry, orch, acq_orch)
         except Exception as exc:
             audit_packet = {"error": f"skill audit packet unavailable: {type(exc).__name__}: {str(exc)[:160]}"}
-        return {"skill": rec.to_dict(), "learning_job": job_detail, "audit_packet": audit_packet}
+        try:
+            from skills.registry import get_default_skill_ids
+            is_default = skill_id in get_default_skill_ids()
+        except Exception:
+            is_default = False
+        skill_dict = rec.to_dict()
+        skill_dict["is_default"] = is_default
+        skill_dict["deletable"] = not is_default
+        skill_dict["origin"] = "baseline" if is_default else "learned"
+        return {"skill": skill_dict, "learning_job": job_detail, "audit_packet": audit_packet}
 
     @app.post("/api/skills/{skill_id}/handoff/approve", dependencies=[Depends(_require_api_key)])
     async def api_skill_handoff_approve(skill_id: str, request: Request):
@@ -1468,16 +1446,17 @@ def _create_app() -> FastAPI:
         return {"status": "recovered", "skill_id": skill_id, "job_id": job_id}
 
     @app.delete("/api/skills/{skill_id}", dependencies=[Depends(_require_api_key)])
-    async def api_skill_remove(skill_id: str, confirm_default: bool = False):
-        """Remove a skill record from the registry.
-
-        Default system skills require ``?confirm_default=true`` to delete.
-        """
+    async def api_skill_remove(skill_id: str):
+        """Remove a learned skill. Bootstrap/default skills cannot be deleted."""
         try:
             from skills.registry import skill_registry, get_default_skill_ids
-            if skill_id in get_default_skill_ids() and not confirm_default:
+            if skill_id in get_default_skill_ids():
                 return JSONResponse(
-                    {"error": f"'{skill_id}' is a default system skill. Pass ?confirm_default=true to delete.", "is_default": True},
+                    {
+                        "error": f"'{skill_id}' is a baseline skill shipped with JARVIS and cannot be deleted.",
+                        "is_default": True,
+                        "deletable": False,
+                    },
                     status_code=409,
                 )
             removed = skill_registry.remove(skill_id)
@@ -2113,33 +2092,48 @@ def _create_app() -> FastAPI:
 
     @app.post("/api/chat", dependencies=[Depends(_require_api_key)])
     async def api_chat(request: Request):
-        if not _ENABLE_DASHBOARD_CHAT:
-            return JSONResponse(
-                {"error": "Dashboard chat is disabled. Use Pi5 voice input."},
-                status_code=403,
-            )
-        if not _response_gen:
-            return JSONResponse({"error": "Not ready"}, status_code=503)
+        """Retired. This path skipped the router (LLM + L0 only). Use TAP."""
+        return JSONResponse(
+            {
+                "error": "POST /api/chat is retired. It bypassed handle_transcription. "
+                "Use POST /api/operator/tap or speak on the Pi.",
+                "tap": "/api/operator/tap",
+            },
+            status_code=410,
+        )
+
+    @app.post("/api/operator/tap", dependencies=[Depends(_require_api_key)])
+    async def api_operator_tap(request: Request):
+        """Second ear: text into handle_transcription as David/operator_proxy."""
+        if not _perc_orch:
+            return JSONResponse({"error": "Perception orchestrator not ready"}, status_code=503)
         body = await request.json()
-        message = body.get("message", "")
+        message = (body.get("text") or body.get("message") or "").strip()
+        speaker = (body.get("speaker") or "David").strip() or "David"
         if not message:
-            return JSONResponse({"error": "Missing 'message'"}, status_code=400)
-        response = await _response_gen.respond(message)
-        gated_text = response.text
-        try:
-            from skills.capability_gate import capability_gate
-            gated_text = capability_gate.check_text(response.text) or response.text
-        except Exception:
-            import re as _re
-            _fallback_re = _re.compile(
-                r"\bI (?:can|could|will|'ll|'m able to) .{3,80}?[.!?\n]", _re.IGNORECASE,
-            )
-            gated_text = _fallback_re.sub("I don't have that capability yet.", response.text)
-        return {
-            "text": gated_text,
-            "memory_tags": response.memory_tags,
-            "latency_ms": response.latency_ms,
-        }
+            return JSONResponse({"error": "Missing 'text'"}, status_code=400)
+        follow_raw = body.get("follow_up", None)
+        follow_up = None
+        if follow_raw is True or follow_raw is False:
+            follow_up = bool(follow_raw)
+        elif isinstance(follow_raw, str) and follow_raw.strip().lower() in ("true", "false"):
+            follow_up = follow_raw.strip().lower() == "true"
+        result = await _perc_orch.inject_operator_turn_async(
+            message, speaker=speaker, follow_up=follow_up,
+        )
+        if not result.get("ok"):
+            code = 409 if result.get("refused") in (
+                "voice_busy", "synthetic_session_active", "timeout",
+            ) else 400
+            return JSONResponse(result, status_code=code)
+        return result
+
+    @app.get("/api/operator/tap/status")
+    async def api_operator_tap_status():
+        """Ear state for agents: new sit vs continuation. Not a sit."""
+        if not _perc_orch:
+            return JSONResponse({"error": "Perception orchestrator not ready"}, status_code=503)
+        return _perc_orch.tap_ear_status()
 
     @app.post("/api/feedback", dependencies=[Depends(_require_api_key)])
     async def api_feedback(request: Request):
@@ -2261,6 +2255,50 @@ def _create_app() -> FastAPI:
                 if len(results) >= limit:
                     break
         return results
+
+    @app.delete("/api/memories/{memory_id}", dependencies=[Depends(_require_api_key)])
+    async def api_memory_forget(memory_id: str):
+        """Operator surgical forget for personal intel (rapport rows).
+
+        Only ``user_preference`` rows. Conversation / library / core stay.
+        Flushes memories.json so a bounce cannot resurrect the scar.
+        """
+        from memory.storage import memory_storage
+        mem = memory_storage.get(memory_id)
+        if mem is None:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        mem_type = str(getattr(mem, "type", "") or "")
+        if mem_type != "user_preference":
+            return JSONResponse(
+                {"error": "Only personal intel (user_preference) can be forgotten here"},
+                status_code=400,
+            )
+        payload = mem.payload if isinstance(mem.payload, str) else str(mem.payload or "")
+        if not memory_storage.remove(memory_id):
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        dropped_pref_keys = 0
+        try:
+            from consciousness.soul import soul_service, _preference_key
+            key = _preference_key(payload)
+            needle = payload.strip()
+            for rel in soul_service.identity.relationships.values():
+                prefs = getattr(rel, "preferences", None)
+                if not isinstance(prefs, dict):
+                    continue
+                for k, v in list(prefs.items()):
+                    if k == key or str(v).strip() == needle:
+                        prefs.pop(k, None)
+                        dropped_pref_keys += 1
+            if dropped_pref_keys:
+                soul_service.save_identity()
+        except Exception:
+            logger.debug("rapport preference cleanup after forget failed", exc_info=True)
+        logger.info("Operator forgot personal intel %s", memory_id)
+        return {
+            "status": "removed",
+            "id": memory_id,
+            "dropped_pref_keys": dropped_pref_keys,
+        }
 
     @app.get("/api/memories/{memory_id}")
     async def api_memory_detail(memory_id: str):
@@ -3401,9 +3439,9 @@ def _create_app() -> FastAPI:
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
 
-    @app.post("/api/goals/observe")
+    @app.post("/api/goals/observe", dependencies=[Depends(_require_api_key)])
     async def api_goal_observe(request: Request):
-        """Inject a GoalSignal manually for testing the goal lifecycle."""
+        """Inject a GoalSignal. Operator-keyed — never an open write (#20)."""
         body = await request.json()
         content = body.get("content", "").strip()
         if not content:
@@ -4003,6 +4041,15 @@ def _create_app() -> FastAPI:
     async def api_onboarding_start():
         """Start the 7-stage companion training playbook."""
         try:
+            gest = _cache.get("gestation") or {}
+            if gest.get("active"):
+                return JSONResponse(
+                    {
+                        "error": "gestation_active",
+                        "detail": "Wait for GESTATION_COMPLETE. Do not start onboarding while wake is disarmed.",
+                    },
+                    status_code=409,
+                )
             from personality.onboarding import get_onboarding_manager
             mgr = get_onboarding_manager()
             if mgr.graduated:

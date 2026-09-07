@@ -412,6 +412,8 @@ class LearningJobOrchestrator:
         for job in self.store.load_all():
             if job.status != "blocked":
                 continue
+            if self._is_operator_requested_job(job):
+                continue
             fail = getattr(job, "failure", None) or {}
             last_err = fail.get("last_error") or ""
             if last_err and any(e in last_err for e in _JUNK_ERRORS):
@@ -435,6 +437,12 @@ class LearningJobOrchestrator:
             and required == ["test:procedure_smoke"]
         )
 
+    @staticmethod
+    def _is_operator_requested_job(job: LearningJob) -> bool:
+        """Voice / GOLDEN LEARN SKILL / dashboard user-source. Not auto-gate junk."""
+        rb = job.requested_by or {}
+        return str(rb.get("source") or "") == "user"
+
     @classmethod
     def _is_terminal_unverifiable_job(cls, job: LearningJob) -> bool:
         last_error = ((job.failure or {}).get("last_error") or "").lower()
@@ -442,11 +450,37 @@ class LearningJobOrchestrator:
             return False
         return cls._is_generic_fallback_job(job)
 
+    def _block_operator_job_without_proof(self, job: LearningJob) -> None:
+        """Keep an operator-asked job visible as blocked. Do not erase the sit."""
+        if job.status != "blocked":
+            reason = (
+                "No verification method yet — stays advisory until proof. "
+                "Not deleted (operator-requested)."
+            )
+            job.status = "blocked"
+            job.events.append({"ts": _utc_iso(), "type": "job_blocked", "msg": reason})
+            self.store.save(job)
+            self._active_jobs.pop(job.job_id, None)
+            self._propagate_blocked(job, reason)
+            logger.info(
+                "Blocked operator-requested job %s without proof (kept on disk)",
+                job.job_id,
+            )
+        else:
+            self._active_jobs.pop(job.job_id, None)
+
     def _purge_terminal_unverifiable_jobs(self) -> None:
-        """Delete generic fallback jobs once verification proves they are unreal."""
+        """Delete auto generic-fallback jobs once verification proves they are unreal.
+
+        Operator-requested learn-X jobs stay blocked so the dashboard can show why.
+        Lived 2026-09-06: dice job was created then purged.
+        """
         purged = 0
         for job in self.store.load_all():
             if not self._is_terminal_unverifiable_job(job):
+                continue
+            if self._is_operator_requested_job(job):
+                self._block_operator_job_without_proof(job)
                 continue
             if self.delete_job(job.job_id, remove_skill=True):
                 purged += 1
@@ -460,6 +494,8 @@ class LearningJobOrchestrator:
             if job.status != "completed":
                 continue
             if not self._is_generic_fallback_job(job):
+                continue
+            if self._is_operator_requested_job(job):
                 continue
             if self.delete_job(job.job_id, remove_skill=True):
                 purged += 1
@@ -487,7 +523,12 @@ class LearningJobOrchestrator:
             )
             if not is_builtin:
                 phrase = clean_id.replace("_", " ").strip()
-                if not is_actionable_capability_phrase(phrase):
+                texts = [phrase]
+                if isinstance(requested_by, dict):
+                    user_text = str(requested_by.get("user_text") or "").strip()
+                    if requested_by.get("source") == "user" and user_text:
+                        texts.append(user_text)
+                if not any(is_actionable_capability_phrase(t) for t in texts):
                     logger.warning("create_job rejected non-actionable skill_id: '%s'", skill_id)
                     return None
         except ImportError:
@@ -1011,7 +1052,7 @@ class LearningJobOrchestrator:
         try:
             from skills.execution_contracts import get_contract
             from skills.operational_bridge import start_operational_handoff
-            contract = get_contract(job.skill_id)
+            contract = get_contract(job.skill_id, job)
             if contract is None:
                 return {"ok": False, "reason": "contract_not_found"}
             ok, detail = start_operational_handoff(
@@ -1281,6 +1322,73 @@ class LearningJobOrchestrator:
             logger.info("Cleaned up %d blocked learning jobs (max_age=%.0fs)", count, max_age_s)
         return count
 
+    def _ensure_user_workshop_plan(self, job: LearningJob) -> None:
+        """Off-catalog operator jobs get the plugin workshop plan (not the stub pipeline)."""
+        if not self._is_operator_requested_job(job):
+            return
+        cap = (job.plan or {}).get("capability_contract") or {}
+        if cap.get("acquisition_eligible"):
+            job.artifacts = [
+                a for a in (job.artifacts or [])
+                if a.get("type") != "research_summary"
+            ]
+            return
+        try:
+            from skills.resolver import (
+                is_generic_fallback_resolution,
+                promote_user_tool_resolution,
+                resolve_skill,
+            )
+        except ImportError:
+            return
+        text = str((job.requested_by or {}).get("user_text") or job.skill_id)
+        resolution = resolve_skill(text)
+        if resolution is None or not is_generic_fallback_resolution(resolution):
+            return
+        resolution = promote_user_tool_resolution(resolution, text)
+        job.plan = {
+            "summary": resolution.notes,
+            "phases": resolution.default_phases,
+            "guided_collect": {},
+            "capability_contract": {
+                "input_type": resolution.capability.input_type if resolution.capability else "",
+                "output_type": resolution.capability.output_type if resolution.capability else "",
+                "success_metrics": list(
+                    (resolution.capability.success_metrics if resolution.capability else ()) or ()
+                ),
+                "evidence_requirements": list(
+                    (resolution.capability.evidence_requirements if resolution.capability else ()) or ()
+                ),
+                "hardware_requirements": [],
+                "execution_contract_id": (
+                    resolution.capability.execution_contract_id if resolution.capability else ""
+                ),
+                "required_executor_kind": (
+                    resolution.capability.required_executor_kind if resolution.capability else "plugin"
+                ),
+                "acquisition_eligible": True,
+                "smoke_fixtures": [
+                    {
+                        "name": "operator_request_smoke",
+                        "input_type": "operator_request",
+                        "input": {"request": text[:200]},
+                        "expected": {"ok": True, "honors_request": True},
+                    }
+                ],
+            },
+            "operator_trigger": text,
+        }
+        job.evidence["required"] = list(resolution.required_evidence)
+        job.artifacts = [
+            a for a in (job.artifacts or [])
+            if a.get("type") != "research_summary"
+        ]
+        job.events.append({
+            "ts": _utc_iso(),
+            "type": "workshop_plan_applied",
+            "msg": "Operator-requested tool: research drafts required/expected, then waits for approval.",
+        })
+
     def recover_blocked_job(self, job_id: str) -> bool:
         """Reset a blocked job to active/assess phase so it can retry."""
         job = self.store.load(job_id)
@@ -1290,9 +1398,10 @@ class LearningJobOrchestrator:
         if job.status not in ("blocked", "failed"):
             logger.info("recover_blocked_job: job %s is '%s', not blocked/failed — skipping", job_id, job.status)
             return False
+        self._ensure_user_workshop_plan(job)
         job.status = "active"
         job.phase = "assess"
-        job.failure = {"count": 0}
+        job.failure = {"count": 0, "last_error": None, "last_failed_phase": None}
         job.updated_at = _utc_iso()
         job.events.append({"ts": _utc_iso(), "type": "job_recovered", "msg": "Reset to assess phase for retry"})
         self.store.save(job)
@@ -1384,15 +1493,44 @@ class LearningJobOrchestrator:
             except Exception:
                 logger.exception("Learning job tick failed for %s", job.job_id)
 
+    def _refresh_thin_workshop_research(self, job: LearningJob) -> None:
+        """Rebuild a generic workshop research packet so the operator can review a real design."""
+        if not self._is_operator_requested_job(job):
+            return
+        cap = (job.plan or {}).get("capability_contract") or {}
+        if not cap.get("acquisition_eligible"):
+            return
+        existing = next((a for a in (job.artifacts or []) if a.get("type") == "research_summary"), None)
+        try:
+            from skills.executors.procedural import ProceduralResearchExecutor
+        except ImportError:
+            return
+        if existing and not ProceduralResearchExecutor._research_is_thin(job, existing):
+            return
+        result = ProceduralResearchExecutor().run(job, {})
+        if result.artifact and existing is None:
+            job.artifacts.append(result.artifact)
+        job.events.append({
+            "ts": _utc_iso(),
+            "type": "research_design_refreshed",
+            "msg": (result.message or "Research design refreshed for operator review.")[:200],
+        })
+        job.updated_at = _utc_iso()
+        self.store.save(job)
+
     def _tick_job(self, job: LearningJob, ctx: dict[str, Any]) -> None:
         """Run executor for the current phase, then try auto-advance."""
         if job.status == "awaiting_operator_approval":
+            self._refresh_thin_workshop_research(job)
             return
 
         if self._sync_terminal_acquisition_if_needed(job, ctx):
             return
 
         if self._is_terminal_unverifiable_job(job):
+            if self._is_operator_requested_job(job):
+                self._block_operator_job_without_proof(job)
+                return
             self.delete_job(job.job_id, remove_skill=True)
             logger.warning("Purged terminal unverifiable learning job %s", job.job_id)
             return

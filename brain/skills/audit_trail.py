@@ -38,17 +38,40 @@ def build_skill_audit_packet(
     required = list(skill.get("verification_required") or _job_required(current_job) or [])
     missing = _missing_proof(required, evidence_history, artifacts)
     evidence_classes = _classify_evidence(skill, current_job, artifacts, evidence_history, acquisition_chain)
+    try:
+        from skills.registry import get_default_skill_ids
+        is_default = skill_id in get_default_skill_ids()
+    except Exception:
+        is_default = False
+    origin = "baseline" if is_default else "learned"
+    proposed = _proposed_design(artifacts)
+    timeline = _timeline(jobs)
+    phase_glass = _phase_glass(
+        skill=skill,
+        current_job=current_job,
+        artifacts=artifacts,
+        timeline=timeline,
+        proposed_design=proposed,
+        evidence_history=evidence_history,
+        operational_handoff=operational_handoff,
+        is_default=is_default,
+    )
 
     return {
         "schema_version": 1,
         "skill_id": skill_id,
         "status": skill.get("status", "unknown"),
         "verified": skill.get("status") == "verified",
+        "is_default": is_default,
+        "deletable": not is_default,
+        "origin": origin,
         "decision_summary": _decision_summary(skill, current_job, missing, evidence_classes, operational_handoff),
         "request_context": _request_context(current_job),
         "resolver_contract": _resolver_contract(skill, current_job, required),
+        "proposed_design": proposed,
         "operational_handoff": operational_handoff,
-        "timeline": _timeline(jobs),
+        "phase_glass": phase_glass,
+        "timeline": timeline,
         "artifacts": artifacts,
         "acquisition_chain": acquisition_chain,
         "evidence_history": evidence_history,
@@ -70,6 +93,11 @@ def build_skill_audit_packet(
             "Read-only audit packet built from SkillRegistry, LearningJob, and artifact JSON state.",
             "Dashboard endpoint does not execute skill code, smoke tests, plugins, or learning phases.",
             "Historical jobs are shown for traceability but do not imply current operational readiness.",
+            (
+                "Baseline skills shipped with JARVIS have no learning pipeline; they cannot be deleted."
+                if is_default
+                else "Learned skills keep a per-phase glass box from the learning job."
+            ),
         ],
     }
 
@@ -401,7 +429,7 @@ def _reason_for_missing(
     evidence_history: list[dict[str, Any]],
     artifacts: list[dict[str, Any]],
 ) -> str:
-    for ev in evidence_history:
+    for ev in reversed(list(evidence_history or [])):
         if not ev.get("is_current"):
             continue
         for test in ev.get("tests", []):
@@ -463,6 +491,208 @@ def _job_required(current_job: dict[str, Any] | None) -> list[str]:
 
 def _canonical(skill_id: str) -> str:
     return re.sub(r"_v\d+$", "", skill_id or "")
+
+
+_ARTIFACT_PHASE = {
+    "research_summary": "research",
+    "integration_test_passed": "integrate",
+    "operational_handoff_required": "verify",
+    "contract_smoke_result": "verify",
+    "sandbox_execution_pass": "verify",
+    "sandbox_result": "verify",
+    "procedure_macro": "acquire",
+    "model_or_method_available": "acquire",
+}
+_EVENT_PHASE = {
+    "job_created": "assess",
+    "gate_update": "assess",
+    "workshop_plan_applied": "assess",
+    "job_recovered": "assess",
+    "research_design_refreshed": "research",
+    "evidence_recorded": "verify",
+    "job_blocked": "verify",
+}
+_DEFAULT_PHASES = ["assess", "research", "acquire", "integrate", "collect", "train", "verify", "register"]
+
+
+def _phase_from_event(event: dict[str, Any]) -> str | None:
+    kind = str(event.get("type") or "")
+    if kind in _EVENT_PHASE:
+        return _EVENT_PHASE[kind]
+    msg = str(event.get("message") or event.get("msg") or "")
+    if kind == "phase_changed" and "->" in msg:
+        return msg.split("->")[-1].strip().split()[0]
+    if kind in ("artifact_added", "artifact_present"):
+        key = msg.split()[0] if msg else ""
+        return _ARTIFACT_PHASE.get(key) or _ARTIFACT_PHASE.get(kind)
+    return None
+
+
+def _phase_glass(
+    *,
+    skill: dict[str, Any],
+    current_job: dict[str, Any] | None,
+    artifacts: list[dict[str, Any]],
+    timeline: list[dict[str, Any]],
+    proposed_design: dict[str, Any],
+    evidence_history: list[dict[str, Any]],
+    operational_handoff: dict[str, Any] | None,
+    is_default: bool,
+) -> dict[str, Any]:
+    """Per-phase glass box. Baseline skills have no learning pipeline."""
+    latest = skill.get("verification_latest") or {}
+    wiring = {
+        "interfaces": skill.get("interfaces") or {},
+        "keywords": skill.get("keywords") or [],
+        "notes": skill.get("notes") or "",
+        "verification_required": skill.get("verification_required") or [],
+        "verification_method": latest.get("verification_method") or "",
+        "known_limitations": latest.get("known_limitations") or [],
+        "verified_by": latest.get("verified_by") or "",
+        "summary": latest.get("summary") or latest.get("details") or "",
+    }
+    if is_default and not current_job:
+        return {
+            "kind": "baseline",
+            "note": "Shipped with JARVIS. Wired in the codebase — no learn-X pipeline, no plugin job. Details below are the bootstrap record.",
+            "phases": [],
+            "wiring": wiring,
+        }
+    if not current_job:
+        return {
+            "kind": "learned_no_job",
+            "note": "Learned skill with no current learning job on disk. Registry details only.",
+            "phases": [],
+            "wiring": wiring,
+        }
+
+    plan = current_job.get("plan") or {}
+    raw_phases = plan.get("phases") or []
+    names: list[str] = []
+    exits: dict[str, list[str]] = {}
+    for item in raw_phases:
+        if isinstance(item, dict):
+            name = str(item.get("name") or "").strip()
+            if name:
+                names.append(name)
+                exits[name] = list(item.get("exit_conditions") or [])
+        elif item:
+            names.append(str(item))
+    if not names:
+        names = [p for p in _DEFAULT_PHASES if p in ("assess", "research", "integrate", "verify", "register")]
+
+    current_phase = str(current_job.get("phase") or "")
+    try:
+        cur_i = names.index(current_phase)
+    except ValueError:
+        cur_i = -1
+
+    arts_by_phase: dict[str, list[dict[str, Any]]] = {n: [] for n in names}
+    for art in artifacts:
+        if not art.get("is_current_job"):
+            continue
+        phase = _ARTIFACT_PHASE.get(str(art.get("type") or ""))
+        if phase in arts_by_phase:
+            arts_by_phase[phase].append({
+                "type": art.get("type"),
+                "path": art.get("path"),
+                "exists": art.get("exists"),
+            })
+
+    ev_by_phase: dict[str, list[dict[str, Any]]] = {n: [] for n in names}
+    for event in timeline:
+        if not event.get("is_current_job"):
+            continue
+        phase = _phase_from_event(event)
+        if phase in ev_by_phase:
+            ev_by_phase[phase].append({
+                "ts": event.get("ts"),
+                "type": event.get("type"),
+                "message": event.get("message"),
+            })
+
+    phases = []
+    for i, name in enumerate(names):
+        if cur_i < 0:
+            state = "unknown"
+        elif i < cur_i:
+            state = "done"
+        elif i == cur_i:
+            state = "current"
+        else:
+            state = "pending"
+        pane: dict[str, Any] = {
+            "name": name,
+            "state": state,
+            "exit_conditions": exits.get(name) or [],
+            "artifacts": arts_by_phase.get(name) or [],
+            "events": (ev_by_phase.get(name) or [])[-12:],
+        }
+        if name == "research" and proposed_design:
+            pane["design"] = proposed_design
+        if name == "verify":
+            pane["handoff"] = operational_handoff or {}
+            pane["latest_evidence"] = (evidence_history[-1] if evidence_history else {}) or {}
+        if name == "assess":
+            pane["gates"] = (current_job.get("gates") or {}).get("hard") or []
+        phases.append(pane)
+
+    return {
+        "kind": "learned",
+        "note": "Each tab is one learning-job phase. Empty panes mean that station has not run yet — not a missing organ.",
+        "current_phase": current_phase,
+        "job_status": current_job.get("status"),
+        "phases": phases,
+        "wiring": wiring,
+    }
+
+
+def _proposed_design(artifacts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Full research design (not the truncated artifact preview)."""
+    current = [
+        a for a in (artifacts or [])
+        if a.get("type") == "research_summary" and a.get("is_current_job")
+    ]
+    target = current[-1] if current else next(
+        (a for a in (artifacts or []) if a.get("type") == "research_summary"),
+        None,
+    )
+    if not target:
+        return {}
+    path = target.get("path") or ""
+    blob: dict[str, Any] = {}
+    if path:
+        p = Path(path).expanduser()
+        if p.is_file():
+            try:
+                loaded = json.loads(p.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    blob = loaded
+            except Exception:
+                blob = {}
+    if not blob and isinstance(target.get("preview"), dict):
+        blob = target.get("preview") or {}
+    if not blob:
+        return {}
+    approach = str(blob.get("technical_approach") or "")
+    thin = (
+        approach.startswith("Governed plugin:")
+        or not blob.get("plugin_structure")
+        or not blob.get("implementation_sketch")
+    )
+    return {
+        "trigger": blob.get("trigger", ""),
+        "approach": blob.get("approach", ""),
+        "required": blob.get("required") or {},
+        "expected": blob.get("expected") or {},
+        "technical_approach": blob.get("technical_approach", ""),
+        "implementation_sketch": blob.get("implementation_sketch", ""),
+        "plugin_structure": blob.get("plugin_structure") or [],
+        "test_cases": blob.get("test_cases") or [],
+        "design_notes": blob.get("design_notes") or [],
+        "awaiting": blob.get("awaiting", ""),
+        "thin": thin,
+    }
 
 
 def _bounded(value: Any) -> Any:

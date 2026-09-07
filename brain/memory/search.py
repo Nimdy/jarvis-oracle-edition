@@ -201,8 +201,10 @@ def _hybrid_search(query: str, top_k: int = 20, speaker: str = "",
         candidates.append((record, mem))
 
     if boundary_blocked > 0 or identity_context is not None:
-        logger.info("Identity pre-filter: %d/%d blocked, %d candidates passed",
-                    boundary_blocked, len(raw), len(candidates))
+        logger.info(
+            "Identity pre-filter (personal security): %d/%d blocked, %d candidates passed",
+            boundary_blocked, len(raw), len(candidates),
+        )
 
     global _baseline_probe_counter
     _baseline_probe_counter += 1

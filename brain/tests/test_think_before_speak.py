@@ -5,6 +5,7 @@ import consciousness.think_before_speak as tbs
 
 def _reset(tmp_path, monkeypatch):
     monkeypatch.setattr(tbs, "_SHADOW_LOG", str(tmp_path / "pss.jsonl"))
+    monkeypatch.setattr(tbs, "_TBS1_PATH", str(tmp_path / "tbs1.json"))
     tbs.PreSpeechReader.reset_instance()
 
 
@@ -58,6 +59,26 @@ def test_unearned_pref_does_not_trip(tmp_path, monkeypatch):
     assert s.stance == "none"
 
 
+def test_handler_captures_stance_on_flight_record_without_injecting():
+    """TBS-0: person-aware labels accrue on the episode. Prompt stays unchanged."""
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parent.parent.joinpath("conversation_handler.py").read_text()
+    assert "_tbs_stance = _tbs.read_before_speak(" in src
+    assert '"pre_speech": _tbs_stance.to_dict()' in src
+    assert "+ _tbs_stance.would_inject" not in src
+    assert "_style_instruction += " not in src
+    window = src[src.find("_tbs_stance = _tbs.read_before_speak"):src.find("_flight_recorder.append")]
+    assert ".would_inject" not in window
+    assert "score_against_post_hoc" in src
+    assert "def _run_companion_post_hoc" in src
+    assert "_run_companion_post_hoc()" in src
+    emerge = src.find("_persist_spoken_turn(introspection_query, reply)")
+    assert emerge > 0
+    assert "_run_companion_post_hoc()" in src[emerge:emerge + 220]
+    assert "_style_instruction += " not in src
+
+
 def test_glassbox_persists_across_restart(tmp_path, monkeypatch):
     _reset(tmp_path, monkeypatch)
     r = tbs.PreSpeechReader.get_instance()
@@ -67,3 +88,60 @@ def test_glassbox_persists_across_restart(tmp_path, monkeypatch):
     tbs.PreSpeechReader.reset_instance()
     r2 = tbs.PreSpeechReader.get_instance()        # reloads from the durable log
     assert r2.get_status()["total_reads"] == 3     # glass box survives reboot
+
+
+class _Read:
+    def __init__(self, would_have_done=None, suggestions=None):
+        self.would_have_done = would_have_done
+        self.suggestions = suggestions or []
+
+
+class _Adv:
+    def __init__(self, adjustment):
+        self.suggestions = [{"adjustment": adjustment}]
+
+
+def test_tbs1_match_give_space(tmp_path, monkeypatch):
+    _reset(tmp_path, monkeypatch)
+    r = tbs.PreSpeechReader.get_instance()
+    s = r.read_before_speak(speaker="David", user_text="ugh", user_emotion="frustrated")
+    row = r.score_against_post_hoc(s, _Read(), _Adv("give_space"))
+    assert row["verdict"] == "match"
+    assert row["injected"] is False
+    st = r.get_status()
+    assert st["injects_prompt"] is False
+    assert st["advisory_score"]["match"] == 1
+    assert st["advisory_score"]["agreement_rate"] == 1.0
+
+
+def test_tbs1_mismatch_concise_vs_space(tmp_path, monkeypatch):
+    _reset(tmp_path, monkeypatch)
+    r = tbs.PreSpeechReader.get_instance()
+    s = r.read_before_speak(
+        speaker="David", user_text="how does X work",
+        person_model={"verbosity_pref": "prefers concise replies", "verbosity_confidence": 0.6})
+    row = r.score_against_post_hoc(
+        s, _Read("would consider giving space / checking in"), None)
+    assert row["pre"] == "lean_concise"
+    assert row["post"] == "give_space"
+    assert row["verdict"] == "mismatch"
+
+
+def test_tbs1_abstain_when_both_none(tmp_path, monkeypatch):
+    _reset(tmp_path, monkeypatch)
+    r = tbs.PreSpeechReader.get_instance()
+    s = r.read_before_speak(speaker="David", user_text="hello")
+    row = r.score_against_post_hoc(s, _Read(None), None)
+    assert row["verdict"] == "abstain"
+    assert r.get_status()["advisory_score"]["agreement_rate"] is None
+
+
+def test_tbs1_persists(tmp_path, monkeypatch):
+    _reset(tmp_path, monkeypatch)
+    r = tbs.PreSpeechReader.get_instance()
+    s = r.read_before_speak(speaker="David", user_text="ugh", user_emotion="frustrated")
+    r.score_against_post_hoc(s, _Read(), _Adv("soften_tone"))
+    tbs.PreSpeechReader.reset_instance()
+    r2 = tbs.PreSpeechReader.get_instance()
+    assert r2.get_status()["advisory_score"]["scored"] == 1
+    assert r2.get_status()["advisory_score"]["match"] == 1

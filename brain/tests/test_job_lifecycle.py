@@ -452,3 +452,82 @@ class TestSkillToolRegistrationRollback:
         assert reg.get(result["skill_id"]) is not None, (
             "Successful job creation must leave the SkillRecord in the registry."
         )
+
+
+def _generic_unverifiable_job(job_id: str, source: str) -> LearningJob:
+    return LearningJob(
+        job_id=job_id,
+        skill_id="roll_20sided_dice_v1",
+        capability_type="procedural",
+        status="active",
+        phase="verify",
+        requested_by={"source": source, "user_text": "roll a 20-sided dice"},
+        plan={"summary": 'Auto-generated from: "roll a 20-sided dice"'},
+        evidence={
+            "required": ["test:procedure_smoke"],
+            "latest": None,
+            "history": [],
+        },
+        failure={
+            "count": 11,
+            "last_error": "Verification: FAIL — no_verification_method",
+            "last_failed_phase": "verify",
+        },
+    )
+
+
+class TestOperatorGenericJobNotPurged:
+    """Lived 2026-09-06: GOLDEN LEARN SKILL d20 was created then sweeper-deleted."""
+
+    def test_tick_blocks_user_job_instead_of_deleting(self, orch, store, registry):
+        job = _generic_unverifiable_job("job_d20_user", "user")
+        store.save(job)
+        orch._active_jobs[job.job_id] = job
+        registry.register(SkillRecord(
+            skill_id=job.skill_id,
+            name="Roll 20sided Dice",
+            status="learning",
+            capability_type="procedural",
+        ))
+
+        orch._tick_job(job, {})
+
+        kept = store.load(job.job_id)
+        assert kept is not None
+        assert kept.status == "blocked"
+        rec = registry.get(job.skill_id)
+        assert rec is not None
+        assert rec.status == "blocked"
+
+    def test_tick_still_purges_auto_gate_junk(self, orch, store, registry):
+        job = _generic_unverifiable_job("job_d20_auto", "auto_gate")
+        store.save(job)
+        orch._active_jobs[job.job_id] = job
+        registry.register(SkillRecord(
+            skill_id=job.skill_id,
+            name="Roll 20sided Dice",
+            status="learning",
+            capability_type="procedural",
+        ))
+
+        orch._tick_job(job, {})
+
+        assert store.load(job.job_id) is None
+        assert registry.get(job.skill_id) is None
+
+    def test_blocked_user_job_survives_junk_sweeper(self, orch, store, registry):
+        job = _generic_unverifiable_job("job_d20_blocked", "user")
+        job.status = "blocked"
+        store.save(job)
+        registry.register(SkillRecord(
+            skill_id=job.skill_id,
+            name="Roll 20sided Dice",
+            status="blocked",
+            capability_type="procedural",
+        ))
+
+        orch._purge_verify_blocked_junk()
+        orch._purge_terminal_unverifiable_jobs()
+
+        assert store.load(job.job_id) is not None
+        assert registry.get(job.skill_id) is not None

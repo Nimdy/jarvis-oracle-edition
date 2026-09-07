@@ -126,6 +126,8 @@ class LibraryIndex:
 
     def add_chunk(self, chunk_id: str, source_id: str, text: str) -> bool:
         if not self.available:
+            self.init()
+        if not self.available:
             return False
         try:
             embedding = self.embed(text)

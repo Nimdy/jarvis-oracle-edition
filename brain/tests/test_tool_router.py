@@ -12,7 +12,10 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from reasoning.tool_router import ToolRouter, ToolType
+from reasoning.tool_router import (
+    ToolRouter, ToolType, is_targeted_visual_question,
+    is_look_retry_followup, is_turn_correction, vision_retry_followup,
+)
 
 
 router = ToolRouter()
@@ -64,6 +67,100 @@ def test_vision_routing():
     assert result2.tool == ToolType.VISION
 
 
+def test_visual_present_see_is_vision_not_introspection():
+    """Lived 2026-08-25: 'what you currently see' dumped OSV; 'from the camera' was solid."""
+    for q in (
+        "Can you tell me what you currently see?",
+        "What do you currently see?",
+        "tell me what you see",
+        "what you currently view",
+        "What do you currently see from the camera?",
+    ):
+        assert router.route(q).tool == ToolType.VISION, q
+    assert router.route("how do you see yourself?").tool == ToolType.INTROSPECTION
+
+
+def test_targeted_visual_question_is_vision_class_not_phrase_hack():
+    """#24: count/color/holding/on-off about the current frame → VISION.
+
+    Generic look stays visual_present. About-X, enroll, and self-view stay out.
+    """
+    for q in (
+        "How many fingers am I holding up?",
+        "What color is my shirt?",
+        "Am I wearing headphones?",
+        "How many monitors are in front of me?",
+        "What am I holding?",
+        "Is the stove on?",
+        "what color is this",
+        "Jarvis, is there a keyboard in front of you?",
+    ):
+        assert is_targeted_visual_question(q) is True, q
+        assert router.route(q).tool == ToolType.VISION, q
+    assert is_targeted_visual_question("What do you currently see?") is False
+    assert is_targeted_visual_question("how many children do I have") is False
+    assert is_targeted_visual_question("what color is Skyler's collar") is False
+    assert is_targeted_visual_question("how do you see yourself?") is False
+    assert is_targeted_visual_question("look at my face") is False
+    assert is_targeted_visual_question(
+        "Remember when I asked you for a vision check and you told me I was sitting in the kitchen"
+    ) is False
+    assert router.route("how many children do I have").tool != ToolType.VISION
+    assert router.route("what color is Skyler's collar").tool != ToolType.VISION
+    assert router.route("look at my face").tool == ToolType.IDENTITY
+    assert router.route(
+        "Remember when I asked you for a vision check"
+    ).tool == ToolType.MEMORY
+
+
+def test_vision_retry_followup_after_wrong_look():
+    """Lived 2026-08-25: 'that is wrong … check again' after VISION went NONE."""
+    spoken = (
+        "Jarvis that is wrong. I have my thumbs tucked in and I only have four "
+        "fingers on each hand. Check again"
+    )
+    assert is_turn_correction(spoken) is True
+    assert is_look_retry_followup(spoken) is True
+    assert is_turn_correction("that's wrong") is True
+    assert is_look_retry_followup("try again") is True
+    hit = vision_retry_followup(
+        spoken,
+        current_tool=ToolType.NONE,
+        prev_tool="VISION",
+        last_vision_query="How many fingers am I holding up?",
+        last_vision_age_s=20.0,
+    )
+    assert hit is not None
+    assert hit["tier"] == "visual_retry"
+    assert hit["vision_retry_query"] == "How many fingers am I holding up?"
+    assert "Check again" in hit["vision_retry_correction"]
+    # After a thanks (NONE) but the look is still in the window.
+    late = vision_retry_followup(
+        "check again",
+        current_tool=ToolType.NONE,
+        prev_tool="NONE",
+        last_vision_query="How many fingers am I holding up?",
+        last_vision_age_s=25.0,
+    )
+    assert late is not None
+    # MEMORY "remember when that was a lie" must not steal to VISION.
+    assert vision_retry_followup(
+        "Remember when I asked you for a vision check and that was wrong",
+        current_tool=ToolType.MEMORY,
+        prev_tool="MEMORY",
+        last_vision_query="What do you see in the room?",
+        last_vision_age_s=10.0,
+    ) is None
+    assert vision_retry_followup(
+        "check again",
+        current_tool=ToolType.NONE,
+        prev_tool="NONE",
+        last_vision_query="How many fingers am I holding up?",
+        last_vision_age_s=900.0,
+    ) is None
+    assert router.route(spoken).tool == ToolType.NONE
+
+
 def test_recognition_probes_route_to_identity():
     """Recognition probes about the present speaker must reach IDENTITY (grounded by
     live fusion), not fall to NONE where the LLM confabulated 'I have no camera access'
@@ -80,6 +177,17 @@ def test_recognition_probes_route_to_identity():
     assert router.route("do you recognize me?").tool == ToolType.IDENTITY
     # must NOT over-capture scene/vision questions
     assert router.route("What do you see right now?").tool == ToolType.VISION
+    # Lived 17:58: "Look at me" / "see my face" captioned the room and never
+    # stored biometrics. Self-face look is IDENTITY enroll/refresh.
+    assert router.route("Look at me.").tool == ToolType.IDENTITY
+    assert router.route("Hey Jarvis, take a fresh look with the camera and see my face.").tool == ToolType.IDENTITY
+    # Lived: "camera" stole enroll to VISION theater ("registered with the camera").
+    assert router.route("Register my face with the camera").tool == ToolType.IDENTITY
+    assert router.route("Jarvis, register my face with the camera.").tool == ToolType.IDENTITY
+    assert router.route("register my voice").tool == ToolType.IDENTITY
+    assert router.route("Look at the camera").tool == ToolType.VISION
+    assert router.route("Look around and describe the room").tool == ToolType.VISION
+    assert router.route("look at me closer").tool == ToolType.CAMERA_CONTROL
 
 
 def test_memory_routing():
@@ -159,6 +267,18 @@ def test_non_preference_complaint_does_not_hit_preference_instruction_tier():
     result = router.route(text)
     assert result.tool == ToolType.NONE
     assert result.extracted_args.get("tier") != "preference_instruction"
+
+
+def test_day_to_day_help_does_not_route_to_introspection():
+    text = (
+        "Something that I'd like help with day to day would probably just be "
+        "monitoring the environment and having your curiosity drive make you "
+        "want to ask me questions if you're not sure about something."
+    )
+    result = router.route(text)
+    assert result.tool == ToolType.NONE, (
+        f"{text!r} should stay NONE, got {result.tool.value}"
+    )
 
 
 def test_identity_routing_explicit_phrases():
@@ -303,6 +423,27 @@ def test_runtime_bridge_scope_does_not_change_router_contracts():
     assert general.tool == ToolType.NONE
 
 
+def test_every_canonical_golden_command_routes():
+    """Golden Commands are the pre-NN validation floor. Every body must parse."""
+    from reasoning.golden_words import list_canonical_commands
+
+    for body in list_canonical_commands():
+        result = router.route(f"Jarvis, GOLDEN COMMAND {body}")
+        assert result.extracted_args.get("tier") == "golden", body
+        assert result.golden_context is not None, body
+        assert result.extracted_args.get("golden_status") == "executed", body
+        assert result.extracted_args.get("golden_canonical_body") == body, body
+
+
+def test_golden_unvalidated_learning_exact_route():
+    result = router.route("Jarvis, GOLDEN COMMAND UNVALIDATED LEARNING")
+    assert result.extracted_args.get("tier") == "golden"
+    assert result.extracted_args.get("golden_status") == "executed"
+    assert result.golden_context is not None
+    assert result.golden_context.command_id == "GW_UNVALIDATED_LEARNING"
+    assert result.extracted_args.get("golden_operation") == "unvalidated_learning"
+
+
 def test_golden_status_exact_route():
     result = router.route("Jarvis, GOLDEN COMMAND STATUS")
     assert result.tool == ToolType.STATUS
@@ -321,11 +462,45 @@ def test_golden_research_web_exact_route():
     assert result.extracted_args.get("golden_operation") == "research_web"
 
 
+def test_golden_learn_skill_captures_argument_and_stays_skill():
+    """Golden LEARN SKILL XYZ is exact-match + trailing intent. Not a fuzzy synonym."""
+    result = router.route(
+        "Jarvis, GOLDEN COMMAND LEARN SKILL roll a 20-sided dice"
+    )
+    assert result.tool == ToolType.SKILL
+    assert result.extracted_args.get("tier") == "golden"
+    assert result.extracted_args.get("golden_status") == "executed"
+    assert result.golden_context is not None
+    assert result.golden_context.command_id == "GW_LEARN_SKILL"
+    assert result.golden_context.argument_text.lower() == "roll a 20-sided dice"
+
+
+def test_natural_learn_a_new_skill_routes_skill():
+    """Lived 2026-09-06: natural learn-skill (not golden) still routes SKILL."""
+    result = router.route(
+        "Learn a new skill to play D&D. I need you to roll a 20-sided dice "
+        "when I ask you to."
+    )
+    assert result.tool == ToolType.SKILL
+
+
 def test_golden_prefix_normalization():
     result = router.route("  Jarvis...   golden   command   status!!! ")
     assert result.tool == ToolType.STATUS
     assert result.extracted_args.get("tier") == "golden"
     assert result.extracted_args.get("golden_status") == "executed"
+
+
+def test_golden_hey_jarvis_prefix_still_exact_body():
+    """Lived 2026-08-25: STT 'Hey Jarvis, golden command vision status' missed ^jarvis."""
+    result = router.route("Hey Jarvis, golden command vision status.")
+    assert result.extracted_args.get("tier") == "golden"
+    assert result.tool == ToolType.VISION
+    assert result.extracted_args.get("golden_command_id") == "GW_VISION_STATUS"
+    assert result.extracted_args.get("golden_operation") == "vision_status"
+    # Address fluff is prefix-only — body stays exact.
+    miss = router.route("Hey Jarvis, do a golden command vision status")
+    assert miss.extracted_args.get("tier") != "golden"
 
 
 def test_golden_bare_prefix_is_not_global_default():
@@ -510,6 +685,47 @@ def test_system_status_vs_status_disambiguation():
             f"System/Status disambiguation fail: {text!r}\n"
             f"  expected {expected.value}, got {result.tool.value}"
         )
+
+
+def test_phatic_greeting_is_status_not_none_pref_dump():
+    """Lived 2026-09-05: 'Yeah, good morning, Jarvis.' → NONE invented a finished morning."""
+    assert router.route("Yeah, good morning, Jarvis.").tool == ToolType.STATUS
+    assert router.route("Good morning, Jarvis.").tool == ToolType.STATUS
+    # Real content stays off STATUS
+    conscience = router.route("Good morning, say something. This is my digital conscience.")
+    assert conscience.tool != ToolType.STATUS
+    tanya = router.route("Jarvis, what's up? I'm just sitting here talking with my wife, Tanya.")
+    assert tanya.tool != ToolType.STATUS
+
+
+def test_stt_split_where_is_handle_transcription_is_codebase():
+    """Lived 2026-09-04: STT 'handle transcription' fell to NONE → Qwen theater."""
+    from tools.codebase_tool import CodeSymbol, codebase_index
+
+    old = codebase_index._symbols
+    codebase_index._symbols = {
+        "conversation_handler.handle_transcription": CodeSymbol(
+            fqn="conversation_handler.handle_transcription",
+            kind="function",
+            file="conversation_handler.py",
+            line=3017,
+            end_line=3100,
+            signature="async def handle_transcription(text)",
+            docstring="Mind-path entry for spoken turns and TAP.",
+        )
+    }
+    try:
+        hit = router.route("Jarvis, where is handle transcription?")
+        assert hit.tool == ToolType.CODEBASE, hit.tool
+        snake = router.route("Where is handle_transcription?")
+        assert snake.tool == ToolType.CODEBASE, snake.tool
+        household = router.route("Where is Tonya?")
+        assert household.tool != ToolType.CODEBASE, household.tool
+        concept = router.route("Where is the function that handles my voice?")
+        # still CODEBASE via 'where is the function' keyword — not via allowlist
+        assert concept.tool == ToolType.CODEBASE
+    finally:
+        codebase_index._symbols = old
 
 
 # ---------------------------------------------------------------------------

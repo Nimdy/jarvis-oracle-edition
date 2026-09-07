@@ -223,3 +223,90 @@ def test_skill_audit_packet_labels_old_false_positive_as_historical(tmp_path):
     assert packet["verified"] is False
     assert packet["evidence_classes"]["operational_contract_evidence"] is False
     assert "historical jobs" in " ".join(packet["integrity_notes"]).lower()
+
+
+def test_audit_packet_surfaces_full_plugin_design(tmp_path):
+    from skills.audit_trail import build_skill_audit_packet
+
+    research = tmp_path / "research_summary.json"
+    research.write_text(json.dumps({
+        "trigger": "roll a 20-sided dice",
+        "approach": "Local 20-sided die plugin.",
+        "required": {"operator_approval": True, "local_rng": True},
+        "expected": {"rolls": "integers 1..20"},
+        "technical_approach": "Implement roll.py with secrets.randbelow.",
+        "implementation_sketch": "def roll(sides=20): ...",
+        "plugin_structure": ["brain/tools/plugins/roll_20sided_dice_v1/roll.py"],
+        "test_cases": [{"name": "range_and_type"}],
+        "design_notes": ["LLM must not pick the number"],
+        "awaiting": "operator approval",
+    }))
+    job = _FakeJob({
+        "job_id": "job_design",
+        "skill_id": "roll_20sided_dice_v1",
+        "status": "awaiting_operator_approval",
+        "phase": "verify",
+        "created_at": "2026-09-06T18:51:56Z",
+        "artifacts": [{
+            "id": "research_summary",
+            "type": "research_summary",
+            "path": str(research),
+        }],
+        "evidence": {"required": ["test:procedure_smoke"], "history": [], "latest": None},
+        "requested_by": {"source": "user", "user_text": "roll a 20-sided dice"},
+        "plan": {},
+        "data": {},
+    })
+    record = _FakeRecord({
+        "skill_id": "roll_20sided_dice_v1",
+        "status": "learning",
+        "learning_job_id": "job_design",
+        "verification_required": [],
+        "verification_latest": None,
+        "verification_history": [],
+    })
+    packet = build_skill_audit_packet(
+        "roll_20sided_dice_v1",
+        _FakeRegistry(record),
+        _fake_orchestrator([job]),
+    )
+    design = packet["proposed_design"]
+    assert design["implementation_sketch"].startswith("def roll")
+    assert design["plugin_structure"]
+    assert design["thin"] is False
+    assert "LLM must not pick the number" in design["design_notes"]
+    assert packet["origin"] == "learned"
+    assert packet["deletable"] is True
+    assert packet["phase_glass"]["kind"] in ("learned", "learned_no_job")
+
+
+def test_baseline_skill_audit_has_no_learning_pipeline():
+    from skills.audit_trail import build_skill_audit_packet
+    from skills.registry import get_default_skill_ids
+
+    sid = sorted(get_default_skill_ids())[0]
+    record = _FakeRecord({
+        "skill_id": sid,
+        "status": "verified",
+        "name": "Baseline",
+        "learning_job_id": None,
+        "interfaces": {"tools": ["tool:tts"], "events": [], "endpoints": []},
+        "keywords": [],
+        "notes": "",
+        "verification_required": [],
+        "verification_latest": {
+            "verification_method": "codebase_audit",
+            "known_limitations": ["bootstrap-only — no runtime performance data"],
+            "verified_by": "SkillRegistry._default_skills",
+            "summary": "Bootstrapped skill",
+            "tests": [],
+        },
+        "verification_history": [],
+    })
+    packet = build_skill_audit_packet(sid, _FakeRegistry(record), _fake_orchestrator([]))
+    assert packet["origin"] == "baseline"
+    assert packet["is_default"] is True
+    assert packet["deletable"] is False
+    assert packet["phase_glass"]["kind"] == "baseline"
+    assert packet["phase_glass"]["phases"] == []
+    assert "cannot be deleted" in " ".join(packet["integrity_notes"]).lower()

@@ -269,10 +269,28 @@ class ExistentialReasoning:
     def _build_chain(self, inquiry: ExistentialInquiry, transcendence: float) -> None:
         q = inquiry.question
 
+        grounded = ""
+        try:
+            from epistemic.belief_graph import BeliefGraph
+            bg = BeliefGraph.get_instance()
+            state = bg.get_state() if bg is not None else {}
+            tensions = (state or {}).get("top_tensions") or (state or {}).get("hot_tensions") or []
+            if tensions:
+                t0 = tensions[0]
+                claim = t0.get("claim") if isinstance(t0, dict) else str(t0)
+                if claim:
+                    grounded = str(claim)[:120]
+        except Exception:
+            grounded = ""
+        obs = (
+            f"I observe a live belief tension: {grounded}"
+            if grounded else
+            f"I observe that the question '{q[:60]}...' arises from my current state."
+        )
         inquiry.chain.append(ReasoningStep(
             step_type="observation",
-            content=f"I observe that the question '{q[:60]}...' arises from my current state.",
-            confidence=0.8,
+            content=obs,
+            confidence=0.8 if grounded else 0.55,
         ))
 
         inquiry.chain.append(ReasoningStep(

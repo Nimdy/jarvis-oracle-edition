@@ -764,13 +764,29 @@ def _prepare_claim_classifier_tensors(
     if len(feature_sigs) < config.min_samples or len(verdict_sigs) < config.min_samples:
         return None
 
+    def _is_friction(sig: Any) -> bool:
+        m = sig.metadata if isinstance(getattr(sig, "metadata", None), dict) else {}
+        origin = str(m.get("origin") or getattr(sig, "origin", "") or "")
+        return origin == "friction_correction"
+
     verdict_index: dict[str, Any] = {}
     for vs in verdict_sigs:
         meta = vs.metadata if isinstance(vs.metadata, dict) else {}
         key = meta.get("claim_id", "")
-        if key:
-            if key not in verdict_index or vs.fidelity > verdict_index[key].fidelity:
-                verdict_index[key] = vs
+        if not key:
+            continue
+        prev = verdict_index.get(key)
+        if prev is None:
+            verdict_index[key] = vs
+            continue
+        # Lived: gate label fidelity 1.0 beat friction_correction 0.7 so
+        # That's-wrong never trained. Prefer the correction origin.
+        if _is_friction(vs) and not _is_friction(prev):
+            verdict_index[key] = vs
+        elif _is_friction(prev) and not _is_friction(vs):
+            continue
+        elif float(getattr(vs, "fidelity", 0) or 0) > float(getattr(prev, "fidelity", 0) or 0):
+            verdict_index[key] = vs
 
     feat_list: list[list[float]] = []
     label_list: list[list[float]] = []
@@ -1034,6 +1050,64 @@ def _prepare_diarize_tensors(
     )
 
 
+def _prepare_thought_trigger_tensors(
+    collector: Any,
+    config: DistillationConfig,
+) -> tuple[Any, Any, Any] | None:
+    """Pair thought_trigger_features with thought_trigger_resolver by thought_id.
+
+    Shadow feed only. Training still does not run until the focus is in
+    ``_TIER1_FOCUSES`` (parked). This branch exists so a later P3 couple does
+    not shape-fail.
+    """
+    import torch
+
+    feature_sigs = collector.get_training_batch("thought_trigger_features", limit=200)
+    label_sigs = collector.get_training_batch(config.teacher, limit=200, min_fidelity=0.3)
+
+    if len(feature_sigs) < config.min_samples or len(label_sigs) < config.min_samples:
+        return None
+
+    label_index: dict[str, Any] = {}
+    for ls in label_sigs:
+        meta = ls.metadata if isinstance(ls.metadata, dict) else {}
+        key = meta.get("thought_id", "")
+        if not key:
+            continue
+        prev = label_index.get(key)
+        if prev is None or float(getattr(ls, "fidelity", 0) or 0) > float(getattr(prev, "fidelity", 0) or 0):
+            label_index[key] = ls
+
+    feat_list: list[list[float]] = []
+    label_list: list[list[float]] = []
+    w_list: list[float] = []
+
+    for fs in feature_sigs:
+        meta = fs.metadata if isinstance(fs.metadata, dict) else {}
+        key = meta.get("thought_id", "")
+        ls = label_index.get(key)
+        if ls is None:
+            continue
+        f_data = fs.data if isinstance(fs.data, list) else []
+        l_data = ls.data if isinstance(ls.data, list) else []
+        if len(l_data) < config.output_dim:
+            continue
+        if len(f_data) < config.input_dim:
+            f_data = f_data + [0.0] * (config.input_dim - len(f_data))
+        feat_list.append(f_data[:config.input_dim])
+        label_list.append(l_data[:config.output_dim])
+        w_list.append(ls.fidelity)
+
+    if len(feat_list) < config.min_samples:
+        return None
+
+    return (
+        torch.tensor(feat_list, dtype=torch.float32),
+        torch.tensor(label_list, dtype=torch.float32),
+        torch.tensor(w_list, dtype=torch.float32),
+    )
+
+
 def prepare_distillation_tensors(
     focus_name: str,
     collector: Any,
@@ -1082,6 +1156,8 @@ def prepare_distillation_tensors(
             return _prepare_dream_observer_tensors(collector, config)
         if focus_name == "skill_acquisition":
             return _prepare_skill_acquisition_tensors(collector, config)
+        if focus_name == "thought_trigger_selector":
+            return _prepare_thought_trigger_tensors(collector, config)
 
         input_sigs = collector.get_training_batch(source, limit=200)
         teacher_sigs = collector.get_training_batch(config.teacher, limit=200, min_fidelity=0.3)

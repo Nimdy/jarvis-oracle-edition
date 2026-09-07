@@ -73,6 +73,7 @@ _STOP_WORDS: frozenset[str] = frozenset({
     # Conversational filler that should not shape fallback skill IDs
     "hey", "okay", "able", "like", "please", "doing", "fine",
     "make", "were", "youre", "dont", "have", "dont", "need",
+    "learn", "skill", "new", "jarvis",
     # Stance / emotional words that produce garbage skill IDs
     "better", "worse", "serve", "operate", "shadows", "honest",
     "trust", "lying", "useless", "pointless", "waste", "terrible", "mad",
@@ -577,6 +578,53 @@ SKILL_TEMPLATES: list[tuple[re.Pattern[str], SkillResolution]] = [
         ),
     ),
 ]
+
+
+_USER_TOOL_PHASES: list[dict[str, list[str]]] = [
+    {"name": "assess", "exit_conditions": []},
+    {"name": "research", "exit_conditions": ["artifact:research_summary"]},
+    {"name": "integrate", "exit_conditions": ["artifact:integration_test_passed"]},
+    {"name": "verify", "exit_conditions": ["evidence:test:procedure_smoke"]},
+    {"name": "register", "exit_conditions": ["skill_status:verified"]},
+]
+
+
+def promote_user_tool_resolution(
+    resolution: SkillResolution,
+    user_text: str,
+) -> SkillResolution:
+    """Upgrade an off-catalog operator learn-X onto the plugin workshop.
+
+    Catalog templates (CSV, scrape) already carry this contract. Voice/GOLDEN
+    fallback does not — it used to race to verify and die. Auto-gate still
+    uses raw ``resolve_skill`` and skips generic fallback.
+    """
+    trigger = (user_text or "").strip()
+    return SkillResolution(
+        skill_id=resolution.skill_id,
+        name=resolution.name,
+        capability_type="procedural",
+        risk_level="low",
+        required_evidence=["test:procedure_smoke", "test:sandbox_execution_pass"],
+        capability=StructuredCapability(
+            input_type="operator_request",
+            output_type="structured_tool_result",
+            success_metrics=("procedure_smoke_passed", "sandbox_execution_pass"),
+            evidence_requirements=(
+                "active_plugin_or_tool_path",
+                "sandbox_execution_artifact",
+            ),
+            execution_contract_id=f"{resolution.skill_id}_plugin",
+            required_executor_kind="plugin",
+            acquisition_eligible=True,
+        ),
+        default_phases=list(_USER_TOOL_PHASES),
+        notes=(
+            f"Auto-generated from: \"{trigger[:80]}\". "
+            "Operator-requested tool: research drafts required/expected, "
+            "then waits for approval before building a plugin."
+        ),
+    )
 
 
 def resolve_skill(user_text: str) -> SkillResolution | None:

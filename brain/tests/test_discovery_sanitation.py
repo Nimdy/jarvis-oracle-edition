@@ -59,6 +59,13 @@ class TestIsActionableCapabilityPhrase:
     def test_reject_who_told_you(self):
         assert not is_actionable_capability_phrase("who told you to do that")
 
+    def test_accept_lived_non_template_learn_requests(self):
+        """Lived 2026-09-06: dice/quiz/tasks must not fail create_job as garbage."""
+        assert is_actionable_capability_phrase("roll a 20-sided dice")
+        assert is_actionable_capability_phrase("quiz me on large language models")
+        assert is_actionable_capability_phrase("keep a list of tasks")
+        assert is_actionable_capability_phrase("roll 20sided dice")
+
 
 class TestNormalizerRejectsJunk:
     """The normalizer should return _REJECTED_FAMILY for non-actionable text."""

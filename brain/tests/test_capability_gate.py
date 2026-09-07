@@ -596,6 +596,53 @@ def test_blocks_expanded_offer_patterns():
     print("  PASS: blocks expanded offer patterns")
 
 
+def test_residual_sweep_requires_first_person_in_same_sentence():
+    """Lived 2026-08-31: closer 'I'm here' must not strip a later user-pref
+    sentence that names electronic dance music. Blocked verbs stay blocked
+    when the self-actor is IN the claim sentence.
+    """
+    gate = CapabilityGate(_fresh_registry())
+    pref = (
+        "You've mentioned that you enjoy electronic dance music to keep you energized. "
+        "I'm here if you want to talk."
+    )
+    out = gate.check_text(pref)
+    assert "electronic dance music" in out.lower(), out
+    assert "enjoy" in out.lower(), out
+
+    must_die = [
+        "I can play music.",
+        "I can dance.",
+        "I danced the waltz.",
+        "Jarvis can sing a song.",
+        "This AI can sing very well.",
+    ]
+    for s in must_die:
+        blocked = gate.check_text(s)
+        low = blocked.lower()
+        assert "capability" in low or not any(
+            verb in low for verb in ("play music", "can dance", "danced", "sing")
+        ), (s, blocked)
+        if s.startswith("I can play") or s.startswith("I can dance"):
+            assert "capability" in low or ("music" not in low and "dance" not in low), (
+                s, blocked
+            )
+
+
+def test_blocks_pull_more_details_operational_claim():
+    """Native MEMORY used to invite 'I can pull more details if you want.'
+    L0 must still kill that tool-shaped closer if it appears.
+    """
+    gate = CapabilityGate(_fresh_registry())
+    out = gate.check_text(
+        "Here's what I remember about that. User is David. "
+        "I can pull more details if you want."
+    )
+    low = out.lower()
+    assert "pull more details" not in low, out
+    assert "pull more" not in low, out
+
+
 def test_blocks_residual_sweep_patterns():
     """Phrases caught by the whole-chunk blocked-verb sweep.
 
@@ -682,6 +729,17 @@ def test_self_state_and_affect_rewrites():
         assert signal.lower() not in out.lower(), (
             f"Expected rewrite of '{signal}' in: {text!r} -> got {out!r}"
         )
+        assert "active and listening" not in out.lower(), (
+            f"L0 must not inject the active-and-listening tic: {text!r} -> {out!r}"
+        )
+    leftover = gate.check_text(
+        "You're a software engineer, and I'm here to help with your work."
+    )
+    assert "active and listening" not in leftover.lower()
+    parrot = gate.check_text(
+        "David, I'm active and listening. Everything is indeed going well."
+    )
+    assert "active and listening" not in parrot.lower()
     stats = gate.get_stats()
     assert stats["self_state_rewrites"] + stats["affect_rewrites"] > 0, (
         f"Expected non-zero rewrite counters, got self_state={stats['self_state_rewrites']}, "
@@ -955,6 +1013,69 @@ def test_commitment_tool_shaped_future_work_unbacked_rewritten():
         assert changed is True
         assert "background task" in new_text.lower()
     print("  PASS: tool-shaped future work commitments rewrite when unbacked")
+
+
+def test_memory_write_unbacked_is_rewritten():
+    """Lived: 'I've updated my records' / 'I'll keep those names' with no write."""
+    gate = CapabilityGate(_fresh_registry())
+    for text in (
+        "I've updated my records.",
+        "I'll make sure to keep those names.",
+        "I'll ensure the records are updated properly.",
+        "I've added them to my memory.",
+    ):
+        new_text, changed = gate.evaluate_memory_write(text, backing_write_ids=None)
+        assert changed is True, text
+        assert "did not write a new fact" in new_text.lower(), (text, new_text)
+        assert "capability" not in new_text.lower(), new_text
+    print("  PASS: unbacked memory-write claims rewritten")
+
+
+def test_memory_write_backed_passes_through():
+    gate = CapabilityGate(_fresh_registry())
+    text = "I've updated my records."
+    new_text, changed = gate.evaluate_memory_write(
+        text, backing_write_ids=["User's son is Kai"],
+    )
+    assert changed is False
+    assert new_text == text
+    print("  PASS: backed memory-write claim passes")
+
+
+def test_ungrounded_visual_attendance_is_rewritten():
+    """Lived: job NONE reply invented watching a named pet with no visual ID."""
+    gate = CapabilityGate(_fresh_registry())
+    text = (
+        "You work as a software engineer. I'm also keeping an eye on Mira, "
+        "just in case she needs a little extra attention."
+    )
+    out = gate.check_text(text)
+    assert "keeping an eye" not in out.lower(), out
+    assert "visual identification" in out.lower(), out
+    print("  PASS: ungrounded visual attendance rewritten")
+
+
+def test_grounded_watch_claim_can_pass():
+    gate = CapabilityGate(_fresh_registry())
+    gate.set_perception_evidence(True)
+    text = "Based on current sensor data, I can see you at the desk."
+    out = gate.check_text(text)
+    assert "I can see you" in out or "sensor" in out.lower()
+    print("  PASS: grounded see-claim not stripped by attendance rewrite")
+
+
+def test_memory_write_safe_reflections_ignored():
+    gate = CapabilityGate(_fresh_registry())
+    for text in (
+        "I'll remember that.",
+        "I'll keep that in mind.",
+        "I'll keep it light.",
+        "I remember your family.",
+    ):
+        new_text, changed = gate.evaluate_memory_write(text, backing_write_ids=None)
+        assert changed is False, (text, new_text)
+        assert new_text == text
+    print("  PASS: memory-write extractor ignores conversational reflections")
 
 
 if __name__ == "__main__":

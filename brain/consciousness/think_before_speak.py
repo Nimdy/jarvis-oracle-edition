@@ -32,6 +32,15 @@ from typing import Any
 logger = logging.getLogger("jarvis.tbs")
 
 _SHADOW_LOG = str(Path.home() / ".jarvis" / "pre_speech_shadow.jsonl")
+_TBS1_PATH = str(Path.home() / ".jarvis" / "pre_speech_tbs1.json")
+
+# Post-hoc advisory/read → TBS stance family. Soften is distress-family with give_space.
+_POSTHOC_STANCE = {
+    "be_concise": "lean_concise",
+    "give_space": "give_space",
+    "soften_tone": "give_space",
+    "lean_into_warmth": "match_warmth",
+}
 
 # Single source of truth: the behavior_advisory person-aware floor (a learned disposition only counts
 # once earned). IMPORTED, not re-hardcoded, so the two can't silently desync. Fallback if unavailable.
@@ -78,7 +87,14 @@ class PreSpeechReader:
         self._stance_counts: dict[str, int] = {}
         self._last: PreSpeechStance | None = None
         self._recent: deque[PreSpeechStance] = deque(maxlen=50)
+        self._tbs1_scored = 0
+        self._tbs1_match = 0
+        self._tbs1_related = 0
+        self._tbs1_mismatch = 0
+        self._tbs1_abstain = 0
+        self._tbs1_last: dict[str, Any] | None = None
         self._load()   # rebuild glass-box counters from the durable log so it survives reboots
+        self._load_tbs1()
 
     @classmethod
     def get_instance(cls) -> "PreSpeechReader":
@@ -180,6 +196,102 @@ class PreSpeechReader:
         except Exception:
             logger.debug("pre-speech load failed (fail-open)", exc_info=True)
 
+    @staticmethod
+    def _posthoc_stance(read: Any, advisory: Any = None) -> str:
+        """Map the post-hoc read/advisory onto a TBS stance family. Delay-only is none."""
+        if advisory is not None:
+            for sug in getattr(advisory, "suggestions", None) or []:
+                adj = str((sug or {}).get("adjustment") or "")
+                if adj in _POSTHOC_STANCE:
+                    return _POSTHOC_STANCE[adj]
+        would = str(getattr(read, "would_have_done", "") or "").lower()
+        if "more concise" in would:
+            return "lean_concise"
+        if "giving space" in would:
+            return "give_space"
+        if "softening" in would:
+            return "give_space"
+        if "warmth" in would or "rapport" in would:
+            return "match_warmth"
+        return "none"
+
+    @staticmethod
+    def _agreement(pre: str, post: str) -> str:
+        pre = pre or "none"
+        post = post or "none"
+        if pre == "none" and post == "none":
+            return "abstain"
+        if pre == post:
+            return "match"
+        # Distress family: give_space vs a mapped soften (already collapsed to give_space).
+        if {pre, post} <= {"give_space", "lean_concise"} and pre != post:
+            return "mismatch"
+        if pre == "none" or post == "none":
+            return "mismatch"
+        return "mismatch"
+
+    def score_against_post_hoc(
+        self, stance: PreSpeechStance | None, read: Any, advisory: Any = None,
+    ) -> dict[str, Any]:
+        """TBS-1: score the pre-speech stance vs the post-hoc read. Injects nothing."""
+        pre = (stance.stance if stance is not None else "none") or "none"
+        post = self._posthoc_stance(read, advisory)
+        verdict = self._agreement(pre, post)
+        self._tbs1_scored += 1
+        if verdict == "match":
+            self._tbs1_match += 1
+        elif verdict == "related":
+            self._tbs1_related += 1
+        elif verdict == "abstain":
+            self._tbs1_abstain += 1
+        else:
+            self._tbs1_mismatch += 1
+        row = {
+            "pre": pre, "post": post, "verdict": verdict,
+            "injected": False, "timestamp": time.time(),
+        }
+        self._tbs1_last = row
+        self._save_tbs1()
+        return row
+
+    def _tbs1_agreement_rate(self) -> float | None:
+        denom = self._tbs1_scored - self._tbs1_abstain
+        if denom <= 0:
+            return None
+        return round((self._tbs1_match + 0.5 * self._tbs1_related) / denom, 3)
+
+    def _save_tbs1(self) -> None:
+        try:
+            Path(_TBS1_PATH).parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "scored": self._tbs1_scored,
+                "match": self._tbs1_match,
+                "related": self._tbs1_related,
+                "mismatch": self._tbs1_mismatch,
+                "abstain": self._tbs1_abstain,
+                "last": self._tbs1_last,
+            }
+            with open(_TBS1_PATH, "w", encoding="utf-8") as f:
+                json.dump(payload, f)
+        except Exception:
+            logger.debug("tbs1 save failed (fail-open)", exc_info=True)
+
+    def _load_tbs1(self) -> None:
+        try:
+            if not os.path.exists(_TBS1_PATH):
+                return
+            with open(_TBS1_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+            self._tbs1_scored = int(data.get("scored", 0) or 0)
+            self._tbs1_match = int(data.get("match", 0) or 0)
+            self._tbs1_related = int(data.get("related", 0) or 0)
+            self._tbs1_mismatch = int(data.get("mismatch", 0) or 0)
+            self._tbs1_abstain = int(data.get("abstain", 0) or 0)
+            last = data.get("last")
+            self._tbs1_last = last if isinstance(last, dict) else None
+        except Exception:
+            logger.debug("tbs1 load failed (fail-open)", exc_info=True)
+
     def get_status(self) -> dict[str, Any]:
         """GLASS BOX — the full observable state of TBS-0. ``injects_prompt`` is structurally False so the
         zero-authority guarantee is auditable from the panel."""
@@ -192,9 +304,21 @@ class PreSpeechReader:
             "stance_distribution": dict(self._stance_counts),
             "last": self._last.to_dict() if self._last else None,
             "recent": [s.to_dict() for s in list(self._recent)[-10:]],
+            "advisory_score": {
+                "phase": "TBS-1_score_against_post_hoc",
+                "scored": self._tbs1_scored,
+                "match": self._tbs1_match,
+                "related": self._tbs1_related,
+                "mismatch": self._tbs1_mismatch,
+                "abstain": self._tbs1_abstain,
+                "agreement_rate": self._tbs1_agreement_rate(),
+                "last": self._tbs1_last,
+                "injects_prompt": False,
+            },
             "earns_next_by": ("TBS-1: the pre-speech stance matches the post-hoc read + transcript review; "
                               "TBS-2: it earns prompt-injection via the style_instruction seam (the P3->P4 flip)"),
             "note": ("pre-speech stance computed BEFORE generation; LOGGED only, never injected (TBS-0). "
+                     "TBS-1 scores that stance against the post-hoc read. Still never injected. "
                      "Reuses theory_of_mind + behavior_advisory vocabulary. docs/THINK_BEFORE_SPEAK.md"),
         }
 

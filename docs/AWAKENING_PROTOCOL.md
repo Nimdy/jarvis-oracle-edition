@@ -1,5 +1,9 @@
 # The Awakening Protocol — JARVIS Must Be Born, Not Booted
 
+> **First-install operator script (follow exactly):**
+> [docs/v2/01-first-contact.md](v2/01-first-contact.md).
+> Phrases there match the live IDENTITY / intel / correction wire.
+>
 > **Primary reading surface:** The dashboard `/learning` page now consolidates
 > the operator learning path for open-source release. This Markdown file remains
 > source/reference material and should not be deleted until a later archive pass.

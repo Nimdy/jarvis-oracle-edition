@@ -2,41 +2,95 @@
 
 This file provides guidance to AI coding agents when working with this repository.
 
+**Mandatory first read:** [docs/NOW.md](docs/NOW.md) — current branch, life-phase, leftovers, **How we test**. Verbal conversation testing always enters `handle_transcription` via Pi STT **or** [docs/OPERATOR_PROXY_TAP.md](docs/OPERATOR_PROXY_TAP.md) (`POST /api/operator/tap`, not `/api/chat`). Pytest under `brain/tests/` **stays and is correct** — contract pins, **not sits**. Green pytest ≠ she spoke it. Then [docs/AGENT_MAP.md](docs/AGENT_MAP.md) — what this is, one spoken turn, who has authority, what not to invent. Roster: Grok 4.6 in-chair; Shockwave debug/docs; Megatron pulse. Frozen snapshot: [docs/SHOCKWAVE_HANDOFF.md](docs/SHOCKWAVE_HANDOFF.md) (do not take its git HEAD as current). Growth validation: [docs/shockwave/GROWTH_VALIDATION.md](docs/shockwave/GROWTH_VALIDATION.md). **REAL means defect, not “the wire works.”** The rest of this file is the field manual. If you skip the map and edit conversation / OSV / memory / routing / TTS / preferences, you will ship a parallel.
+
+**Queue (do not invent a second one):** [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8) — sort by **Sequence**. `docs/NOW.md` wins over every other git/stage/issue line. [Project 2](https://github.com/users/Nimdy/projects/2) is a **closed archive** — ignore it. **#83** is frozen campaign notes — do not execute those checkboxes. `build-now` on a parked/closed issue is not permission to start Matrix / L7 / HRR / lidar.
+
+## STOP. Gated is not missing. Do not build a parallel.
+
+Agents keep damaging this platform the same way: something sounds wrong, too long, too technical, or "not routing," so they add a regex, a new `kind`, a new register, a new preference key, or a second renderer. That is almost always wrong.
+
+**Default assumption:** the subsystem already exists and is shadow, gated, `PRE-MATURE`, or `not_born`. A spec-sheet on TTS is often the **deterministic floor waiting for a gated mouth**, not a missing feature.
+
+### Mandatory search — fail the change if you skipped it
+
+Before adding a classifier, route override, `kind`, register, preference key, or parallel articulator:
+
+1. Search the repo for the behavior (`rg` verbosity, briefing, gist, revoice, response_style, native_voice, theory_of_mind, think_before_speak).
+2. Open `brain/nn_fleet_registry.json` and `docs/MATURITY_GATES_REFERENCE.md` for that name.
+3. If the file says shadow / teacher-only / `not_born` / default-OFF, **stop**. Tell the operator the gate. Do not bypass it with keywords.
+4. If user preferences already store it (`response_style`, `Relationship.preferences`, ToM `verbosity_pref`), **use that store**. Do not invent `briefing_register`.
+5. If P1 self-view is "too much like a dashboard," the mouth is already `brain/cognition/self_view/revoice.py` + `voice_seed.py` (`native_voice`, **not_born**). P1 **must** speak the grounded articulator until that student is born. Do not add exec/tech/ops mouths to `articulate.py`.
+
+### Lived miss 2026-08-24 — do not repeat
+
+Operator asked for exec-suite vs tech vs ops articulation, stored on user preferences. The stack was already wired:
+
+- OSV articulator = full grounded facts (source of truth)
+- `revoice.py` = lead with the gist, offer to go deeper, not a spec sheet
+- `voice_seed` teacher pairs; live speech stays deterministic **on purpose** (LLM must not author self-facts)
+- `response_style` concise/detailed, `_policy_response_length`, ToM `verbosity_pref`, TBS-0 `lean_concise`
+
+An agent added `classify_register` + three articulator mouths + `Relationship.preferences["briefing_register"]`. Reverted in `69d7819`. That hack would also have poisoned the native_voice teacher (gist trained as grounded).
+
+### Lived miss 2026-08-31 — memory / epistemic (do not repeat)
+
+Stage 6 sits: about-me native MEMORY dumped session headers then L0 ate “pull more details if you want”; EDM prefs injected then L0 residual sweep cut `music`/`dance` because `I'm here` was elsewhere in the reply. Family/job/morning were already mouth-true.
+
+**Wrong “fixes” (if you almost typed one, stop):**
+
+- Steal about-me off native MEMORY onto the LLM so it “names the family”
+- Delete `music` / `dance` from `_BLOCKED_CAPABILITY_VERBS` or skip L0 on MEMORY
+- Add an EDM / “user likes music” whitelist
+- Speak fractal chains, dream_observer, or HRR album as autobiography
+- Treat `Fractal recall: no seed above 0.40` as a broken hippocampus
+- Treat prove.html Claim 2 PROVEN as “she retrieved a dream in conversation”
+- Weaken L3 guest lock; delete session memories; lower Face 0.55
+
+**Respectful couple only (and only when David names it):** keep native MEMORY; stop the formatter’s operational invite; do not *declare* session bookkeeping as “what I know about you”; residual sweep first-person **same sentence** as the blocked verb. Ranker / L3 / vec / dream firewall / fractal / HRR / L0-as-a-layer stay.
+
+Canon: [docs/NOW.md](docs/NOW.md) § STOP — spoken memory vs silent memory. [docs/AGENT_MAP.md](docs/AGENT_MAP.md) Memory section.
+
+### What No-Verb-Hacking forbids here
+
+Not only CapabilityGate phrase lists. Also: a second copy of a gated path; a keyword overlay that pretends a shadow NN is live; shrinking the source of truth so the dump "sounds like JARVIS."
+
+Do not silently flip `OSV_P2_ACTIVE`, revoice-live, voice-intent, or native_voice. Promote a gate only when the operator asks.
+
+Turn flow (match this before adding a route or mouth). TAP injects at the
+same `handle_transcription` node as Pi STT:
+
+```mermaid
+flowchart TD
+  stt[STT or TAP → handle_transcription]
+  router[tool_router]
+  p1{P1 self-view kind?}
+  vis{VISION look / what do you see / targeted VQA?}
+  about{about-X and not P1?}
+  osv[articulate_self_view speaks — LLM does not author]
+  eyes[Pi JPEG + brain VLM caption — LLM does not author the room]
+  mem[MEMORY search]
+  llm[LLM as voice under L0]
+  tts[TTS]
+  seed[revoice teacher AFTER speech]
+  stt --> router --> p1
+  p1 -->|yes| osv --> tts --> seed
+  p1 -->|no| vis
+  vis -->|yes| eyes --> tts
+  vis -->|no| about
+  about -->|yes| mem --> tts
+  about -->|no| llm --> tts
+```
+
+Full diagrams, memory write/recall, and the symptom table: [docs/AGENT_MAP.md](docs/AGENT_MAP.md).
+
 ## Project Overview
 
 **Jarvis** is a two-device AI consciousness system:
 - **Pi 5** (with Hailo-10H AI HAT+) = the **senses** — vision (Hailo AI HAT+), raw audio streaming, audio playback, cyberpunk particle display
 - **Desktop/Laptop** (with NVIDIA GPU) = the **brain** — self-evolving consciousness engine, neural policy layer, self-improvement loop, Ollama LLM, GPU STT (faster-whisper), wake word detection (openWakeWord), VAD (Silero), TTS (Kokoro), personality, memory
 
-The brain is **hardware-adaptive**: on startup it auto-detects GPU VRAM and CPU capabilities, then selects model sizes, compute types, device assignments, and VRAM management strategy. See `brain/hardware_profile.py` for the full tier system.
-
-**GPU VRAM Tiers** (7 tiers): minimal (<4GB), low (4-6GB), medium (6-8GB), high (8-12GB), premium (12-16.5GB), ultra (16.5-24.5GB), extreme (24.5GB+). Models can be kept always-loaded in VRAM on premium+ tiers, eliminating cold-start latency.
-
-**CPU Tiers** (4 tiers based on threads + RAM): weak (<4 threads), standard (4-7 threads), strong (8-15 threads, 8GB+), beast (16+ threads, 16GB+). On strong/beast CPUs, `_apply_cpu_overlay()` offloads ancillary ML models (emotion, speaker ID, embeddings, hemisphere) from GPU to CPU, freeing ~1-1.5 GB VRAM.
-
-**VRAM Budget (premium tier, ~16GB GPU, standard CPU — all ML on GPU)**:
-
-| Model | VRAM | Residency | Device |
-|---|---|---|---|
-| Ollama qwen3:8b (primary=fast) | ~5,000 MB | Always (warmup, 30m keep) | GPU (Ollama-managed) |
-| faster-whisper large-v3 (int8_float16) | ~2,000 MB | Always | GPU (CTranslate2) |
-| wav2vec2 emotion | ~500 MB | Always | GPU or CPU (tier-dependent) |
-| ECAPA-TDNN speaker ID | ~300 MB | Always | GPU or CPU (tier-dependent) |
-| Kokoro TTS (ONNX) | ~250 MB | Always | GPU or CPU (tier-dependent) |
-| all-MiniLM-L6-v2 embeddings | ~120 MB | Always | GPU or CPU (tier-dependent) |
-| MobileFaceNet face ID (ONNX) | ~20 MB | Always | GPU or CPU (follows speaker_id device) |
-| Hemisphere NNs (PyTorch, tiny) | ~1 MB | Always | GPU or CPU (tier-dependent) |
-| PyTorch/CUDA framework overhead | ~400 MB | Static | GPU |
-| **TOTAL RESIDENT** | **~8,600 MB** | | |
-| qwen2.5vl:7b (vision) | ~5,000 MB | On-demand | GPU (Ollama-managed) |
-
-**CPU-only models (all tiers)**: Policy NN (<1 MB), Memory Cortex NNs (<0.1 MB), openWakeWord (~30 MB ONNX), Silero VAD (~10 MB), Coding LLM qwen2.5-coder:7b (~5 GB RAM, separate Ollama on port 11435 with `CUDA_VISIBLE_DEVICES=""`), CoderServer Qwen3-Coder-Next (25-48 GB RAM, on-demand llama-server, spawned and killed per generation, `CODER_GPU_LAYERS=0`).
-
-**Critical VRAM constraint**: At premium tier, primary and fast LLM are both qwen3:8b (~5 GB). You CANNOT simply "use a bigger model" — loading qwen3:14b (~8.5 GB) alongside STT (~2 GB), TTS (~250 MB), emotion (~500 MB), speaker ID (~300 MB), embeddings (~120 MB), and framework overhead (~400 MB) exceeds 12 GB and risks OOM during concurrent STT+LLM operations. The fast/standard model being the same is by design — the token cap (150 for simple, 1536 for complex) is the differentiation lever, not model size. Do not recommend model size changes without first computing the full VRAM budget from `hardware_profile.py`.
-
-**VRAM contention management**: `PerceptionOrchestrator` has `_ensure_vram_for_stt()` and `_release_vram_after_stt()`. On premium+, only non-essential Ollama models (vision) are unloaded before STT. Below premium, ALL Ollama models are unloaded before STT and reloaded after. The `OllamaClient` has `unload_non_essential()` and `unload_all()` for this.
-
-Communication is over WebSocket on the local network. The Pi is a sensor node; the brain PC is the source of truth for all consciousness state. All self-evolution, meta-cognition, and neural policy runs **only** on the brain.
+The Pi is a sensor node; the brain is the source of truth. All self-evolution, meta-cognition, and neural policy run **only** on the brain (WebSocket on the LAN). The LLM is voice, not the brain. Hardware-adaptive VRAM/CPU tiering: `brain/hardware_profile.py` — full budget tables are under **Hardware / VRAM** (before Quick Start). Do not recommend a bigger LLM without computing that budget.
 
 ## Scope and Capability Framing
 
@@ -47,7 +101,7 @@ This section exists so AI agents reading AGENTS.md stop mis-framing what Jarvis 
 A locally-hostable, fully-governed cognitive substrate with:
 - self-directed skill acquisition (`acquisition/` + `skills/` + `tools/plugins/`)
 - self-modifying code under quorum (`self_improve/` stage 0/1/2, human-approval gate, sandbox + kernel tick sim, atomic rollback)
-- an 11-layer epistemic immune system (capability gate → attribution ledger → provenance → identity boundary → scene model → delayed attribution → typed contradictions → truth calibration → belief graph → quarantine → reflective audit → soul integrity → epistemic compaction)
+- a 15-entry epistemic immune system (L0–L12 + L3A/L3B: capability gate → attribution ledger → provenance → identity boundary → identity persistence → scene model → delayed attribution → typed contradictions → truth calibration → belief graph → quarantine → reflective audit → soul integrity → epistemic compaction → intention truth)
 - internal multi-agent neural dialog via the hemisphere system + global broadcast slots + meta-cognitive thought cycles + philosophical dialogue + reflective audit
 - restart-honest continuity (persistence, maturity high-water, gated auto-restore, supervisor crash backoff)
 - truth-boundary-preserving synthetic growth lanes (synthetic perception + synthetic claim exercise, fidelity capped, never contaminates lived history)
@@ -561,6 +615,36 @@ brain/                           # Runs on desktop/laptop with NVIDIA GPU
     soak_test.py                 # Automated 50+ interaction stability test
 ```
 
+## Hardware / VRAM
+
+The brain is **hardware-adaptive**: on startup it auto-detects GPU VRAM and CPU capabilities, then selects model sizes, compute types, device assignments, and VRAM management strategy. See `brain/hardware_profile.py` for the full tier system.
+
+**GPU VRAM Tiers** (7 tiers): minimal (<4GB), low (4-6GB), medium (6-8GB), high (8-12GB), premium (12-16.5GB), ultra (16.5-24.5GB), extreme (24.5GB+). Models can be kept always-loaded in VRAM on premium+ tiers, eliminating cold-start latency.
+
+**CPU Tiers** (4 tiers based on threads + RAM): weak (<4 threads), standard (4-7 threads), strong (8-15 threads, 8GB+), beast (16+ threads, 16GB+). On strong/beast CPUs, `_apply_cpu_overlay()` offloads ancillary ML models (emotion, speaker ID, embeddings, hemisphere) from GPU to CPU, freeing ~1-1.5 GB VRAM.
+
+**VRAM Budget (premium tier, ~16GB GPU, standard CPU — all ML on GPU)**:
+
+| Model | VRAM | Residency | Device |
+|---|---|---|---|
+| Ollama qwen3:8b (primary=fast) | ~5,000 MB | Always (warmup, 30m keep) | GPU (Ollama-managed) |
+| faster-whisper large-v3 (int8_float16) | ~2,000 MB | Always | GPU (CTranslate2) |
+| wav2vec2 emotion | ~500 MB | Always | GPU or CPU (tier-dependent) |
+| ECAPA-TDNN speaker ID | ~300 MB | Always | GPU or CPU (tier-dependent) |
+| Kokoro TTS (ONNX) | ~250 MB | Always | GPU or CPU (tier-dependent) |
+| all-MiniLM-L6-v2 embeddings | ~120 MB | Always | GPU or CPU (tier-dependent) |
+| MobileFaceNet face ID (ONNX) | ~20 MB | Always | GPU or CPU (follows speaker_id device) |
+| Hemisphere NNs (PyTorch, tiny) | ~1 MB | Always | GPU or CPU (tier-dependent) |
+| PyTorch/CUDA framework overhead | ~400 MB | Static | GPU |
+| **TOTAL RESIDENT** | **~8,600 MB** | | |
+| qwen3-vl:8b (vision) | ~5,000 MB | On-demand | GPU (Ollama-managed) |
+
+**CPU-only models (all tiers)**: Policy NN (<1 MB), Memory Cortex NNs (<0.1 MB), openWakeWord (~30 MB ONNX), Silero VAD (~10 MB), Coding LLM qwen2.5-coder:7b (~5 GB RAM, separate Ollama on port 11435 with `CUDA_VISIBLE_DEVICES=""`), CoderServer Qwen3-Coder-Next (25-48 GB RAM, on-demand llama-server, spawned and killed per generation, `CODER_GPU_LAYERS=0`).
+
+**Critical VRAM constraint**: At premium tier, primary and fast LLM are both qwen3:8b (~5 GB). You CANNOT simply "use a bigger model" — loading qwen3:14b (~8.5 GB) alongside STT (~2 GB), TTS (~250 MB), emotion (~500 MB), speaker ID (~300 MB), embeddings (~120 MB), and framework overhead (~400 MB) exceeds 12 GB and risks OOM during concurrent STT+LLM operations. The fast/standard model being the same is by design — the token cap (150 for simple, 1536 for complex) is the differentiation lever, not model size. Do not recommend model size changes without first computing the full VRAM budget from `hardware_profile.py`.
+
+**VRAM contention management**: `PerceptionOrchestrator` has `_ensure_vram_for_stt()` and `_release_vram_after_stt()`. On premium+, only non-essential Ollama models (vision) are unloaded before STT. Below premium, ALL Ollama models are unloaded before STT and reloaded after. The `OllamaClient` has `unload_non_essential()` and `unload_all()` for this.
+
 ## Quick Start
 
 ### Pi 5 (Senses)
@@ -592,7 +676,7 @@ cd brain && ./setup.sh
 
 3. **Budget-Aware Consciousness**: The kernel ticks at 100ms base / cadence_multiplier (0.5×–2.0× depending on mode). Three priority queues (REALTIME, INTERACTIVE, BACKGROUND) ensure phase transitions never wait for evolution or existential reasoning. Over-budget background ops are deferred to the next tick with spare budget.
 
-4. **Epistemic Integrity Stack**: 11 layers (0–11 + 3A + 3B) protect cognitive integrity — from capability gate honesty (L0) through attribution ledger (L1), provenance (L2), identity boundary (L3/3A), scene model (L3B), delayed attribution (L4), typed contradictions (L5), truth calibration (L6), belief graph (L7), quarantine (L8), reflective audit (L9), soul integrity index (L10), and epistemic compaction (L11).
+4. **Epistemic Integrity Stack**: 15 entries (L0–L12 + L3A/L3B) protect cognitive integrity — from capability gate honesty (L0) through attribution ledger (L1), provenance (L2), identity boundary (L3), identity persistence (L3A), scene model (L3B), delayed attribution (L4), typed contradictions (L5), truth calibration (L6), belief graph (L7), quarantine (L8), reflective audit (L9), soul integrity index (L10), epistemic compaction (L11), and intention truth (L12). Do not write "11-layer" or "13-layer" in new text; the locked count is 15 entries in `brain/subsystem_registry.json`.
 
 5. **Self-Knowledge Before Self-Reflection**: Every LLM prompt ends with honesty directives. `ConsciousnessCommunicator` outputs only verified metrics. `CapabilityGate` scans all outgoing text with 7 sequential enforcement layers, 15 claim patterns (including action confabulation detection), and a pre-LLM deterministic creation-request catch. Unverified claims are rewritten, never passed through.
 
@@ -615,16 +699,16 @@ cd brain && ./setup.sh
 5. **Mode check** — Is the current mode correct for this operation? CueGate blocks observation writes during dreaming/sleep/reflective/deep_learning. Sleep mode only allows 14 of 27 background cycles.
 6. **Quarantine check** — Is quarantine pressure affecting thresholds? At elevated (>0.3): raised promotion thresholds. At high (>0.6): policy promotion blocked, mutation cap halved, WM max level capped.
 7. **Baseline check** — Is the "failure" actually a yellow/progress state? Check quality baselines (e.g., soul integrity yellow >= 0.50, contradiction debt yellow <= 0.15).
-8. **Reset check** — Did the metric recently reset due to a brain restart? All accumulation counters restart at zero.
+8. **Restart vs wipe-reset check** — A *process restart* is not a wipe. Memories, beliefs, promotion JSON, critic logs, and NN weights persist. `current_ok` must recompute from live RAM and stay false until this session re-earns it. Matrix Tier-2 *authority* resets to probationary (asymmetric firewall) even though weights reload. A *wipe-reset* (`reset-brain.sh --confirm`) is the only path that zeros accumulation. Do not treat a cold start after a month off as a fresh brain.
 
 ### Common False Positives (NOT bugs)
 
 | What You See | Why It's Expected |
 |-------------|------------------|
 | Policy NN: 0 decisions, 0% win rate | Needs ~100 shadow A/B decisions from real conversations to start evaluating |
-| World Model: Level 0 (shadow) | Needs 50 validated predictions + 4 hours of runtime to promote |
-| Mental Simulator: 0 traces | Needs 100 validated simulations + 48 hours of shadow runtime |
-| Autonomy: Level 0 | 30-min warmup, then needs 10 positive deltas at 40% win rate for L2 |
+| World Model: Level 0 (shadow) | Only after a **wipe-reset**. A long-lived brain persists `world_model_promotion.json` (this operator's instance is L2). Process restart does not drop the level. The L2 rolling-accuracy number can still be persistence-dominated — treat the *estimand*, not the badge. |
+| Mental Simulator: 0 traces | Wipe-reset only. Needs 100 validated simulations + 48 hours of shadow runtime to *promote*. Persisted level can already be advisory. |
+| Autonomy: Level 0 | Wipe-reset only. After process restart, `current_level` may restore from disk while `current_ok=false` and `activation_ok=false`. That is restart-honest. |
 | Dashboard maturity bars all red | Every gate starts locked/zero on a fresh brain — they mature over hours/days |
 | PVL: 14 failing contracts | Many contracts require accumulated data (cortex training, associations, research episodes) |
 | Hemisphere: 0 broadcast slots | Specialists must progress through lifecycle ladder (candidate → probationary → verified → eligible → promoted) |
@@ -659,7 +743,7 @@ cd brain && ./setup.sh
 
 **Ambiguous Intent Policy (learning-first)**: Do not hard-map ambiguous user wording to a different strict intent class just to improve hit rate. Keep strict truth semantics in deterministic routes; treat these misses as shadow-learning opportunities that require correction evidence and promotion gates before behavior changes.
 
-**No Verb-Hacking Rule (routing AND CapabilityGate)**: Do not patch routing or CapabilityGate with one-off phrase/verb regexes just to make a single prompt pass. Routing changes must be intent-class and data-lane based (route semantics + provenance), not wording hacks. CapabilityGate changes must be evaluation-strategy or route-awareness based (changing the default policy for a route class), not expanding `_CONVERSATIONAL_SAFE_PHRASES` with more verbs. If phrasing misses, log it as training/friction evidence for the claim classifier hemisphere specialist to learn from. Fix coverage at the class level with regression tests that validate behavior families, not single "golden" utterances.
+**No Verb-Hacking Rule (routing, CapabilityGate, AND parallel mouths)**: Do not patch routing or CapabilityGate with one-off phrase/verb regexes just to make a single prompt pass. Do not add a second articulator/register/preference key because a gated mouth (revoice / native_voice / ToM verbosity) is still shadow. See the STOP section at the top of this file. Routing changes must be intent-class and data-lane based (route semantics + provenance), not wording hacks. CapabilityGate changes must be evaluation-strategy or route-awareness based (changing the default policy for a route class), not expanding `_CONVERSATIONAL_SAFE_PHRASES` with more verbs. If phrasing misses, log it as training/friction evidence for the claim classifier hemisphere specialist to learn from. Fix coverage at the class level with regression tests that validate behavior families, not single "golden" utterances.
 
 **NONE Route LLM Boundary**: General `ToolType.NONE` conversation may use LLM articulation for ordinary chat and stable general knowledge ("what is a dog?", "explain quantum computing") after prompt context and output gates. It must not claim retrieval, research, tool execution, background follow-up, job/task creation, or future work unless the turn has a real backing tool/job/intention. The LLM can phrase an answer; it cannot create JARVIS state, start work by implication, or tell the operator that JARVIS did work no subsystem actually performed.
 
@@ -934,10 +1018,10 @@ Pure-read-only scoring engine in `oracle_benchmark.py`. Scores 7 domains (total 
 - The brain uses a standard `.venv`
 - Pydantic for config and event schemas on both devices
 - PyTorch for neural policy layer + hemisphere NNs (brain only)
-- Tests: `cd brain && python -m pytest tests/`
+- Tests: `cd brain && python -m pytest tests/` **on WSL only**
 - Soak test: `cd brain && python -m tests.soak_test`
 - Event replay: use `tests/event_harness.py` with JSONL recordings
-- Sync code to desktop: `./sync-desktop.sh` (rsync over SSH)
+- **Never edit source on the brain host or the Pi.** Code on this machine (`~/projects/jarvis-oracle-edition`). Sync: `./sync-desktop.sh` (brain), `./sync-pi.sh` (Pi). Sync ≠ bounce. Git push ≠ sync. SSH is logs/API/`~/.jarvis`, not a second editor.
 
 ## Persistence (all under ~/.jarvis/ unless noted)
 

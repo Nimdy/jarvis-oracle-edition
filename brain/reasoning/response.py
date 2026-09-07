@@ -220,6 +220,22 @@ def route_memory_request(
         _last_memory_route = route
         return route
 
+    try:
+        from tools.memory_tool import is_household_self_fact_recall
+        _household_self_fact = is_household_self_fact_recall(text)
+    except Exception:
+        _household_self_fact = False
+    if _household_self_fact:
+        route = MemoryRoute(
+            route_type="self_preference",
+            referenced_entities=refs,
+            allow_preference_injection=True,
+            allow_autonomy_recall=False,
+            search_scope="primary_user_only",
+        )
+        _last_memory_route = route
+        return route
+
     if _BELIEF_RE.search(text):
         route = MemoryRoute(
             route_type="belief_synthesis",
@@ -431,6 +447,11 @@ class ResponseGenerator:
         from reasoning.context import reset_resolved_chunks
         reset_resolved_chunks(conversation_id or "")
 
+        # Live camera is the only scene authority. Cooking-dinner memories
+        # must not locate the user ("you're still in the kitchen").
+        if tool_hint == "vision":
+            recent_memories = []
+
         _identity_ctx = None
         _ref_entities: set[str] | None = None
         try:
@@ -444,13 +465,23 @@ class ResponseGenerator:
         except Exception:
             pass
 
-        route = route_memory_request(user_message, _ref_entities)
-        logger.info(
-            "Memory route: type=%s scope=%s refs=%s inject_pref=%s inject_third=%s",
-            route.route_type, route.search_scope,
-            sorted(route.referenced_entities) if route.referenced_entities else "[]",
-            route.allow_preference_injection, route.allow_thirdparty_injection,
-        )
+        if tool_hint == "vision":
+            route = MemoryRoute(
+                route_type="no_retrieval",
+                allow_preference_injection=False,
+                allow_thirdparty_injection=False,
+                allow_autonomy_recall=False,
+                search_scope="none",
+            )
+            logger.info("Memory route: skipped (vision live-frame is scene authority)")
+        else:
+            route = route_memory_request(user_message, _ref_entities)
+            logger.info(
+                "Memory route: type=%s scope=%s refs=%s inject_pref=%s inject_third=%s",
+                route.route_type, route.search_scope,
+                sorted(route.referenced_entities) if route.referenced_entities else "[]",
+                route.allow_preference_injection, route.allow_thirdparty_injection,
+            )
 
         sem_memories = None
         if route.search_scope != "none":
@@ -490,7 +521,7 @@ class ResponseGenerator:
         surfaced_chunk_ids = _extract_surfaced_chunk_ids(sem_memories or [])
 
         episodic_context = ""
-        if self._episodes:
+        if tool_hint != "vision" and self._episodes:
             episodic_context = self._episodes.get_conversation_context(max_episodes=3)
             related = self._episodes.find_episodes_semantic(user_message, limit=3)
             seen_summaries = set()
@@ -583,13 +614,17 @@ class ResponseGenerator:
             context_builder.set_conversation_id(conversation_id)
         if persist_conversation:
             context_builder.add_user_message(user_message, conversation_id=conversation_id)
-        if conversation_id:
+        if tool_hint == "vision":
+            # Prior turns (e.g. "about to cook dinner") must not ride the
+            # vision prompt — they overrode the live desk caption.
+            messages = [{"role": "user", "content": user_message}]
+        elif conversation_id:
             messages = context_builder.get_conversation_context(conversation_id)
             if len(messages) <= 1:
                 messages = context_builder.get_recent_context()
         else:
             messages = context_builder.get_recent_context()
-        if not persist_conversation:
+        if not persist_conversation and tool_hint != "vision":
             messages = [*messages, {"role": "user", "content": user_message}]
 
         from personality.traits import trait_modulator
@@ -618,9 +653,33 @@ class ResponseGenerator:
                            user_emotion: str | None = None,
                            outcome: str = "completed",
                            persist_response: bool = True) -> GeneratedResponse:
-        """Store memory and return structured response after LLM completes."""
+        """Store memory and return structured response after LLM completes.
+
+        Lived 2026-08-24: an LLM wipe-draft was remembered here while fail-closed
+        speech used the measured dump. An OSV-contradicted blank-slate claim is
+        not autobiography — skip both the conversation_history write and
+        engine.remember. The scar is not deleted; it is not declared.
+        """
         latency_ms = int((time.time() - start) * 1000)
         if persist_response:
+            try:
+                from cognition.self_view import load_self_view
+                from cognition.self_view.articulate import contradicts_measured_continuity
+                if contradicts_measured_continuity(response_text, load_self_view()):
+                    logger.info(
+                        "Skipping conversation persist — OSV-contradicted wipe/blank-slate claim"
+                    )
+                    persist_response = False
+            except Exception:
+                logger.debug("continuity persist guard skipped", exc_info=True)
+        if persist_response:
+            try:
+                from skills.capability_gate import capability_gate
+                gated = capability_gate.check_text(response_text)
+                if gated:
+                    response_text = gated
+            except Exception:
+                logger.debug("persist L0 gate skipped", exc_info=True)
             context_builder.add_assistant_message(response_text, conversation_id=conversation_id)
             context_builder.save()
         tags = self._extract_tags(user_message, response_text)

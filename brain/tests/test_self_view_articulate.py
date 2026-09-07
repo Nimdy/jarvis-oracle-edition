@@ -9,8 +9,10 @@ import cognition.self_view as sv
 from cognition.self_view.articulate import (
     KINDS,
     articulate_self_view,
+    asserts_memory_wipe,
     classify_self_question,
     contains_unqualified_claim,
+    contradicts_measured_continuity,
 )
 
 
@@ -31,9 +33,9 @@ def _snapshot():
     }
 
 
-def _model(eval_snapshot=None, skills=None):
+def _model(eval_snapshot=None, skills=None, snapshot=None):
     return sv.build_self_view(engine=None, eval_snapshot=eval_snapshot or {},
-                              skills_summary=skills or {}, snapshot=_snapshot(), now=1.0)
+                              skills_summary=skills or {}, snapshot=snapshot or _snapshot(), now=1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +49,7 @@ class TestClassify:
             "what can you do?": "capabilities",
             "what new features do you have?": "recent_changes",
             "what changed recently?": "recent_changes",
-            "how are you doing?": "health",
+            "how are your systems?": "health",
             "what are your weaknesses?": "weaknesses",
             "what are you not allowed to do yet?": "gated_capabilities",
             "are you conscious?": "consciousness_query",
@@ -65,7 +67,10 @@ class TestClassify:
             "What can you tell me about your codebase?": "capabilities",
             "Jarvis, tell me about your architecture.": "capabilities",
             "Describe your own architecture.": "capabilities",
-            "Walk me through how you get an answer.": "capabilities",
+            "Walk me through how you get an answer.": "answer_path",
+            "Walk me through how you reach an answer.": "answer_path",
+            "walk me through how you reach an answer": "answer_path",
+            "how do you reach an answer?": "answer_path",
             "Do you know what you are?": "identity",
             "Tell me something about yourself that I don't know.": "identity",
             "do you have feelings?": "consciousness_query",
@@ -77,6 +82,56 @@ class TestClassify:
                   "You know how many kids you can help?",
                   "Give me a status report, please.",
                   "What do you remember the first time you heard my voice?"):
+            assert classify_self_question(q) is None, q
+
+    def test_learn_a_new_skill_is_not_recent_changes(self):
+        """Lived 2026-09-06: 'Learn a new skill … d20' stole to OSV what's-new."""
+        for q in (
+            "Learn a new skill to play D&D. I need you to roll a 20-sided dice when I ask you to.",
+            "Learn a skill to roll a 20-sided dice.",
+            "Learn a skill to quiz me on large language models.",
+            "Learn a skill to keep a list of tasks for me",
+        ):
+            assert classify_self_question(q) is None, q
+        assert classify_self_question("what new features do you have?") == "recent_changes"
+        assert classify_self_question("what changed recently?") == "recent_changes"
+
+    def test_phatic_how_are_you_is_not_p1_health(self):
+        """Lived 2026-09-01: 'How are you?' dumped inner HUD. STATUS already speaks."""
+        for q in (
+            "How are you?",
+            "how are you doing?",
+            "How are you feeling?",
+            "are you okay?",
+        ):
+            assert classify_self_question(q) is None, q
+        # "how do you feel?" is the consciousness-query lane (qualified), not HUD health.
+        assert classify_self_question("how do you feel?") == "consciousness_query"
+        assert classify_self_question("how are your systems?") == "health"
+        assert classify_self_question("are you healthy?") == "health"
+
+    def test_continuity_questions_route_to_self_view(self):
+        """Lived miss: last-memory-after-power-off must not fall through to the LLM."""
+        live = (
+            "what was the last thing you remember because you've been powered off "
+            "for a long time when was your last um recorded memory because today is august 24th"
+        )
+        assert classify_self_question(live) == "continuity"
+        assert classify_self_question("when was your last recorded memory?") == "continuity"
+        assert classify_self_question("have you been offline — is your memory reset?") == "continuity"
+        # MEMORY recall of *content* must still not be stolen
+        assert classify_self_question("What do you remember about Skylar?") is None
+        assert classify_self_question("what do you remember about the meeting") is None
+        assert classify_self_question("What do you know about Skyler from before?") is None
+
+
+    def test_memory_system_how_is_not_capabilities_census(self):
+        """Lived 2026-08-27: 'How does your memory system work?' dumped architecture."""
+        for q in (
+            "How does your memory system work?",
+            "Jarvis, explain how your memory system works.",
+            "Tell me how your memory works.",
+        ):
             assert classify_self_question(q) is None, q
 
 
@@ -119,6 +174,75 @@ class TestArticulation:
         assert "shadow" in out
         assert "earned" in out  # earned-not-declared framing
 
+    def test_llm_as_brain_correction_is_answer_path_not_allowlist(self):
+        """Lived 2026-09-04: Qwen denied being the mouth. No Quinn/qwen token required."""
+        lived = (
+            "Jarvis, you made up a lot of stuff on there because you let your "
+            "baseline large language model continue to think for you. You cannot "
+            "do that. Think before you speak and make sure that the baseline "
+            "Quinn model doesn't do the thinking for you. Quinn model only speaks."
+        )
+        assert classify_self_question(lived) == "answer_path"
+        assert classify_self_question("who is thinking?") == "answer_path"
+        # User's project talk must not steal to P1
+        assert classify_self_question(
+            "I'm using LTX 2.5, a model with weights for animation from images."
+        ) is None
+        assert classify_self_question(
+            "a project that is 100% artificial intelligence, large language model generated"
+        ) is None
+        out = articulate_self_view(_model(), "answer_path").lower()
+        assert "mouth" in out and "brain" in out
+        assert "quinn" not in out and "qwen" not in out
+
+    def test_answer_path_is_measured_not_theater(self):
+        """Lived 14:24: walk-through classified capabilities and recited the
+        architecture inventory. This kind must describe the turn path from the
+        OSV/architecture map — regex router live, voice-intent shadow — and
+        must not invent understanding/feeling/percent-confidence theater.
+        """
+        out = articulate_self_view(_model(), "answer_path")
+        low = out.lower()
+        assert "router" in low or "routing" in low
+        assert "shadow" in low
+        assert "llm" in low or "language model" in low
+        assert "understand" not in low
+        assert "86 percent" not in low and "86%" not in low
+        assert "i parse" not in low
+        assert "pattern recognition" not in low
+        assert contains_unqualified_claim(out) is False
+        # Lived 14:45/14:47: kind was correct, mouth was a designed-status dump.
+        # Keep this speakable. Do not put log headers or inventory tokens on TTS.
+        assert "speech in:" not in low
+        assert "designed-status" not in low
+        assert out.count(".") <= 6
+
+    def test_what_can_you_do_stays_capabilities_inventory(self):
+        assert classify_self_question("What can you do?") == "capabilities"
+        out = articulate_self_view(_model(), "capabilities").lower()
+        assert "active" in out and "shadow" in out
+
+    def test_health_world_model_label_follows_promotion(self):
+        """Lived leftover: P1 health said 'world-model (shadow)' while L2 inject was on."""
+        out = articulate_self_view(_model(), "health").lower()
+        assert "world-model" in out
+        assert "l2" in out
+        assert "not family recall" in out
+        assert "world-model (shadow)" not in out
+
+        snap = _snapshot()
+        snap["world_model"]["promotion"]["level_name"] = "shadow"
+        shadow = articulate_self_view(_model(snapshot=snap), "health").lower()
+        assert "world-model" in shadow
+        assert "(shadow)" in shadow
+        assert "l2" not in shadow
+
+        snap = _snapshot()
+        snap["world_model"].pop("promotion", None)
+        snap["world_model"]["version"] = 3
+        cold = articulate_self_view(_model(snapshot=snap), "health").lower()
+        assert "world-model v3 (shadow)" in cold
+
     def test_consciousness_is_balanced(self):
         out = articulate_self_view(_model(), "consciousness_query").lower()
         assert "no measured basis" in out
@@ -155,3 +279,74 @@ class TestDangerGuard:
             out = articulate_self_view({}, kind)
             assert isinstance(out, str)
             assert not contains_unqualified_claim(out)
+
+
+# ---------------------------------------------------------------------------
+# Continuity (process restart vs wipe) — lived miss 2026-08-24
+# ---------------------------------------------------------------------------
+
+class TestContinuityArticulation:
+    def _mem_model(self, total=734, oldest=1782235435.0, newest=1787578126.0):
+        snap = _snapshot()
+        snap["memory"] = {
+            "total": total,
+            "core_count": 4,
+            "oldest_timestamp": oldest,
+            "newest_timestamp": newest,
+        }
+        return _model(snapshot=snap)
+
+    def test_does_not_claim_wipe_when_memories_exist(self):
+        out = articulate_self_view(self._mem_model(), "continuity")
+        low = out.lower()
+        assert "734" in out
+        assert "reset" not in low
+        assert "starting fresh" not in low
+        assert "wipe" in low  # "not a wipe" / process restart
+        assert contains_unqualified_claim(out) is False
+
+    def test_reports_measured_span_not_invented_date(self):
+        import datetime
+        oldest, newest = 1782235435.0, 1787578126.0
+        out = articulate_self_view(self._mem_model(oldest=oldest, newest=newest), "continuity")
+        def _day(ts: float) -> str:
+            return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).strftime("%Y-%m-%d")
+        assert _day(oldest) in out
+        assert _day(newest) in out
+
+    def test_unknown_memory_does_not_invent_a_wipe(self):
+        out = articulate_self_view(_model(), "continuity").lower()
+        assert "reset" not in out
+        assert "starting fresh" not in out
+        assert "can't measure" in out or "cannot measure" in out or "not readable" in out
+
+    # Lived 2026-08-24 dual-write: LLM draft stored as conversation memory while
+    # fail-closed speech used the measured dump. These pin the detector the
+    # write-path and MEMORY recall both consult. Never a wipe of the scar —
+    # a contradicted blank-slate claim must not be treated as autobiography.
+    _LIVED_LIE = (
+        "My last recorded memory was on August 10th. I don't have a timeline of "
+        "events beyond that, but I can tell you that my current state is fresh "
+        "and ready to process new information. I've been offline for a while, so "
+        "my memory is essentially reset — I'm starting fresh today."
+    )
+
+    def test_lived_llm_lie_asserts_a_memory_wipe(self):
+        assert asserts_memory_wipe(self._LIVED_LIE) is True
+
+    def test_continuity_answer_does_not_assert_a_wipe(self):
+        out = articulate_self_view(self._mem_model(), "continuity")
+        assert asserts_memory_wipe(out) is False
+
+    def test_lived_lie_contradicts_measured_store(self):
+        assert contradicts_measured_continuity(self._LIVED_LIE, self._mem_model()) is True
+
+    def test_cannot_prove_contradiction_when_store_unreadable(self):
+        # KNOW-not-guess: no measured count → do not treat as contradicted.
+        assert contradicts_measured_continuity(self._LIVED_LIE, _model()) is False
+
+    def test_ordinary_recall_is_not_a_wipe_claim(self):
+        assert asserts_memory_wipe("You went to the mall with your kids.") is False
+        assert contradicts_measured_continuity(
+            "You went to the mall with your kids.", self._mem_model()
+        ) is False

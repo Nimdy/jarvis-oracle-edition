@@ -6,7 +6,7 @@
 **Correspondence.** `mrzerobandwidth@gmail.com`.
 **Release date.** 12 May 2026.
 **License.** Dual. AGPLv3 for community, research, non-profit, and hobbyist use. Commercial license available for proprietary integration. See `LICENSE.md`.
-**Code.** `github.com/duafoo/jarvis-oracle-edition` (public at release).
+**Code.** `github.com/Nimdy/jarvis-oracle-edition` (public at release).
 **Reproducibility dossier.** Ten validation artifacts under `docs/validation_reports/` plus hash-verified attestation ledger entries. See Section 9 and Appendix A.
 
 ---

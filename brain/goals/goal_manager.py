@@ -84,6 +84,7 @@ class GoalManager:
         # directly measurable on the dashboard rather than inferred.
         self._source_lifecycle: dict[str, dict[str, int]] = {}
         self._rebuild_abandon_counts()
+        self._rebuild_source_lifecycle()
 
     def _bump_lifecycle(self, source_scope: str, event: str) -> None:
         scope = source_scope or "unknown"
@@ -112,6 +113,17 @@ class GoalManager:
                 self._abandon_counts[g.recurrence_key] = (
                     self._abandon_counts.get(g.recurrence_key, 0) + 1
                 )
+
+    def _rebuild_source_lifecycle(self) -> None:
+        """Replay persisted statuses so /api/goals source_lifecycle survives bounce."""
+        self._source_lifecycle = {}
+        for g in self._registry.get_all():
+            scope = g.source_scope or "unknown"
+            self._bump_lifecycle(scope, "created")
+            if g.status == "completed":
+                self._bump_lifecycle(scope, "completed")
+            elif g.status == "abandoned":
+                self._bump_lifecycle(scope, "abandoned")
 
     def set_autonomy_orchestrator(self, orch: Any) -> None:
         """Wire the autonomy orchestrator for goal task dispatch."""
@@ -900,10 +912,19 @@ class GoalManager:
 
     def _revalidate_metric_candidates(self, now: float) -> None:
         """Abandon metric-deficit candidates whose underlying condition resolved."""
-        if not self._cached_health_report and not self._cached_cal_state:
-            return
+        from goals.signal_producers import system_health_goal_is_actionable
 
         for cand in self._registry.get_candidates():
+            if (
+                cand.kind == "system_health"
+                and not cand.explicit_user_requested
+                and not system_health_goal_is_actionable(cand)
+            ):
+                self._abandon_goal(cand, "no actionable repair path", now)
+                logger.info("Auto-abandoned unactionable metric goal %s", cand.goal_id)
+                continue
+            if not self._cached_health_report and not self._cached_cal_state:
+                continue
             reason = self._review.revalidate_metric_candidate(
                 cand, self._cached_health_report, self._cached_cal_state,
             )

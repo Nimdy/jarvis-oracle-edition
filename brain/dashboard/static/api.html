@@ -75,7 +75,7 @@
 
     <!-- Stats -->
     <div class="a-stats">
-      <div class="a-stat"><span class="a-stat-num">140</span><span class="a-stat-label">Brain API Routes</span></div>
+      <div class="a-stat"><span class="a-stat-num">172</span><span class="a-stat-label">Brain API Routes</span></div>
       <div class="a-stat"><span class="a-stat-num">3</span><span class="a-stat-label">Services</span></div>
       <div class="a-stat"><span class="a-stat-num">Lock-marked</span><span class="a-stat-label">Auth Protected</span></div>
       <div class="a-stat"><span class="a-stat-num">3</span><span class="a-stat-label">WebSockets</span></div>
@@ -427,9 +427,7 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
 
     <div class="a-endpoint" id="ep-skill-delete" data-method="DELETE" data-path="/api/skills/{skill_id}" data-desc="Remove skill" data-cat="skills">
       <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-delete">DELETE</span><span class="a-path">/api/skills/<span class="a-path-param">{skill_id}</span></span><span class="a-ep-desc">Remove a skill record</span><span class="a-ep-lock">🔒</span></div>
-      <div class="a-ep-body"><table class="a-params"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
-        <tr><td class="a-param-name">confirm_default</td><td class="a-param-type">bool</td><td>false</td><td>Must be true to delete default skills (returns 409 otherwise)</td></tr>
-      </tbody></table></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Learned skills only. Baseline skills shipped with JARVIS return 409 and cannot be deleted.</p></div>
     </div>
 
     <div class="a-endpoint" id="ep-job-delete" data-method="DELETE" data-path="/api/learning-jobs/{job_id}" data-desc="Delete learning job" data-cat="skills">
@@ -1005,7 +1003,7 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <!-- LIVE ROUTE ADDENDUM -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <div class="a-category" id="cat-live-addendum" data-cat-id="live-addendum"><h3>Live Route Addendum <span class="a-category-count">34 endpoints</span></h3></div>
+    <div class="a-category" id="cat-live-addendum" data-cat-id="live-addendum"><h3>Live Route Addendum <span class="a-category-count">62 endpoints</span></h3></div>
 
     <div class="a-protocol">
       <h4>Static reference catch-up</h4>
@@ -1207,9 +1205,9 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
       </div>
     </div>
 
-    <div class="a-endpoint" id="ep-intent-shadow" data-method="GET" data-path="/api/intent-shadow" data-desc="Intention shadow status" data-cat="live-addendum">
-      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/intent-shadow</span><span class="a-ep-desc">Intention resolver shadow telemetry</span></div>
-      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Read-only stage telemetry for backed-commitment learning.</p></div>
+    <div class="a-endpoint" id="ep-intent-shadow" data-method="GET" data-path="/api/intent-shadow" data-desc="Voice-intent shadow runner" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/intent-shadow</span><span class="a-ep-desc">Voice-intent NN vs regex router — shadow only</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Not the intention-resolver. Level stays <code>shadow</code> until gates (samples/dwell/agreement). Predictions ≠ consumed. Heuristic <code>tool_router</code> still picks the turn. Do not flip to advisory/primary without David naming the gate.</p></div>
     </div>
 
     <div class="a-endpoint" id="ep-debug-engine-attrs" data-method="GET" data-path="/api/debug/engine-attrs" data-desc="Debug engine attrs" data-cat="live-addendum">
@@ -1217,9 +1215,35 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
       <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Diagnostic-only endpoint for local operator debugging.</p></div>
     </div>
 
-    <div class="a-endpoint" id="ep-chat-api" data-method="POST" data-path="/api/chat" data-desc="Dashboard chat" data-cat="live-addendum">
-      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/chat</span><span class="a-ep-desc">Dashboard chat entrypoint when explicitly enabled</span><span class="a-ep-lock">🔒</span></div>
-      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Protected and gated by <code>ENABLE_DASHBOARD_CHAT</code>. Normal interaction should use Pi voice input.</p></div>
+    <div class="a-endpoint" id="ep-chat-api" data-method="POST" data-path="/api/chat" data-desc="RETIRED — bypassed the mind" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/chat</span><span class="a-ep-desc">410 Gone — skipped handle_transcription</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Retired. Use <code>POST /api/operator/tap</code> (same path as Pi voice) or speak on the Pi.</p></div>
+    </div>
+
+    <div class="a-endpoint" id="ep-operator-tap" data-method="POST" data-path="/api/operator/tap" data-desc="Operator-proxy TAP (agent sit)" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/operator/tap</span><span class="a-ep-desc">Text into handle_transcription as David / operator_proxy</span><span class="a-ep-lock">🔒</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Second ear. Same mind path as Pi STT. Provenance <code>operator_proxy</code>. Does not forge face/voice. Refuses if a voice turn is in flight. Mute the Pi mic. Canon: <code>docs/OPERATOR_PROXY_TAP.md</code>.</p>
+        <table class="a-params"><thead><tr><th>Body</th><th>Type</th><th>Default</th></tr></thead><tbody>
+          <tr><td class="a-param-name">text</td><td class="a-param-type">string</td><td>required (alias: message)</td></tr>
+          <tr><td class="a-param-name">speaker</td><td class="a-param-type">string</td><td>David</td></tr>
+          <tr><td class="a-param-name">follow_up</td><td class="a-param-type">bool</td><td>omit/false = <b>new sit</b>. true only if ear is FOLLOW_UP or last mouth invited</td></tr>
+        </tbody></table>
+        <p style="font-size:0.82rem;color:var(--text-muted)">Do not shotgun TAP. Wait idle. Pytest is a pin, not a sit.</p>
+      </div>
+    </div>
+
+    <div class="a-endpoint" id="ep-operator-tap-status" data-method="GET" data-path="/api/operator/tap/status" data-desc="TAP ear status (not a sit)" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/operator/tap/status</span><span class="a-ep-desc">New sit vs continuation — wait if busy</span></div>
+      <div class="a-ep-body">
+        <p style="font-size:0.82rem;color:var(--text-muted)">Read-only. Not a sit. Poll before TAP.</p>
+        <table class="a-params"><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody>
+          <tr><td class="a-param-name">busy / speaking</td><td>TTS or LISTENING capture — do not TAP</td></tr>
+          <tr><td class="a-param-name">ear</td><td>IDLE = new sit. FOLLOW_UP = continue window (~4s after TTS)</td></tr>
+          <tr><td class="a-param-name">follow_up_listening</td><td>true only in the continue window. FOLLOW_UP is not busy</td></tr>
+          <tr><td class="a-param-name">last_spoken_invites_follow_up</td><td>last mouth asked a question</td></tr>
+        </tbody></table>
+      </div>
     </div>
 
     <div class="a-endpoint" id="ep-feedback-api" data-method="POST" data-path="/api/feedback" data-desc="Conversation feedback" data-cat="live-addendum">
@@ -1273,8 +1297,100 @@ GET /api/endpoint?api_key=&lt;DASHBOARD_API_KEY&gt;</div>
     </div>
 
     <div class="a-endpoint" id="ep-system-code-freshness" data-method="GET" data-path="/api/system/code-freshness" data-desc="Code freshness" data-cat="live-addendum">
-      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/system/code-freshness</span><span class="a-ep-desc">Runtime code freshness and sync status</span></div>
-      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Helps detect whether static docs and running brain code are from the same sync.</p></div>
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/system/code-freshness</span><span class="a-ep-desc">Brain-disk .py mtime vs this PID</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)"><code>is_stale</code> compares files on <b>192.168.1.222</b> to process start — not GitHub, not WSL. Workflow: edit on WSL → <code>./sync-desktop.sh</code> → banner <b>NEWER CODE ON DISK</b> → David restarts. A git push alone does not light the banner. HTML/CSS is live without restart; <code>.py</code> is not. v2 pages must call <code>V2.renderNav</code> or the banner never paints.</p></div>
+    </div>
+
+    <div class="a-protocol">
+      <h4>2026-08-24 catch-up (wired, previously undocumented)</h4>
+      <p>These routes are live on the brain FastAPI app. Added so the operator book matches <code>app.py</code> (count locked by <code>docs_truth_audit.py</code>). Mutating routes are lock-marked; they still require the dashboard API key.</p>
+    </div>
+
+    <div class="a-endpoint" id="ep-connectome" data-method="GET" data-path="/api/connectome" data-desc="Live connectome" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/connectome</span><span class="a-ep-desc">Live EventBus + fleet connectome (nodes, edges, deviations)</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Passive tap. Zero authority. Source of <code>/v2/universe.html</code>.</p></div>
+    </div>
+    <div class="a-endpoint" id="ep-self-view" data-method="GET" data-path="/api/self-view" data-desc="Operational Self-View" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-view</span><span class="a-ep-desc">Provenance-honest self-model (OSV P0–P2 fields)</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Read-only. P2 voice-grounding is shadow until <code>OSV_P2_ACTIVE</code>.</p></div>
+    </div>
+    <div class="a-endpoint" id="ep-self-sensing" data-method="GET" data-path="/api/self-sensing" data-desc="Self-sensing" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-sensing</span><span class="a-ep-desc">Lidar world-model skill vs persistence (shadow)</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">STARVED at a still desk is honest, not a regression. Authority=none.</p></div>
+    </div>
+    <div class="a-endpoint" id="ep-self-sensing-bridge" data-method="GET" data-path="/api/self-sensing/bridge" data-desc="Self-sensing curiosity bridge" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/self-sensing/bridge</span><span class="a-ep-desc">Shadow would-attend proposer + critic recorder telemetry</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)">Does not drive urgency. FAIL on the critic-test = shadow-forever.</p></div>
+    </div>
+    <div class="a-endpoint" id="ep-nn-fleet" data-method="GET" data-path="/api/nn-fleet" data-desc="NN fleet registry" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/nn-fleet</span><span class="a-ep-desc">Design wire vs this-host firing</span></div>
+      <div class="a-ep-body"><p style="font-size:0.82rem;color:var(--text-muted)"><code>inference_consumed</code> / <code>wiring_confirmed</code> = June-30 audit (a consumer <em>wire</em> exists). <code>live_state</code> + <code>consumed_now</code> = this host. World-model inject is off at promotion level 0 (<code>gated</code>). Intent-shadow predicting ≠ consumed. Samples ≠ control. Source of <code>/v2/nnfleet.html</code>.</p></div>
+    </div>
+    <div class="a-endpoint" id="ep-nn-universe" data-method="GET" data-path="/api/nn-universe" data-desc="NN universe" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/nn-universe</span><span class="a-ep-desc">Universe/connectome companion payload for the NN fleet view</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-matrix" data-method="GET" data-path="/api/matrix" data-desc="Matrix Protocol" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/matrix</span><span class="a-ep-desc">Tier-2 specialist lifecycle (birth/train/promoted). Boot resets authority.</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-domains" data-method="GET" data-path="/api/domains" data-desc="Capability domains" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/domains</span><span class="a-ep-desc">Isolated deletable knowledge domains ("know about", never "can do")</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-domains-create" data-method="POST" data-path="/api/domains" data-desc="Create capability domain" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/domains</span><span class="a-ep-desc">Create a domain</span><span class="a-ep-lock">🔒</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-domains-ingest" data-method="POST" data-path="/api/domains/{domain_id}/ingest" data-desc="Ingest into domain" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/domains/<span class="a-path-param">{domain_id}</span>/ingest</span><span class="a-ep-desc">Ingest text/file/folder into a domain</span><span class="a-ep-lock">🔒</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-domains-delete" data-method="DELETE" data-path="/api/domains/{domain_id}" data-desc="Delete capability domain" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-delete">DELETE</span><span class="a-path">/api/domains/<span class="a-path-param">{domain_id}</span></span><span class="a-ep-desc">Clean ablation — zero residue, core memory untouched</span><span class="a-ep-lock">🔒</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-grounding-queue" data-method="GET" data-path="/api/grounding/queue" data-desc="Grounding queue" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/grounding/queue</span><span class="a-ep-desc">Operator-pull Spark / Grounding Ring queue</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-grounding-answer" data-method="POST" data-path="/api/grounding/queue/answer" data-desc="Answer grounding item" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/grounding/queue/answer</span><span class="a-ep-desc">Record an operator grounding answer (external validation)</span><span class="a-ep-lock">🔒</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-memory-integrity" data-method="GET" data-path="/api/memory-integrity" data-desc="Memory integrity" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/memory-integrity</span><span class="a-ep-desc">Provenance distribution + banter firewall observability</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-pi5" data-method="GET" data-path="/api/pi5" data-desc="Pi5 + lidar" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/pi5</span><span class="a-ep-desc">Senses + lidar room + fusion + dense points</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-voice-lab" data-method="GET" data-path="/api/voice-lab" data-desc="Voice lab" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/voice-lab</span><span class="a-ep-desc">Voice-seed corpus stats. Student NN is not_born until earned.</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-playbook" data-method="GET" data-path="/api/playbook" data-desc="Companion playbook" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/playbook</span><span class="a-ep-desc">Companion training playbook / stage surface</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-events-stream" data-method="GET" data-path="/api/events/stream" data-desc="Event stream" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/events/stream</span><span class="a-ep-desc">SSE/live event stream for dashboard panels</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-audio-barge-in" data-method="GET" data-path="/api/audio/barge-in" data-desc="Barge-in status" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/audio/barge-in</span><span class="a-ep-desc">Voice barge-in / interrupt telemetry</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-spatial-places" data-method="GET" data-path="/api/spatial/places" data-desc="Spatial places" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/spatial/places</span><span class="a-ep-desc">P5 spatial place memory (shadow / zero authority)</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-spatial-calib-get" data-method="GET" data-path="/api/spatial/camera-calib" data-desc="Camera calibration" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-get">GET</span><span class="a-path">/api/spatial/camera-calib</span><span class="a-ep-desc">Lidar↔camera extrinsics / yaw calib readout</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-spatial-calib-post" data-method="POST" data-path="/api/spatial/camera-calib" data-desc="Set camera calibration" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/spatial/camera-calib</span><span class="a-ep-desc">Write camera/lidar calibration</span><span class="a-ep-lock">🔒</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-camera-control" data-method="POST" data-path="/api/camera/control" data-desc="Camera PTZ/focus" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/camera/control</span><span class="a-ep-desc">Operator PTZ / focus. Curiosity must not call this until causal A/B confirms.</span><span class="a-ep-lock">🔒</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-plugin-auth" data-method="POST" data-path="/api/plugins/{name}/make-authoritative" data-desc="Make plugin authoritative" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/plugins/<span class="a-path-param">{name}</span>/make-authoritative</span><span class="a-ep-desc">Owner-gated authority grant</span><span class="a-ep-lock">🔒</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-plugin-demote" data-method="POST" data-path="/api/plugins/{name}/demote" data-desc="Demote plugin" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/plugins/<span class="a-path-param">{name}</span>/demote</span><span class="a-ep-desc">Demote an active plugin</span><span class="a-ep-lock">🔒</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-skill-recover" data-method="POST" data-path="/api/skills/{skill_id}/recover" data-desc="Recover skill" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/skills/<span class="a-path-param">{skill_id}</span>/recover</span><span class="a-ep-desc">Recover a failed/parked skill job</span><span class="a-ep-lock">🔒</span></div>
+    </div>
+    <div class="a-endpoint" id="ep-acq-improve" data-method="POST" data-path="/api/acquisition/{acquisition_id}/improve" data-desc="Improve acquisition" data-cat="live-addendum">
+      <div class="a-ep-header" onclick="toggleEndpoint(this)"><span class="a-ep-chevron">▶</span><span class="a-method a-post">POST</span><span class="a-path">/api/acquisition/<span class="a-path-param">{acquisition_id}</span>/improve</span><span class="a-ep-desc">Queue an acquisition improvement pass</span><span class="a-ep-lock">🔒</span></div>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════════ -->

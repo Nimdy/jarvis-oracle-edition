@@ -176,7 +176,18 @@ def live_activity_from_snapshot(snapshot: dict[str, Any] | None) -> dict[str, An
     wmv = _g("world_model.version")
     if wmv is not None:
         out["world_model_version"] = Fact(wmv, Provenance.ADVISORY,
-            note="shadow until WorldModelPromotion earns it", source="snapshot.world_model")
+            note="version stamp; promotion level is world_model_lifecycle",
+            source="snapshot.world_model")
+    wml = _g("world_model.promotion.level_name")
+    if wml:
+        life = str(wml).strip().lower()
+        note = {
+            "active": "L2 earned — prompt inject on the LLM path, not family recall",
+            "advisory": "advisory — not yet prompt-inject",
+            "shadow": "shadow until WorldModelPromotion earns it",
+        }.get(life, "promotion level as stored")
+        out["world_model_lifecycle"] = Fact(life, Provenance.ADVISORY,
+            note=note, source="snapshot.world_model.promotion")
     mh = _g("mutations.mutations_this_hour")
     if mh is not None:
         out["mutations_this_hour"] = Fact(mh, Provenance.ADVISORY, source="snapshot.mutations")

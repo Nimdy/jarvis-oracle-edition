@@ -44,13 +44,14 @@ ToolHint = Literal["codebase", "academic", "introspection", "memory"]
 # ---------------------------------------------------------------------------
 # Codebase files to ingest into Library during Phase 0
 # ---------------------------------------------------------------------------
+# Self-knowledge teacher is CodebaseIndex (AST symbols over brain/ + pi/).
+# Do not ingest markdown / dashboard / playbooks — those drift from the wire
+# and SI would "correct" a book instead of a function. Library copies of
+# source are optional retrieval for study_claim; they are .py only.
 
-# Tier A: always ingest (critical for understanding own wiring)
+# Tier A: always ingest (critical source, not docs)
 _TIER_A_FILES: list[tuple[str, str]] = [
     # (repo-relative path, title for Library)
-    ("AGENTS.md", "AGENTS.md — AI-facing architecture reference"),
-    ("ARCHITECTURE.md", "ARCHITECTURE.md — data flow and system design"),
-    ("docs/SYSTEM_OVERVIEW.md", "System Overview — high-level subsystem map"),
     ("brain/consciousness/events.py", "EventBus constants — 138 event types"),
     ("brain/consciousness/engine.py", "ConsciousnessEngine — top-level coordinator"),
     ("brain/consciousness/consciousness_system.py", "ConsciousnessSystem — tick coordinator"),
@@ -60,6 +61,7 @@ _TIER_A_FILES: list[tuple[str, str]] = [
     ("brain/reasoning/response.py", "ResponseGenerator — streaming with cancel"),
     ("brain/memory/storage.py", "MemoryStorage — unified write path"),
     ("brain/memory/search.py", "MemorySearch — keyword + semantic retrieval"),
+    ("pi/main.py", "Pi SensesService — Hailo person, mic, playback"),
 ]
 
 # Tier B: ingest if Phase 0 budget allows
@@ -92,7 +94,7 @@ class StudyDirective:
 # ---------------------------------------------------------------------------
 
 SELF_STUDY_DIRECTIVES: list[StudyDirective] = [
-    # --- Tier 1: Architecture docs (queries ingested docs) ---
+    # --- Tier 1: architecture questions (CodebaseIndex AST, not markdown) ---
     StudyDirective(
         question=(
             "What is the overall architecture of this system? "
@@ -561,20 +563,26 @@ class GestationManager:
     # ------------------------------------------------------------------
 
     def _ingest_codebase_to_library(self) -> None:
-        """Ingest key source files and docs into the Library for deep retrieval.
+        """Copy key *source* files into the Library for study_claim retrieval.
 
-        Tier A files are mandatory. Tier B files are ingested if time allows.
-        Uses hash-based dedup: unchanged files are skipped on resume.
+        Markdown / dashboard / playbooks are not ingested — self-knowledge is
+        the AST symbol index. Call LibraryIndex.init() first so chunks embed.
         """
         if self._library_ingest_done:
             return
 
         try:
             from library.ingest import ingest_codebase_source
+            from library.index import library_index
         except ImportError:
             logger.warning("Library ingest not available — skipping codebase ingestion")
             self._library_ingest_done = True
             return
+
+        try:
+            library_index.init()
+        except Exception:
+            logger.debug("LibraryIndex init skipped", exc_info=True)
 
         project_root = Path(__file__).resolve().parent.parent.parent
         t0 = time.monotonic()
@@ -583,6 +591,12 @@ class GestationManager:
 
         for tier_name, file_list in [("A", _TIER_A_FILES), ("B", _TIER_B_FILES)]:
             for rel_path, title in file_list:
+                if rel_path.endswith(".md") or "/docs/" in rel_path or rel_path.startswith("docs/"):
+                    skipped += 1
+                    continue
+                if not rel_path.endswith(".py"):
+                    skipped += 1
+                    continue
                 fpath = project_root / rel_path
                 if not fpath.exists():
                     logger.debug("Codebase ingest skip (not found): %s", rel_path)
@@ -595,7 +609,7 @@ class GestationManager:
                         file_path=rel_path,
                         content=content,
                         title=title,
-                        domain_tags="codebase,self_knowledge,architecture" if rel_path.endswith(".md") else "codebase,self_knowledge",
+                        domain_tags="codebase,self_knowledge",
                     )
                     if result.success and result.error != "unchanged":
                         ingested += 1

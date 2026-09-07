@@ -352,11 +352,58 @@ def _select_protocol(capability_type: str) -> str:
     return _PROTOCOL_MAP.get(capability_type, "SK-001")
 
 
-def _serialize_capability_contract(resolution: Any) -> dict[str, Any]:
+def _recover_blocked_workshop_job(
+    existing: Any,
+    resolution: Any,
+    *,
+    user_text: str,
+    speaker: str = "",
+    matrix_trigger: bool = False,
+) -> SkillToolResult | None:
+    """Re-enter a blocked operator job onto the plugin workshop instead of minting a twin."""
+    jid = str(getattr(existing, "learning_job_id", "") or "")
+    if not jid or _learning_job_orch is None:
+        return None
+    if not _learning_job_orch.recover_blocked_job(jid):
+        return None
+    job = None
+    active = _learning_job_orch.get_active_jobs()
+    for candidate in active:
+        if candidate.job_id == jid:
+            job = candidate
+            break
+    if job is None:
+        store = getattr(_learning_job_orch, "store", None)
+        job = store.load(jid) if store is not None else None
+    if job is None:
+        return None
+    return {
+        "outcome": "job_started",
+        "status": job.status,
+        "skill_id": resolution.skill_id,
+        "skill_name": resolution.name,
+        "capability_type": resolution.capability_type,
+        "job_id": job.job_id,
+        "phase": job.phase,
+        "risk_level": resolution.risk_level,
+        "matrix_protocol": bool(matrix_trigger),
+        "protocol_id": getattr(job, "protocol_id", ""),
+        "message": (
+            f"I restarted the blocked learning job for '{resolution.name}' "
+            f"(job: {job.job_id}, phase: {job.phase}). "
+            "I'll draft what's required and expected in research, then wait "
+            "for your approval before building a plugin. "
+            "I won't claim this until evidence proves it works."
+        ),
+    }
+
+
+def _serialize_capability_contract(resolution: Any, user_text: str = "") -> dict[str, Any]:
     """Copy resolver contract metadata into the learning-job plan."""
     capability = getattr(resolution, "capability", None)
     if capability is None:
         return {}
+    trigger = (user_text or "").strip()[:200]
     return {
         "input_type": getattr(capability, "input_type", ""),
         "output_type": getattr(capability, "output_type", ""),
@@ -366,6 +413,14 @@ def _serialize_capability_contract(resolution: Any) -> dict[str, Any]:
         "execution_contract_id": getattr(capability, "execution_contract_id", ""),
         "required_executor_kind": getattr(capability, "required_executor_kind", ""),
         "acquisition_eligible": bool(getattr(capability, "acquisition_eligible", False)),
+        "smoke_fixtures": [
+            {
+                "name": "operator_request_smoke",
+                "input_type": "operator_request",
+                "input": {"request": trigger},
+                "expected": {"ok": True, "honors_request": True},
+            }
+        ] if getattr(capability, "acquisition_eligible", False) else [],
     }
 
 
@@ -420,6 +475,10 @@ def handle_skill_request_structured(
             "status": "unavailable",
             "message": "My skill resolver is unavailable right now.",
         }
+    try:
+        from skills.resolver import promote_user_tool_resolution
+    except ImportError:
+        promote_user_tool_resolution = None  # type: ignore[assignment]
 
     resolve_text = _normalize_matrix_input(user_text) if matrix_trigger else user_text
     resolution = resolve_skill(resolve_text)
@@ -429,21 +488,16 @@ def handle_skill_request_structured(
             "status": "unknown",
             "message": "I couldn't determine what skill to learn from that request.",
         }
-    if is_generic_fallback_resolution(resolution):
-        available = _get_available_skill_descriptions()
-        return {
-            "outcome": "generic_fallback",
-            "status": "blocked",
-            "skill_id": resolution.skill_id,
-            "skill_name": resolution.name,
-            "capability_type": resolution.capability_type,
-            "available_skills": available,
-            "message": (
-                f"I don't have a structured learning path for '{resolution.name}' yet. "
-                f"I can currently learn: {', '.join(available)}. "
-                f"If what you want is close to one of those, try asking for it specifically."
-            ),
-        }
+    # Explicit operator "learn X" / GOLDEN LEARN SKILL XYZ still opens an
+    # advisory job even when the resolver has no template. Catalog listing
+    # is not a substitute for starting the job.
+    # CapabilityGate auto-create continues to skip generic fallback
+    # (it calls resolve_skill, not this promotion).
+    generic_fallback = is_generic_fallback_resolution(resolution)
+    workshop = False
+    if generic_fallback and not matrix_trigger and promote_user_tool_resolution is not None:
+        resolution = promote_user_tool_resolution(resolution, resolve_text)
+        workshop = True
 
     existing = _skill_registry.get(resolution.skill_id)
     if existing is not None and existing.status == "verified":
@@ -486,6 +540,17 @@ def handle_skill_request_structured(
         logger.info("Skill %s is 'learning' with no active job — restarting via new job",
                     existing.skill_id)
 
+    if existing is not None and existing.status == "blocked":
+        recovered = _recover_blocked_workshop_job(
+            existing,
+            resolution,
+            user_text=user_text,
+            speaker=speaker,
+            matrix_trigger=matrix_trigger,
+        )
+        if recovered is not None:
+            return recovered
+
     registered_this_request = False
     if existing is None:
         from skills.registry import SkillRecord
@@ -511,7 +576,8 @@ def handle_skill_request_structured(
             "summary": resolution.notes,
             "phases": resolution.default_phases,
             "guided_collect": dict(getattr(resolution, "guided_collect", None) or {}),
-            "capability_contract": _serialize_capability_contract(resolution),
+            "capability_contract": _serialize_capability_contract(resolution, resolve_text),
+            "operator_trigger": resolve_text,
         },
         hard_gates=resolution.hard_gates,
     )
@@ -568,6 +634,16 @@ def handle_skill_request_structured(
         protocol_note = (
             f" Matrix Protocol engaged — verification protocol {job.protocol_id} "
             f"for {resolution.capability_type} capability class."
+        )
+    elif workshop:
+        protocol_note = (
+            " I'll draft what's required and expected in research, then wait "
+            "for your approval before building a plugin. "
+            "I won't claim this until evidence proves it works."
+        )
+    elif generic_fallback:
+        protocol_note = (
+            " This stays advisory until proof."
         )
 
     return {

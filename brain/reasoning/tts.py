@@ -38,6 +38,9 @@ _MD_NUMBERED = re.compile(r'^\s*\d+\.\s+', re.MULTILINE)
 _MD_BLOCKQUOTE = re.compile(r'^\s*>\s*', re.MULTILINE)
 _MD_HR = re.compile(r'^-{3,}$', re.MULTILINE)
 _MD_LINK = re.compile(r'\[([^\]]*)\]\([^)]*\)')
+# Lived 2026-08-25: VQA spoke "**Answer: 8**" and "\(4 + 4 = 8\)".
+_LATEX_INLINE = re.compile(r'\\[\[\(](.+?)\\[\]\)]', re.DOTALL)
+_LATEX_DOLLAR = re.compile(r'\$([^$]+)\$')
 _EMOJI_RE = re.compile(
     r'[\U0001f300-\U0001f9ff\U00002600-\U000027bf\U0000fe00-\U0000feff'
     r'\U0001fa00-\U0001fa6f\U0001fa70-\U0001faff\U00002702-\U000027b0'
@@ -183,6 +186,9 @@ class BrainTTS:
     @staticmethod
     def _clean_for_speech(text: str) -> str:
         """Strip markdown formatting and normalize numbers for spoken output."""
+        text = _LATEX_INLINE.sub(r'\1', text)
+        text = _LATEX_DOLLAR.sub(r'\1', text)
+        text = text.replace('\\', '')
         text = _MD_HR.sub('', text)
         text = _MD_HEADER.sub('', text)
         text = _MD_BULLET.sub('', text)

@@ -54,6 +54,45 @@ _HYBRID_MIN_LIVED = 3          # ...PLUS at least a few real reps (synthetic alo
 _LIVED_MIN = 10
 
 
+def enforces() -> bool:
+    """P3 authority gate. Default OFF. Flip WEIGHT_ROOM_ENFORCES=true to deny promotions."""
+    import os
+    return os.environ.get("WEIGHT_ROOM_ENFORCES", "false").strip().lower() in ("1", "true", "yes", "on")
+
+
+def may_promote(teacher: str, lived: int = 0, synthetic: int = 0,
+                live_shadow_accuracy: float | None = None,
+                acc_floor: float = 0.65) -> dict[str, Any]:
+    """Would this specialist be allowed to gain authority right now?
+
+    When enforces() is False this still computes the decision but ``allowed``
+    stays True (shadow). When True, would_block becomes a real deny.
+    """
+    gate = WeightRoomGate.get_instance()
+    decision = gate._evaluate_one(teacher, lived, synthetic)
+    baseline_met = bool(decision.get("lived_baseline_met"))
+    acc_ok = live_shadow_accuracy is not None and live_shadow_accuracy >= acc_floor
+    would = baseline_met and acc_ok
+    if enforces():
+        allowed = would
+        reason = decision.get("reason", "")
+        if not acc_ok:
+            reason = (reason + "; live_shadow_accuracy "
+                      f"{live_shadow_accuracy} below {acc_floor}").strip("; ")
+    else:
+        allowed = True
+        reason = "enforces=False (shadow would-block only): " + str(decision.get("reason", ""))
+    return {
+        "allowed": allowed,
+        "would_allow": would,
+        "enforces": enforces(),
+        "lived_baseline_met": baseline_met,
+        "live_shadow_accuracy": live_shadow_accuracy,
+        "reason": reason,
+        "mode": decision.get("mode"),
+    }
+
+
 def classify(teacher: str) -> dict[str, Any]:
     """Map a teacher/specialist name to its lived-baseline regime.
 
@@ -151,6 +190,7 @@ class WeightRoomGate:
         Pure read of weight-room P0 per-teacher lived/synthetic counts. Logs only when a
         decision CHANGES (no per-poll spam). Never raises (fail-closed-to-shadow)."""
         decisions: dict[str, dict[str, Any]] = {}
+        collector = None
         try:
             from hemisphere.distillation import DistillationCollector
             collector = DistillationCollector.instance()
@@ -159,10 +199,31 @@ class WeightRoomGate:
             logger.debug("WeightRoomGate: collector stats unavailable", exc_info=True)
             per_teacher = {}
 
+        _acc_floor = 0.65
         for teacher, st in per_teacher.items():
             if not isinstance(st, dict):
                 continue
             d = self._evaluate_one(teacher, st.get("lived", 0) or 0, st.get("synthetic", 0) or 0)
+            acc = None
+            try:
+                acc = collector.live_shadow_accuracy(teacher) if collector else None
+            except Exception:
+                acc = None
+            d["live_shadow_accuracy"] = acc
+            # Counts-only allow is not a scoring path. Exempt / blocked-by-design
+            # stay their honest states. #5: would_allow requires scored lived acc.
+            if d["decision"] == "would_allow":
+                if acc is None:
+                    d["decision"] = "would_block"
+                    d["reason"] = (
+                        f"{d['reason']}; live_shadow_accuracy unmeasured "
+                        "(need ≥10 scored lived outcomes)"
+                    )
+                elif float(acc) < _acc_floor:
+                    d["decision"] = "would_block"
+                    d["reason"] = (
+                        f"{d['reason']}; live_shadow_accuracy {float(acc):.2f} < {_acc_floor}"
+                    )
             decisions[teacher] = d
             prev = self._last_decisions.get(teacher)
             if prev != d["decision"]:
@@ -183,7 +244,7 @@ class WeightRoomGate:
         return {
             "phase": "P2_lived_baseline_registry",
             "authority": "shadow_would_block_only",
-            "enforces": False,
+            "enforces": enforces(),
             "floors": {
                 "hybrid": {"min_synthetic": _HYBRID_MIN_SYNTHETIC, "min_lived": _HYBRID_MIN_LIVED},
                 "lived": {"min_lived": _LIVED_MIN},

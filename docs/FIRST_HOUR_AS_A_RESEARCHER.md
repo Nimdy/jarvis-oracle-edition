@@ -95,7 +95,10 @@ Read that table twice. Every rejected "why is this green / why is this red?" iss
 curl -s http://brain-ip:9200/api/autonomy/level | jq
 ```
 
-On a fresh brain you should see `current_level=2`, `current_ok=false`, `prior_attested_ok=false`, `request_ok=false`, `activation_ok=false`. That is correct — promotion is gated by both live metrics and operator approval.
+Distinguish **wipe-reset** from **process restart**:
+
+- After `reset-brain.sh --confirm` (wipe): `current_ok=false`, `prior_attested_ok=false`, `request_ok=false`, `activation_ok=false`. `current_level` starts at the configured floor (typically 0/1), not at earned L2.
+- After a **process restart** of a long-lived brain (this operator's instance): `current_level` may restore from `autonomy_state.json` (often 2) while `current_ok` stays **false**, `activation_ok` stays **false**, and `request_ok` stays **false** until live eligibility recomputes. That is restart-honest. Do not treat restored level as live authority, and do not call it a fresh brain.
 
 **Invariant you should assert yourself:**
 
@@ -179,6 +182,7 @@ python -m brain.scripts.dashboard_truth_probe
 - **Don't promote autonomy manually.** The refusal is a feature.
 - **Don't run the synthetic exercise before Stage 2.** It contaminates the baseline.
 - **Don't treat a `PRE-MATURE` marker as a bug.** Check the maturity-gates page first.
+- **Don't build a parallel mouth or preference key** because P1 sounds like a spec sheet. That is `revoice.py` / `native_voice` still `not_born`. See AGENTS.md STOP section. Lived miss 2026-08-24 (`69d7819`).
 - **Don't edit prose pages to reword claims.** If a claim is wrong, the fix is almost certainly in `/api/meta/status-markers` or in the underlying subsystem — not in the HTML.
 - **Don't reach for the LLM.** Almost everything interesting happens in structured subsystems. If you find yourself routing through the LLM to "understand" a cache field, you are probably about to introduce a verb-hack.
 
@@ -186,6 +190,9 @@ python -m brain.scripts.dashboard_truth_probe
 
 ## 9. Where to go next
 
+- [NOW.md](NOW.md) — current branch / stage / leftovers (wins over frozen handoff git lines).
+- [AGENT_MAP.md](AGENT_MAP.md) — **mandatory** turn-flow / authority map. Read before editing conversation, OSV, memory, or routing.
+- [V2_SURFACE_TRUTH.md](V2_SURFACE_TRUTH.md) — dashboardV2 page → API → live meaning (maturity ladder included).
 - [AGENTS.md](../AGENTS.md) — the field-manual for agents working in this codebase.
 - [docs/MASTER_ROADMAP.md](MASTER_ROADMAP.md) — what is SHIPPED, PARTIAL, PRE-MATURE, and DEFERRED, with pointers to the evidence.
 - [docs/ARCHITECTURE_PILLARS.md](ARCHITECTURE_PILLARS.md) — the ten non-negotiables.

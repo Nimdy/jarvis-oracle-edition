@@ -130,6 +130,20 @@ class TestRouterEdgeCases:
         route = route_memory_request("What did I just say?", set())
         assert route.route_type == "episodic"
 
+    def test_what_did_i_tell_you_about_topic_is_self_preference(self):
+        from reasoning.response import route_memory_request
+        route = route_memory_request(
+            "What did I tell you about electronic dance music?", set(),
+        )
+        assert route.route_type == "self_preference"
+        assert route.allow_preference_injection is True
+
+    def test_what_do_you_remember_about_me_is_self_preference(self):
+        from reasoning.response import route_memory_request
+        route = route_memory_request("What do you remember about me?", set())
+        assert route.route_type == "self_preference"
+        assert route.allow_preference_injection is True
+
     def test_my_son_likes_soccer_general_with_thirdparty(self):
         from reasoning.response import route_memory_request
         route = route_memory_request("My son likes soccer.", set())

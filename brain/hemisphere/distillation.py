@@ -122,6 +122,7 @@ class DistillationCollector:
         self._synthetic_counts: dict[str, int] = {}  # weight-room P0: synthetic subset of _counts
         self._quarantine_counts: dict[str, int] = {}
         self._last_seen: dict[str, float] = {}
+        self._last_lived_seen: dict[str, float] = {}
         self._recent_dedup_keys: deque[str] = deque(maxlen=200)
         TRAINING_DATA_DIR.mkdir(parents=True, exist_ok=True)
         QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
@@ -147,6 +148,9 @@ class DistillationCollector:
                         self._synthetic_counts[teacher] = self._synthetic_counts.get(teacher, 0) + syn
                     if signals:
                         self._last_seen[teacher] = signals[-1].timestamp
+                        lived_ts = [s.timestamp for s in signals if not _is_synthetic_origin(s.origin)]
+                        if lived_ts:
+                            self._last_lived_seen[teacher] = lived_ts[-1]
                     total += len(signals)
             except Exception as exc:
                 logger.warning("Failed to rehydrate %s: %s", jsonl_path.name, exc)
@@ -232,6 +236,8 @@ class DistillationCollector:
 
         with self._lock:
             self._last_seen[teacher] = now
+            if not _is_synthetic_origin(origin):
+                self._last_lived_seen[teacher] = now
 
             threshold = TEACHER_QUARANTINE_THRESHOLDS.get(teacher, QUARANTINE_THRESHOLD)
             if fidelity < threshold:
@@ -268,6 +274,25 @@ class DistillationCollector:
 
         return signals[-limit:]
 
+    def live_shadow_accuracy(self, teacher: str, min_n: int = 10) -> float | None:
+        """Accuracy over lived signals that carry an explicit hit/correct label.
+
+        Honesty floor: None until min_n scored lived outcomes exist. Never 0.0
+        as a stand-in for unmeasured. Weight-room P1/P2 scoring path.
+        """
+        lived = self.get_training_batch(teacher, limit=400, lived_only=True)
+        scored: list[bool] = []
+        for sig in lived:
+            meta = sig.metadata or {}
+            data = sig.data if isinstance(sig.data, dict) else {}
+            hit = meta.get("correct", meta.get("hit", data.get("correct") if isinstance(data, dict) else None))
+            if hit is None:
+                continue
+            scored.append(bool(hit))
+        if len(scored) < min_n:
+            return None
+        return round(sum(1 for x in scored if x) / len(scored), 4)
+
     def get_latest(self, teacher: str) -> TeacherSignal | None:
         """Return the most recent signal for a teacher, or None."""
         with self._lock:
@@ -293,6 +318,7 @@ class DistillationCollector:
                     "synthetic": _syn,
                     "lived": max(0, _tot - _syn),
                     "last_seen_s": round(now - self._last_seen[teacher], 1) if teacher in self._last_seen else None,
+                    "last_lived_seen_s": round(now - self._last_lived_seen[teacher], 1) if teacher in getattr(self, "_last_lived_seen", {}) else None,
                 }
             _all = sum(self._counts.values())
             _all_syn = sum(self._synthetic_counts.values())

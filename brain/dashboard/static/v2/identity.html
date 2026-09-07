@@ -78,7 +78,7 @@
 
     <section class="card col12">
       <h2>Sensor Health &amp; Scene Perception</h2>
-      <div class="note">The Pi5 senses node and the scene tracker. STANDBY is expected while no user is present. Scene perception describes <b>surfaces and objects</b> — it is never used to infer who the user is; that is fusion's job alone.</div>
+      <div class="note">The Pi5 senses node and the scene tracker. Hailo <b>persons in frame</b> are identity/presence, not tracked objects. The GPU caption is what the brain named in the JPEG. Tracker <b>visible=0</b> with a person sitting here is the person/object split, not a dead camera. Scene objects are never used to infer who the user is.</div>
       <div class="sensors" id="sensors"></div>
       <div class="bars" id="scene-bars"></div>
       <div class="scenefoot" id="scene-foot"></div>
@@ -124,6 +124,7 @@
   "use strict";
   var V2=window.V2;
   var fetchJSON=V2.fetchJSON, num=V2.num, f2=V2.f2, f3=V2.f3, ago=V2.ago, bandColor=V2.bandColor, el=V2.el, cap=V2.cap, tag=V2.tag, barRow=V2.barRow;
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   var ID=null, CAND=null, SPK=null, FACE=null, SENS=null, SCENE=null, lastOkTs=0;
   var STALE_VOICE_S=30, STALE_FACE_S=90;
   V2.renderNav('/static/v2/identity.html');
@@ -263,10 +264,14 @@
       : '<div class="unpop">no region visibility reported</div>';
     // scene summary + display-content activity (NOT identity)
     var vis=num(SCENE.visible_count), ent=num(SCENE.entity_count), stable=num(SCENE.stable_count);
+    var persons=num(SCENE.person_bbox_count);
+    var capText=(((SCENE.caption)||{}).text||'').trim();
     var dc=(SCENE.display_content||[]);
     var act = dc.length ? dc.map(function(d){ return cap(d.activity_label)+' ('+(num(d.activity_confidence)===null?'—':(d.activity_confidence*100).toFixed(0)+'%')+')'; }).join(', ') : '—';
     el('scene-foot').innerHTML=
-      '<b>'+(vis===null?'—':vis)+'</b> visible / <b>'+(ent===null?'—':ent)+'</b> tracked entities, <b>'+(stable===null?'—':stable)+'</b> stable. '+
+      '<b>'+(persons===null?'—':persons)+'</b> Hailo persons in frame · '+
+      '<b>'+(vis===null?'—':vis)+'</b> visible / <b>'+(ent===null?'—':ent)+'</b> tracked objects, <b>'+(stable===null?'—':stable)+'</b> stable. '+
+      (capText?('Caption: <b>'+esc(capText)+'</b> '):'No VLM caption yet. ')+
       'Display activity: <b>'+act+'</b> '+tag('derived','scene infers activity')+' '+
       '<span class="unpop">activity is observed on a surface — it is NOT used to infer who the user is.</span>';
   }
