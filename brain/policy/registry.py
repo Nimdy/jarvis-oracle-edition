@@ -117,6 +117,21 @@ class ModelRegistry:
                 return v
         return None
 
+    def get_shadow_checkpoint(self) -> ModelVersion | None:
+        """Best trained checkpoint for SHADOW inference when nothing is promoted.
+
+        Lowest validation_loss among versions whose weight file still exists.
+        Does not set is_active and does not grant feature flags. Lived 2026-09-07:
+        93 versions on disk, active_version=0, boot ran default_untrained.
+        """
+        existing = [
+            v for v in self._state.versions
+            if v.path and Path(v.path).exists()
+        ]
+        if not existing:
+            return None
+        return min(existing, key=lambda v: (float(v.validation_loss), -int(v.version)))
+
     def get_version(self, version: int) -> ModelVersion | None:
         for v in self._state.versions:
             if v.version == version:
@@ -153,8 +168,21 @@ class ModelRegistry:
         """
         active = self.get_active()
         if active is None:
-            return {"has_better_candidate": False, "active_version": 0,
-                    "note": "no active model yet"}
+            shadow = self.get_shadow_checkpoint()
+            if shadow is None:
+                return {
+                    "has_better_candidate": False,
+                    "active_version": 0,
+                    "note": "no trained checkpoint",
+                }
+            return {
+                "has_better_candidate": True,
+                "active_version": 0,
+                "best_candidate_version": shadow.version,
+                "best_candidate_arch": shadow.arch,
+                "best_candidate_loss": round(shadow.validation_loss, 4),
+                "note": "shadow checkpoint available — NOT promoted, flags stay off",
+            }
         cands = [v for v in self._state.versions if not v.is_active]
         if not cands:
             return {"has_better_candidate": False, "active_version": active.version}

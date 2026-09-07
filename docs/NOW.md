@@ -246,7 +246,7 @@ Lived 2026-09-01 bounce PID **19451**. `/api/nn-fleet`: 9 `consumed_now` (includ
 | **intent_shadow** | not consumed | **182 predictions / 210 obs**, rolling ~0.69, still `shadow`, 0 rescues. June-30 “25870/0 preds” is **stale**. Dead-wire was fixed. Heuristic still routes. **Do not flip.** | No |
 | weight_room_gate | not consumed | `enforces=False` (P2 would-block). Overlay keeps `consumed_now=False` | No |
 
-HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipping advisory). Policy NN shadow. positive_memory **NN** orphaned (heuristic scalar broadcasts). Claim-friction teacher feed is already fixed (`cc04f08`); registry prose is stale.
+HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipping advisory). Policy NN shadow: **signal-failure** (A/B always ties while unexecuted). Boot now shadow-loads best trained checkpoint (not `default_untrained`); **flags stay 0/8**, no apply. Do not restore DEVIATION_BONUS. positive_memory **NN** orphaned (heuristic scalar broadcasts). Claim-friction teacher feed is already fixed (`cc04f08`); registry prose is stale.
 
 **CODEBASE locate+leash (2026-09-04).** G20/G21 lived on PID **26936**: index stats; *voice* abstains (no allowlist). Sit 3 STT `handle transcription` went NONE → Qwen theater. **STT-join couple on WSL** (`resolve_stt_locate` + router before NONE): spoken *where is handle transcription* → exact `handle_transcription`. Household where-is not stolen. Needs bounce. Do **not** encode the tree into HRR.
 
