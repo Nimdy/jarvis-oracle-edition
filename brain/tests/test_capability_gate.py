@@ -610,6 +610,29 @@ def test_residual_sweep_requires_first_person_in_same_sentence():
     assert "electronic dance music" in out.lower(), out
     assert "enjoy" in out.lower(), out
 
+
+def test_demo_invite_requires_blocked_verb_in_same_sentence():
+    """Lived 2026-09-07: about-me lead 'Here's what I remember about you'
+    plus a later EDM pref rewrote the lead into a demo decline.
+    Dance stays blocked. Invite only dies when the verb is in that sentence.
+    """
+    gate = CapabilityGate(_fresh_registry())
+    reply = (
+        "Here's what I remember about you. "
+        "You enjoy electronic dance music, and you're a software engineer."
+    )
+    out = gate.check_text(reply)
+    low = out.lower()
+    assert "here's what i remember about you" in low, out
+    assert "electronic dance music" in low, out
+    assert "demo" not in low, out
+
+    same = "Here's what I can dance for you."
+    out2 = gate.check_text(same)
+    low2 = out2.lower()
+    assert "here's what i can dance" not in low2, out2
+    assert "capability" in low2 or "demo" in low2, out2
+
     must_die = [
         "I can play music.",
         "I can dance.",

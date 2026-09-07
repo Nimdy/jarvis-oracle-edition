@@ -77,6 +77,33 @@ class PreSpeechStance:
         }
 
 
+_PROTECTED_LENGTH_HINTS = frozenset({"brief", "detailed"})
+
+
+def earned_concise_length_hint(
+    stance: PreSpeechStance | None,
+    *,
+    current_hint: str = "",
+) -> str | None:
+    """NONE LLM length-hint consume of earned ToM concise.
+
+    When TBS stance is ``lean_concise`` (ToM ``prefers concise replies`` at
+    the person-aware floor), return ``brief`` so the existing
+    ``response_length_hint`` guideline fires. Does not return the TBS-2
+    prompt line. Does not overwrite a this-turn brief/detailed hint.
+    Unearned ToM (David 2026-09-07: confidence 0) returns None — Qwen
+    stays the conversational voice until the axis earns.
+    """
+    if stance is None:
+        return None
+    if getattr(stance, "stance", "") != "lean_concise":
+        return None
+    cur = str(current_hint or "").strip().lower()
+    if cur in _PROTECTED_LENGTH_HINTS:
+        return None
+    return "brief"
+
+
 class PreSpeechReader:
     """TBS-0 engine. Computes + LOGS a pre-speech stance each turn (glass-box). Injects nothing."""
 
@@ -120,8 +147,19 @@ class PreSpeechReader:
             negative = user_emotion in _NEGATIVE_EMOTIONS
 
             evidence: list = [["user_emotion", user_emotion], ["verbosity_pref", verbosity or "forming"]]
+            phatic = False
+            try:
+                from reasoning.bounded_response import is_phatic_status_ask
+                phatic = is_phatic_status_ask(user_text)
+            except Exception:
+                phatic = False
             # Priority: distress/withdrawal first, then the LEARNED concise preference, then warmth.
-            if negative or responsiveness == "withdrawn":
+            # Lived 2026-09-07: wav2vec2 tagged "good afternoon" / hello as frustrated and
+            # stamped give_space. A phatic hello is not withdrawal. Sensor noise must not
+            # beat the utterance. Real distress text ("ugh") still wins.
+            if phatic:
+                evidence.append(["phatic_hello", True])
+            if (negative or responsiveness == "withdrawn") and not phatic:
                 stance, conf = "give_space", 0.4
                 would = ("Internal read: they may be frustrated or pulling back — soften, give space, "
                          "keep it brief.")

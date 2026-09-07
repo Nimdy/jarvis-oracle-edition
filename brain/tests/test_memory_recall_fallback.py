@@ -93,6 +93,19 @@ def test_personal_activity_formatter_uses_conversational_memory_voice() -> None:
     assert "_to_speakable_memory_sentence(" in body
     assert "I can pull more details if you want." not in body
     assert "_is_session_bookkeeping_text(" in body
+    assert "preserve_ranker_order: bool = False" in body
+    assert "join_about_me_recap" in body
+
+
+def test_about_me_native_recall_uses_about_you_lead() -> None:
+    """Lived 2026-09-07: about-me spoke 'about that'. Couple addresses you."""
+    src = _source()
+    body = _function_body(src, "handle_transcription")
+    assert "is_about_me_recall" in body
+    assert "native_memory_recall_lead" in body
+    assert "preserve_ranker_order=_about_me" in body
+    assert "ABOUT_ME_SPOKEN_ITEMS" in body
+    assert 'lead="Here\'s what I remember about that."' not in body
 
 
 def test_none_route_fragment_noise_guard_present() -> None:

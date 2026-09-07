@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 _vector_store = None
 _last_retrieval_event_id: str = ""
+_last_ranker_used: bool = False
 _baseline_probe_counter: int = 0
 _BASELINE_PROBE_INTERVAL: int = 20
 
@@ -26,6 +27,16 @@ _BASELINE_PROBE_INTERVAL: int = 20
 def get_last_retrieval_event_id() -> str:
     """Return the event_id from the most recent _hybrid_search call."""
     return _last_retrieval_event_id
+
+
+def get_last_ranker_used() -> bool:
+    """Whether the most recent hybrid search scored with the learned ranker.
+
+    False when the ranker was not ready, a baseline probe forced heuristic,
+    vector search did not run, or scoring fell back. Native MEMORY flight
+    reads this through the memory-tool summary — it is not a mouth signal.
+    """
+    return bool(_last_ranker_used)
 
 
 def init_vector_store(
@@ -133,7 +144,8 @@ def _hybrid_search(query: str, top_k: int = 20, speaker: str = "",
     The ORDER is still the ranker's (learned relevance); the attached score is
     the absolute similarity so callers can label and floor it truthfully.
     """
-    global _last_retrieval_event_id
+    global _last_retrieval_event_id, _last_ranker_used
+    _last_ranker_used = False
 
     if not _vector_store or not _vector_store.available:
         return []
@@ -227,6 +239,8 @@ def _hybrid_search(query: str, top_k: int = 20, speaker: str = "",
             scored = [(rec.heuristic_score, (rec, mem)) for rec, mem in candidates]
     except Exception:
         scored = [(rec.heuristic_score, (rec, mem)) for rec, mem in candidates]
+
+    _last_ranker_used = ranker_used
 
     scored.sort(key=lambda x: x[0], reverse=True)
     selected_pairs = scored[:top_k]

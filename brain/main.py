@@ -96,42 +96,65 @@ def _request_restart(reason: str, message: str = "",
     logger.info("Restart intent written: reason=%s message=%s", reason, message)
 
 
-def _restore_active_policy_controller(
-    policy_registry: Any,
-    state_encoder: Any,
-) -> Any | None:
-    """Restore the active persisted policy model, if one exists.
+def _pick_policy_checkpoint(policy_registry: Any) -> tuple[Any | None, str]:
+    """Pick weights for the live shadow controller.
 
-    This restores trained weights across restart without inferring unstored
-    promotion-phase details such as staged feature flags.
+    Promoted ``is_active`` wins. Else the best trained checkpoint (lowest
+    validation loss) for SHADOW inference only — not a promotion.
     """
     try:
         active = policy_registry.get_active()
     except Exception:
         logger.exception("Failed to query active policy model from registry")
-        return None
+        active = None
+    if active is not None and getattr(active, "path", "") and os.path.exists(active.path):
+        return active, "active"
+    getter = getattr(policy_registry, "get_shadow_checkpoint", None)
+    if not callable(getter):
+        return None, ""
+    try:
+        shadow = getter()
+    except Exception:
+        logger.exception("Failed to query shadow policy checkpoint")
+        return None, ""
+    if shadow is None or not getattr(shadow, "path", "") or not os.path.exists(shadow.path):
+        return None, ""
+    return shadow, "shadow_checkpoint"
 
-    if active is None or not getattr(active, "path", ""):
-        return None
-    if not os.path.exists(active.path):
-        logger.warning("Active policy model path missing on boot: %s", active.path)
+
+def _restore_active_policy_controller(
+    policy_registry: Any,
+    state_encoder: Any,
+) -> Any | None:
+    """Restore persisted policy weights for shadow inference.
+
+    Loads a promoted active model when one exists. If the registry has
+    trained checkpoints but nothing promoted (lived: v93 on disk,
+    active_version=0), load the best checkpoint for SHADOW only.
+    Does not enable feature flags.
+    """
+    checkpoint, source = _pick_policy_checkpoint(policy_registry)
+    if checkpoint is None:
         return None
 
     try:
         from policy.state_encoder import STATE_DIM
         from policy.policy_nn import PolicyNNController
 
-        controller = PolicyNNController(arch=active.arch, input_dim=STATE_DIM)
+        controller = PolicyNNController(arch=checkpoint.arch, input_dim=STATE_DIM)
         controller.set_encoder(state_encoder)
-        if controller.load(active.path):
+        if controller.load(checkpoint.path):
             logger.info(
-                "Restored active policy model on boot: v%04d (%s)",
-                active.version,
-                active.arch,
+                "Restored %s policy model on boot: v%04d (%s)",
+                source,
+                checkpoint.version,
+                checkpoint.arch,
             )
+            controller._restore_source = source
+            controller._restore_version = checkpoint.version
             return controller
     except Exception:
-        logger.exception("Failed to restore active policy model from %s", active.path)
+        logger.exception("Failed to restore policy model from %s", checkpoint.path)
     return None
 
 
@@ -769,15 +792,25 @@ async def main() -> None:
             from policy.telemetry import policy_telemetry as _pt
             if restored_nn is not None:
                 policy_interface.set_nn_controller(restored_nn)
-                # Honest telemetry: reflect that the live NN is the restored active
-                # model, not a fresh untrained default (the boot-restore previously
-                # left model_id="none" even after loading a trained model).
+                # Honest telemetry: trained weights in the shadow controller.
+                # "_shadow" suffix means NOT promoted / flags still off.
                 try:
-                    _act = policy_registry.get_active()
-                    if _act is not None:
-                        _pt.model_id = f"v{_act.version:04d}"
-                        _pt.model_version = _act.version
-                        _pt.arch = _act.arch
+                    _ver = int(getattr(restored_nn, "_restore_version", 0) or 0)
+                    _src = str(getattr(restored_nn, "_restore_source", "") or "")
+                    _arch = getattr(restored_nn, "arch_name", "") or ""
+                    if _ver:
+                        _pt.model_id = (
+                            f"v{_ver:04d}" if _src == "active" else f"v{_ver:04d}_shadow"
+                        )
+                        _pt.model_version = _ver
+                        if _arch:
+                            _pt.arch = _arch
+                    else:
+                        _act = policy_registry.get_active()
+                        if _act is not None:
+                            _pt.model_id = f"v{_act.version:04d}"
+                            _pt.model_version = _act.version
+                            _pt.arch = _act.arch
                 except Exception:
                     logger.warning("Policy telemetry model-id sync failed", exc_info=True)
             else:

@@ -2,6 +2,8 @@ import sys
 from types import SimpleNamespace
 
 from tools.memory_tool import (
+    ABOUT_ME_FILL_RESERVE,
+    ABOUT_ME_SPOKEN_ITEMS,
     _extract_about_subjects,
     _format_payload_preview,
     _is_session_bookkeeping_text,
@@ -9,6 +11,12 @@ from tools.memory_tool import (
     _keyword_search,
     _search_cue_for_speaker,
     _semantic_search,
+    _splice_about_me_fill,
+    address_about_me_sentence,
+    get_last_memory_tool_summary,
+    is_about_me_recall,
+    join_about_me_recap,
+    native_memory_recall_lead,
     search_memory,
 )
 
@@ -964,3 +972,202 @@ def test_search_memory_about_me_embeds_speaker_name(monkeypatch) -> None:
     assert "David" in captured.get("query", "")
     refs = captured.get("referenced_entities") or set()
     assert "skyler" not in {str(x).lower() for x in refs}
+
+
+def _owned_pref(
+    payload: str,
+    *,
+    mem_id: str,
+    mem_type: str = "user_preference",
+    tags: tuple[str, ...] = ("personal_preference", "speaker:david"),
+):
+    return SimpleNamespace(
+        id=mem_id,
+        type=mem_type,
+        payload=payload,
+        weight=0.67,
+        provenance="user_claim",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=tags,
+    )
+
+
+def test_about_me_detector_and_lead_are_speaker_not_topic() -> None:
+    assert is_about_me_recall("What do you remember about me?")
+    assert is_about_me_recall("Jarvis, what do you know about myself?")
+    assert not is_about_me_recall("What do you remember about my family?")
+    assert not is_about_me_recall("What do you remember about Skyler?")
+    assert not is_about_me_recall("What did I do yesterday?")
+    assert native_memory_recall_lead("What do you remember about me?") == (
+        "Here's what I remember about you."
+    )
+    assert native_memory_recall_lead("What do you remember about Skyler?") == (
+        "Here's what I remember about that."
+    )
+    assert "david" not in native_memory_recall_lead("What do you remember about me?").lower()
+
+
+def test_about_you_recap_is_session_bookkeeping() -> None:
+    assert _is_session_bookkeeping_text(
+        "Here's what I remember about you. David enjoys pizza."
+    )
+    assert not _is_session_bookkeeping_text("User's favorite food is pizza")
+
+
+def test_splice_about_me_fill_keeps_ranker_prefix() -> None:
+    head = [(0.9, "edm"), (0.8, "workday"), (0.7, "job"), (0.6, "x"), (0.5, "y")]
+    fill = [(0.3, "pizza"), (0.29, "brief")]
+    out = _splice_about_me_fill(
+        head + fill,
+        semantic_n=len(head),
+        spoken_window=ABOUT_ME_SPOKEN_ITEMS,
+        reserve=ABOUT_ME_FILL_RESERVE,
+    )
+    spoken = [p for _, p in out[:ABOUT_ME_SPOKEN_ITEMS]]
+    assert spoken[:3] == ["edm", "workday", "job"]
+    assert "pizza" in spoken
+    assert "brief" in spoken
+
+
+def test_search_memory_about_me_fill_after_ranker_stamps_ranker_used(monkeypatch) -> None:
+    """Lived 2026-09-07: career mash filled top-k; pizza/brief missed the mouth.
+
+    Ranker still scores the semantic hits. Type fill (not a name allowlist)
+    splices taught prefs into the spoken window. Flight stamps ranker_used.
+    """
+    careers = [
+        _owned_pref(
+            "David enjoys electronic dance music",
+            mem_id="c1",
+            tags=("personal_interest", "speaker:david"),
+        ),
+        _owned_pref("David workday pattern: focused until afternoon", mem_id="c2"),
+        _owned_pref("David is software engineer", mem_id="c3", tags=("personal_fact", "speaker:david")),
+        _owned_pref("David works as a software engineer", mem_id="c4", tags=("personal_fact", "speaker:david")),
+        _owned_pref("David's career is software engineering", mem_id="c5", tags=("personal_fact", "speaker:david")),
+    ]
+    pizza = _owned_pref("User's favorite food is pizza", mem_id="p1")
+    brief = _owned_pref("User prefers brief responses", mem_id="p2")
+    skyler = _owned_pref(
+        "Ah, Skyler — your border collie",
+        mem_id="s1",
+        tags=("personal_preference", "speaker:david"),
+    )
+
+    def by_type(mem_type: str):
+        if mem_type == "user_preference":
+            return [pizza, brief, skyler]
+        return []
+
+    monkeypatch.setitem(
+        sys.modules,
+        "memory.search",
+        SimpleNamespace(
+            semantic_search_scored=lambda *a, **k: [
+                (0.90 - i * 0.02, mem) for i, mem in enumerate(careers)
+            ],
+            keyword_search=lambda *a, **k: [],
+            search_by_type=by_type,
+            get_last_ranker_used=lambda: True,
+        ),
+    )
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+    monkeypatch.setattr("tools.memory_tool._build_identity_context", lambda _s: None)
+
+    out = search_memory("What do you remember about me?", speaker="David")
+    low = out.lower()
+    lines = [ln for ln in out.splitlines() if ln.strip().startswith("-")]
+    spoken_window = lines[:ABOUT_ME_SPOKEN_ITEMS]
+    window_text = "\n".join(spoken_window).lower()
+    assert "electronic dance" in window_text
+    assert "pizza" in window_text
+    assert "brief" in window_text
+    assert "border collie" not in low
+    assert "skyler" not in low
+    summary = get_last_memory_tool_summary()
+    assert summary.get("ranker_used") is True
+    assert int(summary.get("count") or 0) > 0
+
+
+def test_search_memory_about_me_unknown_speaker_does_not_fill(monkeypatch) -> None:
+    pizza = _owned_pref("User's favorite food is pizza", mem_id="p1")
+    monkeypatch.setitem(
+        sys.modules,
+        "memory.search",
+        SimpleNamespace(
+            semantic_search_scored=lambda *a, **k: [],
+            keyword_search=lambda *a, **k: [],
+            search_by_type=lambda *_: [pizza],
+            get_last_ranker_used=lambda: False,
+        ),
+    )
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+    monkeypatch.setattr("tools.memory_tool._build_identity_context", lambda _s: None)
+    out = search_memory("What do you remember about me?", speaker="unknown")
+    assert "pizza" not in out.lower()
+    assert get_last_memory_tool_summary().get("ranker_used") is False
+
+
+def test_about_me_recap_addresses_you_and_joins() -> None:
+    recap = join_about_me_recap(
+        [
+            "David enjoys electronic dance music.",
+            "David workday pattern: focused until afternoon.",
+            "David is software engineer.",
+            "David is David.",
+            "User's favorite food is pizza.",
+        ],
+        "David",
+    )
+    low = recap.lower()
+    assert recap.startswith("You enjoy electronic dance music")
+    assert "your workday pattern: focused until afternoon" in low
+    assert "you're a software engineer" in low
+    assert "your favorite food is pizza" in low
+    assert "david is david" not in low
+    assert recap.count(".") == 1
+    assert ", and " in recap
+    guest = address_about_me_sentence("User enjoys pizza", "Sarah")
+    assert guest.lower().startswith("you enjoy pizza")
+
+
+def test_search_memory_about_me_drops_observation_recaps(monkeypatch) -> None:
+    """Lived 2026-09-07: ranker-order about-me spoke 'Completed a brief
+    interaction about morning david! welcome' observations.
+    """
+    pizza = _owned_pref("User's favorite food is pizza", mem_id="p1")
+    obs = SimpleNamespace(
+        id="o1",
+        type="observation",
+        payload=(
+            "Completed a brief interaction about morning david! welcome. "
+            "Response was concise."
+        ),
+        weight=0.90,
+        provenance="observation",
+        identity_subject="david",
+        identity_subject_type="primary_user",
+        identity_owner_type="person",
+        tags=("observation", "speaker:david"),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "memory.search",
+        SimpleNamespace(
+            semantic_search_scored=lambda *a, **k: [(0.95, obs), (0.40, pizza)],
+            keyword_search=lambda *a, **k: [],
+            search_by_type=lambda *_: [],
+            get_last_ranker_used=lambda: True,
+        ),
+    )
+    monkeypatch.setattr("tools.memory_tool._extract_referenced_entities", lambda _q: set())
+    monkeypatch.setattr("tools.memory_tool._build_identity_context", lambda _s: None)
+    out = search_memory("What do you remember about me?", speaker="David").lower()
+    assert "pizza" in out
+    assert "completed a brief interaction" not in out
+    assert "response was concise" not in out
+    assert _is_session_bookkeeping_text(
+        "Completed a brief interaction about morning david! welcome."
+    )
