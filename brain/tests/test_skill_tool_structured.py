@@ -432,6 +432,22 @@ class SkillToolStructuredTests(unittest.TestCase):
         self.assertFalse(result["matrix_protocol"])
         self.assertFalse(result.get("protocol_id"))
 
+    def test_learn_desire_question_does_not_create_job(self) -> None:
+        """Lived 2026-09-07: conversational invite minted thats_really_cool_want_v1."""
+        lived = (
+            "Jarvis, that's really cool. Do you want to learn a skill or "
+            "capability to make that music?"
+        )
+        result = self._start_advisory_job(lived)
+        self.assertEqual(result["outcome"], "learn_desire_question")
+        self.assertEqual(result["_create_calls"], [])
+        self.assertNotIn("started a learning job", result["message"].lower())
+
+    def test_i_want_you_to_learn_still_creates_job(self) -> None:
+        result = self._start_advisory_job("I want you to learn to make music")
+        self.assertEqual(result["outcome"], "job_started")
+        self.assertEqual(len(result["_create_calls"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

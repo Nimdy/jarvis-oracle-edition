@@ -17,14 +17,14 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/project-2-oneshot` (cut from `feat/nn-fleet-consume` `a98f018` so a bad slice can be dropped) |
-| **HEAD (committed)** | `feat/project-2-oneshot`. Skill learning pipeline lived (d20). **Companion mouth lived 2026-09-07:** phatic STATUS, TBS hello not `give_space`, about-me native recap. P4/TBS-2 still gated. **#26** soaked. **#5** WR lived. **#23** Later. |
+| **HEAD (committed)** | `feat/project-2-oneshot`. Skill learning pipeline lived (d20). **Companion mouth lived 2026-09-07:** phatic STATUS, TBS hello not `give_space`, about-me native recap. Conversational *do you want to learn* no longer mints a LearningJob (lived leak `job_…_a83b`). P4/TBS-2 still gated. **#26** soaked. **#5** WR lived. **#23** Later. |
 | **vs origin** | Pushing this branch; operator asked **2026-09-07** to merge up to GitHub/`main`. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
 | **Board** | **Only board:** [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8) (sort by Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. North star **#42**. **#83** is frozen notes — do not execute those checkboxes. |
 | **Merge `main`** | **Yes — operator asked 2026-09-07** (skill-learning pipeline lived). |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
 | **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
-| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** Companion mouth lived 2026-09-07: STATUS `I'm here with you.`; TBS hello not `give_space`; about-me recap (EDM / workday / engineer / brief / blue). NONE length-hint consumes **earned** ToM concise only (unmet today: verbosity_confidence=0). **TBS-2 / P4 still gated.** Do not close #42/#83. |
+| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** Companion mouth lived 2026-09-07: STATUS `I'm here with you.`; TBS hello not `give_space`; about-me recap (EDM / workday / engineer / brief / blue). NONE length-hint consumes **earned** ToM concise only (unmet today: verbosity_confidence=0). **TBS-2 / P4 still gated.** Live leftover: bogus job `job_20260908T003242Z_a83b` (`thats_really_cool_want_v1`) still on disk in research — operator owns Reject/Delete. Do not close #42/#83. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
@@ -247,6 +247,8 @@ Lived 2026-09-01 bounce PID **19451**. `/api/nn-fleet`: 9 `consumed_now` (includ
 | weight_room_gate | not consumed | `enforces=False` (P2 would-block). Overlay keeps `consumed_now=False` | No |
 
 HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipping advisory). Policy NN shadow: **signal-failure** (A/B always ties while unexecuted). Boot now shadow-loads best trained checkpoint (not `default_untrained`); **flags stay 0/8**, no apply. Do not restore DEVIATION_BONUS. positive_memory **NN** orphaned (heuristic scalar broadcasts). Claim-friction teacher feed is already fixed (`cc04f08`); registry prose is stale.
+
+**Skill leak (2026-09-07 20:32, PID 52817).** STT *Jarvis, that's really cool. Do you want to learn a skill or capability to make that music?* routed **SKILL** (fuzzy `learn.{0,30}to`) and minted `job_20260908T003242Z_a83b` / `thats_really_cool_want_v1`. Not GOLDEN. Not CapabilityGate auto-create. Coupled on WSL: `is_learn_desire_question` → NONE; `skill_tool` fail-closed (no `create_job`). GOLDEN LEARN SKILL + *Learn a new skill d20* + *I want you to learn* still SKILL. **Do not SSH-delete the live job** unless David names delete (dashboard Reject / `DELETE /api/learning-jobs/{job_id}`). Needs bounce.
 
 **CODEBASE locate+leash (2026-09-04).** G20/G21 lived on PID **26936**: index stats; *voice* abstains (no allowlist). Sit 3 STT `handle transcription` went NONE → Qwen theater. **STT-join couple on WSL** (`resolve_stt_locate` + router before NONE): spoken *where is handle transcription* → exact `handle_transcription`. Household where-is not stolen. Needs bounce. Do **not** encode the tree into HRR.
 

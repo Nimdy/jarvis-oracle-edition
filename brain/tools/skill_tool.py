@@ -467,6 +467,17 @@ def handle_skill_request_structured(
             "message": "My learning system isn't initialized yet. I can't start learning jobs right now.",
         }
 
+    from reasoning.tool_router import is_learn_desire_question
+    if is_learn_desire_question(user_text):
+        return {
+            "outcome": "learn_desire_question",
+            "status": "idle",
+            "message": (
+                "That sounded like a question about whether I want to learn, "
+                "not a request to start a learning job."
+            ),
+        }
+
     try:
         from skills.resolver import is_generic_fallback_resolution, resolve_skill
     except ImportError:

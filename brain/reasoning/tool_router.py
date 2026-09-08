@@ -1440,6 +1440,29 @@ def _is_user_help_or_day_to_day(lower: str) -> bool:
     return bool(lower and _USER_HELP_DAY_TO_DAY_RE.search(lower))
 
 
+# Conversational invitation, not a learn-X command. Lived 2026-09-07 20:32:
+# STT "Do you want to learn a skill or capability to make that music?" hit
+# SKILL regex learn.{0,30}to and minted job_20260908T003242Z_a83b
+# (skill_id thats_really_cool_want_v1). Do not match bare "want to learn"
+# (that would catch "I want to learn"). Operator "I want you to learn" stays
+# a command.
+_LEARN_DESIRE_QUESTION_RE = re.compile(
+    r"\b(?:do you want to|do you wanna|would you (?:like|want) to|"
+    r"are you (?:going to|gonna)|you wanna)\s+learn\b",
+    re.I,
+)
+_OPERATOR_LEARN_COMMAND_RE = re.compile(r"\bi want you to learn\b", re.I)
+
+
+def is_learn_desire_question(text: str) -> bool:
+    """True when the user is asking whether she wants to learn, not commanding it."""
+    if not text:
+        return False
+    if _OPERATOR_LEARN_COMMAND_RE.search(text):
+        return False
+    return bool(_LEARN_DESIRE_QUESTION_RE.search(text))
+
+
 _GENERAL_KNOWLEDGE_RE = re.compile(
     r"(?:^|\b)(?:"
     r"who (?:wrote|is|was|invented|discovered|created|founded|directed|composed|painted|designed|built)\b"
@@ -1679,6 +1702,23 @@ class ToolRouter:
                     tool=ToolType.STATUS,
                     confidence=0.9,
                     extracted_args={"tier": "phatic_greeting"},
+                ),
+                synthetic=synthetic,
+            )
+
+        # Conversational "do you want to learn" is companion chat, not SKILL.
+        # GOLDEN LEARN SKILL and "learn X" / "I want you to learn" still fire.
+        if is_learn_desire_question(user_message):
+            logger.info(
+                "Learn-desire question catch: NONE (no LearningJob) for: %s",
+                lower[:60],
+            )
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=ToolType.NONE,
+                    confidence=0.88,
+                    extracted_args={"tier": "learn_desire_question"},
                 ),
                 synthetic=synthetic,
             )
