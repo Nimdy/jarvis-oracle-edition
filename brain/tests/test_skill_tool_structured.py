@@ -432,6 +432,19 @@ class SkillToolStructuredTests(unittest.TestCase):
         self.assertFalse(result["matrix_protocol"])
         self.assertFalse(result.get("protocol_id"))
 
+    def test_set_timer_starts_named_advisory_job(self) -> None:
+        """Lived 2026-09-09: timer use/learn must mint set_timer_v1, not NONE."""
+        from skills.resolver import is_generic_fallback_resolution, resolve_skill
+
+        text = "Set a five minute timer."
+        resolution = resolve_skill(text)
+        self.assertEqual(resolution.skill_id, "set_timer_v1")
+        self.assertFalse(is_generic_fallback_resolution(resolution))
+        result = self._start_advisory_job(text)
+        self.assertEqual(result["outcome"], "job_started")
+        self.assertEqual(result["_create_calls"][0]["skill_id"], "set_timer_v1")
+        self.assertIn("started a learning job", result["message"].lower())
+
     def test_learn_desire_question_does_not_create_job(self) -> None:
         """Lived 2026-09-07: conversational invite minted thats_really_cool_want_v1."""
         lived = (

@@ -101,6 +101,48 @@ def _generate_skill_name(text: str) -> str:
 # ── Skill templates (extend over time) ──────────────────────────────────────
 
 SKILL_TEMPLATES: list[tuple[re.Pattern[str], SkillResolution]] = [
+    # ── Timer / reminder (lived 2026-09-09: "set a five minute timer" was
+    # NONE + L0 "I don't have that capability yet"; GOLDEN ACQUIRE SKILL
+    # became knowledge_only paper. This is the learn-X catalog entry.)
+    (
+        re.compile(
+            r"\b(?:set|start)\s+(?:a\s+)?(?:\d+\s+|\w+\s+){0,3}timer\b"
+            r"|\b(?:set|create|make)\s+(?:a\s+)?reminder\b"
+            r"|\bremind me\b",
+            re.I,
+        ),
+        SkillResolution(
+            skill_id="set_timer_v1",
+            name="Set Timer and Reminders",
+            capability_type="procedural",
+            risk_level="low",
+            required_evidence=["test:procedure_smoke", "test:sandbox_execution_pass"],
+            capability=StructuredCapability(
+                input_type="operator_request",
+                output_type="structured_tool_result",
+                success_metrics=("procedure_smoke_passed", "sandbox_execution_pass"),
+                evidence_requirements=(
+                    "active_plugin_or_tool_path",
+                    "sandbox_execution_artifact",
+                ),
+                execution_contract_id="set_timer_v1_plugin",
+                required_executor_kind="plugin",
+                acquisition_eligible=True,
+            ),
+            default_phases=[
+                {"name": "assess", "exit_conditions": []},
+                {"name": "research", "exit_conditions": ["artifact:research_summary"]},
+                {"name": "integrate", "exit_conditions": ["artifact:integration_test_passed"]},
+                {"name": "verify", "exit_conditions": ["evidence:test:procedure_smoke"]},
+                {"name": "register", "exit_conditions": ["skill_status:verified"]},
+            ],
+            notes=(
+                "Operator-requested timer/reminder tool: research drafts "
+                "required/expected, then waits for approval before building "
+                "a plugin. Does not fire a timer until the plugin is active."
+            ),
+        ),
+    ),
     # ── Speaker Diarization / Source Separation ──────────────────────────
     (
         re.compile(

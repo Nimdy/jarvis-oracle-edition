@@ -476,6 +476,41 @@ def test_golden_learn_skill_captures_argument_and_stays_skill():
     assert result.golden_context.argument_text.lower() == "roll a 20-sided dice"
 
 
+def test_golden_acquire_skill_timer_is_learn_skill_not_acquisition():
+    """Lived 2026-09-09: 'acquire skill, set a timer' became knowledge_only paper."""
+    result = router.route(
+        "Jarvis, golden command, acquire skill, set a timer."
+    )
+    assert result.tool == ToolType.SKILL, result.extracted_args
+    assert result.extracted_args.get("golden_command_id") == "GW_LEARN_SKILL"
+    assert result.golden_context is not None
+    assert result.golden_context.command_id == "GW_LEARN_SKILL"
+    assert "timer" in (result.golden_context.argument_text or "").lower()
+
+
+def test_golden_acquire_without_skill_stays_acquisition():
+    result = router.route("Jarvis, GOLDEN COMMAND ACQUIRE voice diarization")
+    assert result.tool == ToolType.ACQUISITION
+    assert result.extracted_args.get("golden_command_id") == "GW_ACQUIRE"
+
+
+def test_set_timer_and_remind_me_route_skill():
+    """Lived 2026-09-09: 'Set a five minute timer' was NONE + L0 no-capability."""
+    for text in (
+        "Set a five minute timer.",
+        "set a timer",
+        "Set a reminder",
+        "Remind me in five minutes",
+        "remind me to take Skylar out",
+    ):
+        result = router.route(text)
+        assert result.tool == ToolType.SKILL, (
+            f"{text!r} expected SKILL, got {result.tool.value} {result.extracted_args}"
+        )
+    time_ask = router.route("What time is it?")
+    assert time_ask.tool == ToolType.TIME
+
+
 def test_natural_learn_a_new_skill_routes_skill():
     """Lived 2026-09-06: natural learn-skill (not golden) still routes SKILL."""
     result = router.route(
