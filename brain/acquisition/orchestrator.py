@@ -318,6 +318,10 @@ class AcquisitionOrchestrator:
             raise ValueError("prior acquisition has no intent to revise")
 
         gen = int(getattr(prior, "revision_generation", 0) or 0) + 1
+        # Operator feedback is the live spec. Lived 2026-09-09: gen-1 of
+        # knowledge_only "skill set a timer" cloned empty lanes and completed
+        # in 10s with no plan (acq_8571c7b59d).
+        classify_text = feedback or intent
 
         # Carry the skill/contract binding forward so the contract evidence (and smoke
         # fixtures) are reconstructed for the improvement — this is what makes the
@@ -335,20 +339,30 @@ class AcquisitionOrchestrator:
 
         job = CapabilityAcquisitionJob(
             title=f"[improve gen-{gen}] {prior.title or intent[:80]}",
-            user_intent=intent,
+            user_intent=classify_text,
             requested_by=new_req,
             revision_of=prior_acquisition_id,
             revision_feedback=feedback,
             revision_generation=gen,
         )
-        # Clone the prior's classification + structure (skip heuristic re-classification:
-        # we already know what this capability is) and INHERIT its doc evidence floor.
-        job.outcome_class = prior.outcome_class or "plugin_creation"
-        job.classification_confidence = 1.0
-        job.classified_at = time.time()
-        job.required_lanes = list(prior.required_lanes or _LANE_MAP.get(job.outcome_class, []))
-        job.risk_tier = int(getattr(prior, "risk_tier", 0) or 0)
-        job.learning_job_id = getattr(prior, "learning_job_id", "") or ""
+        prior_class = (prior.outcome_class or "").strip() or "plugin_creation"
+        if prior_class == "knowledge_only":
+            # Paper parent was a misroute. Reclassify from the Improve spec.
+            result = self._classifier.classify(classify_text)
+            job.outcome_class = result.outcome_class
+            job.classification_confidence = result.confidence
+            job.classified_at = result.classified_at
+            job.required_lanes = list(result.required_lanes)
+            job.risk_tier = int(result.risk_tier)
+            job.learning_job_id = ""
+        else:
+            # Clone a real prior's classification + inherit its doc evidence floor.
+            job.outcome_class = prior_class
+            job.classification_confidence = 1.0
+            job.classified_at = time.time()
+            job.required_lanes = list(prior.required_lanes or _LANE_MAP.get(job.outcome_class, []))
+            job.risk_tier = int(getattr(prior, "risk_tier", 0) or 0)
+            job.learning_job_id = getattr(prior, "learning_job_id", "") or ""
         job.doc_artifact_ids = list(prior.doc_artifact_ids or [])
 
         self._apply_risk_tier(job)
@@ -357,6 +371,7 @@ class AcquisitionOrchestrator:
         self._record_ledger_entry(job, "acquisition:created")
         job.set_status("planning" if "planning" in job.required_lanes else "executing")
         job.add_artifact_ref(prior_acquisition_id)
+        self._bind_catalog_learning_job(job, classify_text)
 
         self._store.save_job(job)
         self._active_jobs[job.acquisition_id] = job
@@ -364,9 +379,41 @@ class AcquisitionOrchestrator:
         logger.info(
             "Acquisition %s is improvement gen-%d of %s (skill=%s docs=%d tier=%d): %.80s",
             job.acquisition_id, gen, prior_acquisition_id,
-            new_req.get("skill_id", ""), len(job.doc_artifact_ids), job.risk_tier, feedback,
+            (job.requested_by or {}).get("skill_id", ""), len(job.doc_artifact_ids),
+            job.risk_tier, feedback,
         )
         return job
+
+    def _bind_catalog_learning_job(self, job: CapabilityAcquisitionJob, text: str) -> None:
+        """Catalog skills (timer) enter the LearningJob door, not paper lanes.
+
+        Operator still Approves the plugin. Grok does not click Approve.
+        """
+        if (job.outcome_class or "") not in ("skill_creation", "plugin_creation"):
+            return
+        try:
+            from skills.resolver import is_generic_fallback_resolution, resolve_skill
+            from tools.skill_tool import handle_skill_request_structured
+        except Exception:
+            return
+        try:
+            resolution = resolve_skill(text)
+            if resolution is None or is_generic_fallback_resolution(resolution):
+                return
+            speaker = str((job.requested_by or {}).get("speaker") or "")
+            result = handle_skill_request_structured(text, speaker=speaker)
+            if result.get("outcome") not in ("job_started", "already_learning"):
+                return
+            job.learning_job_id = str(result.get("job_id") or "")
+            req = dict(job.requested_by or {})
+            req["skill_id"] = str(result.get("skill_id") or resolution.skill_id)
+            job.requested_by = req
+            logger.info(
+                "Acquisition %s bound learning job %s (%s)",
+                job.acquisition_id, job.learning_job_id, req.get("skill_id"),
+            )
+        except Exception:
+            logger.debug("catalog learning-job bind failed", exc_info=True)
 
     def create_skill_proof_handoff(
         self,

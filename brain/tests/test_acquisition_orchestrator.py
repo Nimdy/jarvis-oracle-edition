@@ -227,6 +227,44 @@ def test_create_adds_to_active_jobs():
         _cleanup(orch)
 
 
+def test_improve_knowledge_only_timer_reclassifies_and_binds_learning_job():
+    """Lived acq_8571c7b59d: Improve of paper timer cloned knowledge_only, empty plan."""
+    store, tmpdir = _make_store()
+    orch = _make_orchestrator(store, tmpdir)
+    try:
+        prior = CapabilityAcquisitionJob(
+            acquisition_id="acq_paper",
+            title="skill set a timer",
+            user_intent="skill set a timer",
+            outcome_class="knowledge_only",
+            required_lanes=["evidence_grounding", "truth"],
+            risk_tier=0,
+            status="completed",
+        )
+        store.save_job(prior)
+        feedback = (
+            "create a skill to where I can ask JARVIS to set a timer for x "
+            "amount of time and then monitor said timer. When the timer goes off alert me"
+        )
+        with patch(
+            "tools.skill_tool.handle_skill_request_structured",
+            return_value={
+                "outcome": "job_started",
+                "job_id": "job_timer_1",
+                "skill_id": "set_timer_v1",
+            },
+        ):
+            job = orch.improve_capability("acq_paper", feedback)
+        assert job.outcome_class == "skill_creation"
+        assert "planning" in job.required_lanes
+        assert job.learning_job_id == "job_timer_1"
+        assert (job.requested_by or {}).get("skill_id") == "set_timer_v1"
+        assert job.status == "planning"
+        assert job.revision_of == "acq_paper"
+    finally:
+        _cleanup(orch)
+
+
 # ---------------------------------------------------------------------------
 # Risk tier permission model
 # ---------------------------------------------------------------------------

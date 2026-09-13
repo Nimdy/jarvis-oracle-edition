@@ -87,6 +87,7 @@ _HARDWARE_PATTERNS = [
 _SKILL_PATTERNS = [
     re.compile(r"\b(?:learn (?:how )?to|teach yourself|acquire the (?:skill|ability))\b", re.I),
     re.compile(r"\b(?:learn|train)\b.*\b(?:skill|ability|capability)\b", re.I),
+    re.compile(r"\b(?:create|build|make)\s+a\s+skill\b", re.I),
 ]
 
 _SPECIALIST_PATTERNS = [
@@ -129,26 +130,34 @@ class IntentClassifier:
         return self._classify_by_patterns(text)
 
     def _check_skill_resolver(self, text: str) -> ClassificationResult | None:
-        """Check if existing SkillResolver has a matching template."""
+        """Catalog templates only — not generic fallback (that would steal everything).
+
+        Lived 2026-09-09: ``SkillResolver`` class does not exist; this probe
+        excepted out and GOLDEN/improve 'skill set a timer' became knowledge_only.
+        """
         try:
-            from skills.resolver import SkillResolver
-            resolver = SkillResolver()
-            resolution = resolver.resolve(text)
-            if resolution and resolution.skill_id and resolution.skill_id != "unknown":
-                if resolution.capability_type in ("perceptual", "control"):
-                    outcome = "skill_creation"
-                else:
-                    outcome = "skill_creation"
-                return ClassificationResult(
-                    outcome_class=outcome,
-                    confidence=0.85,
-                    required_lanes=_LANE_MAP[outcome],
-                    risk_tier=_RISK_MAP[outcome],
-                    reasoning=f"SkillResolver matched: {resolution.skill_id}",
-                )
+            from skills.resolver import (
+                is_generic_fallback_resolution,
+                resolve_skill,
+            )
+            resolution = resolve_skill(text)
+            if resolution is None:
+                return None
+            skill_id = getattr(resolution, "skill_id", None)
+            if not isinstance(skill_id, str) or not skill_id or skill_id == "unknown":
+                return None
+            if is_generic_fallback_resolution(resolution):
+                return None
+            outcome = "skill_creation"
+            return ClassificationResult(
+                outcome_class=outcome,
+                confidence=0.85,
+                required_lanes=_LANE_MAP[outcome],
+                risk_tier=_RISK_MAP[outcome],
+                reasoning=f"SkillResolver matched: {skill_id}",
+            )
         except Exception:
-            pass
-        return None
+            return None
 
     def _classify_by_patterns(self, text: str) -> ClassificationResult:
         """Pattern-based classification using regex banks."""
