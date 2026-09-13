@@ -869,7 +869,10 @@ window.V2D = (function(){
     if(!handoff || !handoff.status){
       return '<div style="font-size:10.5px;color:var(--muted)">No operational handoff request.</div>';
     }
-    return _skRows([
+    var waitHint = (handoff.status==='awaiting_operator_approval' && !handoff.acquisition_id)
+      ? '<div style="font-size:10.5px;color:var(--amber);margin:0 0 8px;line-height:1.45">Approve / Reject + notes are on the <b>Review</b> tab — not this status row, not chat.</div>'
+      : '';
+    return waitHint+_skRows([
       ['Status', handoff.status],
       ['Approval required', handoff.approval_required ? 'yes' : 'no'],
       ['Contract ID', handoff.contract_id],
@@ -1219,7 +1222,24 @@ window.V2D = (function(){
       }
 
       body.innerHTML=html;
-      _wireSkillTabs(body, opts.tab || (glass.current_phase?('phase-'+glass.current_phase):'overview'));
+      // Lived 2026-09-13: awaiting_operator_approval opened the verify
+      // pane. Approve/Reject only exist on Review — operator saw status
+      // and no input. Land on Review when a handoff is waiting.
+      var startTab = opts.tab;
+      if (!startTab) {
+        if (
+          (handoff.status === 'awaiting_operator_approval'
+            || jb.status === 'awaiting_operator_approval')
+          && !handoff.acquisition_id
+        ) {
+          startTab = 'review';
+        } else if (glass.current_phase) {
+          startTab = 'phase-' + glass.current_phase;
+        } else {
+          startTab = 'overview';
+        }
+      }
+      _wireSkillTabs(body, startTab);
 
       function notes(){ var n=document.getElementById('v2d-skill-notes'); return n?n.value.trim():''; }
       function after(){
