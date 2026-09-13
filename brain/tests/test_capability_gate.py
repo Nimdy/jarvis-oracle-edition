@@ -859,6 +859,26 @@ def test_narration_guard_passes_on_skill_route():
     print("  PASS: narration guard passes on non-NONE routes")
 
 
+def test_learning_job_status_with_timer_name_is_not_swept():
+    """Lived 2026-09-13: residual sweep ate 'couldn't create a learning job for Set Timer'."""
+    gate = CapabilityGate(_fresh_registry())
+    text = (
+        "I couldn't create a learning job for 'Set Timer and Reminders' "
+        "(job: job_x, type: procedural, phase: assess)."
+    )
+    out = gate.check_text(text)
+    assert "couldn't create a learning job" in out.lower()
+    assert "set timer" in out.lower()
+    started = (
+        "I started a learning job for 'Set Timer and Reminders' "
+        "(job: job_x, type: procedural, phase: assess). "
+        "I won't claim it until it's verified. I'll wait for your approval."
+    )
+    out2 = gate.check_text(started)
+    assert "started a learning job" in out2.lower()
+    print("  PASS: learning-job status with timer in the name is not swept")
+
+
 def test_narration_guard_phase_pattern():
     """Phase/step narration (hallucinated learning job phases) must be caught."""
     gate = CapabilityGate(_fresh_registry())
@@ -1127,6 +1147,7 @@ if __name__ == "__main__":
     test_must_not_block_reflective_text()
     test_narration_guard_blocks_on_none_route()
     test_narration_guard_passes_on_skill_route()
+    test_learning_job_status_with_timer_name_is_not_swept()
     test_narration_guard_phase_pattern()
     test_narration_guard_no_false_positives()
     test_narration_guard_latch_suppresses_subsequent_chunks()

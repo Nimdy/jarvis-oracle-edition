@@ -556,6 +556,16 @@ _REFLECTIVE_EXCLUSION_RE = re.compile(
     re.I,
 )
 
+# Native SKILL-route job reports name the skill (timer/remind/sing). That is
+# not a capability claim. Lived 2026-09-13: residual sweep ate
+# "I couldn't create a learning job for 'Set Timer and Reminders'".
+_LEARNING_JOB_STATUS_RE = re.compile(
+    r"\b(?:started|couldn't create|could not create|already)\b.{0,80}\blearning job\b"
+    r"|\bwait for your approval\b"
+    r"|\bwon't claim\b",
+    re.I,
+)
+
 _CLAUSE_BOUNDARY_RE = re.compile(r',\s*(?:but|however|now|yet|and now)\s+|;\s*', re.I)
 
 
@@ -1396,6 +1406,14 @@ class CapabilityGate:
 
         # Layer 3: blocked verb — always requires verified status
         if _contains_blocked_capability(claimed):
+            if _LEARNING_JOB_STATUS_RE.search(modified.lower()):
+                self._claims_passed += 1
+                self._recent_passed.append(f"[learning-job-status] {claimed}")
+                self._record_claim_signal(
+                    claimed, "learning-job-status",
+                    is_readiness_frame=rf, pattern_index=pi,
+                )
+                return modified
             claim_pos = modified.find(original_span)
             if claim_pos >= 0:
                 sent_start = max(
@@ -1890,6 +1908,8 @@ class CapabilityGate:
 
             sentence_lower = text_lower[max(0, sent_start):sent_end + 1]
             if _REFLECTIVE_EXCLUSION_RE.search(sentence_lower):
+                continue
+            if _LEARNING_JOB_STATUS_RE.search(sentence_lower):
                 continue
             # Lived 2026-08-31: "I'm here" in a closer poisoned a later
             # "you enjoy electronic dance music" sentence. Contract is

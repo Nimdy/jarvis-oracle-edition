@@ -138,6 +138,7 @@ _CAPABILITY_VERBS = frozenset({
     "detect", "recognize", "identify", "track", "analyze",
     "translate", "transcribe", "summarize", "search",
     "roll", "quiz",
+    "remind", "schedule",
 })
 
 _CAPABILITY_NOUNS = frozenset({
@@ -146,13 +147,14 @@ _CAPABILITY_NOUNS = frozenset({
     "emotion", "language", "code", "document", "file",
     "data", "csv", "json", "xml", "text", "api", "web",
     "dice", "quiz", "task", "tasks", "list",
+    "timer", "reminder", "alarm", "countdown",
 })
 
 
 def is_actionable_capability_phrase(text: str) -> bool:
     """Returns True if the text describes a concrete capability, not a complaint."""
-    lower = text.strip().lower()
-    tokens = set(lower.split())
+    lower = re.sub(r"[^a-z0-9\s]", " ", text.strip().lower())
+    tokens = set(w for w in lower.split() if w)
 
     if len(tokens) < 2:
         return False
