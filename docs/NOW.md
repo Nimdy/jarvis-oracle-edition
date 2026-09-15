@@ -256,6 +256,8 @@ HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipp
 
 **Timer sit blocked 2026-09-13 13:37.** *Set a 5 minute timer* routed SKILL then `create_job rejected non-actionable skill_id: set_timer_v1` (junk filter: timer not a capability noun). L0 residual-swept the failure line because it contained *timer*. Coupled: catalog skill_ids skip the junk filter; timer/remind are actionable; learning-job status reports are not capability claims. Needs bounce.
 
+**Unsolicited recap (2026-09-15).** Always-listening STT of drill-site / block-mode rambles went NONE; Qwen authored markdown briefings (*let me break this down*, *What You're Asking For (Summarized)*), 18s. Coupled: `should_clamp_unsolicited_recap` on NONE stream → nod `Got it.` if the user did not ask to summarize and the reply is recap theater. Questions and *summarize what I said* still recap. Does not silence FOLLOW_UP *Bye guys* (not a recap). Needs bounce.
+
 **CODEBASE locate+leash (2026-09-04).** G20/G21 lived on PID **26936**: index stats; *voice* abstains (no allowlist). Sit 3 STT `handle transcription` went NONE → Qwen theater. **STT-join couple on WSL** (`resolve_stt_locate` + router before NONE): spoken *where is handle transcription* → exact `handle_transcription`. Household where-is not stolen. Needs bounce. Do **not** encode the tree into HRR.
 
 Board: [Project 8](https://github.com/users/Nimdy/projects/8) is the ranked queue (Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. **#83** is frozen notes. North star **#42**. Do not follow #2/#4/#5/#7 as “do now.” Parked issues are closed `not_planned` (L7 / Matrix remainder / domain NN / HRR / lidar / connectome L4 / thought P3 / self-sensing P3).

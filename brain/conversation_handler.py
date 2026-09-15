@@ -30,6 +30,10 @@ from reasoning.tool_router import (
     tool_router, ToolType, RoutingResult, is_targeted_visual_question,
     vision_retry_followup, record_voice_intent_teacher_signal,
 )
+from reasoning.ambient_recap import (
+    AMBIENT_RECAP_NOD,
+    should_clamp_unsolicited_recap,
+)
 from reasoning.context import context_builder
 from reasoning.bounded_response import (
     articulate_meaning_frame,
@@ -6440,6 +6444,17 @@ async def handle_transcription(
                     ):
                         if _cancelled():
                             logger.info("Barge-in: aborting response stream")
+                            break
+                        _probe = sentence or full_reply
+                        if should_clamp_unsolicited_recap(text, _probe):
+                            logger.info(
+                                "NONE route: clamped unsolicited recap of ambient speech"
+                            )
+                            if chunks_sent == 0:
+                                full_reply = AMBIENT_RECAP_NOD
+                                await _send_sentence(AMBIENT_RECAP_NOD, tone)
+                            await _flush_tts()
+                            _broadcast({"type": "response_end", "text": "", "tone": tone, "phase": "LISTENING"})
                             break
                         if is_final:
                             full_reply = sentence
