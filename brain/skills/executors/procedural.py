@@ -50,6 +50,164 @@ def _dice_sides(trigger: str) -> int | None:
     return None
 
 
+def sketch_is_placeholder(sketch: str) -> bool:
+    """True when a sketch is the empty honors_request stub, not a program.
+
+    A real sketch, such as the dice roller, is not a placeholder. One skill's
+    stub must not be treated as another skill's design.
+    """
+    compact = " ".join((sketch or "").split())
+    if not compact:
+        return True
+    if "randbelow" in compact or "rolls" in compact:
+        return False
+    return "result" in compact and "None" in compact and "honors_request" in compact
+
+
+def _timer_acceptance(trigger: str) -> dict[str, str] | None:
+    """Slots for a timer or reminder sentence. Not an implementation."""
+    text = (trigger or "").strip()
+    if not re.search(r"\b(remind(?:er)?|timer|alarm)\b", text, re.IGNORECASE):
+        return None
+    kind = "reminder" if re.search(r"\bremind", text, re.IGNORECASE) else "timer"
+    when = ""
+    match = re.search(
+        r"\b(?:in|for)\s+(\d+|one|a|an)\s+"
+        r"(second|seconds|minute|minutes|hour|hours|day|days)\b",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        when = f"{match.group(1)} {match.group(2)}"
+    else:
+        match = re.search(
+            r"\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b",
+            text,
+            re.IGNORECASE,
+        )
+        if match:
+            when = match.group(0)
+        else:
+            match = re.search(
+                r"\b(\d+|one)\s+(second|seconds|minute|minutes|hour|hours|day|days)\b",
+                text,
+                re.IGNORECASE,
+            )
+            if match:
+                when = f"{match.group(1)} {match.group(2)}"
+    say = ""
+    match = re.search(r"\bto\s+(.+)$", text, re.IGNORECASE)
+    if match and kind == "reminder":
+        say = match.group(1).strip(" .")
+    name = ""
+    match = re.search(r"\b(?:called|named)\s+([A-Za-z0-9_-]+)", text, re.IGNORECASE)
+    if match:
+        name = match.group(1)
+    else:
+        match = re.search(
+            r"\b(?:a|an)\s+([A-Za-z0-9_-]+)\s+timer\b",
+            text,
+            re.IGNORECASE,
+        )
+        if match and match.group(1).lower() not in {"the", "my", "new"}:
+            name = match.group(1)
+    return {"kind": kind, "when": when, "name": name, "say": say}
+
+
+def _project_brief(skill_id: str, trigger: str) -> dict[str, Any]:
+    """Reviewable contract for one new skill. The coder writes the plugin later.
+
+    The brief names this skill's directory and its acceptance tests. It does
+    not contain an implementation, and it does not mention any other skill.
+    """
+    plugin_dir = f"brain/tools/plugins/{skill_id}/"
+    structure = [
+        f"{plugin_dir}__init__.py",
+        f"{plugin_dir}plugin.json",
+        f"{plugin_dir}handler.py",
+        f"{plugin_dir}tests/test_handler.py",
+    ]
+    slots = _timer_acceptance(trigger)
+    required: dict[str, Any] = {
+        "input_type": "operator_request",
+        "output_type": "structured_tool_result",
+        "plugin_on_disk": True,
+        "plugin_directory": plugin_dir,
+        "sandbox_smoke": True,
+        "operator_approval": True,
+        "conversation_llm_not_executor": True,
+        "own_swim_lane": True,
+    }
+    expected: dict[str, Any] = {
+        "honors_operator_request": trigger[:200],
+        "must_not_claim_until_verified": True,
+        "plugin_directory": plugin_dir,
+    }
+    tests: list[dict[str, Any]] = [
+        {
+            "name": "operator_request_smoke",
+            "input": {"request": trigger[:200]},
+            "expected": {
+                "honors_operator_request": trigger[:200],
+                "plugin_directory": plugin_dir,
+            },
+        }
+    ]
+    notes = [
+        f"Operator asked: {trigger}. This is a project brief for {skill_id} only.",
+        f"Plugin directory: {plugin_dir}. No other skill's directory may be imported or edited.",
+        "This brief is not an implementation. After approval, the coder designs this plugin.",
+        "Do not claim the skill works until sandbox smoke passes.",
+        "Reject the brief if the acceptance tests do not describe the request.",
+    ]
+    if slots is not None:
+        required["slots"] = ["kind", "when", "name", "say"]
+        required["same_plugin_manages"] = ["list", "time_left", "cancel"]
+        required["fires_on_speaker"] = True
+        expected["slots"] = slots
+        tests.append({
+            "name": "timer_slots",
+            "input": {"request": trigger[:200]},
+            "expected": {
+                "kind": slots["kind"],
+                "when": slots["when"],
+                "name": slots["name"],
+                "say": slots["say"],
+                "fires_on_speaker": True,
+                "same_plugin_manages": ["list", "time_left", "cancel"],
+            },
+        })
+        notes.insert(
+            1,
+            "One plugin accepts any timer or reminder. Slots are kind, when, "
+            "optional name, and the words to speak. It fires on the speaker. "
+            "List, time left, and cancel stay in this plugin.",
+        )
+    return {
+        "design_role": "project_brief",
+        "approach": (
+            f"Project brief for {skill_id}: {trigger}. "
+            "Operator reviews the acceptance tests. The coder writes the plugin after approval."
+        ),
+        "input_type": "operator_request",
+        "output_type": "structured_tool_result",
+        "success_metrics": ["procedure_smoke_passed", "sandbox_execution_pass"],
+        "required": required,
+        "expected": expected,
+        "test_cases": tests,
+        "accepted_utterances": [trigger[:200]] if trigger else [],
+        "technical_approach": (
+            f"After approval, design only {plugin_dir}. "
+            "The plugin performs the operator request locally. "
+            "The conversation LLM is not the runtime. "
+            "Do not modify any other plugin."
+        ),
+        "implementation_sketch": "",
+        "plugin_structure": structure,
+        "design_notes": notes,
+    }
+
+
 def _plugin_design_packet(skill_id: str, trigger: str) -> dict[str, Any]:
     """Human-reviewable plugin design. Not codegen. Not a verified claim."""
     trigger = (trigger or "").strip() or skill_id.replace("_", " ")
@@ -137,6 +295,7 @@ def handle(request: str) -> dict:
             },
         ]
         return {
+            "design_role": "implementation",
             "approach": (
                 f"Local {sides}-sided die plugin. secrets.randbelow, not Qwen. "
                 "Operator reviews this design, then CodeGen may write the plugin."
@@ -183,53 +342,7 @@ def handle(request: str) -> dict:
             "design_notes": notes,
         }
 
-    sketch = (
-        "def handle(request: str) -> dict:\n"
-        "    # Deterministic local procedure for the operator request.\n"
-        "    # Do not call the conversation LLM to invent the result.\n"
-        "    return {'ok': True, 'honors_request': True, 'result': None}\n"
-    )
-    notes = [
-        f"Operator asked: {trigger}. Research drafts how a plugin would do that — it does not do it yet.",
-        f"Plugin directory: {plugin_dir} (own folder so it can be saved/shared after a reset).",
-        "Conversation LLM is not the executor. After approval, CodeGen writes the plugin; smoke must pass before any claim.",
-        "Operator should reject this draft if the structure, tests, or approach are wrong.",
-    ]
-    return {
-        "approach": (
-            f"Draft a local plugin for: {trigger}. Review required/expected/structure "
-            "before any codegen."
-        ),
-        "input_type": "operator_request",
-        "output_type": "structured_tool_result",
-        "success_metrics": ["procedure_smoke_passed", "sandbox_execution_pass"],
-        "required": {
-            "input_type": "operator_request",
-            "output_type": "structured_tool_result",
-            "plugin_on_disk": True,
-            "sandbox_smoke": True,
-            "operator_approval": True,
-            "conversation_llm_not_executor": True,
-        },
-        "expected": {
-            "honors_operator_request": trigger[:200],
-            "must_not_claim_until_verified": True,
-        },
-        "test_cases": [
-            {
-                "name": "operator_request_smoke",
-                "input": {"request": trigger[:200]},
-                "expected": {"ok": True, "honors_request": True},
-            }
-        ],
-        "technical_approach": (
-            f"Write a quarantined plugin under {plugin_dir} that performs the requested "
-            "procedure locally. LLM must not be the runtime. Operator approves this design first."
-        ),
-        "implementation_sketch": sketch,
-        "plugin_structure": structure,
-        "design_notes": notes,
-    }
+    return _project_brief(skill_id, trigger)
 
 
 # Resource probes — keyed by gate ctx_key, returns bool availability.
@@ -334,7 +447,11 @@ class ProceduralResearchExecutor(PhaseExecutor):
         approach = str(blob.get("technical_approach") or "")
         if approach.startswith("Governed plugin:"):
             return True
-        if not blob.get("plugin_structure") or not blob.get("implementation_sketch"):
+        if sketch_is_placeholder(str(blob.get("implementation_sketch") or "")):
+            if blob.get("design_role") == "project_brief" and blob.get("test_cases") and blob.get("plugin_structure"):
+                return False
+            return True
+        if not blob.get("plugin_structure"):
             return True
         return False
 
@@ -396,8 +513,9 @@ class ProceduralResearchExecutor(PhaseExecutor):
                 "required": design["required"],
                 "expected": design["expected"],
                 "test_cases": design["test_cases"],
+                "design_role": design.get("design_role") or "implementation",
                 "technical_approach": design["technical_approach"],
-                "implementation_sketch": design["implementation_sketch"],
+                "implementation_sketch": design.get("implementation_sketch") or "",
                 "plugin_structure": design["plugin_structure"],
                 "design_notes": design["design_notes"],
                 "accepted_utterances": design.get("accepted_utterances") or [],

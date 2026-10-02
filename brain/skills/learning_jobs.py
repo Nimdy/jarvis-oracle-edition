@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -1212,7 +1213,18 @@ class LearningJobOrchestrator:
         except Exception:
             logger.debug("Failed to propagate blocked status for skill '%s'", job.skill_id, exc_info=True)
 
-    def delete_job(self, job_id: str, remove_skill: bool = False) -> bool:
+    def _remove_job_artifact_dir(self, job_id: str) -> None:
+        """Remove one job's artifact directory. Never a parent or a sibling."""
+        name = str(job_id or "")
+        if not name or name != os.path.basename(name) or name in {".", ".."}:
+            return
+        root = os.path.realpath(self.store.root)
+        target = os.path.realpath(os.path.join(root, name))
+        if os.path.dirname(target) != root or not os.path.isdir(target):
+            return
+        shutil.rmtree(target)
+
+    def delete_job(self, job_id: str, remove_skill: bool = False, force: bool = False) -> bool:
         """Delete a job from disk + memory with safe cleanup.
 
         - If the job is ``blocked`` or ``completed`` and a *different* completed
@@ -1221,8 +1233,10 @@ class LearningJobOrchestrator:
           job so the registry stays consistent.
         - Pass ``remove_skill=True`` only if you also want to remove the
           associated SkillRecord (usually only for junk/auto-gate jobs).
-        - Active (non-terminal) jobs are refused unless ``remove_skill`` is
-          True, to prevent accidental mid-flight deletion.
+        - Active (non-terminal) jobs are refused unless ``remove_skill`` or
+          ``force`` is True.
+        - The artifact directory under the store root is removed with the JSON.
+          A path that is not that one directory is left alone.
         """
         job = self._active_jobs.get(job_id)
         if not job:
@@ -1231,10 +1245,10 @@ class LearningJobOrchestrator:
         if job is None:
             return False
 
-        if job.status in ("active", "running", "in_progress", "awaiting_operator_approval") and not remove_skill:
+        if job.status in ("active", "running", "in_progress", "awaiting_operator_approval") and not (remove_skill or force):
             logger.warning(
                 "Refusing to delete in-flight job %s (status=%s). "
-                "Pass remove_skill=True to force.", job_id, job.status,
+                "Pass remove_skill=True or force=True to force.", job_id, job.status,
             )
             return False
 
@@ -1243,6 +1257,7 @@ class LearningJobOrchestrator:
         self._active_jobs.pop(job_id, None)
         if not self.store.delete(job_id):
             logger.warning("store.delete failed for %s", job_id)
+        self._remove_job_artifact_dir(job_id)
 
         if remove_skill and skill_id and self._registry:
             self._registry.remove(skill_id)
@@ -1254,6 +1269,48 @@ class LearningJobOrchestrator:
             job_id, skill_id, remove_skill,
         )
         return True
+
+    def delete_skill_lane(self, skill_id: str) -> dict[str, Any]:
+        """Remove one skill and only the jobs whose skill_id is exactly that id.
+
+        In-flight jobs in this lane are removed. Other skills stay in memory,
+        on disk, and in the registry.
+        """
+        from skills.registry import get_default_skill_ids
+
+        name = str(skill_id or "").strip()
+        empty = {"ok": False, "reason": "bad_skill_id", "jobs_removed": [], "skill_removed": False}
+        if not name or name != os.path.basename(name) or name in {".", ".."}:
+            return empty
+        if name in get_default_skill_ids():
+            return {"ok": False, "reason": "baseline_skill", "jobs_removed": [], "skill_removed": False}
+
+        job_ids: list[str] = []
+        seen: set[str] = set()
+        for job in list(self._active_jobs.values()):
+            if job.skill_id == name and job.job_id not in seen:
+                seen.add(job.job_id)
+                job_ids.append(job.job_id)
+        for job in self.store.load_all():
+            if job.skill_id == name and job.job_id not in seen:
+                seen.add(job.job_id)
+                job_ids.append(job.job_id)
+
+        removed: list[str] = []
+        for job_id in job_ids:
+            if self.delete_job(job_id, remove_skill=False, force=True):
+                removed.append(job_id)
+
+        skill_removed = False
+        if self._registry is not None:
+            skill_removed = bool(self._registry.remove(name))
+        found = bool(skill_removed or removed)
+        return {
+            "ok": found,
+            "reason": "removed" if found else "not_found",
+            "jobs_removed": removed,
+            "skill_removed": skill_removed,
+        }
 
     def _reconcile_skill_after_delete(self, skill_id: str, deleted_job_id: str) -> None:
         """Fix up the skill record after deleting one of its jobs.

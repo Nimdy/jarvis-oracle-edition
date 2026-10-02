@@ -447,19 +447,7 @@ class AcquisitionOrchestrator:
         research = self._research_from_learning_job(learning_job)
         user_intent = self._build_skill_proof_intent(skill_id, contract, handoff)
         if research:
-            contract_blob = {
-                "plugin_structure": research.get("plugin_structure") or [],
-                "technical_approach": research.get("technical_approach") or "",
-                "implementation_sketch": (research.get("implementation_sketch") or "")[:2500],
-                "test_cases": research.get("test_cases") or [],
-                "accepted_utterances": research.get("accepted_utterances") or [],
-                "required": research.get("required") or {},
-                "expected": research.get("expected") or {},
-            }
-            user_intent += (
-                "\n\nOPERATOR-REVIEWED RESEARCH CONTRACT — implement this, do not invent a competing API:\n"
-                + json.dumps(contract_blob, ensure_ascii=True)[:4000]
-            )
+            user_intent += self._research_contract_clause(skill_id, research)
         job = CapabilityAcquisitionJob(
             title=title,
             user_intent=user_intent,
@@ -562,24 +550,98 @@ class AcquisitionOrchestrator:
         ns = type("LJ", (), {"job_id": jid, "artifacts": []})()
         return self._research_from_learning_job(ns)
 
+    @staticmethod
+    def _research_skill_id(job: CapabilityAcquisitionJob, research: dict[str, Any]) -> str:
+        requested = getattr(job, "requested_by", None) or {}
+        return str(requested.get("skill_id") or research.get("skill_id") or "").strip()
+
+    @staticmethod
+    def _paths_in_skill_lane(skill_id: str, paths: list[Any]) -> list[str]:
+        """Keep plugin paths that belong to this skill. Drop every other lane."""
+        cleaned = [str(path) for path in paths if str(path).strip()]
+        skill_id = str(skill_id or "").strip()
+        if not skill_id:
+            return cleaned
+        if "/" in skill_id or "\\" in skill_id or skill_id in {".", ".."}:
+            return []
+        prefix = f"brain/tools/plugins/{skill_id}/"
+        return [path for path in cleaned if path.startswith(prefix)]
+
+    def _research_contract_clause(self, skill_id: str, research: dict[str, Any]) -> str:
+        """Hand the coder this skill's brief or its own sketch. Never another skill's."""
+        from skills.executors.procedural import sketch_is_placeholder
+
+        sketch = str(research.get("implementation_sketch") or "")
+        real = bool(sketch.strip()) and not sketch_is_placeholder(sketch)
+        blob = {
+            "plugin_structure": self._paths_in_skill_lane(skill_id, list(research.get("plugin_structure") or [])),
+            "technical_approach": research.get("technical_approach") or "",
+            "implementation_sketch": sketch[:2500] if real else "",
+            "test_cases": research.get("test_cases") or [],
+            "accepted_utterances": list(research.get("accepted_utterances") or []),
+            "required": research.get("required") or {},
+            "expected": research.get("expected") or {},
+            "design_role": research.get("design_role") or ("implementation" if real else "project_brief"),
+        }
+        if real:
+            header = (
+                "\n\nOPERATOR-REVIEWED RESEARCH CONTRACT — implement this skill only. "
+                "Do not invent a competing API and do not edit any other plugin:\n"
+            )
+        else:
+            header = (
+                "\n\nPROJECT BRIEF for this skill only. Write the plugin from these "
+                "acceptance tests. Do not return result None. Do not copy or edit "
+                "another skill's plugin:\n"
+            )
+        return header + json.dumps(blob, ensure_ascii=True)[:4000]
+
+    def _planner_swim_lane_note(self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan) -> str:
+        """Tell the coder which directory it may design. One skill, one lane."""
+        from skills.executors.procedural import sketch_is_placeholder
+
+        research = self._load_learning_research(job)
+        sketch = str(getattr(plan, "implementation_sketch", "") or "")
+        skill_id = self._research_skill_id(job, research)
+        plugin_dir = (
+            f"brain/tools/plugins/{skill_id}/"
+            if skill_id and "/" not in skill_id and "\\" not in skill_id and skill_id not in {".", ".."}
+            else "this skill's own plugin directory"
+        )
+        if sketch.strip() and not sketch_is_placeholder(sketch):
+            utterances = [str(item) for item in (research.get("accepted_utterances") or []) if str(item).strip()]
+            listed = ", ".join(utterances) if utterances else "only the utterances already in this contract"
+            return (
+                "\nThe operator already reviewed a research contract for this skill only. "
+                "Keep its plugin path, callable, and tests. "
+                f"You may only add plugin.json details and these utterances: {listed}. "
+                "Do not invent a competing handle() API. "
+                "Do not read or edit any other plugin directory.\n"
+            )
+        tests = research.get("test_cases") or []
+        return (
+            f"\nThis request is a project brief for {skill_id or 'this skill'} only. "
+            f"Design only {plugin_dir}. "
+            "Write the handler so the acceptance tests pass. "
+            "Do not return result None. "
+            "Do not copy another skill's code, aliases, or files. "
+            f"Acceptance tests: {json.dumps(tests, ensure_ascii=True)[:2000]}\n"
+        )
+
     def _apply_learning_research_contract(
         self, job: CapabilityAcquisitionJob, plan: AcquisitionPlan
     ) -> bool:
-        """Operator-reviewed research wins over a competing planner design."""
+        """A real sketch for this skill wins. A placeholder must not replace the coder."""
+        from skills.executors.procedural import sketch_is_placeholder
+
         research = self._load_learning_research(job)
         if not research:
             return False
         sketch = str(research.get("implementation_sketch") or "").strip()
         approach = str(research.get("technical_approach") or "").strip()
-        if not sketch or not approach:
+        if not approach or not sketch or sketch_is_placeholder(sketch):
             return False
-        utterances = list(research.get("accepted_utterances") or [])
-        if not utterances and ("dice" in approach.lower() or "d20" in approach.lower() or "randbelow" in sketch):
-            utterances = [
-                "d20", "roll a d20", "roll d20",
-                "roll a 20-sided dice", "roll a 20 sided dice",
-                "roll a 20-sided die", "roll a 20 sided die",
-            ]
+        utterances = [str(item) for item in (research.get("accepted_utterances") or []) if str(item).strip()]
         alias_line = ""
         if utterances:
             alias_line = " Honor operator phrasings (hyphen optional): " + ", ".join(utterances) + "."
@@ -601,7 +663,10 @@ class AcquisitionOrchestrator:
                 formatted.append(line)
         if formatted:
             plan.test_cases = formatted
-        structure = list(research.get("plugin_structure") or [])
+        structure = self._paths_in_skill_lane(
+            self._research_skill_id(job, research),
+            list(research.get("plugin_structure") or []),
+        )
         if structure:
             plan.required_artifacts = structure
         story = str(research.get("approach") or "").strip()
@@ -1172,13 +1237,7 @@ class AcquisitionOrchestrator:
             f"Risk tier: {job.risk_tier}\n"
             f"Required capabilities: {', '.join(plan.required_capabilities)}\n"
         )
-        if str(getattr(plan, "implementation_sketch", "") or "").strip():
-            user_prompt += (
-                "\nThe operator already reviewed a research contract. Keep its plugin path, "
-                "callable, RNG, output fields, and tests. You may only add hyphen-optional "
-                "aliases (d20, 20 sided die/dice) and plugin.json details. Do not invent a "
-                "competing handle() API.\n"
-            )
+        user_prompt += self._planner_swim_lane_note(job, plan)
 
         # Include operator feedback from prior rejection(s) for revision
         revision_context = self._build_revision_context(job, plan)

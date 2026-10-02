@@ -542,3 +542,63 @@ class TestOperatorGenericJobNotPurged:
 
         assert store.load(job.job_id) is not None
         assert registry.get(job.skill_id) is not None
+
+
+class TestSkillSwimLane:
+    def test_delete_job_removes_only_its_artifact_dir(self, orch, store):
+        timer = _make_job("job_timer_art", skill_id="set_timer_v1", status="blocked")
+        dice = _make_job("job_dice_art", skill_id="roll_20sided_dice_v1", status="blocked")
+        store.save(timer)
+        store.save(dice)
+        timer_dir = os.path.join(store.root, timer.job_id)
+        dice_dir = os.path.join(store.root, dice.job_id)
+        os.makedirs(timer_dir)
+        os.makedirs(dice_dir)
+        with open(os.path.join(timer_dir, "research_summary.json"), "w", encoding="utf-8") as handle:
+            handle.write("{}")
+        with open(os.path.join(dice_dir, "research_summary.json"), "w", encoding="utf-8") as handle:
+            handle.write("{}")
+
+        assert orch.delete_job(timer.job_id) is True
+        assert not os.path.exists(timer_dir)
+        assert store.load(timer.job_id) is None
+        assert os.path.isdir(dice_dir)
+        assert store.load(dice.job_id) is not None
+
+    def test_force_deletes_active_job_and_keeps_the_skill(self, orch, store, registry):
+        _register_skill(registry, "set_timer_v1", "Timer", cap_type="procedural")
+        job = _make_job("job_live_timer", skill_id="set_timer_v1", status="active", phase="research")
+        store.save(job)
+        orch._active_jobs[job.job_id] = job
+
+        assert orch.delete_job(job.job_id, force=True) is True
+        assert store.load(job.job_id) is None
+        assert registry.get("set_timer_v1") is not None
+
+    def test_delete_skill_lane_leaves_every_other_skill(self, orch, store, registry):
+        _register_skill(registry, "set_timer_v1", "Timer", cap_type="procedural")
+        _register_skill(registry, "set_timer_v2", "Timer Two", cap_type="procedural")
+        _register_skill(registry, "roll_20sided_dice_v1", "Dice", cap_type="procedural")
+        timer = _make_job("job_timer_lane", skill_id="set_timer_v1", status="active", phase="verify")
+        other_timer = _make_job("job_timer_v2", skill_id="set_timer_v2", status="blocked")
+        dice = _make_job("job_dice_lane", skill_id="roll_20sided_dice_v1", status="blocked")
+        for job in (timer, other_timer, dice):
+            store.save(job)
+            orch._active_jobs[job.job_id] = job
+            os.makedirs(os.path.join(store.root, job.job_id), exist_ok=True)
+
+        result = orch.delete_skill_lane("set_timer_v1")
+
+        assert result["skill_removed"] is True
+        assert result["jobs_removed"] == ["job_timer_lane"]
+        assert registry.get("set_timer_v1") is None
+        assert store.load("job_timer_lane") is None
+        assert not os.path.exists(os.path.join(store.root, "job_timer_lane"))
+        assert "job_timer_lane" not in orch._active_jobs
+        assert registry.get("set_timer_v2") is not None
+        assert registry.get("roll_20sided_dice_v1") is not None
+        assert store.load("job_timer_v2") is not None
+        assert store.load("job_dice_lane") is not None
+        assert os.path.isdir(os.path.join(store.root, "job_dice_lane"))
+        assert "job_dice_lane" in orch._active_jobs
+        assert "job_timer_v2" in orch._active_jobs

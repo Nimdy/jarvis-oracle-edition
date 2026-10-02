@@ -1459,11 +1459,19 @@ def _create_app() -> FastAPI:
                     },
                     status_code=409,
                 )
-            removed = skill_registry.remove(skill_id)
+            orch = _engine._learning_job_orchestrator if _engine and hasattr(_engine, "_learning_job_orchestrator") else None
+            jobs_removed: list[str] = []
+            removed = False
+            if orch is not None and hasattr(orch, "delete_skill_lane"):
+                lane = orch.delete_skill_lane(skill_id)
+                jobs_removed = list(lane.get("jobs_removed") or [])
+                removed = bool(lane.get("skill_removed"))
+            if not removed:
+                removed = bool(skill_registry.remove(skill_id))
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
-        if removed:
-            return {"status": "removed", "skill_id": skill_id}
+        if removed or jobs_removed:
+            return {"status": "removed", "skill_id": skill_id, "jobs_removed": jobs_removed}
         return JSONResponse({"error": f"Skill '{skill_id}' not found"}, status_code=404)
 
     @app.delete("/api/learning-jobs/{job_id}", dependencies=[Depends(_require_api_key)])
@@ -1475,7 +1483,7 @@ def _create_app() -> FastAPI:
         orch = _engine._learning_job_orchestrator if _engine and hasattr(_engine, '_learning_job_orchestrator') else None
         if not orch:
             return JSONResponse({"error": "Learning job orchestrator not available"}, status_code=503)
-        removed = orch.delete_job(job_id, remove_skill=(remove_skill or force))
+        removed = orch.delete_job(job_id, remove_skill=(remove_skill or force), force=force)
         if removed:
             return {"status": "deleted", "job_id": job_id, "skill_removed": remove_skill or force}
         job = orch.store.load(job_id)

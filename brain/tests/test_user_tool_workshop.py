@@ -542,3 +542,243 @@ def test_improvement_job_still_promotes_roll_module_to_handler(tmp_path):
     assert bundle is not None
     assert "def run(" in bundle.code_files["handler.py"]
     assert bundle.manifest_candidate["name"].endswith("improve1"[-6:])
+
+
+def _acquisition_research_job(tmp_path, job_id: str, blob: dict, skill_id: str):
+    from acquisition.job import CapabilityAcquisitionJob
+    from acquisition.orchestrator import AcquisitionOrchestrator
+
+    research_path = tmp_path / ".jarvis" / "learning_jobs" / job_id / "research_summary.json"
+    research_path.parent.mkdir(parents=True)
+    research_path.write_text(json.dumps(blob))
+    orch = AcquisitionOrchestrator.__new__(AcquisitionOrchestrator)
+    job = CapabilityAcquisitionJob(
+        title="t",
+        user_intent="plugin",
+        requested_by={"skill_id": skill_id},
+    )
+    job.learning_job_id = job_id
+    return orch, job
+
+
+def test_timer_research_is_a_project_brief(tmp_path, monkeypatch):
+    from skills.executors.procedural import ProceduralResearchExecutor, _timer_acceptance
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    trigger = "Jarvis, remind me in one minute to drink some water."
+    job = SimpleNamespace(
+        job_id="job-timer-brief",
+        skill_id="set_timer_v1",
+        capability_type="procedural",
+        protocol_id="",
+        notes="",
+        artifacts=[],
+        plan={
+            "capability_contract": {"acquisition_eligible": True},
+            "operator_trigger": trigger,
+            "phases": [],
+            "summary": f'Auto-generated from: "{trigger}"',
+        },
+        gates={"hard": []},
+        requested_by={"source": "user", "user_text": trigger, "speaker": "David"},
+    )
+    result = ProceduralResearchExecutor().run(job, {})
+    blob = json.loads(open(result.artifact["path"], encoding="utf-8").read())
+    assert blob["design_role"] == "project_brief"
+    assert blob["implementation_sketch"] == ""
+    assert blob["required"]["own_swim_lane"] is True
+    assert blob["required"]["plugin_directory"] == "brain/tools/plugins/set_timer_v1/"
+    assert blob["required"]["fires_on_speaker"] is True
+    assert blob["required"]["same_plugin_manages"] == ["list", "time_left", "cancel"]
+    assert all(path.startswith("brain/tools/plugins/set_timer_v1/") for path in blob["plugin_structure"])
+    slots = blob["expected"]["slots"]
+    assert slots == {
+        "kind": "reminder",
+        "when": "one minute",
+        "name": "",
+        "say": "drink some water",
+    }
+    packed = json.dumps(blob)
+    assert "randbelow" not in packed
+    assert "d20" not in packed.lower()
+    assert "result': None" not in packed and '"result": None' not in packed
+    assert ProceduralResearchExecutor._research_is_thin(job, result.artifact) is False
+    assert _timer_acceptance("set a pasta timer for 12 minutes") == {
+        "kind": "timer",
+        "when": "12 minutes",
+        "name": "pasta",
+        "say": "",
+    }
+    assert _timer_acceptance("Set a 5 minute timer.")["when"] == "5 minute"
+
+
+def test_placeholder_timer_research_rebuilds_without_touching_dice(tmp_path, monkeypatch):
+    from skills.executors.procedural import ProceduralResearchExecutor
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    job_dir = tmp_path / ".jarvis" / "learning_jobs" / "job-timer-stub"
+    job_dir.mkdir(parents=True)
+    path = job_dir / "research_summary.json"
+    path.write_text(json.dumps({
+        "required": {"operator_approval": True},
+        "expected": {"must_not_claim_until_verified": True},
+        "technical_approach": "Implement handle() for this skill.",
+        "plugin_structure": ["brain/tools/plugins/set_timer_v1/handler.py"],
+        "test_cases": [{"name": "operator_request_smoke"}],
+        "implementation_sketch": (
+            "def handle(request):\n"
+            "    return {'ok': True, 'honors_request': True, 'result': None}\n"
+        ),
+    }))
+    trigger = "Jarvis, remind me in one minute to drink some water."
+    job = SimpleNamespace(
+        job_id="job-timer-stub",
+        skill_id="set_timer_v1",
+        capability_type="procedural",
+        protocol_id="",
+        notes="",
+        artifacts=[{"id": "research_summary", "type": "research_summary", "path": str(path)}],
+        plan={
+            "capability_contract": {"acquisition_eligible": True},
+            "operator_trigger": trigger,
+            "phases": [],
+            "summary": f'Auto-generated from: "{trigger}"',
+        },
+        gates={"hard": []},
+        requested_by={"source": "user", "user_text": trigger, "speaker": "David"},
+    )
+    ex = ProceduralResearchExecutor()
+    assert ex._research_is_thin(job, job.artifacts[0]) is True
+    result = ex.run(job, {})
+    assert result.progressed is True
+    blob = json.loads(path.read_text(encoding="utf-8"))
+    assert blob["design_role"] == "project_brief"
+    assert blob["implementation_sketch"] == ""
+    assert "randbelow" not in json.dumps(blob)
+    assert "roll_20sided_dice" not in json.dumps(blob)
+
+
+def test_placeholder_sketch_does_not_replace_coder_plan(tmp_path, monkeypatch):
+    from acquisition.job import AcquisitionPlan
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    orch, job = _acquisition_research_job(tmp_path, "job_timer_stub", {
+        "approach": "Empty stub.",
+        "technical_approach": "Timer plugin. Ignore any dice example.",
+        "implementation_sketch": (
+            "def handle(request):\n"
+            "    return {'ok': True, 'honors_request': True, 'result': None}\n"
+        ),
+        "plugin_structure": ["brain/tools/plugins/set_timer_v1/handler.py"],
+        "test_cases": [{"name": "timer_slots"}],
+        "accepted_utterances": [],
+        "skill_id": "set_timer_v1",
+    }, "set_timer_v1")
+    plan = AcquisitionPlan(
+        acquisition_id=job.acquisition_id,
+        objective="coder",
+        technical_approach="coder wrote the timer",
+        implementation_sketch="def handle(request):\n    return {'kind': 'reminder', 'say': 'drink some water'}\n",
+        test_cases=["coder kept this"],
+        risk_level="high",
+    )
+    assert orch._apply_learning_research_contract(job, plan) is False
+    assert "drink some water" in plan.implementation_sketch
+    assert plan.technical_approach == "coder wrote the timer"
+    assert plan.test_cases == ["coder kept this"]
+    assert plan.risk_level == "high"
+    assert "d20" not in plan.technical_approach
+
+
+def test_timer_contract_does_not_import_dice_aliases(tmp_path, monkeypatch):
+    from acquisition.job import AcquisitionPlan
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    orch, job = _acquisition_research_job(tmp_path, "job_timer_real", {
+        "approach": "Timer plugin for set_timer_v1 only.",
+        "technical_approach": "Timer plugin. Ignore any dice example.",
+        "implementation_sketch": "def handle(request):\n    return {'ok': True, 'kind': 'timer'}\n",
+        "plugin_structure": [
+            "brain/tools/plugins/set_timer_v1/handler.py",
+            "brain/tools/plugins/roll_20sided_dice_v1/roll.py",
+        ],
+        "test_cases": [{"name": "timer_slots", "expected": {"kind": "timer"}}],
+        "accepted_utterances": [],
+        "skill_id": "set_timer_v1",
+    }, "set_timer_v1")
+    plan = AcquisitionPlan(
+        acquisition_id=job.acquisition_id,
+        objective="competing",
+        technical_approach="keyword matching",
+        implementation_sketch="def handle(request): return None",
+        risk_level="high",
+    )
+    assert orch._apply_learning_research_contract(job, plan) is True
+    assert plan.required_artifacts == ["brain/tools/plugins/set_timer_v1/handler.py"]
+    assert "roll a d20" not in plan.technical_approach
+    assert not any("d20" in case for case in plan.test_cases)
+    assert "randbelow" not in plan.implementation_sketch
+
+
+def test_project_brief_leaves_the_coder_plan_in_place(tmp_path, monkeypatch):
+    from acquisition.job import AcquisitionPlan
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    orch, job = _acquisition_research_job(tmp_path, "job_timer_brief_plan", {
+        "design_role": "project_brief",
+        "approach": "Project brief for set_timer_v1.",
+        "technical_approach": "After approval, design only brain/tools/plugins/set_timer_v1/.",
+        "implementation_sketch": "",
+        "plugin_structure": ["brain/tools/plugins/set_timer_v1/handler.py"],
+        "test_cases": [{"name": "timer_slots", "expected": {"kind": "reminder"}}],
+        "accepted_utterances": ["remind me in one minute to drink some water"],
+        "skill_id": "set_timer_v1",
+    }, "set_timer_v1")
+    plan = AcquisitionPlan(
+        acquisition_id=job.acquisition_id,
+        objective="coder",
+        technical_approach="coder wrote the timer",
+        implementation_sketch="def handle(request):\n    return {'kind': 'reminder', 'say': 'drink some water'}\n",
+        risk_level="medium",
+    )
+    assert orch._apply_learning_research_contract(job, plan) is False
+    assert "drink some water" in plan.implementation_sketch
+    assert plan.technical_approach == "coder wrote the timer"
+
+
+def test_planner_note_stays_inside_the_skill_lane(tmp_path, monkeypatch):
+    from acquisition.job import AcquisitionPlan
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    orch, job = _acquisition_research_job(tmp_path, "job_timer_note", {
+        "design_role": "project_brief",
+        "technical_approach": "After approval, design only brain/tools/plugins/set_timer_v1/.",
+        "implementation_sketch": "",
+        "test_cases": [{"name": "timer_slots", "expected": {"kind": "reminder", "when": "one minute"}}],
+        "accepted_utterances": ["remind me in one minute to drink some water"],
+        "skill_id": "set_timer_v1",
+    }, "set_timer_v1")
+    plan = AcquisitionPlan(acquisition_id=job.acquisition_id, objective="brief")
+    note = orch._planner_swim_lane_note(job, plan)
+    assert "brain/tools/plugins/set_timer_v1/" in note
+    assert "result None" in note
+    assert "d20" not in note.lower()
+    assert "randbelow" not in note
+    assert "hyphen-optional aliases" not in note
+
+    orch, dice_job = _acquisition_research_job(tmp_path, "job_dice_note", {
+        "technical_approach": "Implement roll.py with secrets.randbelow.",
+        "implementation_sketch": "import secrets\ndef roll(sides=20):\n    return {'ok': True, 'rolls': [1]}\n",
+        "accepted_utterances": ["d20", "roll a 20 sided die"],
+        "skill_id": "roll_20sided_dice_v1",
+    }, "roll_20sided_dice_v1")
+    dice_plan = AcquisitionPlan(
+        acquisition_id=dice_job.acquisition_id,
+        objective="dice",
+        implementation_sketch="import secrets\ndef roll(sides=20):\n    return {'ok': True, 'rolls': [1]}\n",
+    )
+    dice_note = orch._planner_swim_lane_note(dice_job, dice_plan)
+    assert "roll a 20 sided die" in dice_note
+    assert "this skill only" in dice_note
+    assert "hyphen-optional aliases" not in dice_note
+    assert "set_timer_v1" not in dice_note
