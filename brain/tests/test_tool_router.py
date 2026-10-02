@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from reasoning.tool_router import (
     ToolRouter, ToolType, is_targeted_visual_question,
     is_look_retry_followup, is_turn_correction, vision_retry_followup,
+    is_learn_desire_question,
 )
 
 
@@ -475,6 +476,41 @@ def test_golden_learn_skill_captures_argument_and_stays_skill():
     assert result.golden_context.argument_text.lower() == "roll a 20-sided dice"
 
 
+def test_golden_acquire_skill_timer_is_learn_skill_not_acquisition():
+    """Lived 2026-09-09: 'acquire skill, set a timer' became knowledge_only paper."""
+    result = router.route(
+        "Jarvis, golden command, acquire skill, set a timer."
+    )
+    assert result.tool == ToolType.SKILL, result.extracted_args
+    assert result.extracted_args.get("golden_command_id") == "GW_LEARN_SKILL"
+    assert result.golden_context is not None
+    assert result.golden_context.command_id == "GW_LEARN_SKILL"
+    assert "timer" in (result.golden_context.argument_text or "").lower()
+
+
+def test_golden_acquire_without_skill_stays_acquisition():
+    result = router.route("Jarvis, GOLDEN COMMAND ACQUIRE voice diarization")
+    assert result.tool == ToolType.ACQUISITION
+    assert result.extracted_args.get("golden_command_id") == "GW_ACQUIRE"
+
+
+def test_set_timer_and_remind_me_route_skill():
+    """Lived 2026-09-09: 'Set a five minute timer' was NONE + L0 no-capability."""
+    for text in (
+        "Set a five minute timer.",
+        "set a timer",
+        "Set a reminder",
+        "Remind me in five minutes",
+        "remind me to take Skylar out",
+    ):
+        result = router.route(text)
+        assert result.tool == ToolType.SKILL, (
+            f"{text!r} expected SKILL, got {result.tool.value} {result.extracted_args}"
+        )
+    time_ask = router.route("What time is it?")
+    assert time_ask.tool == ToolType.TIME
+
+
 def test_natural_learn_a_new_skill_routes_skill():
     """Lived 2026-09-06: natural learn-skill (not golden) still routes SKILL."""
     result = router.route(
@@ -482,6 +518,51 @@ def test_natural_learn_a_new_skill_routes_skill():
         "when I ask you to."
     )
     assert result.tool == ToolType.SKILL
+
+
+def test_learn_desire_question_does_not_route_skill():
+    """Lived 2026-09-07: 'Do you want to learn a skill…' minted job a83b."""
+    lived = (
+        "Jarvis, that's really cool. Do you want to learn a skill or "
+        "capability to make that music?"
+    )
+    truncated = (
+        "Jarvis, that's really cool. Do you want to learn a skill or "
+        "capability to make t"
+    )
+    assert is_learn_desire_question(lived)
+    assert is_learn_desire_question(truncated)
+    for text in (
+        lived,
+        truncated,
+        "Do you want to learn a skill",
+        "Would you like to learn to make music?",
+        "Are you going to learn a skill?",
+        "you wanna learn a capability to make that music",
+        "Do you wanna learn a skill",
+    ):
+        result = router.route(text)
+        assert result.tool != ToolType.SKILL, text
+        assert result.tool == ToolType.NONE, text
+        assert result.extracted_args.get("tier") == "learn_desire_question", text
+
+
+def test_operator_learn_commands_still_route_skill():
+    """Desire-question catch must not eat explicit learn-X / I-want-you-to-learn."""
+    for text in (
+        "I want you to learn to make music",
+        "Learn a new skill to play D&D. I need you to roll a 20-sided dice "
+        "when I ask you to.",
+        "Learn a skill to roll a 20-sided dice.",
+        "Jarvis, learn audio analysis.",
+        "Jarvis learn to code",
+        "start a learning job to learn X",
+    ):
+        assert not is_learn_desire_question(text), text
+        result = router.route(text)
+        assert result.tool == ToolType.SKILL, (
+            f"{text!r} expected SKILL, got {result.tool.value} {result.extracted_args}"
+        )
 
 
 def test_golden_prefix_normalization():

@@ -389,7 +389,9 @@ _KEYWORD_PATTERNS: list[tuple[list[str], ToolType]] = [
       "train on", "train yourself",
       "start a learning job", "create a learning job", "begin a learning job",
       "start a training job", "start a skill job",
-      "new learning job", "new training job"],
+      "new learning job", "new training job",
+      "set a timer", "set a reminder", "start a timer", "start a reminder",
+      "remind me to", "remind me in"],
      ToolType.SKILL),
     (["what are you doing", "what's happening right now", "current status",
       "are you busy", "what are you up to", "what's going on",
@@ -592,6 +594,14 @@ _INTENT_PATTERNS: list[tuple[re.Pattern, ToolType, float]] = [
     (re.compile(r"\b(make|suggest|propose).{0,15}(code|improvement|change|modification|suggestion|adjustment).{0,10}(to your|for your|yourself)?\b", re.I), ToolType.SELF_IMPROVE, 0.85),
     (re.compile(r"\b(self[- ]improv|code suggestion|code change|code modif)\b", re.I), ToolType.SELF_IMPROVE, 0.85),
     (re.compile(r"\b(make yourself|make your\w*) (better|faster|smarter|more efficient)\b", re.I), ToolType.SELF_IMPROVE, 0.85),
+    (re.compile(
+        r"\b(?:set|start)\s+(?:a\s+)?(?:\d+\s+|\w+\s+){0,3}timer\b",
+        re.I,
+    ), ToolType.SKILL, 0.92),
+    (re.compile(
+        r"\b(?:set|create|make)\s+(?:a\s+)?reminder\b|\bremind me\b",
+        re.I,
+    ), ToolType.SKILL, 0.91),
     (re.compile(r"\b(?:learn|teach yourself|develop|acquire)\b.{0,30}\b(?:to |how to |the skill |the ability )\b", re.I), ToolType.SKILL, 0.9),
     (re.compile(r"\b(?:can you|could you|please)\s+learn\b.{0,30}\b(?:to |how to )", re.I), ToolType.SKILL, 0.9),
     (re.compile(r"\bstart\s+(?:a\s+)?learning\b", re.I), ToolType.SKILL, 0.85),
@@ -1440,6 +1450,29 @@ def _is_user_help_or_day_to_day(lower: str) -> bool:
     return bool(lower and _USER_HELP_DAY_TO_DAY_RE.search(lower))
 
 
+# Conversational invitation, not a learn-X command. Lived 2026-09-07 20:32:
+# STT "Do you want to learn a skill or capability to make that music?" hit
+# SKILL regex learn.{0,30}to and minted job_20260908T003242Z_a83b
+# (skill_id thats_really_cool_want_v1). Do not match bare "want to learn"
+# (that would catch "I want to learn"). Operator "I want you to learn" stays
+# a command.
+_LEARN_DESIRE_QUESTION_RE = re.compile(
+    r"\b(?:do you want to|do you wanna|would you (?:like|want) to|"
+    r"are you (?:going to|gonna)|you wanna)\s+learn\b",
+    re.I,
+)
+_OPERATOR_LEARN_COMMAND_RE = re.compile(r"\bi want you to learn\b", re.I)
+
+
+def is_learn_desire_question(text: str) -> bool:
+    """True when the user is asking whether she wants to learn, not commanding it."""
+    if not text:
+        return False
+    if _OPERATOR_LEARN_COMMAND_RE.search(text):
+        return False
+    return bool(_LEARN_DESIRE_QUESTION_RE.search(text))
+
+
 _GENERAL_KNOWLEDGE_RE = re.compile(
     r"(?:^|\b)(?:"
     r"who (?:wrote|is|was|invented|discovered|created|founded|directed|composed|painted|designed|built)\b"
@@ -1679,6 +1712,23 @@ class ToolRouter:
                     tool=ToolType.STATUS,
                     confidence=0.9,
                     extracted_args={"tier": "phatic_greeting"},
+                ),
+                synthetic=synthetic,
+            )
+
+        # Conversational "do you want to learn" is companion chat, not SKILL.
+        # GOLDEN LEARN SKILL and "learn X" / "I want you to learn" still fire.
+        if is_learn_desire_question(user_message):
+            logger.info(
+                "Learn-desire question catch: NONE (no LearningJob) for: %s",
+                lower[:60],
+            )
+            return self._finalize(
+                user_message,
+                RoutingResult(
+                    tool=ToolType.NONE,
+                    confidence=0.88,
+                    extracted_args={"tier": "learn_desire_question"},
                 ),
                 synthetic=synthetic,
             )

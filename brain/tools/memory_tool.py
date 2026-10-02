@@ -10,6 +10,7 @@ _last_memory_tool_summary: dict[str, object] = {
     "types": {},
     "route_type": "memory_tool_idle",
     "search_scope": "none",
+    "ranker_used": False,
 }
 
 
@@ -345,6 +346,7 @@ def _household_fact_hits(
             return hits
     return hits
 
+
 # Session bookkeeping is valid store (never discard) and is not autobiography.
 # Lived 2026-08-31: about-me native MEMORY spoke "First words this session"
 # because the first sentence named David.
@@ -360,7 +362,9 @@ _SESSION_BOOKKEEPING_RE = re.compile(
     r"i can pull more details if you want|"
     r"i'?m here, ready when you are|"
     r"how'?s your coffee\?|"
-    r"here'?s what i remember about that|"
+    r"here'?s what i remember about (?:that|you)|"
+    r"completed a brief interaction|"
+    r"response was concise|"
     r"i noticed you rebooted|"
     r"feel free to reach out|"
     r"everything is indeed going well|"
@@ -431,6 +435,100 @@ def _search_cue_for_speaker(query: str, speaker: str) -> str:
     return _ABOUT_ME_CUE_RE.sub(f"about {sp}", query, count=1)
 
 
+def is_about_me_recall(query: str) -> bool:
+    """True when the utterance asks what is remembered about the speaker.
+
+    'me'/'myself' only. 'about my family' is household, not about-me.
+    Speaker binding happens later via this-turn identity — no name list.
+    """
+    return bool(_ABOUT_ME_CUE_RE.search(query or ""))
+
+
+_ABOUT_ME_LEAD = "Here's what I remember about you."
+_ABOUT_X_LEAD = "Here's what I remember about that."
+ABOUT_ME_SPOKEN_ITEMS = 5
+ABOUT_ME_FILL_RESERVE = 2
+_ABOUT_ME_FILL_TYPES = ("user_preference", "personal_fact")
+
+
+def native_memory_recall_lead(query: str) -> str:
+    """Native MEMORY mouth lead. About-me addresses the speaker; else topical."""
+    if is_about_me_recall(query):
+        return _ABOUT_ME_LEAD
+    return _ABOUT_X_LEAD
+
+
+def address_about_me_sentence(text: str, speaker: str) -> str:
+    """Turn a stored fact into a you-addressed clause. No new facts.
+
+    'David enjoys pizza' / 'User enjoys pizza' → 'You enjoy pizza.'
+    Tautology 'David is David' is not autobiography.
+    """
+    raw = re.sub(r"\s+", " ", str(text or "")).strip().rstrip(".")
+    if not raw:
+        return ""
+    name = str(speaker or "").strip()
+    labels = ["User"]
+    if name and name.lower() not in {"", "unknown", "user"}:
+        labels.append(name)
+    subj = "|".join(re.escape(s) for s in labels)
+    if name and re.fullmatch(
+        rf"(?:{re.escape(name)}|User|You)\s+is\s+(?:{re.escape(name)}|User|You)",
+        raw,
+        re.I,
+    ):
+        return ""
+    raw = re.sub(rf"^(?:{subj})'s\b", "Your", raw, count=1, flags=re.I)
+    if re.match(rf"^(?:{subj})\s+is\b", raw, re.I):
+        rest = re.sub(rf"^(?:{subj})\s+is\s+", "", raw, count=1, flags=re.I).strip()
+        if not rest:
+            return ""
+        if not re.match(r"^(?:a|an|the)\b", rest, re.I):
+            rest = ("an " if rest[:1].lower() in "aeiou" else "a ") + rest
+        return f"You're {rest}."
+    m = re.match(rf"^(?:{subj})\s+(\w+)(.*)$", raw, re.I)
+    if m:
+        verb, rest = m.group(1), m.group(2)
+        vl = verb.lower()
+        if vl == "has":
+            raw = f"You have{rest}"
+        elif vl.endswith("s") and not vl.endswith("ss") and vl not in {"is", "was"}:
+            if vl.endswith("ies") and len(vl) > 4:
+                verb = verb[:-3] + "y"
+            elif vl.endswith(("ches", "shes", "sses", "xes", "zes")):
+                verb = verb[:-2]
+            else:
+                verb = verb[:-1]
+            raw = f"You {verb}{rest}"
+        else:
+            raw = f"Your {verb}{rest}"
+    if raw and raw[-1] not in ".!?":
+        raw += "."
+    return raw
+
+
+def join_about_me_recap(sentences: list[str], speaker: str) -> str:
+    """One spoken recap from retrieved clauses. Does not invent facts."""
+    parts: list[str] = []
+    seen: set[str] = set()
+    for sentence in sentences:
+        addressed = address_about_me_sentence(sentence, speaker)
+        if not addressed:
+            continue
+        key = addressed.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        parts.append(addressed.rstrip("."))
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0] + "."
+    if len(parts) == 2:
+        return f"{parts[0]}, and {parts[1]}."
+    return f"{', '.join(parts[:-1])}, and {parts[-1]}."
+
+
 def get_last_memory_tool_summary() -> dict[str, object]:
     return dict(_last_memory_tool_summary)
 
@@ -441,6 +539,7 @@ def _set_memory_tool_summary(
     route_type: str,
     search_scope: str,
     types: dict[str, int] | None = None,
+    ranker_used: bool = False,
 ) -> None:
     global _last_memory_tool_summary
     _last_memory_tool_summary = {
@@ -449,7 +548,17 @@ def _set_memory_tool_summary(
         "types": dict(types or {}),
         "route_type": route_type,
         "search_scope": search_scope,
+        "ranker_used": bool(ranker_used),
     }
+
+
+def _read_ranker_used() -> bool:
+    """Flight stamp from the hybrid search that just ran. Fail-closed False."""
+    try:
+        from memory.search import get_last_ranker_used
+        return bool(get_last_ranker_used())
+    except Exception:
+        return False
 
 
 def _extract_type_from_preview(preview: str) -> str:
@@ -684,7 +793,7 @@ def _matches_aboutness(
     # Lived 2026-09-01 tap_b674927ae261: NONE-LLM recaps beat pizza/job.
     # Conversation recaps stay stored. About-me declares taught prefs/facts.
     mem_type = str(getattr(memory_obj, "type", "") or "").strip().lower()
-    if mem_type in {"conversation", "episode_summary"}:
+    if mem_type in {"conversation", "episode_summary", "observation"}:
         return False
     payload_text = _payload_lead_text(memory_obj)
     lead = _first_sentence(payload_text)
@@ -802,6 +911,96 @@ def _format_payload_preview(memory_obj, max_len: int = 220) -> str:
     return text
 
 
+def _about_me_pref_hits(
+    *,
+    limit: int,
+    speaker: str,
+    identity_context: object | None,
+    referenced_entities: set[str] | None,
+    aboutness_entities: set[str] | None,
+) -> list[tuple[float, str]]:
+    """Type fill for about-me after sqlite-vec+ranker. No name list.
+
+    Lived 2026-09-07: about-me semantic top-k was career mash; taught
+    prefs sat outside the spoken window. Ranker still scores first.
+    Fill is speaker-owned user_preference/personal_fact that already
+    pass aboutness. Other proper names stay out.
+    """
+    sp = (speaker or "").strip().lower()
+    if sp in ("", "unknown"):
+        return []
+    try:
+        from memory.search import search_by_type
+    except Exception:
+        return []
+    seen: set[str] = set()
+    hits: list[tuple[float, str]] = []
+    boundary_check = None
+    try:
+        from memory.search import _check_identity_boundary
+        boundary_check = _check_identity_boundary
+    except Exception:
+        boundary_check = None
+
+    for mem_type in _ABOUT_ME_FILL_TYPES:
+        try:
+            found = list(search_by_type(mem_type) or [])
+        except Exception:
+            found = []
+        for m in found:
+            mid = str(getattr(m, "id", "") or "")
+            if mid and mid in seen:
+                continue
+            if _is_system_self_memory(m) or _is_rejected_personal_memory(m):
+                continue
+            if identity_context is not None and boundary_check is not None:
+                try:
+                    decision = boundary_check(
+                        identity_context, m, referenced_entities,
+                    )
+                    if decision is not None and not getattr(decision, "allow", True):
+                        continue
+                except Exception:
+                    continue
+            if not _matches_aboutness(m, aboutness_entities, speaker=speaker):
+                continue
+            if not _memory_owned_by_speaker(m, speaker):
+                continue
+            if mid:
+                seen.add(mid)
+            preview = f"[{m.type}] {_format_payload_preview(m)}"
+            hits.append((float(getattr(m, "weight", 0.5) or 0.5), preview))
+            if len(hits) >= limit:
+                return hits
+    return hits
+
+
+def _splice_about_me_fill(
+    results: list[tuple[float, str]],
+    *,
+    semantic_n: int,
+    spoken_window: int,
+    reserve: int,
+) -> list[tuple[float, str]]:
+    """Ranker prefix stays first; taught-pref fill gets a couple spoken slots.
+
+    Does not re-score. Semantic hits that the ranker already ordered keep
+    their lead. Fill rows that missed top-k are moved into the native
+    window so the formatter can declare them.
+    """
+    if semantic_n < 0:
+        semantic_n = 0
+    if semantic_n > len(results):
+        semantic_n = len(results)
+    head = results[:semantic_n]
+    fill = results[semantic_n:]
+    if not fill or spoken_window <= 1:
+        return results
+    take_fill = min(reserve, len(fill), spoken_window - 1)
+    take_head = max(0, spoken_window - take_fill)
+    return head[:take_head] + fill[:take_fill] + head[take_head:] + fill[take_fill:]
+
+
 def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
     """Search memories via semantic search first, keyword fallback second."""
     query_lower = query.lower()
@@ -810,6 +1009,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
     aboutness_entities = _extract_about_subjects(query, speaker=speaker)
     search_cue = _search_cue_for_speaker(query, speaker)
     household_kind = household_recall_kind(query)
+    about_me = is_about_me_recall(query)
     if household_kind:
         # Stopword "in" must not aboutness-cut the roster question.
         # Keep the live question as the ranker cue — do not rewrite it into
@@ -828,6 +1028,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
                 route_type="episodic_recall",
                 search_scope="episode_summaries",
                 types={"episode": episode_count} if episode_count > 0 else {},
+                ranker_used=False,
             )
             return ep_results
 
@@ -839,10 +1040,12 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
         referenced_entities=referenced_entities,
         aboutness_entities=aboutness_entities,
     )
+    ranker_used = _read_ranker_used()
+    semantic_n = len(results)
 
-    run_keyword = household_kind or len(results) < limit
+    run_keyword = household_kind or about_me or len(results) < limit
     if run_keyword:
-        kw_budget = limit if household_kind else max(limit - len(results), 0)
+        kw_budget = limit if (household_kind or about_me) else max(limit - len(results), 0)
         kw_results = _keyword_search(
             search_cue.lower(),
             max(kw_budget, 1),
@@ -858,6 +1061,14 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
                 speaker=speaker,
                 identity_context=identity_context,
                 referenced_entities=referenced_entities,
+            )
+        if about_me:
+            kw_results = list(kw_results) + _about_me_pref_hits(
+                limit=limit,
+                speaker=speaker,
+                identity_context=identity_context,
+                referenced_entities=referenced_entities,
+                aboutness_entities=aboutness_entities,
             )
         seen = {preview for _, preview in results}
         # Keyword is a lexical FALLBACK, scored by memory weight (not query
@@ -881,6 +1092,13 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
             for score, preview in results
             if _preview_matches_household_kind(preview, household_kind)
         ]
+    elif about_me:
+        results = _splice_about_me_fill(
+            results,
+            semantic_n=semantic_n,
+            spoken_window=ABOUT_ME_SPOKEN_ITEMS,
+            reserve=ABOUT_ME_FILL_RESERVE,
+        )
 
     if not results:
         _set_memory_tool_summary(
@@ -888,6 +1106,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
             route_type="memory_tool_search",
             search_scope="semantic_keyword",
             types={},
+            ranker_used=ranker_used,
         )
         return f"No memories found for this query."
 
@@ -905,6 +1124,7 @@ def search_memory(query: str, limit: int = 8, speaker: str = "") -> str:
         route_type="memory_tool_search",
         search_scope="semantic_keyword",
         types=types,
+        ranker_used=ranker_used,
     )
     lines = [f"Found {len(results)} relevant memory(ies):"]
     for score, preview in results[:limit]:

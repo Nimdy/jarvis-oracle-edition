@@ -43,6 +43,99 @@ def _humanize_dwell(raw: str) -> str:
     return f"for about {hours} hour{'s' if hours != 1 else ''}"
 
 
+_PHATIC_STATUS_RE = re.compile(
+    r"\b("
+    r"how are you(?: doing| feeling)?"
+    r"|how(?:'s| is) it going"
+    r"|how do you feel"
+    r"|how you feeling"
+    r"|how have you been"
+    r"|are you (?:okay|alright)"
+    r"|good (?:morning|afternoon|evening)"
+    r")\b",
+    re.I,
+)
+_NOT_PHATIC_STATUS_RE = re.compile(
+    r"\b("
+    r"system health|health report|status report|diagnostic"
+    r"|what mode|operational status|how (?:are|is) (?:your|the) system"
+    r"|how are you built"
+    r")\b",
+    re.I,
+)
+
+
+def is_phatic_status_ask(user_text: str) -> bool:
+    """How-are-you / hello — not a status report or system-health census."""
+    t = user_text or ""
+    if _NOT_PHATIC_STATUS_RE.search(t):
+        return False
+    return bool(_PHATIC_STATUS_RE.search(t))
+
+
+def _readout_usable(ro: Any) -> bool:
+    if ro is None:
+        return False
+    if getattr(ro, "cannot_lie_clamped", False) or getattr(ro, "all_sources_zero", False):
+        return False
+    try:
+        return float(getattr(ro, "level", 0.0) or 0.0) > 0.0
+    except (TypeError, ValueError):
+        return False
+
+
+def _phatic_greeting_prefix(user_text: str) -> str:
+    low = (user_text or "").lower()
+    if "good morning" in low:
+        return "Good morning. "
+    if "good afternoon" in low:
+        return "Good afternoon. "
+    if "good evening" in low:
+        return "Good evening. "
+    return ""
+
+
+def _operational_affect_line(affect_snapshot: Any, traits: list[str] | None) -> str:
+    """Measured affect + traits → one operational sentence. Not a feeling."""
+    names = {str(t).strip().lower() for t in (traits or []) if t}
+    warm = bool(names & {"empathetic", "empathy", "warm", "warmth", "companion"})
+
+    dop = getattr(affect_snapshot, "dopamine", None) if affect_snapshot is not None else None
+    ser = getattr(affect_snapshot, "serotonin", None) if affect_snapshot is not None else None
+    cor = getattr(affect_snapshot, "cortisol", None) if affect_snapshot is not None else None
+
+    def _level(ro: Any) -> float:
+        try:
+            return float(getattr(ro, "level", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if _readout_usable(cor) and _level(cor) >= 0.62:
+        return "I'm here, under some tension."
+    if _readout_usable(ser) and _level(ser) >= 0.58 and (not _readout_usable(cor) or _level(cor) < 0.55):
+        return "I'm here with you." if warm else "I'm here, things are steady."
+    if _readout_usable(dop) and _level(dop) >= 0.58:
+        return "I'm here — something's moving."
+    if warm:
+        return "I'm here with you."
+    return "I'm here."
+
+
+def articulate_phatic_self_status(
+    user_text: str = "",
+    *,
+    affect_snapshot: Any = None,
+    traits: list[str] | None = None,
+) -> str:
+    """Companion how-are-you / hello from measured affect + personality.
+
+    Fail-closed: clamped or empty readout does not invent mood. Never says
+    'I feel'. Never names operating mode. Affect-expression stay unapplied.
+    """
+    prefix = _phatic_greeting_prefix(user_text)
+    return (prefix + _operational_affect_line(affect_snapshot, traits)).strip()
+
+
 def _articulate_self_status(frame: MeaningFrame) -> str:
     """Produce natural spoken-word status from structured facts.
 

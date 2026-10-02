@@ -40,6 +40,17 @@ def orch(store, registry):
     return LearningJobOrchestrator(store=store, registry=registry)
 
 
+def test_create_job_accepts_catalog_set_timer(orch):
+    """Lived 2026-09-13: create_job rejected set_timer_v1 as non-actionable."""
+    job = orch.create_job(
+        skill_id="set_timer_v1",
+        capability_type="procedural",
+        requested_by={"source": "user", "user_text": "Set a 5 minute timer."},
+    )
+    assert job is not None
+    assert job.skill_id == "set_timer_v1"
+
+
 def _make_job(
     job_id: str,
     skill_id: str = "speaker_identification_v1",

@@ -521,7 +521,16 @@ class LearningJobOrchestrator:
                 clean_id == fam_id or clean_id in fam.aliases
                 for fam_id, fam in BUILTIN_FAMILIES.items()
             )
-            if not is_builtin:
+            is_catalog = False
+            try:
+                from skills.resolver import SKILL_TEMPLATES
+                is_catalog = any(res.skill_id == skill_id for _, res in SKILL_TEMPLATES)
+            except Exception:
+                is_catalog = False
+            # Lived 2026-09-13: set_timer_v1 is a catalog template but
+            # "set timer" failed the junk-phrase filter (timer not in
+            # capability nouns). Catalog IDs are operator-named skills.
+            if not is_builtin and not is_catalog:
                 phrase = clean_id.replace("_", " ").strip()
                 texts = [phrase]
                 if isinstance(requested_by, dict):

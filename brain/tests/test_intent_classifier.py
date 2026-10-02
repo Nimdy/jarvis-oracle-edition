@@ -151,8 +151,25 @@ class TestPatternBanks:
         assert len(_PLUGIN_PATTERNS) == 2
         assert len(_CORE_UPGRADE_PATTERNS) == 2
         assert len(_HARDWARE_PATTERNS) == 2
-        assert len(_SKILL_PATTERNS) == 2
+        assert len(_SKILL_PATTERNS) == 3
         assert len(_SPECIALIST_PATTERNS) == 2
+
+    def test_create_a_skill_pattern(self):
+        r = self._classify("create a skill to quiz me")
+        assert r.outcome_class == "skill_creation"
+
+
+class TestCatalogTemplateClassify:
+    def test_set_a_timer_is_skill_creation_not_knowledge(self):
+        """Lived 2026-09-09: SkillResolver class missing → knowledge_only paper."""
+        from acquisition.classifier import IntentClassifier
+
+        r = IntentClassifier().classify(
+            "create a skill to where I can ask JARVIS to set a timer for x "
+            "amount of time and then monitor said timer. When the timer goes off alert me"
+        )
+        assert r.outcome_class == "skill_creation"
+        assert "set_timer_v1" in r.reasoning
 
 
 # ---------------------------------------------------------------------------

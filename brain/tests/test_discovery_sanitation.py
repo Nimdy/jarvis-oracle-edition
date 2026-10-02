@@ -66,6 +66,12 @@ class TestIsActionableCapabilityPhrase:
         assert is_actionable_capability_phrase("keep a list of tasks")
         assert is_actionable_capability_phrase("roll 20sided dice")
 
+    def test_timer_and_remind_are_actionable(self):
+        """Lived 2026-09-13: set_timer_v1 rejected as non-actionable junk."""
+        assert is_actionable_capability_phrase("set timer")
+        assert is_actionable_capability_phrase("Set a 5 minute timer.")
+        assert is_actionable_capability_phrase("remind me in 5 days")
+
 
 class TestNormalizerRejectsJunk:
     """The normalizer should return _REJECTED_FAMILY for non-actionable text."""

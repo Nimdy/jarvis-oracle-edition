@@ -260,8 +260,12 @@ _COMMANDS: tuple[GoldenCommandDefinition, ...] = (
         operation="learn_skill",
         expected_arguments=("intent_text",),
         # STT renders "learn skill X" several natural ways — accept them all.
+        # Lived 2026-09-09: "golden command, acquire skill, set a timer" prefix-
+        # matched GW_ACQUIRE ("ACQUIRE …") and became knowledge_only paper.
+        # ACQUIRE SKILL is the skill-learning command, not capability acquisition.
         aliases=("LEARN A SKILL", "LEARN SKILLS", "LEARN NEW SKILL",
-                 "LEARN A NEW SKILL", "START LEARNING SKILL", "START SKILL"),
+                 "LEARN A NEW SKILL", "START LEARNING SKILL", "START SKILL",
+                 "ACQUIRE SKILL", "ACQUIRE A SKILL"),
     ),
     GoldenCommandDefinition(
         command_id="GW_ACQUISITION_STATUS",
@@ -356,20 +360,21 @@ def parse_golden_command(
     command = _BY_CANONICAL_BODY.get(canonical_lookup)
 
     # Prefix match for commands that expect trailing arguments (e.g. ACQUIRE
-    # <text>, LEARN SKILL <text>). Check the canonical body AND any aliases so
-    # natural STT variants ("learn a skill X" / "learn skills X") still parse.
+    # <text>, LEARN SKILL <text>). Longest body wins so "ACQUIRE SKILL set a
+    # timer" is LEARN SKILL, not bare ACQUIRE.
     argument_text = ""
     if command is None:
+        prefix_hits: list[tuple[int, GoldenCommandDefinition, str]] = []
         for cmd in _COMMANDS:
             if not cmd.expected_arguments:
                 continue
             for body in (cmd.canonical_body, *getattr(cmd, "aliases", ())):
                 if canonical_lookup.startswith(body + " "):
-                    command = cmd
-                    argument_text = normalized_body[len(body):].strip()
-                    break
-            if command is not None:
-                break
+                    prefix_hits.append((len(body), cmd, body))
+        if prefix_hits:
+            prefix_hits.sort(key=lambda hit: -hit[0])
+            _, command, body = prefix_hits[0]
+            argument_text = normalized_body[len(body):].strip()
 
     if command is None:
         ctx = GoldenCommandContext(

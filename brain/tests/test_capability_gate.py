@@ -610,6 +610,29 @@ def test_residual_sweep_requires_first_person_in_same_sentence():
     assert "electronic dance music" in out.lower(), out
     assert "enjoy" in out.lower(), out
 
+
+def test_demo_invite_requires_blocked_verb_in_same_sentence():
+    """Lived 2026-09-07: about-me lead 'Here's what I remember about you'
+    plus a later EDM pref rewrote the lead into a demo decline.
+    Dance stays blocked. Invite only dies when the verb is in that sentence.
+    """
+    gate = CapabilityGate(_fresh_registry())
+    reply = (
+        "Here's what I remember about you. "
+        "You enjoy electronic dance music, and you're a software engineer."
+    )
+    out = gate.check_text(reply)
+    low = out.lower()
+    assert "here's what i remember about you" in low, out
+    assert "electronic dance music" in low, out
+    assert "demo" not in low, out
+
+    same = "Here's what I can dance for you."
+    out2 = gate.check_text(same)
+    low2 = out2.lower()
+    assert "here's what i can dance" not in low2, out2
+    assert "capability" in low2 or "demo" in low2, out2
+
     must_die = [
         "I can play music.",
         "I can dance.",
@@ -834,6 +857,26 @@ def test_narration_guard_passes_on_skill_route():
         )
     gate.set_route_hint(None)
     print("  PASS: narration guard passes on non-NONE routes")
+
+
+def test_learning_job_status_with_timer_name_is_not_swept():
+    """Lived 2026-09-13: residual sweep ate 'couldn't create a learning job for Set Timer'."""
+    gate = CapabilityGate(_fresh_registry())
+    text = (
+        "I couldn't create a learning job for 'Set Timer and Reminders' "
+        "(job: job_x, type: procedural, phase: assess)."
+    )
+    out = gate.check_text(text)
+    assert "couldn't create a learning job" in out.lower()
+    assert "set timer" in out.lower()
+    started = (
+        "I started a learning job for 'Set Timer and Reminders' "
+        "(job: job_x, type: procedural, phase: assess). "
+        "I won't claim it until it's verified. I'll wait for your approval."
+    )
+    out2 = gate.check_text(started)
+    assert "started a learning job" in out2.lower()
+    print("  PASS: learning-job status with timer in the name is not swept")
 
 
 def test_narration_guard_phase_pattern():
@@ -1104,6 +1147,7 @@ if __name__ == "__main__":
     test_must_not_block_reflective_text()
     test_narration_guard_blocks_on_none_route()
     test_narration_guard_passes_on_skill_route()
+    test_learning_job_status_with_timer_name_is_not_swept()
     test_narration_guard_phase_pattern()
     test_narration_guard_no_false_positives()
     test_narration_guard_latch_suppresses_subsequent_chunks()

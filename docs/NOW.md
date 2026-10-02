@@ -1,6 +1,6 @@
 # NOW — load-bearing card (refresh this file, not the others)
 
-**Date: 2026-09-07.** Operator: David.
+**Date: 2026-10-02.** Operator: David.
 
 This is the **only** file allowed to hold current branch, life-phase, and leftovers.
 Roster, turn lanes, classify, and gates live elsewhere. If this file disagrees with
@@ -17,14 +17,14 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/project-2-oneshot` (cut from `feat/nn-fleet-consume` `a98f018` so a bad slice can be dropped) |
-| **HEAD (committed)** | `feat/project-2-oneshot`. **Skill learning pipeline lived 2026-09-07:** GOLDEN learn-X → research contract → plan review → codegen → quarantine → verify → deploy. Sit `Hey Jarvis, roll a D20.` → PLUGIN → `I rolled the Dice, you got 1`. P4/TBS-2 still gated. **#26** soaked. **#5** WR lived. **#23** Later. |
-| **vs origin** | Pushing this branch; operator asked **2026-09-07** to merge up to GitHub/`main`. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
+| **HEAD (committed)** | `feat/project-2-oneshot`. Skill learning pipeline lived (d20). **Companion mouth lived 2026-09-07.** Conversational *do you want to learn* no longer mints a job. Timer/reminder *use* + GOLDEN `ACQUIRE SKILL` now enter the **LEARN SKILL** pipeline (`set_timer_v1`) — plugin still waits on operator approval. Timer sit couples 2026-09-13 (catalog junk filter, Improve rebinds `set_timer_v1`, Review tab) + unsolicited-recap clamp 2026-09-15 are synced to the brain; **#88 sit still owed** (bounce + sit). P4/TBS-2 still gated. **#26** soaked. **#5** WR lived. **#23** Later. |
+| **vs origin** | Pushed and merged to `main` via **PR #85** on **2026-10-02** (operator asked). Branch kept as the working branch. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
 | **Board** | **Only board:** [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8) (sort by Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. North star **#42**. **#83** is frozen notes — do not execute those checkboxes. |
-| **Merge `main`** | **Yes — operator asked 2026-09-07** (skill-learning pipeline lived). |
+| **Merge `main`** | **Done 2026-10-02** (PR #85: companion mouth + timer learn-door). Next merge only when David asks. |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
 | **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
-| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** **Milestone lived:** off-catalog skill learning. d20 plugin `operational_proof_plugin_for_r_2174a7` **active**. Do **not** Improve unless named. Do not TAP. Do not close #42/#83. |
+| **Operational queue** | **[Project 8](https://github.com/users/Nimdy/projects/8) Sequence.** **Do timer, not curiosity organ.** Tickets: leftover VQA-not-self [#87](https://github.com/Nimdy/jarvis-oracle-edition/issues/87); timer template [#86](https://github.com/Nimdy/jarvis-oracle-edition/issues/86) → learn-door [#88](https://github.com/Nimdy/jarvis-oracle-edition/issues/88) → meaning-class [#92](https://github.com/Nimdy/jarvis-oracle-edition/issues/92) → fire [#90](https://github.com/Nimdy/jarvis-oracle-edition/issues/90) → manage [#89](https://github.com/Nimdy/jarvis-oracle-edition/issues/89) → calendar/catch-up [#91](https://github.com/Nimdy/jarvis-oracle-edition/issues/91). Do not unpark #7/#4/#81. Do not close #42/#83. |
 
 Household facts live in **memory**, not in code. Operator fact card (Grok TAP-as-David; do not invent):
 
@@ -218,7 +218,7 @@ If fractal did not fire, dream did not speak, HRR is PRE-MATURE — **that is su
 
 TAP-lived 2026-08-31 (operator-proxy, `follow_up=false` new sits). Do not “fix” these by weakening L0 or L3.
 
-1. **About-me ranking** — Pi sit 2026-08-31 16:57 STT **“Jarvis, what do you remember about me?”** conv=`48687d54` **route=MEMORY**. Greeting recap **gone**. Mouth: same-session closer “everything is indeed going well / feel free to reach out” (from follow-up “Yes, everything's going well”) + 6am coffee + software-engineer career mash. No pizza/brief/EDM. **Coupled (needs bounce):** skip session closers + phatic user-turns from about-me. Ranker still scores. Store keeps the rows. Re-sit after bounce. Do not stack a follow-up smalltalk before the about-me question.
+1. **About-me ranking** — **Lived 2026-09-07 15:05** STT **“What do you remember about me?”** conv=`ea757493` **route=MEMORY** `ranker_used=true`. Mouth: you-addressed recap (EDM, workday, software engineer, brief, blue). Observations out. L0 demo-invite is same-sentence (dance stays blocked). Family names stay on the family question. Pizza not in this window — ranker+fill, not an allowlist. Do not steal onto the LLM.
 2. **EDM** — TAP mouth **named electronic dance music**. L0 same-sentence couple lived. Keep verbs blocked.
 3. **Family** — MEMORY native (stop LLM inventing Emily/Mike). Pi sit omitted Skyler because a **kinship-word filter** dropped pet facts. That filter is the cousin/great-great hack. **Removed:** wife/son/dog ontology on family recall. Family = taught prefs the ranker scores; conversation recaps still out. Plastic teach, not a relation list. Needs bounce.
 4. **Job TAP** `tap_42d4f124d180` — **software engineer LIVE** (NONE + inject). After-work walk / Skylar padding leftover. Do not grind STT Skylar vs stored Skyler. Same class as Tanya vs Tonya.
@@ -246,7 +246,17 @@ Lived 2026-09-01 bounce PID **19451**. `/api/nn-fleet`: 9 `consumed_now` (includ
 | **intent_shadow** | not consumed | **182 predictions / 210 obs**, rolling ~0.69, still `shadow`, 0 rescues. June-30 “25870/0 preds” is **stale**. Dead-wire was fixed. Heuristic still routes. **Do not flip.** | No |
 | weight_room_gate | not consumed | `enforces=False` (P2 would-block). Overlay keeps `consumed_now=False` | No |
 
-HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipping advisory). Policy NN shadow. positive_memory **NN** orphaned (heuristic scalar broadcasts). Claim-friction teacher feed is already fixed (`cc04f08`); registry prose is stale.
+HRR dormant. Salience dormant (cold-start deadlock — do not “fix” by flipping advisory). Policy NN shadow: **signal-failure** (A/B always ties while unexecuted). Boot now shadow-loads best trained checkpoint (not `default_untrained`); **flags stay 0/8**, no apply. Do not restore DEVIATION_BONUS. positive_memory **NN** orphaned (heuristic scalar broadcasts). Claim-friction teacher feed is already fixed (`cc04f08`); registry prose is stale.
+
+**Skill leak (2026-09-07 20:32, PID 52817).** STT *Jarvis, that's really cool. Do you want to learn a skill or capability to make that music?* routed **SKILL** (fuzzy `learn.{0,30}to`) and minted `job_20260908T003242Z_a83b` / `thats_really_cool_want_v1`. Coupled `259762e`: `is_learn_desire_question` → NONE; `skill_tool` fail-closed. Operator-named **delete + bounce 2026-09-07 22:04** PID **55942**. Overlay MATCH (`tool_router.py`/`skill_tool.py` sha, `is_stale=false`, TAP 200). Job JSON + skill record gone; d20 job `job_20260906T170633Z_377e` kept. GOLDEN LEARN SKILL + *Learn a new skill d20* + *I want you to learn* still SKILL.
+
+**Timer/reminder learn path (2026-09-09).** *Set a five minute timer* was NONE + L0 *I don't have that capability yet* (integrity, no plugin). GOLDEN *acquire skill, set a timer* prefix-matched `GW_ACQUIRE` → acquisition `knowledge_only` paper (`acq_688488d216`, 3s, no plugin). Coupled: `ACQUIRE SKILL` is a LEARN SKILL alias (longest prefix); *set a timer* / *remind me* route SKILL and resolve `set_timer_v1`. Does **not** fire a timer until operator-approved plugin. Grok does not click Approve. Needs bounce.
+
+**Improve gen-1 paper (acq_8571c7b59d).** Dashboard Improve cloned `knowledge_only` (empty plan, 10s, no `learning_job_id`). Classifier `SkillResolver` class did not exist so templates never fired. Coupled: catalog `resolve_skill` templates (not generic fallback) classify `skill_creation`; Improve of a knowledge_only parent **reclassifies from feedback** and binds a `set_timer_v1` LearningJob. Operator still Approves.
+
+**Timer sit blocked 2026-09-13 13:37.** *Set a 5 minute timer* routed SKILL then `create_job rejected non-actionable skill_id: set_timer_v1` (junk filter: timer not a capability noun). L0 residual-swept the failure line because it contained *timer*. Coupled: catalog skill_ids skip the junk filter; timer/remind are actionable; learning-job status reports are not capability claims. Needs bounce.
+
+**Unsolicited recap (2026-09-15).** Always-listening STT of drill-site / block-mode rambles went NONE; Qwen authored markdown briefings (*let me break this down*, *What You're Asking For (Summarized)*), 18s. Coupled: `should_clamp_unsolicited_recap` on NONE stream → nod `Got it.` if the user did not ask to summarize and the reply is recap theater. Questions and *summarize what I said* still recap. Does not silence FOLLOW_UP *Bye guys* (not a recap). Needs bounce.
 
 **CODEBASE locate+leash (2026-09-04).** G20/G21 lived on PID **26936**: index stats; *voice* abstains (no allowlist). Sit 3 STT `handle transcription` went NONE → Qwen theater. **STT-join couple on WSL** (`resolve_stt_locate` + router before NONE): spoken *where is handle transcription* → exact `handle_transcription`. Household where-is not stolen. Needs bounce. Do **not** encode the tree into HRR.
 
@@ -264,7 +274,7 @@ Do not skip ranker. Do not treat 9 `consumed_now` as “she routes with NNs.” 
 | **WS2** VQA #24 | Coupled (`vqa_prompt` wraps the spoken question) | Lived |
 | **WS2** TTS markdown | Coupled (`BrainTTS._clean_for_speech`) | Lived |
 | **WS2** OSV P2 | Coupled **pre-TTS** in `_gate_text` when `p2_active_default()`. Env still default **off**. | Mouth does not cut until `OSV_P2_ACTIVE=true` on the process. **Ask before that bounce.** |
-| **WS2** TBS-0 | Lived on `How are you?` flight `pre_speech` (stance=none, `injected=false`). | Do not concat into `_style_instruction` (TBS-2 / P4) |
+| **WS2** TBS-0 | Lived. Hello / how-are-you no longer stamp `give_space` from noisy emotion. `injected=false`. | Do not concat into `_style_instruction` (TBS-2 / P4) |
 | **WS2** thin soul STATUS/MEMORY | Lived soul-dial log. Phatic how-are-you stays STATUS. Articulator no longer speaks this-turn `STATUS` or cortex pair HUD. Persist spoken STATUS. | `native_voice` stays `not_born`. |
 | **WS3** WR P1 | SI snapshot now shows `signals_lived` / `signals_synthetic`; `live_shadow_accuracy=None` until scored inference | **`enforces=False`** |
 | **WS3** claim_classifier friction | Pairing prefers `origin==friction_correction` | Shadow student |
