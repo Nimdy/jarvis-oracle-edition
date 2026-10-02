@@ -1,6 +1,6 @@
 # NOW — load-bearing card (refresh this file, not the others)
 
-**Date: 2026-09-07.** Operator: David.
+**Date: 2026-10-02.** Operator: David.
 
 This is the **only** file allowed to hold current branch, life-phase, and leftovers.
 Roster, turn lanes, classify, and gates live elsewhere. If this file disagrees with
@@ -17,10 +17,10 @@ the handoff, the playbook, or a skill.
 |---|---|
 | **Repo** | `~/projects/jarvis-oracle-edition` → origin `Nimdy/jarvis-oracle-edition` |
 | **Branch** | `feat/project-2-oneshot` (cut from `feat/nn-fleet-consume` `a98f018` so a bad slice can be dropped) |
-| **HEAD (committed)** | `feat/project-2-oneshot`. Skill learning pipeline lived (d20). **Companion mouth lived 2026-09-07.** Conversational *do you want to learn* no longer mints a job. Timer/reminder *use* + GOLDEN `ACQUIRE SKILL` now enter the **LEARN SKILL** pipeline (`set_timer_v1`) — plugin still waits on operator approval. P4/TBS-2 still gated. **#26** soaked. **#5** WR lived. **#23** Later. |
-| **vs origin** | Pushing this branch; operator asked **2026-09-07** to merge up to GitHub/`main`. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
+| **HEAD (committed)** | `feat/project-2-oneshot`. Skill learning pipeline lived (d20). **Companion mouth lived 2026-09-07.** Conversational *do you want to learn* no longer mints a job. Timer/reminder *use* + GOLDEN `ACQUIRE SKILL` now enter the **LEARN SKILL** pipeline (`set_timer_v1`) — plugin still waits on operator approval. Timer sit couples 2026-09-13 (catalog junk filter, Improve rebinds `set_timer_v1`, Review tab) + unsolicited-recap clamp 2026-09-15 are synced to the brain; **#88 sit still owed** (bounce + sit). P4/TBS-2 still gated. **#26** soaked. **#5** WR lived. **#23** Later. |
+| **vs origin** | Pushed and merged to `main` via **PR #85** on **2026-10-02** (operator asked). Branch kept as the working branch. Recovery branch `feat/nn-fleet-consume` untouched. Do not force L2. Do not auto L3. |
 | **Board** | **Only board:** [JARVIS Next — ordered queue](https://github.com/users/Nimdy/projects/8) (sort by Sequence). [Project 2](https://github.com/users/Nimdy/projects/2) is **closed archive**. North star **#42**. **#83** is frozen notes — do not execute those checkboxes. |
-| **Merge `main`** | **Yes — operator asked 2026-09-07** (skill-learning pipeline lived). |
+| **Merge `main`** | **Done 2026-10-02** (PR #85: companion mouth + timer learn-door). Next merge only when David asks. |
 | **Gestation** | **Graduated.** Do not re-run birth. Do not wipe `~/.jarvis`. |
 | **Life phase** | Stage 6 curriculum **parked** (operator: chips do not matter). Do not grind Stage 6/7. Gate work is **#83 couple**, not playbook homework. |
 | **Autonomy** | **L2 safe-apply, operator-named keep 2026-09-01.** Earned on policy wins (15/10). If a bounce restores L1 and she qualifies again, **let her earn L2** — that is learned, not a defect. L2 code-patch bridge still does not apply (SI stage &lt; 2). Do not demote. Do not auto L3. |
